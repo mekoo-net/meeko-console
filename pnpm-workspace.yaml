@@ -1,0 +1,8 @@
+onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - 'esbuild'
+  - 'unrs-resolver'
+verifyDepsBeforeRun: false
+strictDepBuilds: false
+allowBuilds:
+  '@parcel/watcher': set this to true or false
