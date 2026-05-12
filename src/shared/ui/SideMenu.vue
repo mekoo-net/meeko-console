@@ -4,12 +4,16 @@ import { useRoute, useRouter } from 'vue-router';
 import {
   Bell,
   ChatLineRound,
+  Cpu,
   CreditCard,
+  DataLine,
   Document,
   Link,
+  MagicStick,
   Message,
   Money,
   Operation,
+  PriceTag,
   Tickets,
   User,
 } from '@element-plus/icons-vue';
@@ -53,8 +57,21 @@ const tree: readonly MenuNode[] = [
     icon: CreditCard,
     children: [
       { type: 'leaf', index: '/billing/recharges', title: '充值记录', icon: Document },
-      { type: 'leaf', index: '/billing/consumptions', title: '消费记录', icon: Money },
+      { type: 'leaf', index: '/billing/bills', title: '账单流水', icon: Money },
       { type: 'leaf', index: '/billing/channels', title: '充值渠道', icon: Link, roles: ['Admin'] },
+    ],
+  },
+  {
+    type: 'group',
+    index: '/demuxai',
+    title: 'DemuxAI 管理',
+    icon: MagicStick,
+    roles: ['Admin'],
+    children: [
+      { type: 'leaf', index: '/demuxai/models', title: '模型列表', icon: Cpu },
+      { type: 'leaf', index: '/demuxai/providers', title: '供应商', icon: Link },
+      { type: 'leaf', index: '/demuxai/pricing', title: '模型定价', icon: PriceTag },
+      { type: 'leaf', index: '/demuxai/logs', title: '调用日志', icon: DataLine },
     ],
   },
   {
