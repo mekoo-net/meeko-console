@@ -2,7 +2,6 @@ import type { AppResult } from '@/shared/api/httpTypes';
 
 import type {
   AlipayConfig,
-  ChannelConfigMap,
   PaymentChannel,
   PaymentProviderCode,
   WechatPayConfig,

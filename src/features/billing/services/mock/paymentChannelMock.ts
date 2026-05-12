@@ -1,13 +1,11 @@
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { delay } from '@/shared/lib/delay';
 
-import {
-  defaultAlipayConfig,
-  defaultWechatPayConfig,
-  type AlipayConfig,
-  type PaymentChannel,
-  type PaymentProviderCode,
-  type WechatPayConfig,
+import type {
+  AlipayConfig,
+  PaymentChannel,
+  PaymentProviderCode,
+  WechatPayConfig,
 } from '../../model/paymentChannel.types';
 import type { PaymentChannelPort } from '../ports/paymentChannelPort';
 

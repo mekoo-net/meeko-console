@@ -105,9 +105,7 @@ function commitMappings(
       uid: isTmp ? genMappingUid() : d.uid!,
       providerModelUid: resolvedRef,
       displayName: d.displayName.trim(),
-      mappingWeight: d.mappingWeight,
       enabled: d.enabled,
-      sortOrder: d.sortOrder,
       notes: d.notes?.trim() || null,
     });
   }
@@ -159,12 +157,6 @@ function validateForm(
         message: `上架映射 "${m.displayName}" 的 providerModelUid 无效`,
       });
     }
-    if (m.mappingWeight < 0 || m.mappingWeight > 100) {
-      return fail({
-        code: 'validation',
-        message: `上架映射 "${m.displayName}" 的权重应在 0..100`,
-      });
-    }
   }
   return ok(undefined);
 }
@@ -180,10 +172,10 @@ export class DemuxaiProviderMock implements DemuxaiProviderPort {
     filter: ListProvidersFilter;
   }): Promise<AppResult<ListProvidersPage>> {
     await delay();
-    const sorted = [...this.store.providers].sort((a, b) => {
-      if (a.priority !== b.priority) return b.priority - a.priority;
-      return b.weight - a.weight;
-    });
+    // MVP 阶段没有 priority/weight，按 createdAtUtc 倒序（新建在前）
+    const sorted = [...this.store.providers].sort((a, b) =>
+      b.createdAtUtc.localeCompare(a.createdAtUtc),
+    );
     const filtered = applyFilter(sorted, input.filter);
     const slice = clientPaginate(filtered, input.page, input.pageSize);
     const parsed: Provider[] = [];
@@ -211,13 +203,6 @@ export class DemuxaiProviderMock implements DemuxaiProviderPort {
         details: { apiKey: ['至少 8 位'] },
       });
     }
-    if (input.weight < 0 || input.weight > 100) {
-      return fail({
-        code: 'validation',
-        message: '权重应在 0..100',
-        details: { weight: ['0..100'] },
-      });
-    }
     const v = validateForm(input.providerModels, input.modelMappings);
     if (!v.success) return v;
 
@@ -237,8 +222,6 @@ export class DemuxaiProviderMock implements DemuxaiProviderPort {
       apiType: input.apiType,
       baseUrl: input.baseUrl.trim(),
       apiKeyMasked: maskKey(input.apiKey),
-      weight: input.weight,
-      priority: input.priority,
       notes: input.notes?.trim() || null,
       status: 'enabled',
       autoDisabledCode: null,
@@ -290,8 +273,6 @@ export class DemuxaiProviderMock implements DemuxaiProviderPort {
       ...(input.apiKey !== undefined && input.apiKey.trim() !== ''
         ? { apiKeyMasked: maskKey(input.apiKey) }
         : {}),
-      ...(input.weight !== undefined ? { weight: input.weight } : {}),
-      ...(input.priority !== undefined ? { priority: input.priority } : {}),
       ...(input.notes !== undefined ? { notes: input.notes?.trim() || null } : {}),
       providerModels: nextModels,
       modelMappings: nextMappings,

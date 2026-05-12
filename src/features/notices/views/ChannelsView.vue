@@ -111,11 +111,6 @@ function providerIcon(row: SmtpProviderDto): string {
   return '✉️';
 }
 
-function templateCount(uid: string): number {
-  // 从实际数据推算，mock 场景直接存在外部引用即可，暂为 0
-  void uid;
-  return 0;
-}
 </script>
 
 <template>

@@ -71,7 +71,7 @@ interface CarriedByEntry {
   providerName: string;
   /** 上游 model 技术名（= provider_model.model_name） */
   modelName: string;
-  /** 该映射的权重，便于在 chip 上提示 */
+  /** 与同 displayName 多路映射时的加权；缺失视为 100 */
   mappingWeight: number;
   enabled: boolean;
 }
@@ -89,7 +89,7 @@ const carriedByMap = computed(() => {
         providerUid: p.uid,
         providerName: p.name,
         modelName: pmRef.modelName,
-        mappingWeight: mp.mappingWeight,
+        mappingWeight: mp.mappingWeight ?? 100,
         enabled: mp.enabled,
       });
       m.set(mp.displayName, list);

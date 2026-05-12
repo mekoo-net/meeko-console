@@ -45,8 +45,7 @@ export type ProviderModel = z.infer<typeof providerModelSchema>;
  *   指向同一上游技术名）
  * - `enabled` 软关停一条映射；`notes` 备注（运营 / 内部沟通）
  *
- * NOTE: 排序与按比例分流（`sortOrder` / `mappingWeight`）等调度类字段
- * 当前阶段未启用，需要时再加回 schema。
+ * `sortOrder` / `mappingWeight` 可选：用于控制台展示与按比例分流草稿；BFF 未落库时可省略。
  */
 export const providerModelMappingSchema = z.object({
   uid: uidString,
@@ -54,6 +53,9 @@ export const providerModelMappingSchema = z.object({
   displayName: z.string().min(1).max(128),
   enabled: z.boolean(),
   notes: z.string().nullable().optional(),
+  sortOrder: z.number().int().optional(),
+  /** 多条映射共存时的相对权重（100 为中立默认） */
+  mappingWeight: z.number().int().positive().optional(),
 });
 export type ProviderModelMapping = z.infer<typeof providerModelMappingSchema>;
 
@@ -134,6 +136,8 @@ export interface ProviderModelMappingDraft {
   displayName: string;
   enabled: boolean;
   notes?: string | null;
+  sortOrder?: number;
+  mappingWeight?: number;
 }
 
 export interface CreateProviderInput {

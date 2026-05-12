@@ -475,11 +475,11 @@ onMounted(() => {
   line-height: 1.2;
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
-.cell-routing__priority {
+.cell-routing__primary {
   font-weight: 600;
   color: var(--el-color-primary);
 }
-.cell-routing__weight {
+.cell-routing__sub {
   font-size: 11.5px;
   color: var(--el-text-color-secondary);
 }

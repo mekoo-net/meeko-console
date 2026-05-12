@@ -122,7 +122,7 @@ const currentChannelName = computed(() => {
                 placeholder="支持 HTML 与 {{变量}} 占位符，如 {{displayName}}、{{code}} 等"
               />
               <div class="form-tip">
-                支持 Mustache 模板语法，变量用 <code>{'{{variableName}}'}</code> 包裹
+                支持 Mustache 模板语法，变量用 <code v-pre>{{variableName}}</code> 包裹
               </div>
             </el-form-item>
 
