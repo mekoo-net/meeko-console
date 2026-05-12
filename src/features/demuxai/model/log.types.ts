@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { apiTypeSchema, logStatusSchema, type ApiType, type LogStatus } from './enums';
+import type { Uid } from '@/shared/lib/id';
 
 const uidString = z.union([z.string(), z.number()]).transform((v) => String(v));
 
@@ -29,7 +30,7 @@ export const logEntrySchema = z.object({
   iamUserUid: uidString,
   /** 对外暴露的 modelId（用户请求体里的 model） */
   modelId: z.string(),
-  /** 实际选中的供应商 uid */
+  /** 实际选中的模型渠道 uid */
   providerUid: uidString,
   /** 上游真实 model 名（如 modelId='demux-gpt-4o' → providerModelId='gpt-4o'） */
   providerModelId: z.string(),
@@ -84,6 +85,48 @@ export interface ListLogsFilter {
   errorOnly?: boolean;
 }
 
+/** 时间分桶聚合点（按 from-to 跨度自适应桶大小：1h / 1d / etc.） */
+export interface LogStatsBucket {
+  /** 桶起始时间（UTC ISO） */
+  tsUtc: string;
+  calls: number;
+  errors: number;
+  /** 该桶总扣费（元） */
+  cost: number;
+  /** 该桶总 tokens */
+  tokens: number;
+}
+
+/** Top 模型条目（按调用量降序） */
+export interface LogStatsTopModel {
+  modelId: string;
+  calls: number;
+  cost: number;
+  /** 0-1 */
+  errorRate: number;
+}
+
+/** Top 渠道条目（按调用量降序） */
+export interface LogStatsTopProvider {
+  providerUid: Uid;
+  calls: number;
+  errors: number;
+  avgLatencyMs: number;
+}
+
+/** 错误码分布条目（仅非 ok 调用） */
+export interface LogStatsErrorCode {
+  /** 上游 / 网关错误码；缺失时为 `unknown` */
+  code: string;
+  count: number;
+}
+
+/** 状态分布条目 */
+export interface LogStatsStatus {
+  status: LogStatus;
+  count: number;
+}
+
 export interface LogStats {
   totalCalls: number;
   successCalls: number;
@@ -96,4 +139,19 @@ export interface LogStats {
   totalTokens: number;
   /** 范围内总扣费（元） */
   totalCost: number;
+
+  /** 范围内平均 RPM（每分钟调用数，按时间跨度归一） */
+  rpm: number;
+  /** 桶宽（秒）—— 前端做横轴刻度 / tooltip 用 */
+  bucketSizeSec: number;
+  /** 时间序列分桶（按 occurredAt 升序） */
+  buckets: LogStatsBucket[];
+  /** 状态分布（用于环形图） */
+  statusBreakdown: LogStatsStatus[];
+  /** Top 模型（≤ 5 条） */
+  topModels: LogStatsTopModel[];
+  /** Top 模型渠道（≤ 5 条） */
+  topProviders: LogStatsTopProvider[];
+  /** 错误码分布（仅 status≠ok，≤ 5 条；其余合入 `other`） */
+  errorCodes: LogStatsErrorCode[];
 }

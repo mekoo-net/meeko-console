@@ -60,7 +60,7 @@ export const providerModelMappingSchema = z.object({
 export type ProviderModelMapping = z.infer<typeof providerModelMappingSchema>;
 
 /**
- * 供应商（上游凭据 + 模型实体 + 上架映射）。
+ * 模型渠道（上游凭据 + 模型实体 + 上架映射）。
  *
  * 一个 Provider = 一组凭据 + 一种 apiType + 一组 `providerModels` + 一组 `modelMappings`。
  *
@@ -95,7 +95,7 @@ export const providerSchema = z.object({
   errorRate24h: z.number().min(0).max(1).optional(),
   /** 24h 调用次数，用于 UI 排序参考 */
   callCount24h: z.number().int().nonnegative().optional(),
-  /** 供应商内登记的「上游模型实体」（per upstream model_name） */
+  /** 模型渠道内登记的「上游模型实体」（per upstream model_name） */
   providerModels: z.array(providerModelSchema),
   /** 对外上架映射（displayName → providerModel） */
   modelMappings: z.array(providerModelMappingSchema),
