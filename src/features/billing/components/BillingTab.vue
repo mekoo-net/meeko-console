@@ -7,35 +7,39 @@ import { formatMoney } from '@/shared/lib/money';
 import { formatDateTime } from '@/shared/lib/date';
 
 import {
-  ConsumptionStatusLabel,
-  ConsumptionStatusTone,
-  ConsumptionTypeLabel,
-  consumptionStatusValues,
-  consumptionTypeValues,
+  billStatusValues,
+  billSubTypeValues,
+  BillStatusLabel,
+  BillStatusTone,
+  BillSubTypeLabel,
+  BusinessCodeLabel,
+  rechargeProviderValues,
+  rechargeStatusValues,
+  RechargeProviderLabel,
   RechargeStatusLabel,
   RechargeStatusTone,
-  rechargeStatusValues,
-  type ConsumptionRecord,
-  type ConsumptionStatus,
-  type ConsumptionType,
+  type BillingEntry,
+  type BillStatus,
+  type BillSubType,
+  type RechargeProvider,
   type RechargeRecord,
   type RechargeStatus,
 } from '../model/billing.types';
-import { PaymentProviderLabel } from '../model/paymentChannel.types';
 import { getBillingPort } from '../services';
 
 const props = defineProps<{ accountUid: string }>();
 
 const billingPort = getBillingPort();
 
+const rechargeProvider = ref<RechargeProvider | 'all'>('all');
 const rechargeStatus = ref<RechargeStatus | 'all'>('all');
 const rechargeItems = ref<RechargeRecord[]>([]);
 const rechargeLoading = ref(false);
 
-const consumptionType = ref<ConsumptionType | 'all'>('all');
-const consumptionStatus = ref<ConsumptionStatus | 'all'>('all');
-const consumptionItems = ref<ConsumptionRecord[]>([]);
-const consumptionLoading = ref(false);
+const billSubType = ref<BillSubType | 'all'>('all');
+const billStatus = ref<BillStatus | 'all'>('all');
+const billItems = ref<BillingEntry[]>([]);
+const billLoading = ref(false);
 
 async function fetchRecharges(): Promise<void> {
   rechargeLoading.value = true;
@@ -43,7 +47,11 @@ async function fetchRecharges(): Promise<void> {
     const r = await billingPort.listRecharges({
       page: 1,
       pageSize: 100,
-      filter: { accountUid: props.accountUid, status: rechargeStatus.value },
+      filter: {
+        accountUid: props.accountUid,
+        provider: rechargeProvider.value,
+        status: rechargeStatus.value,
+      },
     });
     if (r.success) rechargeItems.value = r.data.items;
   } finally {
@@ -51,49 +59,55 @@ async function fetchRecharges(): Promise<void> {
   }
 }
 
-async function fetchConsumptions(): Promise<void> {
-  consumptionLoading.value = true;
+async function fetchBills(): Promise<void> {
+  billLoading.value = true;
   try {
-    const r = await billingPort.listConsumptions({
+    const r = await billingPort.listBills({
       page: 1,
       pageSize: 100,
       filter: {
         accountUid: props.accountUid,
-        type: consumptionType.value,
-        status: consumptionStatus.value,
+        business: 'all',
+        subType: billSubType.value,
+        status: billStatus.value,
       },
     });
-    if (r.success) consumptionItems.value = r.data.items;
+    if (r.success) billItems.value = r.data.items;
   } finally {
-    consumptionLoading.value = false;
+    billLoading.value = false;
   }
 }
 
 function resetRecharge(): void {
+  rechargeProvider.value = 'all';
   rechargeStatus.value = 'all';
 }
-function resetConsumption(): void {
-  consumptionType.value = 'all';
-  consumptionStatus.value = 'all';
+function resetBill(): void {
+  billSubType.value = 'all';
+  billStatus.value = 'all';
 }
 
-watch(rechargeStatus, () => void fetchRecharges());
-watch([consumptionType, consumptionStatus], () => void fetchConsumptions());
+watch([rechargeProvider, rechargeStatus], () => void fetchRecharges());
+watch([billSubType, billStatus], () => void fetchBills());
 watch(
   () => props.accountUid,
   () => {
     void fetchRecharges();
-    void fetchConsumptions();
+    void fetchBills();
   },
 );
 
 onMounted(() => {
   void fetchRecharges();
-  void fetchConsumptions();
+  void fetchBills();
 });
 
 const totalRecharge = computed(() => rechargeItems.value.length);
-const totalConsumption = computed(() => consumptionItems.value.length);
+const totalBill = computed(() => billItems.value.length);
+
+function isInternalProvider(p: RechargeProvider): boolean {
+  return p === 'cs_compensation' || p === 'marketing_reward' || p === 'manual';
+}
 </script>
 
 <template>
@@ -102,15 +116,26 @@ const totalConsumption = computed(() => consumptionItems.value.length);
     <section class="billing-section">
       <div class="billing-section__head">
         <h4 class="billing-section__title">
-          充值订单
+          充值记录
           <span class="billing-section__count">共 {{ totalRecharge }} 条</span>
         </h4>
       </div>
 
       <div class="tab-filter">
         <el-form :inline="true" @submit.prevent>
+          <el-form-item label="渠道">
+            <el-select v-model="rechargeProvider" style="width: 180px">
+              <el-option label="全部渠道" value="all" />
+              <el-option
+                v-for="p in rechargeProviderValues"
+                :key="p"
+                :label="RechargeProviderLabel[p]"
+                :value="p"
+              />
+            </el-select>
+          </el-form-item>
           <el-form-item label="状态">
-            <el-select v-model="rechargeStatus" style="width: 200px">
+            <el-select v-model="rechargeStatus" style="width: 180px">
               <el-option label="全部状态" value="all" />
               <el-option
                 v-for="s in rechargeStatusValues"
@@ -135,16 +160,35 @@ const totalConsumption = computed(() => consumptionItems.value.length);
         row-key="uid"
         size="small"
         class="compact-table"
-        empty-text="暂无充值订单"
+        empty-text="暂无充值记录"
       >
-        <el-table-column label="金额" width="140" align="right">
+        <el-table-column label="流水号" min-width="180" prop="uid">
           <template #default="{ row }: { row: RechargeRecord }">
-            <span class="cell-money">{{ formatMoney(row.amount, { currency: row.currency }) }}</span>
+            <span class="cell-uid">{{ row.uid }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="渠道" width="120">
+        <el-table-column label="渠道" width="130">
           <template #default="{ row }: { row: RechargeRecord }">
-            {{ (PaymentProviderLabel as Record<string, string>)[row.provider] ?? row.provider }}
+            <el-tag
+              size="small"
+              :type="isInternalProvider(row.provider) ? 'warning' : 'success'"
+              effect="plain"
+              round
+            >
+              {{ RechargeProviderLabel[row.provider] }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="业务单号" min-width="220">
+          <template #default="{ row }: { row: RechargeRecord }">
+            <span class="cell-refno">{{ row.refNo }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="金额" width="140" align="right">
+          <template #default="{ row }: { row: RechargeRecord }">
+            <span class="cell-money cell-money--in">
+              +{{ formatMoney(row.amount, { currency: row.currency }) }}
+            </span>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="100">
@@ -152,105 +196,133 @@ const totalConsumption = computed(() => consumptionItems.value.length);
             <StatusTag :label="RechargeStatusLabel[row.status]" :tone="RechargeStatusTone[row.status]" />
           </template>
         </el-table-column>
-        <el-table-column label="单号" min-width="200">
+        <el-table-column label="日期" width="170">
           <template #default="{ row }: { row: RechargeRecord }">
-            <span class="cell-trade-no">{{ row.outTradeNo }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="创建时间" width="170">
-          <template #default="{ row }: { row: RechargeRecord }">
-            <span class="cell-date">{{ formatDateTime(row.createdAtUtc) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="支付时间" width="170">
-          <template #default="{ row }: { row: RechargeRecord }">
-            <span v-if="row.paidAtUtc" class="cell-date">{{ formatDateTime(row.paidAtUtc) }}</span>
-            <span v-else class="cell-muted">—</span>
+            <span class="cell-date">{{ formatDateTime(row.paidAtUtc ?? row.createdAtUtc) }}</span>
           </template>
         </el-table-column>
       </el-table>
     </section>
 
-    <!-- 下半：消费记录 -->
+    <!-- 下半：账单（扣款） -->
     <section class="billing-section">
       <div class="billing-section__head">
         <h4 class="billing-section__title">
-          消费记录
-          <span class="billing-section__count">共 {{ totalConsumption }} 条</span>
+          账单流水
+          <span class="billing-section__count">共 {{ totalBill }} 条</span>
         </h4>
       </div>
 
       <div class="tab-filter">
         <el-form :inline="true" @submit.prevent>
           <el-form-item label="类型">
-            <el-select v-model="consumptionType" style="width: 200px">
+            <el-select v-model="billSubType" style="width: 180px">
               <el-option label="全部类型" value="all" />
               <el-option
-                v-for="t in consumptionTypeValues"
+                v-for="t in billSubTypeValues"
                 :key="t"
-                :label="ConsumptionTypeLabel[t]"
+                :label="BillSubTypeLabel[t]"
                 :value="t"
               />
             </el-select>
           </el-form-item>
           <el-form-item label="状态">
-            <el-select v-model="consumptionStatus" style="width: 200px">
+            <el-select v-model="billStatus" style="width: 180px">
               <el-option label="全部状态" value="all" />
               <el-option
-                v-for="s in consumptionStatusValues"
+                v-for="s in billStatusValues"
                 :key="s"
-                :label="ConsumptionStatusLabel[s]"
+                :label="BillStatusLabel[s]"
                 :value="s"
               />
             </el-select>
           </el-form-item>
         </el-form>
         <div class="tab-filter__actions">
-          <el-button type="primary" :icon="Search" :loading="consumptionLoading" @click="fetchConsumptions()">
+          <el-button type="primary" :icon="Search" :loading="billLoading" @click="fetchBills()">
             查询
           </el-button>
-          <el-button :icon="RefreshLeft" @click="resetConsumption()">重置</el-button>
+          <el-button :icon="RefreshLeft" @click="resetBill()">重置</el-button>
         </div>
       </div>
 
       <el-table
-        v-loading="consumptionLoading"
-        :data="consumptionItems"
+        v-loading="billLoading"
+        :data="billItems"
         row-key="uid"
         size="small"
         class="compact-table"
-        empty-text="暂无消费记录"
+        empty-text="暂无账单记录"
       >
-        <el-table-column label="项目" min-width="220">
-          <template #default="{ row }: { row: ConsumptionRecord }">
-            <div class="cell-item">
-              <span class="cell-item__desc">{{ row.description ?? row.productCode }}</span>
-              <span class="cell-item__code">{{ row.productCode }}</span>
+        <el-table-column label="流水号" min-width="180" prop="uid">
+          <template #default="{ row }: { row: BillingEntry }">
+            <span class="cell-uid">{{ row.uid }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="业务" width="100">
+          <template #default="{ row }: { row: BillingEntry }">
+            <el-tag
+              size="small"
+              :type="row.business === 'demux' ? 'primary' : 'info'"
+              effect="plain"
+              round
+            >
+              {{ BusinessCodeLabel[row.business] }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="产品" min-width="160">
+          <template #default="{ row }: { row: BillingEntry }">
+            <span v-if="row.productCode" class="cell-product">{{ row.productCode }}</span>
+            <span v-else class="cell-muted">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="类型" width="140">
+          <template #default="{ row }: { row: BillingEntry }">
+            <div class="cell-type">
+              <el-tag
+                size="small"
+                :type="row.subType === 'usage' ? 'warning' : 'info'"
+                effect="plain"
+                round
+              >
+                {{ BillSubTypeLabel[row.subType] }}
+              </el-tag>
+              <span v-if="row.operatorAccountUid !== row.ownerAccountUid" class="cell-type__iam">
+                IAM
+              </span>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="类型" width="120">
-          <template #default="{ row }: { row: ConsumptionRecord }">
-            {{ ConsumptionTypeLabel[row.type] }}
+        <el-table-column label="金额" width="160" align="right">
+          <template #default="{ row }: { row: BillingEntry }">
+            <div class="cell-amount">
+              <span
+                class="cell-money"
+                :class="{
+                  'cell-money--reverted': row.status === 'reversed' || row.status === 'partial_refunded',
+                  'cell-money--failed': row.status === 'failed',
+                  'cell-money--out': row.status === 'completed',
+                }"
+              >
+                -{{ formatMoney(row.actualAmount, { currency: row.currency }) }}
+              </span>
+              <span
+                v-if="row.actualAmount !== row.originalAmount"
+                class="cell-amount__original"
+              >
+                原 {{ formatMoney(row.originalAmount, { currency: row.currency }) }}
+              </span>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="金额" width="140" align="right">
-          <template #default="{ row }: { row: ConsumptionRecord }">
-            <span class="cell-money cell-money--danger">
-              {{ formatMoney(row.amount, { currency: row.currency }) }}
-            </span>
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }: { row: BillingEntry }">
+            <StatusTag :label="BillStatusLabel[row.status]" :tone="BillStatusTone[row.status]" />
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }: { row: ConsumptionRecord }">
-            <StatusTag
-              :label="ConsumptionStatusLabel[row.status]"
-              :tone="ConsumptionStatusTone[row.status]"
-            />
-          </template>
-        </el-table-column>
-        <el-table-column label="发生时间" width="170">
-          <template #default="{ row }: { row: ConsumptionRecord }">
+        <el-table-column label="日期" width="170">
+          <template #default="{ row }: { row: BillingEntry }">
             <span class="cell-date">{{ formatDateTime(row.occurredAtUtc) }}</span>
           </template>
         </el-table-column>
@@ -310,22 +382,58 @@ const totalConsumption = computed(() => consumptionItems.value.length);
   gap: 10px;
   margin-left: auto;
 }
-.cell-money--danger {
-  color: #dc2626;
-}
-.cell-item {
+
+.cell-type {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   line-height: 1.35;
 }
-.cell-item__desc {
-  font-weight: 500;
+.cell-type__iam {
+  font-size: 11px;
+  color: var(--el-color-warning);
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 1.4;
+}
+
+.cell-product {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12.5px;
   color: var(--el-text-color-primary);
 }
-.cell-item__code {
+
+.cell-refno {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  color: var(--el-text-color-primary);
+}
+
+.cell-amount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.35;
+}
+.cell-amount__original {
   font-size: 11px;
   color: var(--el-text-color-secondary);
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  text-decoration: line-through;
   margin-top: 2px;
+}
+.cell-money--in {
+  color: var(--el-color-success);
+}
+.cell-money--out {
+  color: var(--el-color-warning);
+}
+.cell-money--reverted {
+  color: var(--el-text-color-secondary);
+  text-decoration: line-through;
+}
+.cell-money--failed {
+  color: var(--el-color-danger);
+  opacity: 0.6;
 }
 </style>

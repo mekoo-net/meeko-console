@@ -1,19 +1,20 @@
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { clientPaginate } from '@/shared/composables/usePagination';
-import { createUidSeq, type Uid } from '@/shared/lib/id';
+import { createSnowflakeIdSeq, createUidSeq, type Uid } from '@/shared/lib/id';
 import { delay } from '@/shared/lib/delay';
 
 import {
-  consumptionRecordSchema,
+  billingEntrySchema,
   invoiceDtoSchema,
   orderDtoSchema,
   rechargeIntentSchema,
   rechargeRecordSchema,
   subscriptionDtoSchema,
   walletSnapshotSchema,
-  type ConsumptionRecord,
+  type BillingEntry,
   type CreateRechargeInput,
   type InvoiceDto,
+  type ListBillsFilter,
   type ListInvoicesFilter,
   type ListOrdersFilter,
   type OrderDto,
@@ -31,8 +32,7 @@ import {
 } from '../../model/business.types';
 import type {
   BillingPort,
-  ListConsumptionsFilter,
-  ListConsumptionsPage,
+  ListBillsPage,
   ListInvoicesPage,
   ListOrdersPage,
   ListRechargesFilter,
@@ -45,7 +45,7 @@ interface AccountBilling {
   subscriptions: SubscriptionDto[];
   invoices: InvoiceDto[];
   recharges: RechargeRecord[];
-  consumptions: ConsumptionRecord[];
+  bills: BillingEntry[];
   businesses: BusinessInstance[];
 }
 
@@ -53,9 +53,9 @@ const genOrderUid = createUidSeq(5_000_000);
 const genSubUid = createUidSeq(6_000_000);
 const genInvUid = createUidSeq(7_000_000);
 const genRechargeUid = createUidSeq(8_000_000);
-const genRechargeRecordUid = createUidSeq(9_000_000);
-const genConsumptionUid = createUidSeq(10_000_000);
 const genBusinessUid = createUidSeq(11_000_000);
+/** 账单 + 充值记录共用一套雪花 ID（按时间递增） */
+const genSnowflakeUid = createSnowflakeIdSeq();
 
 /** 业务产品名称字典（前后端共识，前端为方便展示常驻一份）。 */
 const PRODUCT_NAMES: Readonly<Record<string, string>> = {
@@ -161,95 +161,195 @@ function seedForAccount(accountUid: Uid): AccountBilling {
 
   const recharges: RechargeRecord[] = [
     {
-      uid: genRechargeRecordUid(),
-      accountUid,
-      outTradeNo: `TRADE-SEED-001-${accountUid}`,
+      uid: genSnowflakeUid(),
+      ownerAccountUid: accountUid,
       provider: 'alipay',
       scene: 0,
+      refNo: `2026050100${accountUid}500`,
       amount: 500,
       currency: 'CNY',
       status: 'paid',
+      operatorUid: null,
       createdAtUtc: iso(new Date(now.getTime() - 30 * 86400000)),
       paidAtUtc: iso(new Date(now.getTime() - 30 * 86400000 + 60000)),
     },
     {
-      uid: genRechargeRecordUid(),
-      accountUid,
-      outTradeNo: `TRADE-SEED-002-${accountUid}`,
+      uid: genSnowflakeUid(),
+      ownerAccountUid: accountUid,
       provider: 'wechat_pay',
       scene: 2,
+      refNo: `4200002026042100${accountUid}`,
       amount: 12880.5,
       currency: 'CNY',
       status: 'paid',
+      operatorUid: null,
       createdAtUtc: iso(new Date(now.getTime() - 10 * 86400000)),
       paidAtUtc: iso(new Date(now.getTime() - 10 * 86400000 + 30000)),
     },
     {
-      uid: genRechargeRecordUid(),
-      accountUid,
-      outTradeNo: `TRADE-SEED-003-${accountUid}`,
-      provider: 'manual',
+      uid: genSnowflakeUid(),
+      ownerAccountUid: accountUid,
+      provider: 'cs_compensation',
       scene: 99,
+      refNo: 'TKT-20260428-018',
+      amount: 50,
+      currency: 'CNY',
+      status: 'paid',
+      operatorUid: '900000001',
+      createdAtUtc: iso(new Date(now.getTime() - 3 * 3600000)),
+      paidAtUtc: iso(new Date(now.getTime() - 3 * 3600000)),
+    },
+    {
+      uid: genSnowflakeUid(),
+      ownerAccountUid: accountUid,
+      provider: 'marketing_reward',
+      scene: 99,
+      refNo: 'ACT-2026-NEWYEAR',
+      amount: 100,
+      currency: 'CNY',
+      status: 'paid',
+      operatorUid: '900000002',
+      createdAtUtc: iso(new Date(now.getTime() - 20 * 86400000)),
+      paidAtUtc: iso(new Date(now.getTime() - 20 * 86400000)),
+    },
+    {
+      uid: genSnowflakeUid(),
+      ownerAccountUid: accountUid,
+      provider: 'alipay',
+      scene: 0,
+      refNo: `2026051200${accountUid}200`,
       amount: 200,
       currency: 'CNY',
       status: 'pending',
+      operatorUid: null,
       createdAtUtc: iso(now),
       paidAtUtc: null,
     },
   ];
 
-  const consumptions: ConsumptionRecord[] = [
+  // 主账户和 IAM 子账户都可能触发扣款；这里用一个固定的"子账户"模拟运营/财务/开发的 IAM 子账户
+  const iamSubUid = '700000001';
+
+  const bills: BillingEntry[] = [
     {
-      uid: genConsumptionUid(),
-      accountUid,
+      uid: genSnowflakeUid(),
+      ownerAccountUid: accountUid,
+      operatorAccountUid: accountUid,
+      business: 'platform',
       productCode: 'pro-seat',
-      description: '订阅扣款 · pro-seat × 5',
-      amount: 495,
-      currency: 'CNY',
-      type: 'subscription',
+      subType: 'prepaid',
       status: 'completed',
-      orderUid: o1.uid,
-      invoiceUid: inv1.uid,
+      failureCode: null,
+      originalAmount: 495,
+      actualAmount: 495,
+      currency: 'CNY',
+      balanceAfter: 12880.5,
+      refType: 'subscription',
+      refUid: o1.uid,
+      reversedAtUtc: null,
+      reversedBy: null,
+      reversedCode: null,
       occurredAtUtc: iso(new Date(now.getTime() - 7 * 86400000)),
     },
     {
-      uid: genConsumptionUid(),
-      accountUid,
+      uid: genSnowflakeUid(),
+      ownerAccountUid: accountUid,
+      operatorAccountUid: accountUid,
+      business: 'platform',
       productCode: 'api-pack',
-      description: '一次性套餐购买',
-      amount: 499,
-      currency: 'CNY',
-      type: 'one_time',
+      subType: 'prepaid',
       status: 'completed',
-      orderUid: o2.uid,
-      invoiceUid: inv2.uid,
+      failureCode: null,
+      originalAmount: 499,
+      actualAmount: 499,
+      currency: 'CNY',
+      balanceAfter: 12381.5,
+      refType: 'order',
+      refUid: o2.uid,
+      reversedAtUtc: null,
+      reversedBy: null,
+      reversedCode: null,
       occurredAtUtc: iso(new Date(now.getTime() - 86400000)),
     },
     {
-      uid: genConsumptionUid(),
-      accountUid,
-      productCode: 'api-call',
-      description: 'API 调用扣费 · 2,300 次',
-      amount: 23,
-      currency: 'CNY',
-      type: 'usage',
+      uid: genSnowflakeUid(),
+      ownerAccountUid: accountUid,
+      operatorAccountUid: iamSubUid,
+      business: 'demux',
+      productCode: 'demux-inference',
+      subType: 'usage',
       status: 'completed',
-      orderUid: null,
-      invoiceUid: null,
+      failureCode: null,
+      originalAmount: 23,
+      actualAmount: 23,
+      currency: 'CNY',
+      balanceAfter: 12358.5,
+      refType: null,
+      refUid: null,
+      reversedAtUtc: null,
+      reversedBy: null,
+      reversedCode: null,
       occurredAtUtc: iso(new Date(now.getTime() - 2 * 86400000)),
     },
     {
-      uid: genConsumptionUid(),
-      accountUid,
-      productCode: 'manual-adj',
-      description: '人工调账 · 客服补偿',
-      amount: 50,
-      currency: 'CNY',
-      type: 'adjustment',
+      uid: genSnowflakeUid(),
+      ownerAccountUid: accountUid,
+      operatorAccountUid: iamSubUid,
+      business: 'demux',
+      productCode: 'demux-inference',
+      subType: 'usage',
       status: 'reversed',
-      orderUid: null,
-      invoiceUid: null,
-      occurredAtUtc: iso(new Date(now.getTime() - 3 * 3600000)),
+      failureCode: null,
+      originalAmount: 8.5,
+      actualAmount: 0,
+      currency: 'CNY',
+      balanceAfter: 12358.5,
+      refType: null,
+      refUid: null,
+      reversedAtUtc: iso(new Date(now.getTime() - 5 * 86400000 + 3600000)),
+      reversedBy: '900000001',
+      reversedCode: 'duplicate_charge',
+      occurredAtUtc: iso(new Date(now.getTime() - 5 * 86400000)),
+    },
+    {
+      uid: genSnowflakeUid(),
+      ownerAccountUid: accountUid,
+      operatorAccountUid: accountUid,
+      business: 'demux',
+      productCode: 'demux-training',
+      subType: 'usage',
+      status: 'partial_refunded',
+      failureCode: null,
+      originalAmount: 200,
+      actualAmount: 120,
+      currency: 'CNY',
+      balanceAfter: null,
+      refType: null,
+      refUid: null,
+      reversedAtUtc: iso(new Date(now.getTime() - 12 * 86400000)),
+      reversedBy: '900000001',
+      reversedCode: 'service_unavailable',
+      occurredAtUtc: iso(new Date(now.getTime() - 12 * 86400000 - 3600000)),
+    },
+    {
+      uid: genSnowflakeUid(),
+      ownerAccountUid: accountUid,
+      operatorAccountUid: iamSubUid,
+      business: 'demux',
+      productCode: 'demux-inference',
+      subType: 'usage',
+      status: 'failed',
+      failureCode: 'insufficient_balance',
+      originalAmount: 15,
+      actualAmount: 0,
+      currency: 'CNY',
+      balanceAfter: null,
+      refType: null,
+      refUid: null,
+      reversedAtUtc: null,
+      reversedBy: null,
+      reversedCode: null,
+      occurredAtUtc: iso(new Date(now.getTime() - 60 * 60 * 1000)),
     },
   ];
 
@@ -300,7 +400,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
     subscriptions: [sub],
     invoices: [inv1, inv2],
     recharges,
-    consumptions,
+    bills,
     businesses,
   };
 }
@@ -384,10 +484,11 @@ export class BillingMock implements BillingPort {
     }
     const b = ensure(accountUid);
     const created = iso(new Date());
+    const provider = (input.provider ?? 'manual') as RechargeRecord['provider'];
     const intent: RechargeIntent = {
       rechargeUid: genRechargeUid(),
       outTradeNo: `MOCK-${Date.now()}`,
-      provider: input.provider ?? 'manual',
+      provider,
       scene: input.scene ?? 99,
       amount: input.amount,
       currency: b.wallet.currency,
@@ -405,14 +506,15 @@ export class BillingMock implements BillingPort {
       updatedAtUtc: created,
     };
     const record: RechargeRecord = {
-      uid: genRechargeRecordUid(),
-      accountUid,
-      outTradeNo: intent.outTradeNo,
-      provider: intent.provider,
+      uid: genSnowflakeUid(),
+      ownerAccountUid: accountUid,
+      provider,
       scene: intent.scene,
+      refNo: intent.outTradeNo,
       amount: intent.amount,
       currency: intent.currency,
       status: 'paid',
+      operatorUid: null,
       createdAtUtc: created,
       paidAtUtc: created,
     };
@@ -538,6 +640,9 @@ export class BillingMock implements BillingPort {
       }
       all.sort((a, b) => b.createdAtUtc.localeCompare(a.createdAtUtc));
     }
+    if (input.filter.provider !== 'all') {
+      all = all.filter((r) => r.provider === input.filter.provider);
+    }
     if (input.filter.status !== 'all') {
       all = all.filter((r) => r.status === input.filter.status);
     }
@@ -579,24 +684,27 @@ export class BillingMock implements BillingPort {
     return ok(parsed);
   }
 
-  async listConsumptions(input: {
+  async listBills(input: {
     page: number;
     pageSize: number;
-    filter: ListConsumptionsFilter;
-  }): Promise<AppResult<ListConsumptionsPage>> {
+    filter: ListBillsFilter;
+  }): Promise<AppResult<ListBillsPage>> {
     await delay();
-    let all: ConsumptionRecord[] = [];
+    let all: BillingEntry[] = [];
     if (input.filter.accountUid) {
       const b = ensure(input.filter.accountUid);
-      all = [...b.consumptions];
+      all = [...b.bills];
     } else {
       for (const b of store.values()) {
-        all.push(...b.consumptions);
+        all.push(...b.bills);
       }
       all.sort((a, b) => b.occurredAtUtc.localeCompare(a.occurredAtUtc));
     }
-    if (input.filter.type !== 'all') {
-      all = all.filter((r) => r.type === input.filter.type);
+    if (input.filter.business !== 'all') {
+      all = all.filter((r) => r.business === input.filter.business);
+    }
+    if (input.filter.subType !== 'all') {
+      all = all.filter((r) => r.subType === input.filter.subType);
     }
     if (input.filter.status !== 'all') {
       all = all.filter((r) => r.status === input.filter.status);
@@ -610,9 +718,9 @@ export class BillingMock implements BillingPort {
       all = all.filter((r) => Date.parse(r.occurredAtUtc) <= to);
     }
     const slice = clientPaginate(all, input.page, input.pageSize);
-    const parsed: ConsumptionRecord[] = [];
+    const parsed: BillingEntry[] = [];
     for (const it of slice) {
-      const r = consumptionRecordSchema.safeParse(it);
+      const r = billingEntrySchema.safeParse(it);
       if (!r.success) continue;
       parsed.push(r.data);
     }

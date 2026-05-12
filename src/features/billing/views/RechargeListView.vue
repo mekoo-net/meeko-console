@@ -4,20 +4,22 @@ import { useRouter } from 'vue-router';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import StatusTag from '@/shared/ui/StatusTag.vue';
+import FilterBar from '@/shared/ui/FilterBar.vue';
 import { formatMoney } from '@/shared/lib/money';
 import { formatDateTime } from '@/shared/lib/date';
 import { getAccountAdminPort } from '@/features/accounts/services';
 import type { Account } from '@/features/accounts/model/account.types';
 
-import FilterBar from '@/shared/ui/FilterBar.vue';
 import {
+  rechargeProviderValues,
   rechargeStatusValues,
+  RechargeProviderLabel,
   RechargeStatusLabel,
   RechargeStatusTone,
+  type RechargeProvider,
   type RechargeRecord,
   type RechargeStatus,
 } from '../model/billing.types';
-import { PaymentProviderLabel } from '../model/paymentChannel.types';
 import { getBillingPort } from '../services';
 import type { ListRechargesFilter } from '../services/ports/billingPort';
 
@@ -36,6 +38,7 @@ interface PageFilter {
   accountUid: string;
   contactKeyword: string;
   dateRange: [string, string] | null;
+  provider: RechargeProvider | 'all';
   status: RechargeStatus | 'all';
 }
 
@@ -43,6 +46,7 @@ const defaultFilter = (): PageFilter => ({
   accountUid: '',
   contactKeyword: '',
   dateRange: null,
+  provider: 'all',
   status: 'all',
 });
 
@@ -64,7 +68,10 @@ async function loadAccounts(): Promise<void> {
 }
 
 function buildPortFilter(): ListRechargesFilter {
-  const f: ListRechargesFilter = { status: filter.value.status };
+  const f: ListRechargesFilter = {
+    provider: filter.value.provider,
+    status: filter.value.status,
+  };
   if (filter.value.accountUid.trim()) {
     f.accountUid = filter.value.accountUid.trim();
   }
@@ -94,15 +101,11 @@ async function fetchData(): Promise<void> {
   }
 }
 
-/**
- * 邮箱/手机过滤在客户端基于 accountMap 二次过滤——后端管账户与流水分库，
- * 通常不会直接给"按 owner 邮箱过滤流水"的端点，前端 join 更顺手。
- */
 const displayRecords = computed(() => {
   const kw = filter.value.contactKeyword.trim().toLowerCase();
   if (!kw) return records.value;
   return records.value.filter((r) => {
-    const a = accountMap.value.get(r.accountUid);
+    const a = accountMap.value.get(r.ownerAccountUid);
     if (!a) return false;
     const email = (a.ownerEmail ?? '').toLowerCase();
     const phone = a.ownerPhone ?? '';
@@ -110,15 +113,11 @@ const displayRecords = computed(() => {
   });
 });
 
-/**
- * 单一 watch 监听分页 + 后端参与过滤的字段（status / accountUid / dateRange）。
- * 同一 tick 内多次赋值会被合并，避免一次筛选触发两次请求。
- * 邮箱/手机过滤是纯前端字符串包含，无需重新请求。
- */
 watch(
   () => ({
     page: page.value,
     pageSize: pageSize.value,
+    provider: filter.value.provider,
     status: filter.value.status,
     accountUid: filter.value.accountUid,
     dateRange: filter.value.dateRange,
@@ -128,7 +127,13 @@ watch(
 );
 
 watch(
-  () => [filter.value.status, filter.value.accountUid, filter.value.dateRange] as const,
+  () =>
+    [
+      filter.value.provider,
+      filter.value.status,
+      filter.value.accountUid,
+      filter.value.dateRange,
+    ] as const,
   () => {
     page.value = 1;
   },
@@ -138,6 +143,10 @@ watch(
 function resetFilter(): void {
   filter.value = defaultFilter();
   page.value = 1;
+}
+
+function isInternalProvider(p: RechargeProvider): boolean {
+  return p === 'cs_compensation' || p === 'marketing_reward' || p === 'manual';
 }
 
 onMounted(() => {
@@ -150,7 +159,7 @@ onMounted(() => {
   <div class="page">
     <PageHeader
       title="充值记录"
-      description="平台全量充值流水，支持按账户、邮箱/手机、时间范围、状态筛选。"
+      description="账户钱包入账事件，含用户付费充值（支付宝 / 微信）与平台内部充值（客服补偿 / 营销奖励 / 手工充值）。仅主账户可发起。"
     />
 
     <FilterBar
@@ -161,6 +170,17 @@ onMounted(() => {
       @refresh="fetchData()"
       @reset="resetFilter()"
     >
+      <el-form-item label="渠道">
+        <el-select v-model="filter.provider">
+          <el-option label="全部渠道" value="all" />
+          <el-option
+            v-for="p in rechargeProviderValues"
+            :key="p"
+            :label="RechargeProviderLabel[p]"
+            :value="p"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="状态">
         <el-select v-model="filter.status">
           <el-option label="全部状态" value="all" />
@@ -181,49 +201,51 @@ onMounted(() => {
       size="small"
       class="compact-table"
     >
-      <el-table-column label="账户 UID" width="130">
+      <el-table-column label="流水号" min-width="180" prop="uid">
         <template #default="{ row }: { row: RechargeRecord }">
-          <el-button
-            link
-            class="cell-uid-btn"
-            @click="router.push(`/accounts/${row.accountUid}`)"
-          >
-            {{ row.accountUid }}
-          </el-button>
+          <span class="cell-uid">{{ row.uid }}</span>
         </template>
       </el-table-column>
 
-      <el-table-column label="账户" min-width="200">
+      <el-table-column label="账户" min-width="220">
         <template #default="{ row }: { row: RechargeRecord }">
-          <template v-if="accountMap.has(row.accountUid)">
-            <div class="cell-contact">
-              <div class="cell-contact__email">
-                <span v-if="accountMap.get(row.accountUid)?.ownerEmail">
-                  {{ accountMap.get(row.accountUid)?.ownerEmail }}
-                </span>
-                <span v-else class="cell-muted">—</span>
-              </div>
-              <div class="cell-contact__phone">
-                <span v-if="accountMap.get(row.accountUid)?.ownerPhone">
-                  {{ accountMap.get(row.accountUid)?.ownerPhone }}
-                </span>
-                <span v-else class="cell-muted">—</span>
-              </div>
+          <div class="cell-account">
+            <el-button
+              link
+              class="cell-account__uid"
+              @click="router.push(`/accounts/${row.ownerAccountUid}`)"
+            >
+              {{ row.ownerAccountUid }}
+            </el-button>
+            <div class="cell-account__contact">
+              <span v-if="accountMap.get(row.ownerAccountUid)?.ownerEmail">
+                {{ accountMap.get(row.ownerAccountUid)?.ownerEmail }}
+              </span>
+              <span v-else-if="accountMap.get(row.ownerAccountUid)?.ownerPhone">
+                {{ accountMap.get(row.ownerAccountUid)?.ownerPhone }}
+              </span>
+              <span v-else class="cell-muted">—</span>
             </div>
-          </template>
-          <span v-else class="cell-muted">—</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="金额" width="140" align="right">
-        <template #default="{ row }: { row: RechargeRecord }">
-          <span class="cell-money">{{ formatMoney(row.amount, { currency: row.currency }) }}</span>
+          </div>
         </template>
       </el-table-column>
 
       <el-table-column label="渠道" width="120">
         <template #default="{ row }: { row: RechargeRecord }">
-          {{ (PaymentProviderLabel as Record<string, string>)[row.provider] ?? row.provider }}
+          <el-tag
+            size="small"
+            :type="isInternalProvider(row.provider) ? 'warning' : 'success'"
+            effect="plain"
+            round
+          >
+            {{ RechargeProviderLabel[row.provider] }}
+          </el-tag>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="业务单号" min-width="220">
+        <template #default="{ row }: { row: RechargeRecord }">
+          <span class="cell-refno">{{ row.refNo }}</span>
         </template>
       </el-table-column>
 
@@ -236,22 +258,17 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="单号" min-width="200">
+      <el-table-column label="金额" width="140" align="right">
         <template #default="{ row }: { row: RechargeRecord }">
-          <span class="cell-trade-no">{{ row.outTradeNo }}</span>
+          <span class="cell-money cell-money--in">
+            +{{ formatMoney(row.amount, { currency: row.currency }) }}
+          </span>
         </template>
       </el-table-column>
 
-      <el-table-column label="创建时间" width="170">
+      <el-table-column label="日期" width="170">
         <template #default="{ row }: { row: RechargeRecord }">
-          <span class="cell-date">{{ formatDateTime(row.createdAtUtc) }}</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="支付时间" width="170">
-        <template #default="{ row }: { row: RechargeRecord }">
-          <span v-if="row.paidAtUtc" class="cell-date">{{ formatDateTime(row.paidAtUtc) }}</span>
-          <span v-else class="cell-muted">—</span>
+          <span class="cell-date">{{ formatDateTime(row.paidAtUtc ?? row.createdAtUtc) }}</span>
         </template>
       </el-table-column>
     </el-table>
@@ -276,8 +293,13 @@ onMounted(() => {
   margin-top: 16px;
 }
 
-/* UID 按钮：等宽数字 + 灰色，hover 主题色 */
-.cell-uid-btn {
+.cell-account {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.35;
+}
+.cell-account__uid {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12.5px;
   font-variant-numeric: tabular-nums;
@@ -285,26 +307,24 @@ onMounted(() => {
   padding: 0;
   height: auto;
   line-height: 1.4;
+  justify-content: flex-start;
 }
-.cell-uid-btn:hover {
+.cell-account__uid:hover {
   color: var(--el-color-primary);
 }
-
-/* 账户单元格：上邮箱、下手机号 */
-.cell-contact {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.35;
-}
-.cell-contact__email {
-  font-weight: 500;
-  color: var(--el-text-color-primary);
-  font-size: 13px;
-}
-.cell-contact__phone {
+.cell-account__contact {
   font-size: 12px;
   color: var(--el-text-color-secondary);
-  font-variant-numeric: tabular-nums;
   margin-top: 2px;
+}
+
+.cell-refno {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  color: var(--el-text-color-primary);
+}
+
+.cell-money--in {
+  color: var(--el-color-success);
 }
 </style>

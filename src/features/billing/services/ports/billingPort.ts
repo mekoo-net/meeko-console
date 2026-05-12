@@ -2,17 +2,17 @@ import type { AppResult } from '@/shared/api/httpTypes';
 import type { Uid } from '@/shared/lib/id';
 
 import type {
-  ConsumptionRecord,
-  ConsumptionStatus,
-  ConsumptionType,
+  BillingEntry,
   CreateRechargeInput,
   InvoiceDto,
+  ListBillsFilter,
   ListInvoicesFilter,
   ListOrdersFilter,
   OrderDto,
   PlaceOrderInput,
   PlaceOrderResult,
   RechargeIntent,
+  RechargeProvider,
   RechargeRecord,
   RechargeStatus,
   SubscriptionDto,
@@ -37,6 +37,7 @@ export interface ListRechargesPage {
 
 export interface ListRechargesFilter {
   accountUid?: string;
+  provider: RechargeProvider | 'all';
   status: RechargeStatus | 'all';
   /** 创建时间起点（ISO8601，inclusive） */
   fromUtc?: string;
@@ -44,20 +45,12 @@ export interface ListRechargesFilter {
   toUtc?: string;
 }
 
-export interface ListConsumptionsPage {
-  items: ConsumptionRecord[];
+export interface ListBillsPage {
+  items: BillingEntry[];
   total: number;
 }
 
-export interface ListConsumptionsFilter {
-  accountUid?: string;
-  type: ConsumptionType | 'all';
-  status: ConsumptionStatus | 'all';
-  /** 发生时间起点（ISO8601，inclusive） */
-  fromUtc?: string;
-  /** 发生时间终点（ISO8601，inclusive） */
-  toUtc?: string;
-}
+export type { ListBillsFilter };
 
 /**
  * 对齐 BFF `/api/billing`（Keystone 当前登录上下文下的账户）。
@@ -82,19 +75,27 @@ export interface BillingPort {
     input: { page: number; pageSize: number; filter: ListInvoicesFilter },
   ): Promise<AppResult<ListInvoicesPage>>;
 
-  /** 平台级全量充值记录，accountUid 为空时查所有账户 */
+  /**
+   * 平台级全量充值记录（用户付费 / 客服补偿 / 营销奖励 / 手工充值），
+   * accountUid 为空时查所有账户。
+   */
   listRecharges(input: {
     page: number;
     pageSize: number;
     filter: ListRechargesFilter;
   }): Promise<AppResult<ListRechargesPage>>;
 
-  /** 平台级全量消费（扣费）记录，accountUid 为空时查所有账户 */
-  listConsumptions(input: {
+  /**
+   * 平台级全量账单（钱包扣款流水），accountUid 为空时查所有账户。
+   *
+   * 错扣回滚不另起一条记录，而是直接驳回原条目（`status='reversed'` 且
+   * `actualAmount=0`），便于审计一一对应。
+   */
+  listBills(input: {
     page: number;
     pageSize: number;
-    filter: ListConsumptionsFilter;
-  }): Promise<AppResult<ListConsumptionsPage>>;
+    filter: ListBillsFilter;
+  }): Promise<AppResult<ListBillsPage>>;
 
   /**
    * 列出账户已开通的业务（三态：opened / paused / stopped）。
