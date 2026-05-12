@@ -124,20 +124,20 @@ function validateForm(
     if (!name) {
       return fail({
         code: 'validation',
-        message: `第 ${i + 1} 个供应商模型 modelName 不能为空`,
+        message: `第 ${i + 1} 个渠道模型 modelName 不能为空`,
       });
     }
     if (seenNames.has(name)) {
       return fail({
         code: 'validation',
-        message: `供应商模型 "${name}" 重复（同 Provider 内 modelName 必须唯一）`,
+        message: `渠道模型 "${name}" 重复（同渠道内 modelName 必须唯一）`,
       });
     }
     seenNames.add(name);
     if (!Number.isFinite(m.maxContextTokens) || m.maxContextTokens <= 0) {
       return fail({
         code: 'validation',
-        message: `供应商模型 "${name}" 的 maxContextTokens 必须 > 0`,
+        message: `渠道模型 "${name}" 的 maxContextTokens 必须 > 0`,
       });
     }
   }
@@ -190,7 +190,7 @@ export class DemuxaiProviderMock implements DemuxaiProviderPort {
   async get(uid: Uid): Promise<AppResult<Provider>> {
     await delay();
     const row = this.store.providers.find((c) => c.uid === uid);
-    if (!row) return fail({ code: 'not_found', message: `供应商 ${uid} 不存在` });
+    if (!row) return fail({ code: 'not_found', message: `模型渠道 ${uid} 不存在` });
     return parseProvider(row);
   }
 
@@ -244,7 +244,7 @@ export class DemuxaiProviderMock implements DemuxaiProviderPort {
   async update(uid: Uid, input: UpdateProviderInput): Promise<AppResult<Provider>> {
     await delay();
     const idx = this.store.providers.findIndex((c) => c.uid === uid);
-    if (idx < 0) return fail({ code: 'not_found', message: `供应商 ${uid} 不存在` });
+    if (idx < 0) return fail({ code: 'not_found', message: `模型渠道 ${uid} 不存在` });
     const cur = this.store.providers[idx]!;
 
     let nextModels = cur.providerModels;
@@ -288,7 +288,7 @@ export class DemuxaiProviderMock implements DemuxaiProviderPort {
   async delete(uid: Uid): Promise<AppResult<void>> {
     await delay();
     const idx = this.store.providers.findIndex((c) => c.uid === uid);
-    if (idx < 0) return fail({ code: 'not_found', message: `供应商 ${uid} 不存在` });
+    if (idx < 0) return fail({ code: 'not_found', message: `模型渠道 ${uid} 不存在` });
     this.store.providers.splice(idx, 1);
     reconcilePlatformModels(this.store);
     return ok(undefined);
@@ -297,7 +297,7 @@ export class DemuxaiProviderMock implements DemuxaiProviderPort {
   async setStatus(uid: Uid, status: ProviderStatus): Promise<AppResult<Provider>> {
     await delay();
     const idx = this.store.providers.findIndex((c) => c.uid === uid);
-    if (idx < 0) return fail({ code: 'not_found', message: `供应商 ${uid} 不存在` });
+    if (idx < 0) return fail({ code: 'not_found', message: `模型渠道 ${uid} 不存在` });
     const cur = this.store.providers[idx]!;
     const next: Provider = {
       ...cur,
@@ -317,7 +317,7 @@ export class DemuxaiProviderMock implements DemuxaiProviderPort {
   async test(uid: Uid): Promise<AppResult<ProviderTestResult>> {
     await delay();
     const idx = this.store.providers.findIndex((c) => c.uid === uid);
-    if (idx < 0) return fail({ code: 'not_found', message: `供应商 ${uid} 不存在` });
+    if (idx < 0) return fail({ code: 'not_found', message: `模型渠道 ${uid} 不存在` });
     const cur = this.store.providers[idx]!;
     const ok10 = Math.random() < 0.9;
     const t = new Date().toISOString();
