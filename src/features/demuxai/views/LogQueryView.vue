@@ -6,8 +6,8 @@
  *  - **必须传时间范围**：UI 默认填最近 24h；用户清空 dateRange 时按钮置灰
  *  - 跨域 join：用 accountUid → 调 accountAdminPort 拉账户 directory，
  *    展示账户名 + LV（仅 view 层组合，不污染 demuxai/model）
- *  - 上方 4 个 KPI 卡片随同一份 filter 走 stats 端点
  *  - 错误日志一键过滤 → 排障常用
+ *  - KPI 汇总卡片已迁移至「概览」页（OverviewView）
  */
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
@@ -30,7 +30,7 @@ import {
   logStatusValues,
   type LogStatus,
 } from '../model/enums';
-import type { ListLogsFilter, LogEntry, LogStats } from '../model/log.types';
+import type { ListLogsFilter, LogEntry } from '../model/log.types';
 import type { Model } from '../model/model.types';
 import type { Provider } from '../model/provider.types';
 import {
@@ -51,9 +51,7 @@ const total = ref(0);
 const loading = ref(false);
 
 const page = ref(1);
-const pageSize = ref(50);
-
-const stats = ref<LogStats | null>(null);
+const pageSize = ref(20);
 
 interface PageFilter {
   accountUid: string;
@@ -148,22 +146,17 @@ async function fetchData(): Promise<void> {
   }
   loading.value = true;
   try {
-    const f = buildPortFilter();
-    const [listR, statsR] = await Promise.all([
-      logsPort.list({
-        page: page.value,
-        pageSize: pageSize.value,
-        filter: f,
-      }),
-      logsPort.stats(f),
-    ]);
-    if (listR.success) {
-      records.value = listR.data.items;
-      total.value = listR.data.total;
+    const r = await logsPort.list({
+      page: page.value,
+      pageSize: pageSize.value,
+      filter: buildPortFilter(),
+    });
+    if (r.success) {
+      records.value = r.data.items;
+      total.value = r.data.total;
     } else {
-      ElMessage.error(listR.error.message);
+      ElMessage.error(r.error.message);
     }
-    if (statsR.success) stats.value = statsR.data;
   } finally {
     loading.value = false;
   }
@@ -208,11 +201,6 @@ const displayRecords = computed(() => {
   });
 });
 
-const successRate = computed(() => {
-  if (!stats.value || stats.value.totalCalls === 0) return 0;
-  return (stats.value.successCalls / stats.value.totalCalls) * 100;
-});
-
 function openDetail(row: LogEntry): void {
   detailLog.value = row;
   detailOpen.value = true;
@@ -242,45 +230,7 @@ onMounted(() => {
 
 <template>
   <div class="page">
-    <PageHeader
-      title="调用日志"
-      description="DemuxAI 微服务调用流水。**必须**指定时间范围（最长 7 天）。账户名 / LV 来自账户域 join，单条详情查看 Token / 扣费 / 链路 / 错误信息。"
-    />
-
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-card__label">总调用</div>
-        <div class="kpi-card__value">{{ (stats?.totalCalls ?? 0).toLocaleString() }}</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-card__label">成功率</div>
-        <div
-          class="kpi-card__value"
-          :class="{ 'kpi-card__value--warning': successRate < 95, 'kpi-card__value--danger': successRate < 90 }"
-        >
-          {{ successRate.toFixed(2) }}%
-        </div>
-        <div class="kpi-card__sub">
-          失败 <span class="num">{{ (stats?.errorCalls ?? 0).toLocaleString() }}</span>
-        </div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-card__label">P95 延迟</div>
-        <div class="kpi-card__value">
-          {{ (stats?.p95LatencyMs ?? 0).toLocaleString() }} <span class="unit">ms</span>
-        </div>
-        <div class="kpi-card__sub">
-          均值 <span class="num">{{ (stats?.avgLatencyMs ?? 0).toLocaleString() }}</span> ms
-        </div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-card__label">总扣费</div>
-        <div class="kpi-card__value">{{ formatMoney(stats?.totalCost ?? 0) }}</div>
-        <div class="kpi-card__sub">
-          {{ ((stats?.totalTokens ?? 0) / 1000).toFixed(1) }}K tokens
-        </div>
-      </div>
-    </div>
+    <PageHeader title="调用日志" />
 
     <FilterBar
       v-model:account-uid="filter.accountUid"
@@ -299,7 +249,7 @@ onMounted(() => {
           style="width: 220px"
         />
       </el-form-item>
-      <el-form-item label="供应商">
+      <el-form-item label="模型渠道">
         <el-select v-model="filter.providerUid" clearable placeholder="全部" style="width: 220px">
           <el-option
             v-for="p in providers"
@@ -381,7 +331,7 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="供应商" min-width="160">
+      <el-table-column label="模型渠道" min-width="160">
         <template #default="{ row }: { row: LogEntry }">
           <span class="cell-channel">{{ providerName(row.providerUid) }}</span>
         </template>
@@ -438,7 +388,7 @@ onMounted(() => {
         v-model:current-page="page"
         v-model:page-size="pageSize"
         :total="total"
-        :page-sizes="[50, 100]"
+        :page-sizes="[20, 50, 100]"
         layout="total, sizes, prev, pager, next"
         background
       />
@@ -454,47 +404,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.kpi-card {
-  background: #fff;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  padding: 14px 16px;
-}
-.kpi-card__label {
-  font-size: 12.5px;
-  color: var(--el-text-color-secondary);
-}
-.kpi-card__value {
-  margin-top: 4px;
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-  font-variant-numeric: tabular-nums;
-}
-.kpi-card__value--warning {
-  color: var(--el-color-warning);
-}
-.kpi-card__value--danger {
-  color: var(--el-color-danger);
-}
-.kpi-card__sub {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-.unit {
-  font-size: 14px;
-  color: var(--el-text-color-secondary);
-  font-weight: 500;
-  margin-left: 2px;
-}
-
 .error-only {
   display: inline-flex;
   align-items: center;

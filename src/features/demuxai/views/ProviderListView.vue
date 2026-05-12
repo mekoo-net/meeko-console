@@ -122,7 +122,7 @@ async function onSubmit(payload: {
     if (payload.create) {
       const r = await providerPort.create(payload.create);
       if (r.success) {
-        ElMessage.success('供应商已创建');
+        ElMessage.success('模型渠道已创建');
         drawerOpen.value = false;
         await fetchData();
       } else {
@@ -149,8 +149,8 @@ async function toggleStatus(row: Provider): Promise<void> {
   const isAuto = row.status === 'auto_disabled';
   if (isAuto) {
     const okp = await confirmDanger({
-      title: '恢复自动停用供应商',
-      message: `供应商 "${row.name}" 由调度因「${
+      title: '恢复自动停用渠道',
+      message: `模型渠道 "${row.name}" 由调度因「${
         providerAutoDisabledCodeLabel[row.autoDisabledCode ?? ''] ?? row.autoDisabledCode ?? '未知'
       }」自动停用，确认人工恢复为启用吗？`,
       type: 'warning',
@@ -174,8 +174,8 @@ async function onDelete(row: Provider): Promise<void> {
       ? `\n\n以下平台模型 displayName 将随之被自动删除（不再被任何 mapping 引用）：\n  ${orphans.join('\n  ')}`
       : '';
   const okp = await confirmDanger({
-    title: '删除供应商',
-    message: `确认删除供应商 "${row.name}"？历史调用日志保留显示，该操作不可撤销。${orphanMsg}`,
+    title: '删除模型渠道',
+    message: `确认删除模型渠道 "${row.name}"？历史调用日志保留显示，该操作不可撤销。${orphanMsg}`,
     confirmText: '确认删除',
     type: 'warning',
   });
@@ -258,11 +258,11 @@ onMounted(() => {
 <template>
   <div class="page">
     <PageHeader
-      title="供应商"
-      description="上游模型凭据。一个供应商 = 一组凭据 + 一种 apiType + 一组供应商模型 + 对外上架映射。连续错误自动停用，需人工恢复。"
+      title="模型渠道"
+      description="上游模型凭据。一个模型渠道 = 一组凭据 + 一种 apiType + 一组渠道模型 + 对外上架映射。连续错误自动停用，需人工恢复。"
     >
       <template #actions>
-        <el-button :icon="Plus" type="primary" @click="openCreate">新建供应商</el-button>
+        <el-button :icon="Plus" type="primary" @click="openCreate">新建模型渠道</el-button>
       </template>
     </PageHeader>
 
@@ -422,8 +422,8 @@ onMounted(() => {
 
       <template #empty>
         <EmptyState
-          title="暂无供应商"
-          description="点击右上角「新建供应商」接入第一个上游模型供应商。"
+          title="暂无模型渠道"
+          description="点击右上角「新建模型渠道」接入第一个上游模型渠道。"
         />
       </template>
     </el-table>

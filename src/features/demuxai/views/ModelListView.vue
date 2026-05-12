@@ -336,7 +336,7 @@ onMounted(() => {
       <template #empty>
         <EmptyState
           title="暂无模型"
-          description="模型由 Provider 映射自动创建。请先到「供应商」页配置上游凭据并新增模型映射。"
+          description="模型由渠道映射自动创建。请先到「模型渠道」页配置上游凭据并新增模型映射。"
         />
       </template>
     </el-table>
