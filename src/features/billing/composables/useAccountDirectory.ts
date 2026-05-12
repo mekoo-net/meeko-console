@@ -12,7 +12,7 @@ export function useAccountDirectory() {
     async () => getAccountAdminPort().listAccounts({
       page: 1,
       pageSize: 200,
-      filter: { keyword: '', type: 'all', status: 'all' },
+      filter: { accountUid: '', contactKeyword: '', type: 'all', status: 'all' },
     }),
     { initial: { items: [], total: 0 } },
   );

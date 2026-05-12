@@ -49,6 +49,9 @@
       "@parcel/watcher",
       "esbuild",
       "unrs-resolver"
-    ]
+    ],
+    "overrides": {
+      "glob": "^13.0.0"
+    }
   }
 }

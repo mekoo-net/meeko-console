@@ -1,0 +1,89 @@
+/**
+ * 紧凑无竖线表格风格（compact-table）
+ *
+ * 给 `<el-table>` 加上 `class="compact-table"`（建议同时 `size="small"`，
+ * 移除 `border` 属性）即可获得：
+ *   - 单行 ~40px 紧凑行高
+ *   - 去掉单元格之间的竖向分割线
+ *   - 浅灰表头 + 600 字重，参考主流后台模板（vue-element-plus-admin / pure-admin）
+ *   - 行 hover 整行高亮
+ *
+ * 同时提供一组用于业务单元格的 utility class：
+ *   .cell-uid    等宽数字字体 + tabular-nums，UID/单号
+ *   .cell-sub    次要描述行（slug / 备注）
+ *   .cell-money  绿色等宽货币
+ *   .cell-date   等宽日期
+ *   .cell-muted  占位灰
+ */
+
+.compact-table {
+  font-size: 13px;
+}
+
+/* 去掉竖向分割线（兼容 border / borderless 两种属性写法） */
+.compact-table .el-table__cell,
+.compact-table.el-table--border .el-table__cell {
+  border-right: none !important;
+}
+
+/* 表头：浅灰底 + 二级文字色 + 加粗 */
+.compact-table th.el-table__cell {
+  background: #f8fafc !important;
+  color: var(--el-text-color-secondary);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+/* 行分割线淡化 */
+.compact-table tr.el-table__row td.el-table__cell {
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+/* 单元格紧凑 padding */
+.compact-table td.el-table__cell {
+  padding: 8px 0;
+}
+
+/* 鼠标悬停整行高亮 */
+.compact-table .el-table__body tr:hover > td.el-table__cell {
+  background: var(--el-fill-color-light) !important;
+}
+
+/* —— 业务单元格 utility —— */
+.compact-table .cell-uid,
+.compact-table .cell-trade-no {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--el-text-color-secondary);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.compact-table .cell-sub {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.compact-table .cell-money {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--el-color-success);
+}
+
+.compact-table .cell-money--warning {
+  color: var(--el-color-warning);
+}
+
+.compact-table .cell-date {
+  font-variant-numeric: tabular-nums;
+  color: var(--el-text-color-regular);
+  font-size: 12.5px;
+}
+
+.compact-table .cell-muted {
+  color: var(--el-text-color-placeholder);
+}
+
+

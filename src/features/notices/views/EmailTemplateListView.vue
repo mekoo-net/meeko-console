@@ -85,7 +85,7 @@ async function submitCreate(): Promise<void> {
 }
 
 function editLink(code: string, locale: string): string {
-  return `/notices/templates/${encodeURIComponent(code)}/${encodeURIComponent(locale)}`;
+  return `/notices/email/templates/${encodeURIComponent(code)}/${encodeURIComponent(locale)}`;
 }
 </script>
 

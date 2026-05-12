@@ -26,19 +26,41 @@ function openDetail(uid: string): void {
 </script>
 
 <template>
-  <el-table :data="items" border stripe row-key="uid" class="account-table">
+  <el-table
+    :data="items"
+    row-key="uid"
+    size="small"
+    class="compact-table"
+  >
+    <el-table-column label="UID" width="130" prop="uid">
+      <template #default="{ row }: { row: Account }">
+        <span class="cell-uid">{{ row.uid }}</span>
+      </template>
+    </el-table-column>
+
     <el-table-column label="账户" min-width="220">
       <template #default="{ row }: { row: Account }">
-        <div class="cell-name">
-          <div class="cell-name__title">{{ row.name }}</div>
-          <div class="cell-name__sub">{{ row.slug }} · UID {{ row.uid }}</div>
+        <div class="cell-contact">
+          <div class="cell-contact__email">
+            <span v-if="row.ownerEmail">{{ row.ownerEmail }}</span>
+            <span v-else class="cell-muted">—</span>
+          </div>
+          <div class="cell-contact__phone">
+            <span v-if="row.ownerPhone">{{ row.ownerPhone }}</span>
+            <span v-else class="cell-muted">—</span>
+          </div>
         </div>
       </template>
     </el-table-column>
 
-    <el-table-column prop="type" label="类型" width="120">
+    <el-table-column prop="type" label="类型" width="110">
       <template #default="{ row }: { row: Account }">
-        <el-tag :type="row.type === 'organization' ? 'primary' : 'info'" effect="light" round>
+        <el-tag
+          :type="row.type === 'organization' ? 'primary' : 'info'"
+          effect="light"
+          round
+          size="small"
+        >
           {{ accountTypeLabel[row.type] }}
         </el-tag>
       </template>
@@ -50,76 +72,60 @@ function openDetail(uid: string): void {
       </template>
     </el-table-column>
 
-    <!-- 仅组织账户才显示 IAM 账户数；个人账户固定只有 1 个，无需列出 -->
-    <el-table-column label="IAM 账户数" width="110" align="center">
-      <template #default="{ row }: { row: Account }">
-        <template v-if="row.type === 'organization'">
-          <span class="cell-num">{{ row.iamUserCount ?? '—' }}</span>
-        </template>
-        <span v-else class="cell-muted">—</span>
-      </template>
-    </el-table-column>
-
-    <!-- Owner 邮箱（IAM 用户层面的标识）-->
-    <el-table-column label="Owner 邮箱" min-width="180">
-      <template #default="{ row }: { row: Account }">
-        <span v-if="row.ownerEmail" class="cell-email">{{ row.ownerEmail }}</span>
-        <span v-else class="cell-muted">—</span>
-      </template>
-    </el-table-column>
-
-    <!-- 钱包余额（可用金额） -->
-    <el-table-column label="余额（可用）" width="140" align="right">
+    <el-table-column label="余额" width="150" align="right">
       <template #default="{ row }: { row: Account }">
         <template v-if="walletMap?.has(row.uid)">
           <span class="cell-money">
-            {{ formatMoney(walletMap.get(row.uid)!.available, { currency: walletMap.get(row.uid)!.currency }) }}
+            {{
+              formatMoney(walletMap.get(row.uid)!.available, {
+                currency: walletMap.get(row.uid)!.currency,
+              })
+            }}
           </span>
         </template>
         <span v-else class="cell-muted">—</span>
       </template>
     </el-table-column>
 
-    <el-table-column label="更新时间" min-width="150">
+    <el-table-column label="创建时间" width="170">
       <template #default="{ row }: { row: Account }">
-        {{ formatDateTime(row.updatedAtUtc) }}
+        <span class="cell-date">{{ formatDateTime(row.createdAtUtc) }}</span>
       </template>
     </el-table-column>
 
-    <el-table-column label="操作" width="100" fixed="right" align="right">
+    <el-table-column label="活跃时间" width="170">
       <template #default="{ row }: { row: Account }">
-        <el-button link type="primary" @click="openDetail(row.uid)">详情</el-button>
+        <span v-if="row.lastActiveAtUtc" class="cell-date">
+          {{ formatDateTime(row.lastActiveAtUtc) }}
+        </span>
+        <span v-else class="cell-muted">—</span>
+      </template>
+    </el-table-column>
+
+    <el-table-column label="操作" width="80" fixed="right" align="right">
+      <template #default="{ row }: { row: Account }">
+        <el-button link type="primary" size="small" @click="openDetail(row.uid)">详情</el-button>
       </template>
     </el-table-column>
   </el-table>
 </template>
 
 <style scoped>
-.account-table :deep(th.el-table__cell) {
-  background: #f8fafc;
+/* 账户单元格：上邮箱、下手机号（此组件特有，其他通用样式见 src/shared/ui/table.css） */
+.cell-contact {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
 }
-.cell-name__title {
-  font-weight: 600;
+.cell-contact__email {
+  font-weight: 500;
   color: var(--el-text-color-primary);
+  font-size: 13px;
 }
-.cell-name__sub {
+.cell-contact__phone {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+  font-variant-numeric: tabular-nums;
   margin-top: 2px;
-}
-.cell-num {
-  font-variant-numeric: tabular-nums;
-}
-.cell-email {
-  font-size: 13px;
-  color: var(--el-text-color-regular);
-}
-.cell-money {
-  font-variant-numeric: tabular-nums;
-  font-weight: 500;
-  color: var(--el-color-success);
-}
-.cell-muted {
-  color: var(--el-text-color-placeholder);
 }
 </style>

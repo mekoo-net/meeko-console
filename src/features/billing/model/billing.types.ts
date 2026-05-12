@@ -136,6 +136,56 @@ export const rechargeRecordSchema = z.object({
 
 export type RechargeRecord = z.infer<typeof rechargeRecordSchema>;
 
+/**
+ * 消费（扣费）记录。
+ *
+ * 业务语义：账户钱包发生的一次扣费事件，可能来源于订阅扣款、用量扣费、
+ * 一次性订单、人工调账等。比 Invoice 更细粒度，对运营是审计型流水。
+ */
+export const consumptionTypeValues = ['subscription', 'usage', 'one_time', 'adjustment'] as const;
+export type ConsumptionType = (typeof consumptionTypeValues)[number];
+
+export const ConsumptionTypeLabel: Readonly<Record<ConsumptionType, string>> = {
+  subscription: '订阅扣款',
+  usage: '用量扣费',
+  one_time: '一次性订单',
+  adjustment: '人工调账',
+};
+
+export const consumptionStatusValues = ['completed', 'pending', 'reversed'] as const;
+export type ConsumptionStatus = (typeof consumptionStatusValues)[number];
+
+export const ConsumptionStatusLabel: Readonly<Record<ConsumptionStatus, string>> = {
+  completed: '已完成',
+  pending: '处理中',
+  reversed: '已冲正',
+};
+
+export const ConsumptionStatusTone: Readonly<
+  Record<ConsumptionStatus, 'success' | 'warning' | 'danger' | 'info'>
+> = {
+  completed: 'success',
+  pending: 'warning',
+  reversed: 'danger',
+};
+
+export const consumptionRecordSchema = z.object({
+  uid: uidString,
+  accountUid: uidString,
+  productCode: z.string(),
+  description: z.string().optional(),
+  /** 扣费金额，正数；冲正记录用 reversed 状态体现 */
+  amount: z.number(),
+  currency: z.string(),
+  type: z.enum(consumptionTypeValues),
+  status: z.enum(consumptionStatusValues),
+  orderUid: uidString.nullable().optional(),
+  invoiceUid: uidString.nullable().optional(),
+  occurredAtUtc: z.string(),
+});
+
+export type ConsumptionRecord = z.infer<typeof consumptionRecordSchema>;
+
 export interface CreateRechargeInput {
   amount: number;
   provider?: string | undefined;

@@ -34,4 +34,15 @@ export interface AccountAdminPort {
   createIamUser(accountUid: string, payload: CreateIamUserPayload): Promise<AppResult<IamUser>>;
 
   setAccountStatus(uid: string, status: AccountStatus): Promise<AppResult<Account>>;
+
+  /**
+   * 授予勋章。`code` 已存在则视为幂等成功。
+   * 返回更新后的 Account。
+   */
+  grantAchievement(accountUid: string, code: string): Promise<AppResult<Account>>;
+  /**
+   * 撤销勋章。`code` 不存在则视为幂等成功。
+   * 返回更新后的 Account。
+   */
+  revokeAchievement(accountUid: string, code: string): Promise<AppResult<Account>>;
 }

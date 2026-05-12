@@ -8,7 +8,8 @@ import { getAccountAdminPort } from '../services';
 import type { Account, AccountListFilter } from '../model/account.types';
 
 const defaultFilter = (): AccountListFilter => ({
-  keyword: '',
+  accountUid: '',
+  contactKeyword: '',
   type: 'all',
   status: 'all',
 });
@@ -44,7 +45,13 @@ export function useAccountList() {
 
   const list = useListQuery({
     filter,
-    filterKey: () => `${filter.value.keyword}|${filter.value.type}|${filter.value.status}`,
+    filterKey: () =>
+      [
+        filter.value.accountUid,
+        filter.value.contactKeyword,
+        filter.value.type,
+        filter.value.status,
+      ].join('|'),
     fetcher: async ({ page, pageSize, filter: f }) => {
       const result = await port.listAccounts({ page, pageSize, filter: f });
       if (result.success) {

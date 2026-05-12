@@ -11,21 +11,23 @@ import type { Account } from '@/features/accounts/model/account.types';
 
 import FilterBar from '@/shared/ui/FilterBar.vue';
 import {
-  rechargeStatusValues,
-  RechargeStatusLabel,
-  RechargeStatusTone,
-  type RechargeRecord,
-  type RechargeStatus,
+  consumptionStatusValues,
+  consumptionTypeValues,
+  ConsumptionStatusLabel,
+  ConsumptionStatusTone,
+  ConsumptionTypeLabel,
+  type ConsumptionRecord,
+  type ConsumptionStatus,
+  type ConsumptionType,
 } from '../model/billing.types';
-import { PaymentProviderLabel } from '../model/paymentChannel.types';
 import { getBillingPort } from '../services';
-import type { ListRechargesFilter } from '../services/ports/billingPort';
+import type { ListConsumptionsFilter } from '../services/ports/billingPort';
 
 const router = useRouter();
 const billingPort = getBillingPort();
 const accountPort = getAccountAdminPort();
 
-const records = ref<RechargeRecord[]>([]);
+const records = ref<ConsumptionRecord[]>([]);
 const total = ref(0);
 const loading = ref(false);
 
@@ -36,13 +38,15 @@ interface PageFilter {
   accountUid: string;
   contactKeyword: string;
   dateRange: [string, string] | null;
-  status: RechargeStatus | 'all';
+  type: ConsumptionType | 'all';
+  status: ConsumptionStatus | 'all';
 }
 
 const defaultFilter = (): PageFilter => ({
   accountUid: '',
   contactKeyword: '',
   dateRange: null,
+  type: 'all',
   status: 'all',
 });
 
@@ -63,8 +67,11 @@ async function loadAccounts(): Promise<void> {
   }
 }
 
-function buildPortFilter(): ListRechargesFilter {
-  const f: ListRechargesFilter = { status: filter.value.status };
+function buildPortFilter(): ListConsumptionsFilter {
+  const f: ListConsumptionsFilter = {
+    status: filter.value.status,
+    type: filter.value.type,
+  };
   if (filter.value.accountUid.trim()) {
     f.accountUid = filter.value.accountUid.trim();
   }
@@ -80,7 +87,7 @@ function buildPortFilter(): ListRechargesFilter {
 async function fetchData(): Promise<void> {
   loading.value = true;
   try {
-    const r = await billingPort.listRecharges({
+    const r = await billingPort.listConsumptions({
       page: page.value,
       pageSize: pageSize.value,
       filter: buildPortFilter(),
@@ -94,10 +101,6 @@ async function fetchData(): Promise<void> {
   }
 }
 
-/**
- * 邮箱/手机过滤在客户端基于 accountMap 二次过滤——后端管账户与流水分库，
- * 通常不会直接给"按 owner 邮箱过滤流水"的端点，前端 join 更顺手。
- */
 const displayRecords = computed(() => {
   const kw = filter.value.contactKeyword.trim().toLowerCase();
   if (!kw) return records.value;
@@ -110,15 +113,11 @@ const displayRecords = computed(() => {
   });
 });
 
-/**
- * 单一 watch 监听分页 + 后端参与过滤的字段（status / accountUid / dateRange）。
- * 同一 tick 内多次赋值会被合并，避免一次筛选触发两次请求。
- * 邮箱/手机过滤是纯前端字符串包含，无需重新请求。
- */
 watch(
   () => ({
     page: page.value,
     pageSize: pageSize.value,
+    type: filter.value.type,
     status: filter.value.status,
     accountUid: filter.value.accountUid,
     dateRange: filter.value.dateRange,
@@ -128,7 +127,13 @@ watch(
 );
 
 watch(
-  () => [filter.value.status, filter.value.accountUid, filter.value.dateRange] as const,
+  () =>
+    [
+      filter.value.type,
+      filter.value.status,
+      filter.value.accountUid,
+      filter.value.dateRange,
+    ] as const,
   () => {
     page.value = 1;
   },
@@ -149,8 +154,8 @@ onMounted(() => {
 <template>
   <div class="page">
     <PageHeader
-      title="充值记录"
-      description="平台全量充值流水，支持按账户、邮箱/手机、时间范围、状态筛选。"
+      title="消费记录"
+      description="账户钱包扣费流水（订阅 / 用量 / 一次性订单 / 人工调账），支持账户、邮箱/手机、时间范围、类型与状态筛选。"
     />
 
     <FilterBar
@@ -161,13 +166,24 @@ onMounted(() => {
       @refresh="fetchData()"
       @reset="resetFilter()"
     >
+      <el-form-item label="类型">
+        <el-select v-model="filter.type">
+          <el-option label="全部类型" value="all" />
+          <el-option
+            v-for="t in consumptionTypeValues"
+            :key="t"
+            :label="ConsumptionTypeLabel[t]"
+            :value="t"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="状态">
         <el-select v-model="filter.status">
           <el-option label="全部状态" value="all" />
           <el-option
-            v-for="s in rechargeStatusValues"
+            v-for="s in consumptionStatusValues"
             :key="s"
-            :label="RechargeStatusLabel[s]"
+            :label="ConsumptionStatusLabel[s]"
             :value="s"
           />
         </el-select>
@@ -182,7 +198,7 @@ onMounted(() => {
       class="compact-table"
     >
       <el-table-column label="账户 UID" width="130">
-        <template #default="{ row }: { row: RechargeRecord }">
+        <template #default="{ row }: { row: ConsumptionRecord }">
           <el-button
             link
             class="cell-uid-btn"
@@ -194,7 +210,7 @@ onMounted(() => {
       </el-table-column>
 
       <el-table-column label="账户" min-width="200">
-        <template #default="{ row }: { row: RechargeRecord }">
+        <template #default="{ row }: { row: ConsumptionRecord }">
           <template v-if="accountMap.has(row.accountUid)">
             <div class="cell-contact">
               <div class="cell-contact__email">
@@ -215,43 +231,43 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="金额" width="140" align="right">
-        <template #default="{ row }: { row: RechargeRecord }">
-          <span class="cell-money">{{ formatMoney(row.amount, { currency: row.currency }) }}</span>
+      <el-table-column label="项目" min-width="220">
+        <template #default="{ row }: { row: ConsumptionRecord }">
+          <div class="cell-product">
+            <div class="cell-product__code">{{ row.productCode }}</div>
+            <div v-if="row.description" class="cell-product__desc">{{ row.description }}</div>
+          </div>
         </template>
       </el-table-column>
 
-      <el-table-column label="渠道" width="120">
-        <template #default="{ row }: { row: RechargeRecord }">
-          {{ (PaymentProviderLabel as Record<string, string>)[row.provider] ?? row.provider }}
+      <el-table-column label="类型" width="110">
+        <template #default="{ row }: { row: ConsumptionRecord }">
+          <el-tag size="small" type="info" effect="plain" round>
+            {{ ConsumptionTypeLabel[row.type] }}
+          </el-tag>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="金额" width="140" align="right">
+        <template #default="{ row }: { row: ConsumptionRecord }">
+          <span class="cell-money cell-money--warning">
+            -{{ formatMoney(row.amount, { currency: row.currency }) }}
+          </span>
         </template>
       </el-table-column>
 
       <el-table-column label="状态" width="100">
-        <template #default="{ row }: { row: RechargeRecord }">
+        <template #default="{ row }: { row: ConsumptionRecord }">
           <StatusTag
-            :label="RechargeStatusLabel[row.status]"
-            :tone="RechargeStatusTone[row.status]"
+            :label="ConsumptionStatusLabel[row.status]"
+            :tone="ConsumptionStatusTone[row.status]"
           />
         </template>
       </el-table-column>
 
-      <el-table-column label="单号" min-width="200">
-        <template #default="{ row }: { row: RechargeRecord }">
-          <span class="cell-trade-no">{{ row.outTradeNo }}</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="创建时间" width="170">
-        <template #default="{ row }: { row: RechargeRecord }">
-          <span class="cell-date">{{ formatDateTime(row.createdAtUtc) }}</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="支付时间" width="170">
-        <template #default="{ row }: { row: RechargeRecord }">
-          <span v-if="row.paidAtUtc" class="cell-date">{{ formatDateTime(row.paidAtUtc) }}</span>
-          <span v-else class="cell-muted">—</span>
+      <el-table-column label="发生时间" width="170">
+        <template #default="{ row }: { row: ConsumptionRecord }">
+          <span class="cell-date">{{ formatDateTime(row.occurredAtUtc) }}</span>
         </template>
       </el-table-column>
     </el-table>
@@ -305,6 +321,24 @@ onMounted(() => {
   font-size: 12px;
   color: var(--el-text-color-secondary);
   font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
+/* 项目单元格：上 productCode、下描述 */
+.cell-product {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+.cell-product__code {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  color: var(--el-text-color-primary);
+  font-weight: 500;
+}
+.cell-product__desc {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
   margin-top: 2px;
 }
 </style>

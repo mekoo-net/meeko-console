@@ -7,7 +7,9 @@ import {
   type Account,
   type AccountListFilter,
   type AccountStatus,
+  type Achievement,
 } from '../../model/account.types';
+import { findAchievementDef } from '../../model/achievementCatalog';
 import { iamUserSchema, type IamUser } from '../../model/iamUser.types';
 import { createIamUserSchema, type CreateIamUserPayload } from '../../model/validators';
 import type {
@@ -19,17 +21,24 @@ import { getStore, nextIamUid } from './data';
 
 function listFiltered(filter: AccountListFilter): Account[] {
   const all = Array.from(getStore().accounts.values());
-  const keyword = filter.keyword.trim().toLowerCase();
-  return all.filter((a) => {
+  const accountUid = filter.accountUid.trim();
+  const contact = filter.contactKeyword.trim().toLowerCase();
+  const matched = all.filter((a) => {
     if (filter.type !== 'all' && a.type !== filter.type) return false;
     if (filter.status !== 'all' && a.status !== filter.status) return false;
-    if (keyword.length === 0) return true;
-    return (
-      a.name.toLowerCase().includes(keyword) ||
-      a.slug.toLowerCase().includes(keyword) ||
-      a.uid.includes(keyword)
-    );
+    if (accountUid.length > 0 && a.uid !== accountUid) return false;
+    if (contact.length > 0) {
+      const email = (a.ownerEmail ?? '').toLowerCase();
+      const phone = a.ownerPhone ?? '';
+      if (!email.includes(contact) && !phone.includes(contact)) return false;
+    }
+    return true;
   });
+  matched.sort(
+    (a, b) =>
+      new Date(b.createdAtUtc ?? 0).getTime() - new Date(a.createdAtUtc ?? 0).getTime(),
+  );
+  return matched;
 }
 
 /** Mock 也走 schema 校验，便于将来直接替换为 HttpAdapter 而不改 view。 */
@@ -132,6 +141,52 @@ export class AccountAdminMock implements AccountAdminPort {
     }
     const next: Account = { ...a, status, updatedAtUtc: new Date().toISOString() };
     store.accounts.set(uid, next);
+    return parseAccount(next);
+  }
+
+  async grantAchievement(accountUid: string, code: string): Promise<AppResult<Account>> {
+    await delay();
+    const store = getStore();
+    const a = store.accounts.get(accountUid);
+    if (!a) return fail({ code: 'not_found', message: `账户 ${accountUid} 不存在` });
+    const def = findAchievementDef(code);
+    if (!def) return fail({ code: 'validation', message: `勋章 ${code} 不存在于勋章库` });
+    const current = a.achievements ?? [];
+    if (current.some((x) => x.code === code)) {
+      return parseAccount(a);
+    }
+    const granted: Achievement = {
+      code: def.code,
+      name: def.name,
+      description: def.description,
+      icon: def.icon,
+      grantedAtUtc: new Date().toISOString(),
+    };
+    const next: Account = {
+      ...a,
+      achievements: [...current, granted],
+      updatedAtUtc: new Date().toISOString(),
+    };
+    store.accounts.set(accountUid, next);
+    return parseAccount(next);
+  }
+
+  async revokeAchievement(accountUid: string, code: string): Promise<AppResult<Account>> {
+    await delay();
+    const store = getStore();
+    const a = store.accounts.get(accountUid);
+    if (!a) return fail({ code: 'not_found', message: `账户 ${accountUid} 不存在` });
+    const current = a.achievements ?? [];
+    if (!current.some((x) => x.code === code)) {
+      return parseAccount(a);
+    }
+    const filtered = current.filter((x) => x.code !== code);
+    const next: Account = {
+      ...a,
+      achievements: filtered.length > 0 ? filtered : undefined,
+      updatedAtUtc: new Date().toISOString(),
+    };
+    store.accounts.set(accountUid, next);
     return parseAccount(next);
   }
 }

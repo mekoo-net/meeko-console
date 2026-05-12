@@ -13,6 +13,13 @@ const list = useAccountList();
   <div class="page">
     <PageHeader title="账户列表" description="Account 是数据归属与计费单位。详情页可查看 / 新增子账号。" />
 
+    <AccountFilterBar
+      v-model="list.filter.value"
+      :loading="list.loading.value"
+      @refresh="list.refresh()"
+      @reset="list.resetFilter()"
+    />
+
     <DataTableShell
       :loading="list.loading.value"
       :error="list.error.value"
@@ -20,15 +27,6 @@ const list = useAccountList();
       empty-title="未找到匹配的账户"
       empty-description="调整筛选条件或重置后重试。"
     >
-      <template #filter>
-        <AccountFilterBar
-          v-model="list.filter.value"
-          :loading="list.loading.value"
-          @refresh="list.refresh()"
-          @reset="list.resetFilter()"
-        />
-      </template>
-
       <template #toolbar>
         <div class="toolbar__hint">共 {{ list.total.value }} 个账户</div>
       </template>

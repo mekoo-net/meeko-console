@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Refresh, Search } from '@element-plus/icons-vue';
+import FilterBar from '@/shared/ui/FilterBar.vue';
 
 import {
   accountStatusLabel,
@@ -28,43 +28,37 @@ function patch<K extends keyof AccountListFilter>(key: K, value: AccountListFilt
 </script>
 
 <template>
-  <div class="filter">
-    <el-input
-      :model-value="filter.keyword"
-      :prefix-icon="Search"
-      placeholder="搜索名称、slug 或 UID"
-      clearable
-      style="max-width: 280px"
-      @update:model-value="(v: string | undefined) => patch('keyword', v ?? '')"
-    />
-    <el-select
-      :model-value="filter.type"
-      placeholder="账户类型"
-      style="width: 140px"
-      @update:model-value="(v: AccountListFilter['type']) => patch('type', v)"
-    >
-      <el-option label="全部类型" value="all" />
-      <el-option v-for="t in accountTypeValues" :key="t" :label="accountTypeLabel[t]" :value="t" />
-    </el-select>
-    <el-select
-      :model-value="filter.status"
-      placeholder="状态"
-      style="width: 140px"
-      @update:model-value="(v: AccountListFilter['status']) => patch('status', v)"
-    >
-      <el-option label="全部状态" value="all" />
-      <el-option v-for="s in accountStatusValues" :key="s" :label="accountStatusLabel[s]" :value="s" />
-    </el-select>
-    <el-button :icon="Refresh" :loading="loading" @click="emit('refresh')">刷新</el-button>
-    <el-button text @click="emit('reset')">重置</el-button>
-  </div>
+  <FilterBar
+    :account-uid="filter.accountUid"
+    :contact-keyword="filter.contactKeyword"
+    :loading="loading"
+    @update:account-uid="(v: string) => patch('accountUid', v)"
+    @update:contact-keyword="(v: string) => patch('contactKeyword', v)"
+    @refresh="emit('refresh')"
+    @reset="emit('reset')"
+  >
+    <el-form-item label="账户类型">
+      <el-select
+        :model-value="filter.type"
+        @update:model-value="(v: AccountListFilter['type']) => patch('type', v)"
+      >
+        <el-option label="全部类型" value="all" />
+        <el-option v-for="t in accountTypeValues" :key="t" :label="accountTypeLabel[t]" :value="t" />
+      </el-select>
+    </el-form-item>
+    <el-form-item label="状态">
+      <el-select
+        :model-value="filter.status"
+        @update:model-value="(v: AccountListFilter['status']) => patch('status', v)"
+      >
+        <el-option label="全部状态" value="all" />
+        <el-option
+          v-for="s in accountStatusValues"
+          :key="s"
+          :label="accountStatusLabel[s]"
+          :value="s"
+        />
+      </el-select>
+    </el-form-item>
+  </FilterBar>
 </template>
-
-<style scoped>
-.filter {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-</style>

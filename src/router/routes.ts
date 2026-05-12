@@ -40,20 +40,20 @@ export const routes: RouteRecordRaw[] = [
       {
         path: 'billing',
         component: () => import('@/features/billing/views/BillingLayout.vue'),
-        redirect: { name: 'billing-overview' },
+        redirect: { name: 'billing-recharges' },
         meta: { title: '账单管理', requiresAuth: true },
         children: [
-          {
-            path: 'overview',
-            name: 'billing-overview',
-            component: () => import('@/features/billing/views/PlatformBalanceView.vue'),
-            meta: { title: '余额总览', requiresAuth: true },
-          },
           {
             path: 'recharges',
             name: 'billing-recharges',
             component: () => import('@/features/billing/views/RechargeListView.vue'),
             meta: { title: '充值记录', requiresAuth: true },
+          },
+          {
+            path: 'consumptions',
+            name: 'billing-consumptions',
+            component: () => import('@/features/billing/views/ConsumptionListView.vue'),
+            meta: { title: '消费记录', requiresAuth: true },
           },
           {
             path: 'channels',
@@ -62,12 +62,6 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '充值渠道', requiresAuth: true, roles: ['Admin'] },
           },
         ],
-      },
-      {
-        path: 'admins',
-        name: 'admins',
-        component: () => import('@/features/accounts/views/AdminListView.vue'),
-        meta: { title: '访问控制', requiresAuth: true, roles: ['Admin'] },
       },
       {
         path: 'notices',

@@ -4,12 +4,14 @@ import { createUidSeq, type Uid } from '@/shared/lib/id';
 import { delay } from '@/shared/lib/delay';
 
 import {
+  consumptionRecordSchema,
   invoiceDtoSchema,
   orderDtoSchema,
   rechargeIntentSchema,
   rechargeRecordSchema,
   subscriptionDtoSchema,
   walletSnapshotSchema,
+  type ConsumptionRecord,
   type CreateRechargeInput,
   type InvoiceDto,
   type ListInvoicesFilter,
@@ -22,8 +24,15 @@ import {
   type SubscriptionDto,
   type WalletSnapshot,
 } from '../../model/billing.types';
+import {
+  businessInstanceSchema,
+  type BusinessInstance,
+  type ListBusinessesFilter,
+} from '../../model/business.types';
 import type {
   BillingPort,
+  ListConsumptionsFilter,
+  ListConsumptionsPage,
   ListInvoicesPage,
   ListOrdersPage,
   ListRechargesFilter,
@@ -36,6 +45,8 @@ interface AccountBilling {
   subscriptions: SubscriptionDto[];
   invoices: InvoiceDto[];
   recharges: RechargeRecord[];
+  consumptions: ConsumptionRecord[];
+  businesses: BusinessInstance[];
 }
 
 const genOrderUid = createUidSeq(5_000_000);
@@ -43,6 +54,17 @@ const genSubUid = createUidSeq(6_000_000);
 const genInvUid = createUidSeq(7_000_000);
 const genRechargeUid = createUidSeq(8_000_000);
 const genRechargeRecordUid = createUidSeq(9_000_000);
+const genConsumptionUid = createUidSeq(10_000_000);
+const genBusinessUid = createUidSeq(11_000_000);
+
+/** 业务产品名称字典（前后端共识，前端为方便展示常驻一份）。 */
+const PRODUCT_NAMES: Readonly<Record<string, string>> = {
+  'cdn-accel': 'CDN 加速',
+  'obj-storage': '对象存储',
+  'ai-inference': 'AI 推理',
+  'pro-seat': '团队席位',
+  'api-pack': 'API 套餐',
+};
 
 const store = new Map<Uid, AccountBilling>();
 
@@ -176,12 +198,110 @@ function seedForAccount(accountUid: Uid): AccountBilling {
     },
   ];
 
+  const consumptions: ConsumptionRecord[] = [
+    {
+      uid: genConsumptionUid(),
+      accountUid,
+      productCode: 'pro-seat',
+      description: '订阅扣款 · pro-seat × 5',
+      amount: 495,
+      currency: 'CNY',
+      type: 'subscription',
+      status: 'completed',
+      orderUid: o1.uid,
+      invoiceUid: inv1.uid,
+      occurredAtUtc: iso(new Date(now.getTime() - 7 * 86400000)),
+    },
+    {
+      uid: genConsumptionUid(),
+      accountUid,
+      productCode: 'api-pack',
+      description: '一次性套餐购买',
+      amount: 499,
+      currency: 'CNY',
+      type: 'one_time',
+      status: 'completed',
+      orderUid: o2.uid,
+      invoiceUid: inv2.uid,
+      occurredAtUtc: iso(new Date(now.getTime() - 86400000)),
+    },
+    {
+      uid: genConsumptionUid(),
+      accountUid,
+      productCode: 'api-call',
+      description: 'API 调用扣费 · 2,300 次',
+      amount: 23,
+      currency: 'CNY',
+      type: 'usage',
+      status: 'completed',
+      orderUid: null,
+      invoiceUid: null,
+      occurredAtUtc: iso(new Date(now.getTime() - 2 * 86400000)),
+    },
+    {
+      uid: genConsumptionUid(),
+      accountUid,
+      productCode: 'manual-adj',
+      description: '人工调账 · 客服补偿',
+      amount: 50,
+      currency: 'CNY',
+      type: 'adjustment',
+      status: 'reversed',
+      orderUid: null,
+      invoiceUid: null,
+      occurredAtUtc: iso(new Date(now.getTime() - 3 * 3600000)),
+    },
+  ];
+
+  const businesses: BusinessInstance[] = [
+    {
+      uid: genBusinessUid(),
+      accountUid,
+      productCode: 'cdn-accel',
+      productName: PRODUCT_NAMES['cdn-accel']!,
+      status: 'opened',
+      openedAtUtc: iso(new Date(now.getTime() - 30 * 86400000)),
+      currentPeriodEndUtc: iso(new Date(now.getTime() + 30 * 86400000)),
+    },
+    {
+      uid: genBusinessUid(),
+      accountUid,
+      productCode: 'obj-storage',
+      productName: PRODUCT_NAMES['obj-storage']!,
+      status: 'opened',
+      openedAtUtc: iso(new Date(now.getTime() - 90 * 86400000)),
+      currentPeriodEndUtc: iso(new Date(now.getTime() + 7 * 86400000)),
+    },
+    {
+      uid: genBusinessUid(),
+      accountUid,
+      productCode: 'ai-inference',
+      productName: PRODUCT_NAMES['ai-inference']!,
+      status: 'paused',
+      openedAtUtc: iso(new Date(now.getTime() - 60 * 86400000)),
+      pausedAtUtc: iso(new Date(now.getTime() - 5 * 86400000)),
+      currentPeriodEndUtc: iso(new Date(now.getTime() + 15 * 86400000)),
+    },
+    {
+      uid: genBusinessUid(),
+      accountUid,
+      productCode: 'api-pack',
+      productName: PRODUCT_NAMES['api-pack']!,
+      status: 'stopped',
+      openedAtUtc: iso(new Date(now.getTime() - 180 * 86400000)),
+      stoppedAtUtc: iso(new Date(now.getTime() - 20 * 86400000)),
+      currentPeriodEndUtc: null,
+    },
+  ];
+
   return {
     wallet,
     orders: [o1, o2],
     subscriptions: [sub],
     invoices: [inv1, inv2],
     recharges,
+    consumptions,
+    businesses,
   };
 }
 
@@ -421,10 +541,78 @@ export class BillingMock implements BillingPort {
     if (input.filter.status !== 'all') {
       all = all.filter((r) => r.status === input.filter.status);
     }
+    if (input.filter.fromUtc) {
+      const from = Date.parse(input.filter.fromUtc);
+      all = all.filter((r) => Date.parse(r.createdAtUtc) >= from);
+    }
+    if (input.filter.toUtc) {
+      const to = Date.parse(input.filter.toUtc);
+      all = all.filter((r) => Date.parse(r.createdAtUtc) <= to);
+    }
     const slice = clientPaginate(all, input.page, input.pageSize);
     const parsed: RechargeRecord[] = [];
     for (const it of slice) {
       const r = rechargeRecordSchema.safeParse(it);
+      if (!r.success) continue;
+      parsed.push(r.data);
+    }
+    return ok({ items: parsed, total: all.length });
+  }
+
+  async listBusinesses(
+    accountUid: Uid,
+    filter: ListBusinessesFilter,
+  ): Promise<AppResult<BusinessInstance[]>> {
+    await delay();
+    const b = ensure(accountUid);
+    let rows = [...b.businesses];
+    if (filter.status !== 'all') {
+      rows = rows.filter((r) => r.status === filter.status);
+    }
+    rows.sort((a, b) => b.openedAtUtc.localeCompare(a.openedAtUtc));
+    const parsed: BusinessInstance[] = [];
+    for (const it of rows) {
+      const r = businessInstanceSchema.safeParse(it);
+      if (!r.success) continue;
+      parsed.push(r.data);
+    }
+    return ok(parsed);
+  }
+
+  async listConsumptions(input: {
+    page: number;
+    pageSize: number;
+    filter: ListConsumptionsFilter;
+  }): Promise<AppResult<ListConsumptionsPage>> {
+    await delay();
+    let all: ConsumptionRecord[] = [];
+    if (input.filter.accountUid) {
+      const b = ensure(input.filter.accountUid);
+      all = [...b.consumptions];
+    } else {
+      for (const b of store.values()) {
+        all.push(...b.consumptions);
+      }
+      all.sort((a, b) => b.occurredAtUtc.localeCompare(a.occurredAtUtc));
+    }
+    if (input.filter.type !== 'all') {
+      all = all.filter((r) => r.type === input.filter.type);
+    }
+    if (input.filter.status !== 'all') {
+      all = all.filter((r) => r.status === input.filter.status);
+    }
+    if (input.filter.fromUtc) {
+      const from = Date.parse(input.filter.fromUtc);
+      all = all.filter((r) => Date.parse(r.occurredAtUtc) >= from);
+    }
+    if (input.filter.toUtc) {
+      const to = Date.parse(input.filter.toUtc);
+      all = all.filter((r) => Date.parse(r.occurredAtUtc) <= to);
+    }
+    const slice = clientPaginate(all, input.page, input.pageSize);
+    const parsed: ConsumptionRecord[] = [];
+    for (const it of slice) {
+      const r = consumptionRecordSchema.safeParse(it);
       if (!r.success) continue;
       parsed.push(r.data);
     }

@@ -2,6 +2,9 @@ import type { AppResult } from '@/shared/api/httpTypes';
 import type { Uid } from '@/shared/lib/id';
 
 import type {
+  ConsumptionRecord,
+  ConsumptionStatus,
+  ConsumptionType,
   CreateRechargeInput,
   InvoiceDto,
   ListInvoicesFilter,
@@ -15,6 +18,7 @@ import type {
   SubscriptionDto,
   WalletSnapshot,
 } from '../../model/billing.types';
+import type { BusinessInstance, ListBusinessesFilter } from '../../model/business.types';
 
 export interface ListOrdersPage {
   items: OrderDto[];
@@ -34,6 +38,25 @@ export interface ListRechargesPage {
 export interface ListRechargesFilter {
   accountUid?: string;
   status: RechargeStatus | 'all';
+  /** 创建时间起点（ISO8601，inclusive） */
+  fromUtc?: string;
+  /** 创建时间终点（ISO8601，inclusive） */
+  toUtc?: string;
+}
+
+export interface ListConsumptionsPage {
+  items: ConsumptionRecord[];
+  total: number;
+}
+
+export interface ListConsumptionsFilter {
+  accountUid?: string;
+  type: ConsumptionType | 'all';
+  status: ConsumptionStatus | 'all';
+  /** 发生时间起点（ISO8601，inclusive） */
+  fromUtc?: string;
+  /** 发生时间终点（ISO8601，inclusive） */
+  toUtc?: string;
 }
 
 /**
@@ -65,4 +88,20 @@ export interface BillingPort {
     pageSize: number;
     filter: ListRechargesFilter;
   }): Promise<AppResult<ListRechargesPage>>;
+
+  /** 平台级全量消费（扣费）记录，accountUid 为空时查所有账户 */
+  listConsumptions(input: {
+    page: number;
+    pageSize: number;
+    filter: ListConsumptionsFilter;
+  }): Promise<AppResult<ListConsumptionsPage>>;
+
+  /**
+   * 列出账户已开通的业务（三态：opened / paused / stopped）。
+   * 业务实例与订单 / 订阅是兄弟概念，不分页（单账户通常 < 50 条）。
+   */
+  listBusinesses(
+    accountUid: Uid,
+    filter: ListBusinessesFilter,
+  ): Promise<AppResult<BusinessInstance[]>>;
 }
