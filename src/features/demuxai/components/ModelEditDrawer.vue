@@ -239,12 +239,12 @@ async function onSubmit(): Promise<void> {
             <span v-else-if="!entry.enabled" class="carried-weight">（停用）</span>
           </el-tag>
           <span v-if="carriedBy.length === 0" class="carried-empty">
-            当前没有任何供应商上架此 displayName（理论上应被自动清理）
+            当前没有任何模型渠道上架此 displayName（理论上应被自动清理）
           </span>
         </div>
         <div class="form-hint">
           反向派生于 Provider.modelMappings × providerModels —— 仅展示。
-          新增 / 移除请编辑对应供应商。
+          新增 / 移除请编辑对应模型渠道。
         </div>
       </el-form-item>
 

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 /**
- * 供应商编辑抽屉（新模型）。
+ * 模型渠道编辑抽屉（新模型）。
  *
  * 数据模型上承 `provider.types.ts`：
- *  - **供应商模型** `providerModels[]`：本 Provider 下登记的「上游模型实体」
+ *  - **渠道模型** `providerModels[]`：本模型渠道下登记的「上游模型实体」
  *    （`modelName` + family + capabilities + ctx/out 上限 + 最低可见 LV）
- *  - **对外上架** `modelMappings[]`：把某个供应商模型用 `displayName` 上架，
+ *  - **对外上架** `modelMappings[]`：把某个渠道模型用 `displayName` 上架，
  *    支持权重 / 启停 / 排序；同一 providerModel 可以挂多条不同 displayName
  *    的映射（套餐 / 灰度等场景）
  *
@@ -257,7 +257,7 @@ const displayNameCount = computed(() => {
 
 function addProviderModelFromUpstream(modelName: string): void {
   if (registeredModelNames.value.has(modelName)) {
-    ElMessage.warning(`供应商模型 "${modelName}" 已登记`);
+    ElMessage.warning(`渠道模型 "${modelName}" 已登记`);
     return;
   }
   const family = inferFamily(modelName);
@@ -333,16 +333,16 @@ function autoFillMappings(): void {
     count += 1;
   }
   if (count === 0) {
-    ElMessage.info('所有供应商模型都已有上架映射');
+    ElMessage.info('所有渠道模型都已有上架映射');
   } else {
-    ElMessage.success(`已为 ${count} 个供应商模型生成默认上架`);
+    ElMessage.success(`已为 ${count} 个渠道模型生成默认上架`);
   }
 }
 
 function addEmptyMapping(): void {
   const first = form.value.providerModels[0];
   if (!first) {
-    ElMessage.warning('请先在「供应商模型」里登记至少一个 modelName');
+    ElMessage.warning('请先在「渠道模型」里登记至少一个 modelName');
     return;
   }
   addMappingForModel(first.uid, { displayName: '' });
@@ -357,23 +357,23 @@ function validateLists(): string | null {
   for (let i = 0; i < form.value.providerModels.length; i += 1) {
     const m = form.value.providerModels[i]!;
     const name = m.modelName.trim();
-    if (!name) return `供应商模型第 ${i + 1} 行：modelName 不能为空`;
+    if (!name) return `渠道模型第 ${i + 1} 行：modelName 不能为空`;
     if (seenNames.has(name)) {
-      return `供应商模型 "${name}" 重复（同一 Provider 内 modelName 必须唯一）`;
+      return `渠道模型 "${name}" 重复（同一 Provider 内 modelName 必须唯一）`;
     }
     seenNames.add(name);
     if (!Number.isFinite(m.maxContextTokens) || m.maxContextTokens <= 0) {
-      return `供应商模型 "${name}" 的上下文上限必须 > 0`;
+      return `渠道模型 "${name}" 的上下文上限必须 > 0`;
     }
     if (
       m.maxOutputTokens !== null &&
       m.maxOutputTokens !== undefined &&
       m.maxOutputTokens > m.maxContextTokens
     ) {
-      return `供应商模型 "${name}" 的输出上限不能大于上下文上限`;
+      return `渠道模型 "${name}" 的输出上限不能大于上下文上限`;
     }
     if (!m.capabilities.length) {
-      return `供应商模型 "${name}" 至少选择一项能力`;
+      return `渠道模型 "${name}" 至少选择一项能力`;
     }
   }
   const known = new Set(form.value.providerModels.map((m) => m.uid));
@@ -381,7 +381,7 @@ function validateLists(): string | null {
     const m = form.value.modelMappings[i]!;
     if (!m.displayName.trim()) return `对外上架第 ${i + 1} 行：displayName 不能为空`;
     if (!known.has(m.providerModelUid)) {
-      return `对外上架 "${m.displayName}" 引用的供应商模型不存在`;
+      return `对外上架 "${m.displayName}" 引用的渠道模型不存在`;
     }
   }
   return null;
@@ -461,7 +461,7 @@ const sortedMappings = computed<ProviderModelMappingDraft[]>(() =>
 <template>
   <el-drawer
     v-model="visible"
-    :title="isEdit ? `编辑供应商 · ${provider?.name ?? ''}` : '新建供应商'"
+    :title="isEdit ? `编辑模型渠道 · ${provider?.name ?? ''}` : '新建模型渠道'"
     direction="rtl"
     size="980px"
     :close-on-click-modal="false"
@@ -503,7 +503,7 @@ const sortedMappings = computed<ProviderModelMappingDraft[]>(() =>
                 :value="p"
               />
             </el-select>
-            <div v-if="isEdit" class="form-hint">协议不可更改，如需变更请新建供应商。</div>
+            <div v-if="isEdit" class="form-hint">协议不可更改，如需变更请新建模型渠道。</div>
           </el-form-item>
 
           <el-form-item label="Base URL" prop="baseUrl">
@@ -537,11 +537,11 @@ const sortedMappings = computed<ProviderModelMappingDraft[]>(() =>
         </el-form>
       </section>
 
-      <!-- ============ ③ 供应商模型（provider_model） ============ -->
+      <!-- ============ ③ 渠道模型（provider_model） ============ -->
       <section class="section">
         <div class="section__head">
           <h3 class="section__title">
-            供应商模型
+            渠道模型
             <span class="section__count">{{ form.providerModels.length }}</span>
           </h3>
           <span class="section__hint">
@@ -609,7 +609,7 @@ const sortedMappings = computed<ProviderModelMappingDraft[]>(() =>
         <div v-if="form.providerModels.length === 0" class="empty-state">
           <el-icon class="empty-state__icon"><InfoFilled /></el-icon>
           <div>
-            <div class="empty-state__title">尚未登记任何供应商模型</div>
+            <div class="empty-state__title">尚未登记任何渠道模型</div>
             <div class="empty-state__desc">
               拉取上游目录后点击「添加」，或「手工新增模型」。
             </div>
@@ -786,7 +786,7 @@ const sortedMappings = computed<ProviderModelMappingDraft[]>(() =>
             <span class="section__count">{{ form.modelMappings.length }}</span>
           </h3>
           <span class="section__hint">
-            把已登记的供应商模型用 <code>displayName</code> 上架；同一模型可挂多条
+            把已登记的渠道模型用 <code>displayName</code> 上架；同一模型可挂多条
             <code>displayName</code> 的映射（套餐 / 灰度名）。
           </span>
         </div>
@@ -816,7 +816,7 @@ const sortedMappings = computed<ProviderModelMappingDraft[]>(() =>
           <div>
             <div class="empty-state__title">尚未配置任何对外上架</div>
             <div class="empty-state__desc">
-              没有上架的供应商模型不会被调度命中；点击「自动按模型生成上架」一键上架全部。
+              没有上架的渠道模型不会被调度命中；点击「自动按模型生成上架」一键上架全部。
             </div>
           </div>
         </div>
@@ -824,7 +824,7 @@ const sortedMappings = computed<ProviderModelMappingDraft[]>(() =>
         <div v-else class="mapping-table">
           <div class="mapping-table__head">
             <div class="mp-col mp-col--name">对外展示名 displayName</div>
-            <div class="mp-col mp-col--ref">→ 供应商模型 modelName</div>
+            <div class="mp-col mp-col--ref">→ 渠道模型 modelName</div>
             <div class="mp-col mp-col--toggle">启用</div>
             <div class="mp-col mp-col--actions"></div>
           </div>
@@ -855,7 +855,7 @@ const sortedMappings = computed<ProviderModelMappingDraft[]>(() =>
               <el-select
                 v-model="row.providerModelUid"
                 size="small"
-                placeholder="选择供应商模型"
+                placeholder="选择渠道模型"
                 filterable
               >
                 <el-option

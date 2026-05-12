@@ -95,14 +95,14 @@ const providerText = computed(() => {
 
       <el-divider />
 
-      <h4 class="section-title">模型与供应商</h4>
+      <h4 class="section-title">模型与渠道</h4>
       <div class="log-detail__row">
         <span class="label">对外 modelId</span>
         <span class="mono" :class="{ 'deleted-model': modelDeleted }">{{ modelText }}</span>
         <el-tag v-if="modelDeleted" size="small" type="info" effect="plain">已删除</el-tag>
       </div>
       <div class="log-detail__row">
-        <span class="label">实际供应商</span>
+        <span class="label">实际渠道</span>
         <span class="mono">{{ providerText }}</span>
         <span class="provider-tag">{{ ApiTypeLabel[log.apiType] }}</span>
       </div>
