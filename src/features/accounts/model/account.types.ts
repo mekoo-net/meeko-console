@@ -40,8 +40,10 @@ export const achievementSchema = z.object({
   code: z.string(),
   name: z.string(),
   description: z.string(),
-  /** emoji 或图标标识 */
+  /** emoji（fallback 时的核心符号） */
   icon: z.string(),
+  /** 勋章插画 URL（SVG / PNG / JPG），授予时从勋章库快照写入，可选 */
+  image: z.string().nullable().optional(),
   grantedAtUtc: z.string(),
 });
 

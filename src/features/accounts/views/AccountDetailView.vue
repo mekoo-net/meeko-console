@@ -12,6 +12,7 @@ import { useAccountDetail } from '../composables/useAccountDetail';
 import { getAccountAdminPort } from '../services';
 
 import AccountInfoCard from '../components/AccountInfoCard.vue';
+import AccountAchievementsCard from '../components/AccountAchievementsCard.vue';
 import BillingTab from '@/features/billing/components/BillingTab.vue';
 import BusinessTab from '@/features/billing/components/BusinessTab.vue';
 import IamUsersTab from '../components/IamUsersTab.vue';
@@ -28,7 +29,7 @@ const togglingStatus = ref(false);
 const account = computed(() => detail.account.value);
 const isSuspended = computed(() => account.value?.status === 'suspended');
 
-const activeTab = ref<'business' | 'billing' | 'iam'>('business');
+const activeTab = ref<'business' | 'billing' | 'achievements' | 'iam'>('business');
 
 async function toggleSuspend(): Promise<void> {
   const a = account.value;
@@ -85,7 +86,7 @@ async function toggleSuspend(): Promise<void> {
 
     <div v-loading="detail.loading.value">
       <template v-if="account">
-        <AccountInfoCard :account="account" @achievements-changed="detail.refresh()" />
+        <AccountInfoCard :account="account" />
 
         <el-card shadow="never" class="tabs-card">
           <el-tabs v-model="activeTab" class="detail-tabs">
@@ -94,6 +95,12 @@ async function toggleSuspend(): Promise<void> {
             </el-tab-pane>
             <el-tab-pane label="账单" name="billing" lazy>
               <BillingTab :account-uid="account.uid" />
+            </el-tab-pane>
+            <el-tab-pane label="徽章" name="achievements" lazy>
+              <AccountAchievementsCard
+                :account="account"
+                @changed="detail.refresh()"
+              />
             </el-tab-pane>
             <el-tab-pane label="IAM" name="iam" lazy>
               <IamUsersTab :account-uid="account.uid" />

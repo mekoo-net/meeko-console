@@ -1,0 +1,22 @@
+<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="api-bg" cx="40%" cy="35%" r="70%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="55%" stop-color="#eab308"/>
+      <stop offset="100%" stop-color="#422006"/>
+    </radialGradient>
+    <linearGradient id="api-bolt" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fefce8"/>
+      <stop offset="50%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#a16207"/>
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="60" fill="url(#api-bg)" stroke="#422006" stroke-width="2"/>
+  <circle cx="64" cy="64" r="50" fill="none" stroke="#fef9c3" stroke-width="1.2" opacity="0.5"/>
+  <path d="M 74 22 L 38 70 L 56 70 L 48 106 L 90 56 L 70 56 L 80 22 Z" fill="url(#api-bolt)" stroke="#78350f" stroke-width="2.5" stroke-linejoin="round"/>
+  <circle cx="28" cy="40" r="2.5" fill="#fef9c3"/>
+  <circle cx="102" cy="50" r="3" fill="#fef9c3"/>
+  <circle cx="32" cy="88" r="2" fill="#fef9c3"/>
+  <circle cx="100" cy="86" r="2.5" fill="#fef9c3"/>
+  <path d="M 22 64 L 24 68 L 28 70 L 24 72 L 22 76 L 20 72 L 16 70 L 20 68 Z" fill="#fef9c3" opacity="0.85"/>
+</svg>

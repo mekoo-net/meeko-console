@@ -160,6 +160,7 @@ export class AccountAdminMock implements AccountAdminPort {
       name: def.name,
       description: def.description,
       icon: def.icon,
+      image: def.image ?? null,
       grantedAtUtc: new Date().toISOString(),
     };
     const next: Account = {

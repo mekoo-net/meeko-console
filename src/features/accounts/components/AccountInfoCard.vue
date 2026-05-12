@@ -9,15 +9,11 @@ import {
   accountTypeLabel,
   type Account,
 } from '../model/account.types';
-import AccountAchievementsCard from './AccountAchievementsCard.vue';
 import AccountOAuthCard from './AccountOAuthCard.vue';
 import AccountTierCard from './AccountTierCard.vue';
 import AccountWalletCard from './AccountWalletCard.vue';
 
 defineProps<{ account: Account }>();
-const emit = defineEmits<{
-  (e: 'achievements-changed'): void;
-}>();
 </script>
 
 <template>
@@ -64,7 +60,6 @@ const emit = defineEmits<{
       />
       <AccountWalletCard :account-uid="account.uid" />
       <AccountOAuthCard :bindings="account.oauthBindings" />
-      <AccountAchievementsCard :account="account" @changed="emit('achievements-changed')" />
     </div>
   </section>
 </template>
@@ -134,9 +129,9 @@ const emit = defineEmits<{
   grid-template-columns: repeat(2, 1fr);
   gap: 14px;
 }
-@media (min-width: 1280px) {
+@media (min-width: 1024px) {
   .info-card__grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 </style>

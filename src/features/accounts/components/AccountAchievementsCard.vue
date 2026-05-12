@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 
 import { confirmDanger } from '@/shared/composables/useConfirm';
@@ -8,6 +8,7 @@ import { formatDateTime } from '@/shared/lib/date';
 import type { Account, Achievement } from '../model/account.types';
 import { ACHIEVEMENT_CATALOG, type AchievementDef } from '../model/achievementCatalog';
 import { getAccountAdminPort } from '../services';
+import BadgeMedal from './BadgeMedal.vue';
 
 const props = defineProps<{ account: Account }>();
 const emit = defineEmits<{ (e: 'changed'): void }>();
@@ -15,9 +16,31 @@ const emit = defineEmits<{ (e: 'changed'): void }>();
 const port = getAccountAdminPort();
 
 const owned = computed<Achievement[]>(() => props.account.achievements ?? []);
+
+/** 按授予日期降序：新拿到的勋章排在最前。 */
+const sortedOwned = computed<Achievement[]>(() =>
+  [...owned.value].sort((a, b) => (a.grantedAtUtc < b.grantedAtUtc ? 1 : -1)),
+);
+
 const ownedCodes = computed(() => new Set(owned.value.map((a) => a.code)));
 const grantableDefs = computed<AchievementDef[]>(() =>
   ACHIEVEMENT_CATALOG.filter((d) => !ownedCodes.value.has(d.code)),
+);
+
+const page = ref(1);
+const pageSize = ref(8);
+
+const pagedOwned = computed<Achievement[]>(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return sortedOwned.value.slice(start, start + pageSize.value);
+});
+
+watch(
+  () => sortedOwned.value.length,
+  (len) => {
+    const maxPage = Math.max(1, Math.ceil(len / pageSize.value));
+    if (page.value > maxPage) page.value = maxPage;
+  },
 );
 
 const dialogOpen = ref(false);
@@ -46,15 +69,15 @@ async function submitGrant(): Promise<void> {
   }
 }
 
-async function revoke(code: string, name: string): Promise<void> {
+async function revoke(a: Achievement): Promise<void> {
   const ok = await confirmDanger({
     title: '撤销勋章',
-    message: `确认撤销勋章「${name}」吗？此操作可逆，撤销后该勋章会从账户记录中移除。`,
+    message: `确认撤销勋章「${a.name}」吗？撤销后该勋章会从账户记录中移除。`,
     confirmText: '撤销',
     type: 'warning',
   });
   if (!ok) return;
-  const r = await port.revokeAchievement(props.account.uid, code);
+  const r = await port.revokeAchievement(props.account.uid, a.code);
   if (r.success) {
     ElMessage.success('勋章已撤销');
     emit('changed');
@@ -65,9 +88,14 @@ async function revoke(code: string, name: string): Promise<void> {
 </script>
 
 <template>
-  <div class="ach-card">
-    <div class="ach-card__head">
-      <span class="ach-card__label">成就勋章</span>
+  <section class="ach-section">
+    <header class="ach-section__head">
+      <div class="ach-section__title-row">
+        <span class="ach-section__title">成就勋章</span>
+        <el-tag v-if="owned.length > 0" type="info" effect="plain" round size="small">
+          {{ owned.length }} / {{ ACHIEVEMENT_CATALOG.length }}
+        </el-tag>
+      </div>
       <el-button
         size="small"
         type="primary"
@@ -76,22 +104,45 @@ async function revoke(code: string, name: string): Promise<void> {
       >
         授予勋章
       </el-button>
+    </header>
+
+    <div v-if="owned.length > 0">
+      <div class="ach-section__grid">
+        <article
+          v-for="a in pagedOwned"
+          :key="a.code"
+          class="ach-card"
+          @click="revoke(a)"
+        >
+          <div class="ach-card__medal">
+            <BadgeMedal
+              :code="a.code"
+              :icon="a.icon"
+              :image="a.image"
+              :size="96"
+            />
+          </div>
+          <div class="ach-card__body">
+            <div class="ach-card__name">{{ a.name }}</div>
+            <div class="ach-card__desc">{{ a.description }}</div>
+            <div class="ach-card__date">授予于 {{ formatDateTime(a.grantedAtUtc) }}</div>
+          </div>
+        </article>
+      </div>
+
+      <div v-if="owned.length > pageSize" class="ach-section__pagination">
+        <el-pagination
+          v-model:current-page="page"
+          :page-size="pageSize"
+          :total="owned.length"
+          layout="prev, pager, next, total"
+          background
+          small
+        />
+      </div>
     </div>
 
-    <div v-if="owned.length > 0" class="ach-card__grid">
-      <el-tooltip
-        v-for="a in owned"
-        :key="a.code"
-        :content="`${a.description} · 授予于 ${formatDateTime(a.grantedAtUtc)}`"
-        placement="top"
-      >
-        <div class="ach-item" @click="revoke(a.code, a.name)">
-          <div class="ach-item__icon">{{ a.icon }}</div>
-          <div class="ach-item__name">{{ a.name }}</div>
-        </div>
-      </el-tooltip>
-    </div>
-    <div v-else class="ach-card__empty">尚未获得任何勋章</div>
+    <div v-else class="ach-section__empty">尚未获得任何勋章</div>
 
     <el-dialog v-model="dialogOpen" title="授予勋章" width="460px" destroy-on-close>
       <el-form label-width="80px" @submit.prevent>
@@ -126,67 +177,98 @@ async function revoke(code: string, name: string): Promise<void> {
         </el-button>
       </template>
     </el-dialog>
-  </div>
+  </section>
 </template>
 
 <style scoped>
-.ach-card {
+.ach-section {
   background: #fff;
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 10px;
-  padding: 16px 18px;
+  border-radius: 12px;
+  padding: 18px 22px 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  min-height: 152px;
+  gap: 16px;
 }
-.ach-card__head {
+.ach-section__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
-.ach-card__label {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-.ach-card__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+.ach-section__title-row {
+  display: flex;
+  align-items: center;
   gap: 10px;
 }
-.ach-item {
+.ach-section__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+.ach-section__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
+}
+.ach-card {
+  background: linear-gradient(180deg, #fafafa 0%, #ffffff 50%, #f8fafc 100%);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 12px;
+  padding: 14px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+.ach-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--el-color-primary-light-5);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+}
+.ach-card__medal {
+  width: 96px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ach-card__body {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 8px 6px;
-  border-radius: 8px;
-  background: #fefce8;
-  border: 1px solid #fde68a;
-  cursor: pointer;
-  transition: transform 0.15s;
-}
-.ach-item:hover {
-  transform: translateY(-1px);
-  border-color: #f59e0b;
-}
-.ach-item__icon {
-  font-size: 22px;
-  line-height: 1;
-}
-.ach-item__name {
-  font-size: 11px;
-  color: var(--el-text-color-regular);
   text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
 }
-.ach-card__empty {
+.ach-card__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+.ach-card__desc {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.5;
+}
+.ach-card__date {
+  font-size: 11.5px;
+  color: var(--el-text-color-placeholder);
+  margin-top: 2px;
+}
+.ach-section__pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
+}
+.ach-section__empty {
   font-size: 13px;
   color: var(--el-text-color-placeholder);
-  padding: 12px 0;
+  padding: 24px 0;
   text-align: center;
 }
 .ach-option {
