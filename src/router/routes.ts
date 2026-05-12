@@ -66,14 +66,20 @@ export const routes: RouteRecordRaw[] = [
       {
         path: 'demuxai',
         component: () => import('@/features/demuxai/views/DemuxaiLayout.vue'),
-        redirect: { name: 'demuxai-models' },
+        redirect: { name: 'demuxai-overview' },
         meta: { title: 'DemuxAI 管理', requiresAuth: true, roles: ['Admin'] },
         children: [
+          {
+            path: 'overview',
+            name: 'demuxai-overview',
+            component: () => import('@/features/demuxai/views/OverviewView.vue'),
+            meta: { title: '概览', requiresAuth: true, roles: ['Admin'] },
+          },
           {
             path: 'providers',
             name: 'demuxai-providers',
             component: () => import('@/features/demuxai/views/ProviderListView.vue'),
-            meta: { title: '供应商', requiresAuth: true, roles: ['Admin'] },
+            meta: { title: '模型渠道', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'models',

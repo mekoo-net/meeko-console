@@ -6,6 +6,7 @@ import {
   ChatLineRound,
   Cpu,
   CreditCard,
+  DataAnalysis,
   DataLine,
   Document,
   Link,
@@ -68,8 +69,9 @@ const tree: readonly MenuNode[] = [
     icon: MagicStick,
     roles: ['Admin'],
     children: [
+      { type: 'leaf', index: '/demuxai/overview', title: '概览', icon: DataAnalysis },
       { type: 'leaf', index: '/demuxai/models', title: '模型列表', icon: Cpu },
-      { type: 'leaf', index: '/demuxai/providers', title: '供应商', icon: Link },
+      { type: 'leaf', index: '/demuxai/providers', title: '模型渠道', icon: Link },
       { type: 'leaf', index: '/demuxai/pricing', title: '模型定价', icon: PriceTag },
       { type: 'leaf', index: '/demuxai/logs', title: '调用日志', icon: DataLine },
     ],
