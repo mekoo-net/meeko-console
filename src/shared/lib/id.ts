@@ -43,3 +43,31 @@ export function createUidSeq(start: number = 1_000_000): () => Uid {
     return n.toString();
   };
 }
+
+/**
+ * Mock 用：简化版雪花 ID 生成器，按时间有序、单调递增。
+ *
+ * 真实雪花 ID 结构 = `[41bit ms timestamp][10bit machine][12bit seq]`，
+ * 这里前端 Mock 用 `[ms timestamp][4-digit seq]` 的 18 位字符串，
+ * 既能保证按时间排序，也契合后端 long 形态。
+ *
+ * 适用：账单 / 充值等"按时间序"流水主键。
+ */
+export function createSnowflakeIdSeq(): () => Uid {
+  let lastTs = 0n;
+  let seq = 0n;
+  return () => {
+    let ts = BigInt(Date.now());
+    if (ts === lastTs) {
+      seq = (seq + 1n) & 0xfffn;
+      if (seq === 0n) {
+        ts = lastTs + 1n;
+      }
+    } else {
+      seq = 0n;
+    }
+    lastTs = ts;
+    const seqStr = seq.toString().padStart(4, '0');
+    return `${ts.toString()}${seqStr}`;
+  };
+}
