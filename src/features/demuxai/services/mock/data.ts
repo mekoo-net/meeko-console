@@ -297,6 +297,7 @@ function seedProviders(): Provider[] {
   const o_o1mini = pm('o1-mini', TPL.o1mini);
   const o_emb3 = pm('text-embedding-3-large', TPL.embedLarge);
   const openaiMain: Provider = {
+    id: 1001,
     uid: genProviderUid(),
     name: 'OpenAI 直连（主）',
     apiType: 'openai',
@@ -328,6 +329,7 @@ function seedProviders(): Provider[] {
   const a_gpt4o = pm('gpt-4o', TPL.gpt4o);
   const a_gpt4omini = pm('gpt-4o-mini', TPL.gpt4omini);
   const azureNA: Provider = {
+    id: 1002,
     uid: genProviderUid(),
     name: 'Azure OpenAI（北美）',
     apiType: 'azure_openai',
@@ -353,6 +355,7 @@ function seedProviders(): Provider[] {
   const an_sonnet = pm('claude-3-5-sonnet-20241022', TPL.claudeSonnet);
   const an_haiku = pm('claude-3-5-haiku-20241022', TPL.claudeHaiku);
   const anthropic: Provider = {
+    id: 1003,
     uid: genProviderUid(),
     name: 'Anthropic 直连',
     apiType: 'anthropic',
@@ -378,6 +381,7 @@ function seedProviders(): Provider[] {
   const ali_max = pm('qwen-max', TPL.qwenMax);
   const ali_plus = pm('qwen-plus', TPL.qwenPlus);
   const aliyun: Provider = {
+    id: 1004,
     uid: genProviderUid(),
     name: '阿里灵积',
     apiType: 'aliyun_dashscope',
@@ -403,6 +407,7 @@ function seedProviders(): Provider[] {
   const ds_chat = pm('deepseek-chat', TPL.deepseekChat);
   const ds_reasoner = pm('deepseek-reasoner', TPL.deepseekR1);
   const deepseek: Provider = {
+    id: 1005,
     uid: genProviderUid(),
     name: 'DeepSeek 官方',
     apiType: 'deepseek',
@@ -427,6 +432,7 @@ function seedProviders(): Provider[] {
   // —— Provider 6: 自建 vLLM
   const sh_llama = pm('meta-llama/Llama-3.1-70B-Instruct', TPL.llama70b);
   const selfHosted: Provider = {
+    id: 1006,
     uid: genProviderUid(),
     name: '自建 vLLM (Llama3.1-70B)',
     apiType: 'self_hosted_openai_compat',
@@ -448,6 +454,7 @@ function seedProviders(): Provider[] {
   // —— Provider 7: Moonshot 备份 (auto_disabled)
   const ms_32k = pm('moonshot-v1-32k', TPL.moonshot32k);
   const moonshot: Provider = {
+    id: 1007,
     uid: genProviderUid(),
     name: 'Moonshot 备份',
     apiType: 'moonshot',
@@ -469,6 +476,7 @@ function seedProviders(): Provider[] {
   // —— Provider 8: Gemini 实验
   const g_flash = pm('gemini-1.5-flash', TPL.geminiFlash);
   const gemini: Provider = {
+    id: 1008,
     uid: genProviderUid(),
     name: 'Gemini 实验渠道',
     apiType: 'gemini',
@@ -516,7 +524,14 @@ function seedModels(providers: Provider[]): Model[] {
   return [...seen.values()];
 }
 
-/** 价格表种子。新模型主键 = displayName。 */
+/**
+ * 价格表种子。新模型主键 = displayName。
+ *
+ * 形状跟随 `docs/api/10-demuxai-pricing.md` 的 discriminated union：
+ *  - `billingType` 顶层判别，`pricing` 嵌套对象按类型决定形状
+ *  - 当前种子里全部是文本 / embedding 模型 → 全部 `per_token`；
+ *    GPT-4o / Claude 3.5 Sonnet 多带 cachedRead/cachedWrite 字段，作为缓存价示例
+ */
 function seedPricing(models: Model[]): Pricing[] {
   const t = iso(now);
   type PricingBase = Omit<Pricing, 'uid' | 'modelId' | 'updatedAtUtc' | 'effectiveFromUtc'>;
@@ -524,12 +539,11 @@ function seedPricing(models: Model[]): Pricing[] {
     [
       'GPT-4o',
       {
-        mode: 'per_token',
-        inputPricePerKToken: 0.018,
-        outputPricePerKToken: 0.072,
-        pricePerCall: null,
-        pricePerImage: null,
-        pricePerMinute: null,
+        billingType: 'per_token',
+        pricing: {
+          input: { perMToken: 18, cachedRead: 4.5 },
+          output: { perMToken: 72 },
+        },
         multiplier: 1.0,
         currency: 'CNY',
         tierMultipliers: { '5': 0.7, '4': 0.85 },
@@ -539,12 +553,11 @@ function seedPricing(models: Model[]): Pricing[] {
     [
       'GPT-4o mini',
       {
-        mode: 'per_token',
-        inputPricePerKToken: 0.001,
-        outputPricePerKToken: 0.004,
-        pricePerCall: null,
-        pricePerImage: null,
-        pricePerMinute: null,
+        billingType: 'per_token',
+        pricing: {
+          input: { perMToken: 1 },
+          output: { perMToken: 4 },
+        },
         multiplier: 1.0,
         currency: 'CNY',
         tierMultipliers: { '5': 0.6 },
@@ -554,12 +567,16 @@ function seedPricing(models: Model[]): Pricing[] {
     [
       'Claude 3.5 Sonnet',
       {
-        mode: 'per_token',
-        inputPricePerKToken: 0.022,
-        outputPricePerKToken: 0.11,
-        pricePerCall: null,
-        pricePerImage: null,
-        pricePerMinute: null,
+        billingType: 'per_token',
+        pricing: {
+          input: {
+            perMToken: 22,
+            cachedRead: 2.2,
+            cachedWrite5m: 27.5, // 5m TTL：base × 1.25
+            cachedWrite1h: 44, // 1h TTL：base × 2.0
+          },
+          output: { perMToken: 110 },
+        },
         multiplier: 1.0,
         currency: 'CNY',
         tierMultipliers: { '5': 0.75 },
@@ -569,12 +586,11 @@ function seedPricing(models: Model[]): Pricing[] {
     [
       'DeepSeek-V3',
       {
-        mode: 'per_token',
-        inputPricePerKToken: 0.0007,
-        outputPricePerKToken: 0.002,
-        pricePerCall: null,
-        pricePerImage: null,
-        pricePerMinute: null,
+        billingType: 'per_token',
+        pricing: {
+          input: { perMToken: 0.7 },
+          output: { perMToken: 2 },
+        },
         multiplier: 1.0,
         currency: 'CNY',
         tierMultipliers: {},
@@ -584,12 +600,11 @@ function seedPricing(models: Model[]): Pricing[] {
     [
       'DeepSeek-R1 (推理)',
       {
-        mode: 'per_token',
-        inputPricePerKToken: 0.0045,
-        outputPricePerKToken: 0.018,
-        pricePerCall: null,
-        pricePerImage: null,
-        pricePerMinute: null,
+        billingType: 'per_token',
+        pricing: {
+          input: { perMToken: 4.5 },
+          output: { perMToken: 18, reasoning: 18 },
+        },
         multiplier: 1.0,
         currency: 'CNY',
         tierMultipliers: {},
@@ -599,12 +614,11 @@ function seedPricing(models: Model[]): Pricing[] {
     [
       'Qwen-Max',
       {
-        mode: 'per_token',
-        inputPricePerKToken: 0.02,
-        outputPricePerKToken: 0.06,
-        pricePerCall: null,
-        pricePerImage: null,
-        pricePerMinute: null,
+        billingType: 'per_token',
+        pricing: {
+          input: { perMToken: 20 },
+          output: { perMToken: 60 },
+        },
         multiplier: 1.0,
         currency: 'CNY',
         tierMultipliers: {},
@@ -614,12 +628,11 @@ function seedPricing(models: Model[]): Pricing[] {
     [
       'Llama 3.1 70B (自建)',
       {
-        mode: 'per_token',
-        inputPricePerKToken: 0.002,
-        outputPricePerKToken: 0.002,
-        pricePerCall: null,
-        pricePerImage: null,
-        pricePerMinute: null,
+        billingType: 'per_token',
+        pricing: {
+          input: { perMToken: 2 },
+          output: { perMToken: 2 },
+        },
         multiplier: 1.0,
         currency: 'CNY',
         tierMultipliers: { '5': 0.5, '4': 0.75 },
@@ -629,12 +642,11 @@ function seedPricing(models: Model[]): Pricing[] {
     [
       'Text-Embedding-3-Large',
       {
-        mode: 'per_token',
-        inputPricePerKToken: 0.0009,
-        outputPricePerKToken: 0,
-        pricePerCall: null,
-        pricePerImage: null,
-        pricePerMinute: null,
+        billingType: 'per_token',
+        pricing: {
+          input: { perMToken: 0.9 },
+          output: { perMToken: 0 },
+        },
         multiplier: 1.0,
         currency: 'CNY',
         tierMultipliers: {},
@@ -653,7 +665,7 @@ function seedPricing(models: Model[]): Pricing[] {
         modelId: m.modelId,
         effectiveFromUtc: iso(new Date(now.getTime() - 7 * 86400000)),
         updatedAtUtc: t,
-      } satisfies Pricing;
+      } as Pricing;
     })
     .filter((p): p is Pricing => p !== null);
 }
@@ -661,6 +673,13 @@ function seedPricing(models: Model[]): Pricing[] {
 const SEED_ACCOUNTS = ['100000001', '100000002', '100000003'] as const;
 const SEED_IAM_USERS = ['200000001', '700000001', '700000002'] as const;
 
+/**
+ * 抽样调用日志。
+ *
+ * 真实场景下日志会按 `billingType` 多态分布（token / image / video / ...）；
+ * 当前 mock 的 Provider 全部是文本 LLM，所以这里全部以 `per_token` 抽样。
+ * 等后续 seedProviders 增加图像 / 视频 / 音频 / TTS 模型，再扩展对应分支。
+ */
 function seedLogs(providers: Provider[]): LogEntry[] {
   const out: LogEntry[] = [];
   const errorCodes = ['upstream_5xx', 'upstream_timeout', 'rate_limited', 'context_too_long'];
@@ -684,6 +703,15 @@ function seedLogs(providers: Provider[]): LogEntry[] {
     pairsByProvider.set(p.uid, list);
   }
 
+  // error.code 与对应上游 httpStatus 的固定映射，方便 UI 校色 / 文案
+  const errorCodeToHttp: Record<string, number> = {
+    upstream_5xx: 502,
+    upstream_timeout: 504,
+    rate_limited: 429,
+    context_too_long: 400,
+    cancelled: 0,
+  };
+
   for (let i = 0; i < 320; i += 1) {
     const p = usable[i % usable.length]!;
     const pairs = pairsByProvider.get(p.uid) ?? [];
@@ -694,52 +722,107 @@ function seedLogs(providers: Provider[]): LogEntry[] {
     const prompt = 200 + (i * 37) % 4000;
     const completion = 80 + (i * 53) % 1600;
     const failed = i % 23 === 0;
-    const slow = i % 17 === 0;
-    const inputCost = (prompt / 1000) * 0.018;
-    const outputCost = (completion / 1000) * 0.072;
-    const status = failed
-      ? (['error', 'timeout', 'rate_limited'] as const)[i % 3]!
-      : 'ok';
-    const httpStatus = failed
-      ? status === 'timeout'
-        ? 504
-        : status === 'rate_limited'
-          ? 429
-          : 502
-      : 200;
+    const success = !failed;
+    const streamed = i % 2 === 0;
+
+    const errorCode = failed ? errorCodes[i % errorCodes.length]! : null;
+    const httpStatus = failed ? (errorCodeToHttp[errorCode!] ?? 500) : 200;
+
+    const inputTokens = prompt;
+    const outputTokens = failed ? 0 : completion;
+    const totalTokens = inputTokens + outputTokens;
+    // ---- 单价快照（元 / 1M tokens） ----
+    const inputPerMToken = 18;
+    const outputPerMToken = 72;
+    const cachedReadPerMToken = 9; // 约 50% off 基础单价
+    const cachedWrite5mPerMToken = 22.5; // Anthropic 5m TTL：base × 1.25
+    const cachedWrite1hPerMToken = 36; // Anthropic 1h TTL：base × 2.0
+    // ---- 用量子维度（未触发为 0；mock 模型非音频 / 不计推理） ----
+    const cachedReadTokens = 0;
+    const cachedWrite5mTokens = 0;
+    const cachedWrite1hTokens = 0;
+    const inputAudioTokens = 0;
+    const reasoningTokens = 0;
+    const outputAudioTokens = 0;
+    // ---- 实际扣费（公式：tokens / 1_000_000 × perMToken） ----
+    const inputAmount = Math.round((inputTokens / 1_000_000) * inputPerMToken * 10000) / 10000;
+    const outputAmount = Math.round((outputTokens / 1_000_000) * outputPerMToken * 10000) / 10000;
+    const total = Math.round((inputAmount + outputAmount) * 10000) / 10000;
+
+    // tokenLatency:
+    //  - 失败 → null
+    //  - 流式且成功 → 首字延迟 TTFT (80~580 ms)
+    //  - 非流式且成功 → 端到端总耗时 (500~3000 ms，跟 completion 长度大致正相关)
+    let tokenLatency: number | null;
+    if (!success) {
+      tokenLatency = null;
+    } else if (streamed) {
+      tokenLatency = 80 + ((i * 7) % 500);
+    } else {
+      tokenLatency = 500 + ((i * 13) % 2500);
+    }
+
+    // 每 ~6 条调用聚合到同一个 convId 模拟多轮对话
+    const convSeq = Math.floor(i / 6);
+    const convId = `CV-${(SEED_IAM_USERS[i % SEED_IAM_USERS.length]!).slice(-3)}-${convSeq.toString(36)}`;
+
     out.push({
       uid: genLogUid(),
-      occurredAtUtc: occurred.toISOString(),
-      accountUid: SEED_ACCOUNTS[i % SEED_ACCOUNTS.length]!,
-      iamUserUid: SEED_IAM_USERS[i % SEED_IAM_USERS.length]!,
-      modelId: pair.displayName,
-      providerUid: p.uid,
-      providerModelId: pair.modelName,
+      createAt: occurred.toISOString(),
+      account: {
+        uid: SEED_ACCOUNTS[i % SEED_ACCOUNTS.length]!,
+        iamId: SEED_IAM_USERS[i % SEED_IAM_USERS.length]!,
+      },
+      convId,
+      modelName: pair.displayName,
+      providerId: p.id,
       apiType: p.apiType,
-      promptTokens: prompt,
-      completionTokens: failed ? 0 : completion,
-      totalTokens: prompt + (failed ? 0 : completion),
-      inputCost,
-      outputCost: failed ? 0 : outputCost,
-      totalCost: inputCost + (failed ? 0 : outputCost),
-      multiplierSnapshot: 1.0,
-      tierSnapshot: 1 + (i % 5),
-      latencyMs: failed
-        ? status === 'timeout'
-          ? 30000
-          : 800
-        : slow
-          ? 4500
-          : 200 + (i * 13) % 1200,
-      firstTokenLatencyMs: failed ? null : 80 + (i * 7) % 500,
-      status,
-      httpStatus,
-      errorCode: failed ? errorCodes[i % errorCodes.length]! : null,
-      errorMessage: failed
-        ? `${errorCodes[i % errorCodes.length]!}: upstream returned ${httpStatus}`
+      billingType: 'per_token',
+      usage: {
+        totalTokens,
+        input: {
+          tokens: inputTokens,
+          cachedReadTokens,
+          cachedWrite5mTokens,
+          cachedWrite1hTokens,
+          audioTokens: inputAudioTokens,
+        },
+        output: {
+          tokens: outputTokens,
+          reasoningTokens,
+          audioTokens: outputAudioTokens,
+        },
+      },
+      cost: {
+        input: {
+          perMToken: inputPerMToken,
+          amount: inputAmount,
+          cachedRead: { perMToken: cachedReadPerMToken, amount: 0 },
+          cachedWrite5m: { perMToken: cachedWrite5mPerMToken, amount: 0 },
+          cachedWrite1h: { perMToken: cachedWrite1hPerMToken, amount: 0 },
+          audio: { perMToken: 0, amount: 0 },
+        },
+        output: {
+          perMToken: outputPerMToken,
+          amount: outputAmount,
+          reasoning: { perMToken: 0, amount: 0 },
+          audio: { perMToken: 0, amount: 0 },
+        },
+        multiplierSnapshot: 1.0,
+        tierSnapshot: 1 + (i % 5),
+        total,
+      },
+      tokenLatency,
+      success,
+      error: errorCode
+        ? {
+            code: errorCode,
+            message: `${errorCode}: upstream returned ${httpStatus}`,
+            httpStatus,
+          }
         : null,
       requestIp: `203.0.113.${(i % 250) + 1}`,
-      streamed: i % 2 === 0,
+      streamed,
     });
   }
   return out.sort((a, b) => b.uid.localeCompare(a.uid));

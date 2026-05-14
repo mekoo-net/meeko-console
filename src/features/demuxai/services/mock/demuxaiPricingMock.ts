@@ -4,6 +4,7 @@ import { delay } from '@/shared/lib/delay';
 
 import {
   pricingSchema,
+  upsertPricingInputSchema,
   type ListPricingFilter,
   type Pricing,
   type UpsertPricingInput,
@@ -21,29 +22,25 @@ function applyFilter(rows: Pricing[], f: ListPricingFilter): Pricing[] {
   const kw = f.keyword.trim().toLowerCase();
   return rows.filter((p) => {
     if (kw && !p.modelId.toLowerCase().includes(kw)) return false;
-    if (f.mode !== 'all' && p.mode !== f.mode) return false;
+    if (f.billingType !== 'all' && p.billingType !== f.billingType) return false;
     return true;
   });
 }
 
-function validateModeFields(input: UpsertPricingInput): AppResult<void> {
-  if (input.mode === 'per_token') {
-    if (input.inputPricePerKToken == null || input.outputPricePerKToken == null) {
-      return fail({
-        code: 'validation',
-        message: '按 Token 模式必须填 input/output 单价',
-        details: { mode: ['per_token requires input & output price'] },
-      });
-    }
-  }
-  if (input.mode === 'per_call' && input.pricePerCall == null) {
-    return fail({ code: 'validation', message: '按调用模式必须填 pricePerCall' });
-  }
-  if (input.mode === 'per_image' && input.pricePerImage == null) {
-    return fail({ code: 'validation', message: '按图片模式必须填 pricePerImage' });
-  }
-  if (input.mode === 'per_minute' && input.pricePerMinute == null) {
-    return fail({ code: 'validation', message: '按时长模式必须填 pricePerMinute' });
+/**
+ * 校验 upsert 入参形状。
+ *
+ * 95% 的字段约束（含 discriminated union shape、tiers 唯一性、非负数等）已经在
+ * `upsertPricingInputSchema` 里通过 zod 表达。这里只兜底做 multiplier 范围检查。
+ */
+function validateUpsert(input: UpsertPricingInput): AppResult<void> {
+  const r = upsertPricingInputSchema.safeParse(input);
+  if (!r.success) {
+    return fail({
+      code: 'validation',
+      message: r.error.issues[0]?.message ?? '入参不合法',
+      details: { errors: r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) },
+    });
   }
   if (input.multiplier <= 0) {
     return fail({ code: 'validation', message: '倍率必须 > 0' });
@@ -83,7 +80,7 @@ export class DemuxaiPricingMock implements DemuxaiPricingPort {
 
   async upsert(input: UpsertPricingInput): Promise<AppResult<Pricing>> {
     await delay();
-    const v = validateModeFields(input);
+    const v = validateUpsert(input);
     if (!v.success) return v;
 
     if (!this.store.models.some((m) => m.modelId === input.modelId)) {
@@ -98,42 +95,24 @@ export class DemuxaiPricingMock implements DemuxaiPricingPort {
     const existingIdx = this.store.pricing.findIndex((p) => p.modelId === input.modelId);
     if (existingIdx >= 0) {
       const cur = this.store.pricing[existingIdx]!;
-      const next: Pricing = {
-        ...cur,
-        mode: input.mode,
-        inputPricePerKToken: input.inputPricePerKToken ?? null,
-        outputPricePerKToken: input.outputPricePerKToken ?? null,
-        pricePerCall: input.pricePerCall ?? null,
-        pricePerImage: input.pricePerImage ?? null,
-        pricePerMinute: input.pricePerMinute ?? null,
-        multiplier: input.multiplier,
-        currency: input.currency,
-        tierMultipliers: { ...input.tierMultipliers },
-        effectiveFromUtc: input.effectiveFromUtc,
+      const next = {
+        ...input,
+        uid: cur.uid,
         updatedAtUtc: t,
-      };
+        updatedByIamUid: cur.updatedByIamUid ?? null,
+      } as Pricing;
       const p = parsePricing(next);
       if (!p.success) return p;
       this.store.pricing[existingIdx] = p.data;
       return ok(p.data);
     }
 
-    const row: Pricing = {
+    const row = {
+      ...input,
       uid: genPricingUid(),
-      modelId: input.modelId,
-      mode: input.mode,
-      inputPricePerKToken: input.inputPricePerKToken ?? null,
-      outputPricePerKToken: input.outputPricePerKToken ?? null,
-      pricePerCall: input.pricePerCall ?? null,
-      pricePerImage: input.pricePerImage ?? null,
-      pricePerMinute: input.pricePerMinute ?? null,
-      multiplier: input.multiplier,
-      currency: input.currency,
-      tierMultipliers: { ...input.tierMultipliers },
-      effectiveFromUtc: input.effectiveFromUtc,
       updatedAtUtc: t,
       updatedByIamUid: null,
-    };
+    } as Pricing;
     const p = parsePricing(row);
     if (!p.success) return p;
     this.store.pricing.push(p.data);

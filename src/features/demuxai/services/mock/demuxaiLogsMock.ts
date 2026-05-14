@@ -2,7 +2,6 @@ import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { clientPaginate } from '@/shared/composables/usePagination';
 import { delay } from '@/shared/lib/delay';
 
-import { logStatusValues, type LogStatus } from '../../model/enums';
 import {
   logEntrySchema,
   type ListLogsFilter,
@@ -10,7 +9,6 @@ import {
   type LogStats,
   type LogStatsBucket,
   type LogStatsErrorCode,
-  type LogStatsStatus,
   type LogStatsTopModel,
   type LogStatsTopProvider,
 } from '../../model/log.types';
@@ -20,18 +18,22 @@ import { getDemuxaiStore } from './data';
 
 function applyFilter(rows: LogEntry[], f: ListLogsFilter): LogEntry[] {
   return rows.filter((r) => {
-    if (f.accountUid && r.accountUid !== f.accountUid) return false;
-    if (f.iamUserUid && r.iamUserUid !== f.iamUserUid) return false;
-    if (f.modelId && !r.modelId.toLowerCase().includes(f.modelId.toLowerCase())) return false;
-    if (f.providerUid && r.providerUid !== f.providerUid) return false;
+    if (f.accountUid && r.account.uid !== f.accountUid) return false;
+    if (f.iamId && r.account.iamId !== f.iamId) return false;
+    if (f.modelName && !r.modelName.toLowerCase().includes(f.modelName.toLowerCase())) return false;
+    if (f.providerId != null && r.providerId !== f.providerId) return false;
     if (f.apiType && r.apiType !== f.apiType) return false;
-    if (f.status !== 'all' && r.status !== f.status) return false;
-    if (f.errorOnly && r.status === 'ok') return false;
+    if (f.convId && r.convId !== f.convId) return false;
+    if (f.errorOnly && r.success) return false;
+    if (f.errorCode) {
+      if (r.success) return false;
+      if (r.error?.code !== f.errorCode) return false;
+    }
     if (f.fromUtc) {
-      if (Date.parse(r.occurredAtUtc) < Date.parse(f.fromUtc)) return false;
+      if (Date.parse(r.createAt) < Date.parse(f.fromUtc)) return false;
     }
     if (f.toUtc) {
-      if (Date.parse(r.occurredAtUtc) > Date.parse(f.toUtc)) return false;
+      if (Date.parse(r.createAt) > Date.parse(f.toUtc)) return false;
     }
     return true;
   });
@@ -42,6 +44,11 @@ function percentile(values: number[], p: number): number {
   const sorted = [...values].sort((a, b) => a - b);
   const idx = Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p));
   return sorted[idx] ?? 0;
+}
+
+/** 只有 per_token 才有"token 数"概念；非 token 类型返回 0（不计入 token 聚合）。 */
+function tokenCountOf(row: LogEntry): number {
+  return row.billingType === 'per_token' ? row.usage.totalTokens : 0;
 }
 
 /**
@@ -80,40 +87,33 @@ function buildBuckets(
     });
   }
   for (const r of rows) {
-    const t = Date.parse(r.occurredAtUtc);
+    const t = Date.parse(r.createAt);
     if (!Number.isFinite(t)) continue;
     const idx = Math.min(count - 1, Math.max(0, Math.floor((t - fromMs) / sizeMs)));
     const b = buckets[idx];
     if (!b) continue;
     b.calls += 1;
-    if (r.status !== 'ok') b.errors += 1;
-    b.cost += r.totalCost;
-    b.tokens += r.totalTokens;
+    if (!r.success) b.errors += 1;
+    b.cost += r.cost.total;
+    b.tokens += tokenCountOf(r);
   }
   for (const b of buckets) b.cost = Math.round(b.cost * 10000) / 10000;
   return buckets;
-}
-
-function buildStatusBreakdown(rows: LogEntry[]): LogStatsStatus[] {
-  const counts = new Map<LogStatus, number>();
-  for (const s of logStatusValues) counts.set(s, 0);
-  for (const r of rows) counts.set(r.status, (counts.get(r.status) ?? 0) + 1);
-  return logStatusValues.map((status) => ({ status, count: counts.get(status) ?? 0 }));
 }
 
 function buildTopModels(rows: LogEntry[], limit = 5): LogStatsTopModel[] {
   type Agg = { calls: number; cost: number; errors: number };
   const m = new Map<string, Agg>();
   for (const r of rows) {
-    const a = m.get(r.modelId) ?? { calls: 0, cost: 0, errors: 0 };
+    const a = m.get(r.modelName) ?? { calls: 0, cost: 0, errors: 0 };
     a.calls += 1;
-    a.cost += r.totalCost;
-    if (r.status !== 'ok') a.errors += 1;
-    m.set(r.modelId, a);
+    a.cost += r.cost.total;
+    if (!r.success) a.errors += 1;
+    m.set(r.modelName, a);
   }
   return [...m.entries()]
-    .map<LogStatsTopModel>(([modelId, a]) => ({
-      modelId,
+    .map<LogStatsTopModel>(([modelName, a]) => ({
+      modelName,
       calls: a.calls,
       cost: Math.round(a.cost * 10000) / 10000,
       errorRate: a.calls === 0 ? 0 : a.errors / a.calls,
@@ -123,21 +123,26 @@ function buildTopModels(rows: LogEntry[], limit = 5): LogStatsTopModel[] {
 }
 
 function buildTopProviders(rows: LogEntry[], limit = 5): LogStatsTopProvider[] {
-  type Agg = { calls: number; errors: number; latencySum: number };
-  const m = new Map<string, Agg>();
+  type Agg = { calls: number; errors: number; ttftSum: number; ttftSamples: number };
+  const m = new Map<number, Agg>();
   for (const r of rows) {
-    const a = m.get(r.providerUid) ?? { calls: 0, errors: 0, latencySum: 0 };
+    const a = m.get(r.providerId) ?? { calls: 0, errors: 0, ttftSum: 0, ttftSamples: 0 };
     a.calls += 1;
-    if (r.status !== 'ok') a.errors += 1;
-    a.latencySum += r.latencyMs;
-    m.set(r.providerUid, a);
+    if (!r.success) a.errors += 1;
+    // 仅 streamed && success 的样本进入 TTFT 聚合（与 LogStats 口径一致）
+    if (r.success && r.streamed && r.tokenLatency != null) {
+      a.ttftSum += r.tokenLatency;
+      a.ttftSamples += 1;
+    }
+    m.set(r.providerId, a);
   }
   return [...m.entries()]
-    .map<LogStatsTopProvider>(([providerUid, a]) => ({
-      providerUid,
+    .map<LogStatsTopProvider>(([providerId, a]) => ({
+      providerId,
       calls: a.calls,
       errors: a.errors,
-      avgLatencyMs: a.calls === 0 ? 0 : Math.round(a.latencySum / a.calls),
+      avgTokenLatency:
+        a.ttftSamples === 0 ? 0 : Math.round(a.ttftSum / a.ttftSamples),
     }))
     .sort((x, y) => y.calls - x.calls)
     .slice(0, limit);
@@ -146,8 +151,8 @@ function buildTopProviders(rows: LogEntry[], limit = 5): LogStatsTopProvider[] {
 function buildErrorCodes(rows: LogEntry[], limit = 5): LogStatsErrorCode[] {
   const m = new Map<string, number>();
   for (const r of rows) {
-    if (r.status === 'ok') continue;
-    const code = r.errorCode?.trim() || 'unknown';
+    if (r.success) continue;
+    const code = r.error?.code.trim() || 'unknown';
     m.set(code, (m.get(code) ?? 0) + 1);
   }
   const all = [...m.entries()]
@@ -203,14 +208,13 @@ export class DemuxaiLogsMock implements DemuxaiLogsPort {
         totalCalls: 0,
         successCalls: 0,
         errorCalls: 0,
-        avgLatencyMs: 0,
-        p95LatencyMs: 0,
+        avgTokenLatency: 0,
+        p95TokenLatency: 0,
         totalTokens: 0,
         totalCost: 0,
         rpm: 0,
         bucketSizeSec,
         buckets: buildBuckets([], fromMs, toMs, bucketSizeSec),
-        statusBreakdown: buildStatusBreakdown([]),
         topModels: [],
         topProviders: [],
         errorCodes: [],
@@ -221,15 +225,18 @@ export class DemuxaiLogsMock implements DemuxaiLogsPort {
     let errorCalls = 0;
     let totalTokens = 0;
     let totalCost = 0;
-    let latencySum = 0;
-    const latencies: number[] = [];
+    let ttftSum = 0;
+    const ttftSamples: number[] = [];
     for (const r of filtered) {
-      if (r.status === 'ok') successCalls += 1;
+      if (r.success) successCalls += 1;
       else errorCalls += 1;
-      totalTokens += r.totalTokens;
-      totalCost += r.totalCost;
-      latencySum += r.latencyMs;
-      latencies.push(r.latencyMs);
+      totalTokens += tokenCountOf(r);
+      totalCost += r.cost.total;
+      // 仅 streamed && success 的 tokenLatency 是 TTFT 语义；非流式 / 失败不入聚合
+      if (r.success && r.streamed && r.tokenLatency != null) {
+        ttftSum += r.tokenLatency;
+        ttftSamples.push(r.tokenLatency);
+      }
     }
 
     const rpm = Math.round((totalCalls / (spanMs / 1000 / 60)) * 100) / 100;
@@ -238,14 +245,14 @@ export class DemuxaiLogsMock implements DemuxaiLogsPort {
       totalCalls,
       successCalls,
       errorCalls,
-      avgLatencyMs: Math.round(latencySum / totalCalls),
-      p95LatencyMs: percentile(latencies, 0.95),
+      avgTokenLatency:
+        ttftSamples.length === 0 ? 0 : Math.round(ttftSum / ttftSamples.length),
+      p95TokenLatency: percentile(ttftSamples, 0.95),
       totalTokens,
       totalCost: Math.round(totalCost * 10000) / 10000,
       rpm,
       bucketSizeSec,
       buckets: buildBuckets(filtered, fromMs, toMs, bucketSizeSec),
-      statusBreakdown: buildStatusBreakdown(filtered),
       topModels: buildTopModels(filtered),
       topProviders: buildTopProviders(filtered),
       errorCodes: buildErrorCodes(filtered),

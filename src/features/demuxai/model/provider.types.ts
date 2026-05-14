@@ -77,6 +77,15 @@ export type ProviderModelMapping = z.infer<typeof providerModelMappingSchema>;
  * 需要时再把 `priority` / `weight` 加回 Provider schema。
  */
 export const providerSchema = z.object({
+  /**
+   * 数据库自增主键（int）。
+   *
+   * - 业务唯一标识仍是 `uid`，对外接口、URL、关联仍用 `uid`
+   * - 但**调用日志 / 调度统计**这种高吞吐数据用 `id` 作为外键引用，
+   *   避免 string UID 的 join 开销与索引膨胀（int 主键索引更紧凑）
+   * - 详见 `docs/api/11-demuxai-logs.md` 的 `LogEntry.providerId`
+   */
+  id: z.number().int().positive(),
   uid: uidString,
   name: z.string().min(1).max(64),
   apiType: apiTypeSchema,

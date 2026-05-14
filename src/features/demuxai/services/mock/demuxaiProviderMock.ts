@@ -216,7 +216,10 @@ export class DemuxaiProviderMock implements DemuxaiProviderPort {
     }
 
     const t = new Date().toISOString();
+    // 模拟数据库自增主键：从现有 max(id)+1，没有就从 1001 起步
+    const nextId = this.store.providers.reduce((m, p) => Math.max(m, p.id), 1000) + 1;
     const row: Provider = {
+      id: nextId,
       uid: genProviderUid(),
       name: input.name.trim(),
       apiType: input.apiType,

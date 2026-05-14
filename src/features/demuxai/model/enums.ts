@@ -129,47 +129,67 @@ export const ModelCapabilityLabel: Readonly<Record<ModelCapability, string>> = {
 };
 
 /**
- * 计费模式。
- * - `per_token`：按 token 数（input/output 分开计价，主流）
- * - `per_call`：按调用次数（一次固定价，常见于 image / function）
- * - `per_image`：按图片张数（结合分辨率会有阶梯）
- * - `per_minute`：按音频/视频时长
+ * 计费类型（discriminated union 的判别字段）。
+ *
+ * 每种 `billingType` 对应一种 `pricing` 嵌套形状，详见 `pricing.types.ts`。
+ *
+ * - `per_token`        ：文本 LLM / embedding / rerank（input + output + 可选 cached / reasoning）
+ * - `per_call`         ：单次平价（function call、moderation 等）
+ * - `per_image`        ：文生图（按 size × quality 分档，DALL-E / SD / MJ）
+ * - `per_video`        ：文生视频（按 resolution 分档，按秒计费，Sora / Gen-3 / Kling）
+ * - `per_audio_minute` ：语音转写（按音频时长，Whisper / 实时 ASR）
+ * - `per_character`    ：文生语音（按千字符，TTS / ElevenLabs / CosyVoice）
  */
-export const pricingModeValues = ['per_token', 'per_call', 'per_image', 'per_minute'] as const;
-export type PricingMode = (typeof pricingModeValues)[number];
+export const billingTypeValues = [
+  'per_token',
+  'per_call',
+  'per_image',
+  'per_video',
+  'per_audio_minute',
+  'per_character',
+] as const;
+export type BillingType = (typeof billingTypeValues)[number];
 
-export const PricingModeLabel: Readonly<Record<PricingMode, string>> = {
+export const BillingTypeLabel: Readonly<Record<BillingType, string>> = {
   per_token: '按 Token',
   per_call: '按调用',
   per_image: '按图片',
-  per_minute: '按时长',
+  per_video: '按视频',
+  per_audio_minute: '按音频时长',
+  per_character: '按字符',
 };
 
-/** 调用日志单条状态 */
-export const logStatusValues = ['ok', 'error', 'timeout', 'rate_limited', 'cancelled'] as const;
-export type LogStatus = (typeof logStatusValues)[number];
+/**
+ * 调用日志错误码（常见值）。
+ *
+ * `LogEntry.error.code` 字段保持为开放 string —— 上游错误码千差万别，
+ * 这里只列前端 UI 已知的典型值用于配色 / 国际化映射；遇到未知码走默认配色。
+ */
+export const KNOWN_LOG_ERROR_CODES = [
+  'upstream_5xx',
+  'upstream_4xx',
+  'upstream_timeout',
+  'rate_limited',
+  'context_too_long',
+  'cancelled',
+  'auth_failed',
+  'unknown',
+] as const;
+export type KnownLogErrorCode = (typeof KNOWN_LOG_ERROR_CODES)[number];
 
-export const LogStatusLabel: Readonly<Record<LogStatus, string>> = {
-  ok: '成功',
-  error: '失败',
-  timeout: '超时',
-  rate_limited: '限流',
+export const LogErrorCodeLabel: Readonly<Record<KnownLogErrorCode, string>> = {
+  upstream_5xx: '上游 5xx',
+  upstream_4xx: '上游 4xx',
+  upstream_timeout: '上游超时',
+  rate_limited: '被限流',
+  context_too_long: '上下文超长',
   cancelled: '已取消',
-};
-
-export const LogStatusTone: Readonly<
-  Record<LogStatus, 'success' | 'warning' | 'danger' | 'info'>
-> = {
-  ok: 'success',
-  error: 'danger',
-  timeout: 'danger',
-  rate_limited: 'warning',
-  cancelled: 'info',
+  auth_failed: '鉴权失败',
+  unknown: '未知错误',
 };
 
 export const apiTypeSchema = z.enum(apiTypeValues);
 export const providerStatusSchema = z.enum(providerStatusValues);
 export const modelFamilySchema = z.enum(modelFamilyValues);
 export const modelCapabilitySchema = z.enum(modelCapabilityValues);
-export const pricingModeSchema = z.enum(pricingModeValues);
-export const logStatusSchema = z.enum(logStatusValues);
+export const billingTypeSchema = z.enum(billingTypeValues);
