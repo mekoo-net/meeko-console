@@ -21,9 +21,9 @@ import { TIER_THRESHOLDS } from '@/features/accounts/model/tierConfig';
 
 import {
   ModelFamilyLabel,
-  pricingModeValues,
-  PricingModeLabel,
-  type PricingMode,
+  billingTypeValues,
+  BillingTypeLabel,
+  type BillingType,
 } from '../model/enums';
 import type { ListPricingFilter, Pricing, UpsertPricingInput } from '../model/pricing.types';
 import type { Model } from '../model/model.types';
@@ -42,12 +42,12 @@ const pageSize = ref(20);
 
 interface PageFilter {
   keyword: string;
-  mode: PricingMode | 'all';
+  billingType: BillingType | 'all';
 }
 
 const defaultFilter = (): PageFilter => ({
   keyword: '',
-  mode: 'all',
+  billingType: 'all',
 });
 
 const filter = ref<PageFilter>(defaultFilter());
@@ -77,7 +77,7 @@ watch(activeTab, (tab) => {
 function buildPortFilter(): ListPricingFilter {
   return {
     keyword: filter.value.keyword.trim(),
-    mode: filter.value.mode,
+    billingType: filter.value.billingType,
   };
 }
 
@@ -115,7 +115,7 @@ watch(
 );
 
 watch(
-  () => [filter.value.keyword, filter.value.mode] as const,
+  () => [filter.value.keyword, filter.value.billingType] as const,
   () => {
     page.value = 1;
     void fetchData();
@@ -190,16 +190,75 @@ watch(
   },
 );
 
+/**
+ * 列表"基础单价"列的简要展示。
+ *
+ * 单档（per_token / per_call / per_audio_minute / per_character）直接列价；
+ * 多档（per_image / per_video）展示"档位数 + 最低-最高价区间"，详情走编辑弹窗。
+ */
 function priceSummary(row: Pricing): string {
-  if (row.mode === 'per_token') {
-    return `${formatMoney(row.inputPricePerKToken ?? 0, { fractionDigits: 4 })} 入 / ${formatMoney(
-      row.outputPricePerKToken ?? 0,
-      { fractionDigits: 4 },
-    )} 出 · per 1K`;
+  switch (row.billingType) {
+    case 'per_token': {
+      const p = row.pricing;
+      const extras: string[] = [];
+      if (p.input.cachedRead != null) {
+        extras.push(`cR ${formatMoney(p.input.cachedRead, { fractionDigits: 2 })}`);
+      }
+      if (p.input.cachedWrite5m != null) {
+        extras.push(`cW5m ${formatMoney(p.input.cachedWrite5m, { fractionDigits: 2 })}`);
+      }
+      if (p.input.cachedWrite1h != null) {
+        extras.push(`cW1h ${formatMoney(p.input.cachedWrite1h, { fractionDigits: 2 })}`);
+      }
+      if (p.output.reasoning != null) {
+        extras.push(`reason ${formatMoney(p.output.reasoning, { fractionDigits: 2 })}`);
+      }
+      if (p.input.audio != null || p.output.audio != null) {
+        const ai = p.input.audio ?? 0;
+        const ao = p.output.audio ?? 0;
+        extras.push(
+          `audio ${formatMoney(ai, { fractionDigits: 2 })}/${formatMoney(ao, { fractionDigits: 2 })}`,
+        );
+      }
+      const main = `${formatMoney(p.input.perMToken, { fractionDigits: 2 })} 入 / ${formatMoney(
+        p.output.perMToken,
+        { fractionDigits: 2 },
+      )} 出 · per 1M`;
+      return extras.length ? `${main} · ${extras.join(' · ')}` : main;
+    }
+    case 'per_call': {
+      const p = row.pricing;
+      const cached =
+        p.cachedPricePerCall != null
+          ? ` · cached ${formatMoney(p.cachedPricePerCall, { fractionDigits: 4 })}`
+          : '';
+      return `${formatMoney(p.pricePerCall, { fractionDigits: 4 })} / 次${cached}`;
+    }
+    case 'per_image': {
+      const prices = row.pricing.tiers.map((t) => t.pricePerImage);
+      const min = Math.min(...prices);
+      const max = Math.max(...prices);
+      const range =
+        min === max
+          ? formatMoney(min, { fractionDigits: 4 })
+          : `${formatMoney(min, { fractionDigits: 4 }) }-${formatMoney(max, { fractionDigits: 4 })}`;
+      return `${row.pricing.tiers.length} 档 / ${range} / 张`;
+    }
+    case 'per_video': {
+      const prices = row.pricing.tiers.map((t) => t.pricePerSecond);
+      const min = Math.min(...prices);
+      const max = Math.max(...prices);
+      const range =
+        min === max
+          ? formatMoney(min, { fractionDigits: 4 })
+          : `${formatMoney(min, { fractionDigits: 4 }) }-${formatMoney(max, { fractionDigits: 4 })}`;
+      return `${row.pricing.tiers.length} 档 / ${range} / 秒`;
+    }
+    case 'per_audio_minute':
+      return `${formatMoney(row.pricing.pricePerMinute, { fractionDigits: 4 })} / 分钟`;
+    case 'per_character':
+      return `${formatMoney(row.pricing.pricePerKChar, { fractionDigits: 4 })} / 1K 字符`;
   }
-  if (row.mode === 'per_call') return `${formatMoney(row.pricePerCall ?? 0, { fractionDigits: 4 })} / 次`;
-  if (row.mode === 'per_image') return `${formatMoney(row.pricePerImage ?? 0, { fractionDigits: 4 })} / 张`;
-  return `${formatMoney(row.pricePerMinute ?? 0, { fractionDigits: 4 })} / 分钟`;
 }
 
 function tierBadgeLabel(level: number, mult: number): string {
@@ -239,13 +298,13 @@ onMounted(() => {
                 clearable
               />
             </el-form-item>
-            <el-form-item label="计费模式">
-              <el-select v-model="filter.mode" style="width: 180px">
+            <el-form-item label="计费类型">
+              <el-select v-model="filter.billingType" style="width: 180px">
                 <el-option label="全部" value="all" />
                 <el-option
-                  v-for="m in pricingModeValues"
+                  v-for="m in billingTypeValues"
                   :key="m"
-                  :label="PricingModeLabel[m]"
+                  :label="BillingTypeLabel[m]"
                   :value="m"
                 />
               </el-select>
@@ -275,15 +334,15 @@ onMounted(() => {
             </template>
           </el-table-column>
 
-          <el-table-column label="计费模式" width="120">
+          <el-table-column label="计费类型" width="120">
             <template #default="{ row }: { row: Pricing }">
               <el-tag size="small" type="primary" effect="plain" round>
-                {{ PricingModeLabel[row.mode] }}
+                {{ BillingTypeLabel[row.billingType] }}
               </el-tag>
             </template>
           </el-table-column>
 
-          <el-table-column label="基础单价" min-width="280">
+          <el-table-column label="基础单价" min-width="320">
             <template #default="{ row }: { row: Pricing }">
               <span class="cell-price">{{ priceSummary(row) }}</span>
             </template>

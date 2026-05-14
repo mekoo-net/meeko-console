@@ -2,11 +2,15 @@
 /**
  * 定价编辑对话框（按 modelId upsert）。
  *
- * 表单结构随 `mode` 变化：
- *  - per_token：input / output 单价 + LV 倍率表
- *  - per_call / per_image / per_minute：单一价
+ * 表单形状随 `billingType` 切换（discriminated union）：
+ *  - `per_token`        ：input / output / 可选 cached / reasoning
+ *  - `per_call`         ：单次价 / 可选缓存单次价
+ *  - `per_image`        ：tiers[]，每行 (size, quality, pricePerImage)
+ *  - `per_video`        ：tiers[]，每行 (resolution, pricePerSecond) + min/maxSeconds
+ *  - `per_audio_minute` ：pricePerMinute
+ *  - `per_character`    ：pricePerKChar
  *
- * `tierMultipliers` 用一组 LV → multiplier 行编辑；删除某 LV = 该 LV 走 1.0。
+ * `tierMultipliers` 是用户级 LV 折扣，与 `pricing.tiers[]` 是两个概念。
  */
 import { computed, ref, watch } from 'vue';
 import { Delete, Plus } from '@element-plus/icons-vue';
@@ -15,11 +19,16 @@ import type { FormInstance, FormRules } from 'element-plus';
 import { TIER_THRESHOLDS } from '@/features/accounts/model/tierConfig';
 
 import {
-  pricingModeValues,
-  PricingModeLabel,
-  type PricingMode,
+  billingTypeValues,
+  BillingTypeLabel,
+  type BillingType,
 } from '../model/enums';
-import type { Pricing, UpsertPricingInput } from '../model/pricing.types';
+import type {
+  PerImageTier,
+  PerVideoTier,
+  Pricing,
+  UpsertPricingInput,
+} from '../model/pricing.types';
 import type { Model } from '../model/model.types';
 
 interface Props {
@@ -41,36 +50,85 @@ const visible = computed({
   set: (v) => emit('update:modelValue', v),
 });
 
-interface TierRow {
+interface MultiplierRow {
   level: number;
   multiplier: number;
 }
 
+interface PerTokenForm {
+  input: {
+    perMToken: number;
+    cachedRead: number | null;
+    cachedWrite5m: number | null;
+    cachedWrite1h: number | null;
+    audio: number | null;
+  };
+  output: {
+    perMToken: number;
+    reasoning: number | null;
+    audio: number | null;
+  };
+}
+
+interface PerCallForm {
+  pricePerCall: number;
+  cachedPricePerCall: number | null;
+}
+
+interface PerAudioMinuteForm {
+  pricePerMinute: number;
+}
+
+interface PerCharacterForm {
+  pricePerKChar: number;
+}
+
 interface FormState {
   modelId: string;
-  mode: PricingMode;
-  inputPricePerKToken: number | null;
-  outputPricePerKToken: number | null;
-  pricePerCall: number | null;
-  pricePerImage: number | null;
-  pricePerMinute: number | null;
+  billingType: BillingType;
+  perToken: PerTokenForm;
+  perCall: PerCallForm;
+  perImageTiers: PerImageTier[];
+  perVideoTiers: PerVideoTier[];
+  perVideoMinSeconds: number | null;
+  perVideoMaxSeconds: number | null;
+  perAudio: PerAudioMinuteForm;
+  perCharacter: PerCharacterForm;
   multiplier: number;
   currency: string;
-  tierRows: TierRow[];
+  multiplierRows: MultiplierRow[];
   effectiveFromUtc: string;
 }
 
+const emptyPerToken = (): PerTokenForm => ({
+  input: {
+    perMToken: 0,
+    cachedRead: null,
+    cachedWrite5m: null,
+    cachedWrite1h: null,
+    audio: null,
+  },
+  output: {
+    perMToken: 0,
+    reasoning: null,
+    audio: null,
+  },
+});
+
 const emptyForm = (modelId: string): FormState => ({
   modelId,
-  mode: 'per_token',
-  inputPricePerKToken: 0,
-  outputPricePerKToken: 0,
-  pricePerCall: null,
-  pricePerImage: null,
-  pricePerMinute: null,
+  billingType: 'per_token',
+  perToken: emptyPerToken(),
+  perCall: { pricePerCall: 0, cachedPricePerCall: null },
+  perImageTiers: [{ size: '1024x1024', quality: 'standard', pricePerImage: 0 }],
+  perVideoTiers: [{ resolution: '1080p', pricePerSecond: 0 }],
+  perVideoMinSeconds: null,
+  perVideoMaxSeconds: null,
+  perAudio: { pricePerMinute: 0 },
+  perCharacter: { pricePerKChar: 0 },
   multiplier: 1.0,
   currency: 'CNY',
-  tierRows: [],
+  multiplierRows: [],
   effectiveFromUtc: new Date().toISOString(),
 });
 
@@ -84,27 +142,64 @@ const rules: FormRules<FormState> = {
   effectiveFromUtc: [{ required: true, message: '请选择生效时间', trigger: 'change' }],
 };
 
+function loadPricingIntoForm(p: Pricing): FormState {
+  const base = emptyForm(p.modelId);
+  base.billingType = p.billingType;
+  base.multiplier = p.multiplier;
+  base.currency = p.currency;
+  base.effectiveFromUtc = p.effectiveFromUtc;
+  base.multiplierRows = Object.entries(p.tierMultipliers).map(([k, v]) => ({
+    level: Number(k),
+    multiplier: v,
+  }));
+
+  switch (p.billingType) {
+    case 'per_token':
+      base.perToken = {
+        input: {
+          perMToken: p.pricing.input.perMToken,
+          cachedRead: p.pricing.input.cachedRead ?? null,
+          cachedWrite5m: p.pricing.input.cachedWrite5m ?? null,
+          cachedWrite1h: p.pricing.input.cachedWrite1h ?? null,
+          audio: p.pricing.input.audio ?? null,
+        },
+        output: {
+          perMToken: p.pricing.output.perMToken,
+          reasoning: p.pricing.output.reasoning ?? null,
+          audio: p.pricing.output.audio ?? null,
+        },
+      };
+      break;
+    case 'per_call':
+      base.perCall = {
+        pricePerCall: p.pricing.pricePerCall,
+        cachedPricePerCall: p.pricing.cachedPricePerCall ?? null,
+      };
+      break;
+    case 'per_image':
+      base.perImageTiers = p.pricing.tiers.map((t) => ({ ...t }));
+      break;
+    case 'per_video':
+      base.perVideoTiers = p.pricing.tiers.map((t) => ({ ...t }));
+      base.perVideoMinSeconds = p.pricing.minSeconds ?? null;
+      base.perVideoMaxSeconds = p.pricing.maxSeconds ?? null;
+      break;
+    case 'per_audio_minute':
+      base.perAudio = { pricePerMinute: p.pricing.pricePerMinute };
+      break;
+    case 'per_character':
+      base.perCharacter = { pricePerKChar: p.pricing.pricePerKChar };
+      break;
+  }
+  return base;
+}
+
 watch(
   () => [props.modelValue, props.pricing, props.model] as const,
   ([open, p, m]) => {
     if (!open) return;
     if (p) {
-      form.value = {
-        modelId: p.modelId,
-        mode: p.mode,
-        inputPricePerKToken: p.inputPricePerKToken ?? null,
-        outputPricePerKToken: p.outputPricePerKToken ?? null,
-        pricePerCall: p.pricePerCall ?? null,
-        pricePerImage: p.pricePerImage ?? null,
-        pricePerMinute: p.pricePerMinute ?? null,
-        multiplier: p.multiplier,
-        currency: p.currency,
-        tierRows: Object.entries(p.tierMultipliers).map(([k, v]) => ({
-          level: Number(k),
-          multiplier: v,
-        })),
-        effectiveFromUtc: p.effectiveFromUtc,
-      };
+      form.value = loadPricingIntoForm(p);
     } else if (m) {
       form.value = emptyForm(m.modelId);
     }
@@ -112,15 +207,77 @@ watch(
   { immediate: true },
 );
 
-function addTierRow(): void {
-  const used = new Set(form.value.tierRows.map((r) => r.level));
+// ---------- tierMultipliers (用户 LV 折扣) ----------
+function addMultiplierRow(): void {
+  const used = new Set(form.value.multiplierRows.map((r) => r.level));
   const next = TIER_THRESHOLDS.find((t) => !used.has(t.level));
   if (!next) return;
-  form.value.tierRows.push({ level: next.level, multiplier: 0.9 });
+  form.value.multiplierRows.push({ level: next.level, multiplier: 0.9 });
 }
 
-function removeTierRow(idx: number): void {
-  form.value.tierRows.splice(idx, 1);
+function removeMultiplierRow(idx: number): void {
+  form.value.multiplierRows.splice(idx, 1);
+}
+
+// ---------- per_image tiers ----------
+function addImageTier(): void {
+  form.value.perImageTiers.push({ size: '1024x1024', quality: 'standard', pricePerImage: 0 });
+}
+
+function removeImageTier(idx: number): void {
+  if (form.value.perImageTiers.length <= 1) return;
+  form.value.perImageTiers.splice(idx, 1);
+}
+
+// ---------- per_video tiers ----------
+function addVideoTier(): void {
+  form.value.perVideoTiers.push({ resolution: '1080p', pricePerSecond: 0 });
+}
+
+function removeVideoTier(idx: number): void {
+  if (form.value.perVideoTiers.length <= 1) return;
+  form.value.perVideoTiers.splice(idx, 1);
+}
+
+function buildPricingPayload(f: FormState): UpsertPricingInput['pricing'] {
+  switch (f.billingType) {
+    case 'per_token': {
+      const pt: PerTokenForm = f.perToken;
+      return {
+        input: {
+          perMToken: pt.input.perMToken ?? 0,
+          ...(pt.input.cachedRead != null ? { cachedRead: pt.input.cachedRead } : {}),
+          ...(pt.input.cachedWrite5m != null ? { cachedWrite5m: pt.input.cachedWrite5m } : {}),
+          ...(pt.input.cachedWrite1h != null ? { cachedWrite1h: pt.input.cachedWrite1h } : {}),
+          ...(pt.input.audio != null ? { audio: pt.input.audio } : {}),
+        },
+        output: {
+          perMToken: pt.output.perMToken ?? 0,
+          ...(pt.output.reasoning != null ? { reasoning: pt.output.reasoning } : {}),
+          ...(pt.output.audio != null ? { audio: pt.output.audio } : {}),
+        },
+      };
+    }
+    case 'per_call': {
+      const pc: PerCallForm = f.perCall;
+      return {
+        pricePerCall: pc.pricePerCall ?? 0,
+        ...(pc.cachedPricePerCall != null ? { cachedPricePerCall: pc.cachedPricePerCall } : {}),
+      };
+    }
+    case 'per_image':
+      return { tiers: f.perImageTiers.map((t) => ({ ...t })) };
+    case 'per_video':
+      return {
+        tiers: f.perVideoTiers.map((t) => ({ ...t })),
+        ...(f.perVideoMinSeconds != null ? { minSeconds: f.perVideoMinSeconds } : {}),
+        ...(f.perVideoMaxSeconds != null ? { maxSeconds: f.perVideoMaxSeconds } : {}),
+      };
+    case 'per_audio_minute':
+      return { pricePerMinute: f.perAudio.pricePerMinute ?? 0 };
+    case 'per_character':
+      return { pricePerKChar: f.perCharacter.pricePerKChar ?? 0 };
+  }
 }
 
 async function onSubmit(): Promise<void> {
@@ -128,24 +285,20 @@ async function onSubmit(): Promise<void> {
   if (!valid) return;
   const f = form.value;
   const tierMultipliers: Record<string, number> = {};
-  for (const row of f.tierRows) {
+  for (const row of f.multiplierRows) {
     if (row.multiplier > 0 && row.multiplier !== 1) {
       tierMultipliers[String(row.level)] = row.multiplier;
     }
   }
-  const payload: UpsertPricingInput = {
+  const payload = {
     modelId: f.modelId,
-    mode: f.mode,
-    inputPricePerKToken: f.mode === 'per_token' ? f.inputPricePerKToken ?? 0 : null,
-    outputPricePerKToken: f.mode === 'per_token' ? f.outputPricePerKToken ?? 0 : null,
-    pricePerCall: f.mode === 'per_call' ? f.pricePerCall ?? 0 : null,
-    pricePerImage: f.mode === 'per_image' ? f.pricePerImage ?? 0 : null,
-    pricePerMinute: f.mode === 'per_minute' ? f.pricePerMinute ?? 0 : null,
+    billingType: f.billingType,
+    pricing: buildPricingPayload(f),
     multiplier: f.multiplier,
     currency: f.currency,
     tierMultipliers,
     effectiveFromUtc: f.effectiveFromUtc,
-  };
+  } as UpsertPricingInput;
   emit('submit', payload);
 }
 </script>
@@ -154,7 +307,7 @@ async function onSubmit(): Promise<void> {
   <el-dialog
     v-model="visible"
     :title="pricing ? `编辑定价 · ${pricing.modelId}` : `新建定价 · ${model?.modelId ?? ''}`"
-    width="640px"
+    width="720px"
     :close-on-click-modal="false"
   >
     <el-form
@@ -169,68 +322,284 @@ async function onSubmit(): Promise<void> {
         <el-input v-model="form.modelId" disabled />
       </el-form-item>
 
-      <el-form-item label="计费模式">
-        <el-radio-group v-model="form.mode">
-          <el-radio v-for="m in pricingModeValues" :key="m" :value="m">
-            {{ PricingModeLabel[m] }}
+      <el-form-item label="计费类型">
+        <el-radio-group v-model="form.billingType">
+          <el-radio v-for="m in billingTypeValues" :key="m" :value="m">
+            {{ BillingTypeLabel[m] }}
           </el-radio>
         </el-radio-group>
       </el-form-item>
 
-      <template v-if="form.mode === 'per_token'">
-        <el-form-item label="输入单价">
+      <!-- ============ per_token ============ -->
+      <template v-if="form.billingType === 'per_token'">
+        <el-divider content-position="left">Input（输入 token）</el-divider>
+        <el-form-item label="主输入单价">
           <el-input-number
-            v-model="form.inputPricePerKToken"
+            v-model="form.perToken.input.perMToken"
             :min="0"
             :precision="4"
-            :step="0.001"
+            :step="0.5"
             style="width: 200px"
           />
-          <span class="suffix">CNY / 1K tokens</span>
+          <span class="suffix">{{ form.currency }} / 1M input tokens</span>
         </el-form-item>
-        <el-form-item label="输出单价">
+        <el-form-item label="cached 读">
           <el-input-number
-            v-model="form.outputPricePerKToken"
+            v-model="form.perToken.input.cachedRead"
             :min="0"
             :precision="4"
-            :step="0.001"
+            :step="0.5"
+            placeholder="可空"
             style="width: 200px"
           />
-          <span class="suffix">CNY / 1K tokens</span>
+          <span class="suffix">命中 cache 的输入折扣价（{{ form.currency }} / 1M，可空）</span>
+        </el-form-item>
+        <el-form-item label="cached 写 5m">
+          <el-input-number
+            v-model="form.perToken.input.cachedWrite5m"
+            :min="0"
+            :precision="4"
+            :step="0.5"
+            placeholder="可空"
+            style="width: 200px"
+          />
+          <span class="suffix">Anthropic 5min TTL cache 写入（约 base × 1.25，可空）</span>
+        </el-form-item>
+        <el-form-item label="cached 写 1h">
+          <el-input-number
+            v-model="form.perToken.input.cachedWrite1h"
+            :min="0"
+            :precision="4"
+            :step="0.5"
+            placeholder="可空"
+            style="width: 200px"
+          />
+          <span class="suffix">Anthropic 1h TTL cache 写入（约 base × 2.0，可空）</span>
+        </el-form-item>
+        <el-form-item label="输入音频">
+          <el-input-number
+            v-model="form.perToken.input.audio"
+            :min="0"
+            :precision="4"
+            :step="5"
+            placeholder="可空"
+            style="width: 200px"
+          />
+          <span class="suffix">GPT-4o-audio 输入音频 token（约 base × 16，可空）</span>
+        </el-form-item>
+
+        <el-divider content-position="left">Output（输出 token）</el-divider>
+        <el-form-item label="主输出单价">
+          <el-input-number
+            v-model="form.perToken.output.perMToken"
+            :min="0"
+            :precision="4"
+            :step="0.5"
+            style="width: 200px"
+          />
+          <span class="suffix">{{ form.currency }} / 1M output tokens</span>
+        </el-form-item>
+        <el-form-item label="reasoning">
+          <el-input-number
+            v-model="form.perToken.output.reasoning"
+            :min="0"
+            :precision="4"
+            :step="0.5"
+            placeholder="可空"
+            style="width: 200px"
+          />
+          <span class="suffix">o1 / extended thinking / Gemini thoughts 单价（可空）</span>
+        </el-form-item>
+        <el-form-item label="输出音频">
+          <el-input-number
+            v-model="form.perToken.output.audio"
+            :min="0"
+            :precision="4"
+            :step="5"
+            placeholder="可空"
+            style="width: 200px"
+          />
+          <span class="suffix">GPT-4o-audio 输出音频 token（约 base × 8，可空）</span>
         </el-form-item>
       </template>
 
-      <el-form-item v-if="form.mode === 'per_call'" label="单次价">
+      <!-- ============ per_call ============ -->
+      <template v-if="form.billingType === 'per_call'">
+        <el-form-item label="单次价">
+          <el-input-number
+            v-model="form.perCall.pricePerCall"
+            :min="0"
+            :precision="4"
+            :step="0.001"
+            style="width: 200px"
+          />
+          <span class="suffix">{{ form.currency }} / 次</span>
+        </el-form-item>
+        <el-form-item label="命中缓存单次价">
+          <el-input-number
+            v-model="form.perCall.cachedPricePerCall"
+            :min="0"
+            :precision="4"
+            :step="0.001"
+            placeholder="可空"
+            style="width: 200px"
+          />
+          <span class="suffix">如 moderation 命中缓存的折扣价（可空）</span>
+        </el-form-item>
+      </template>
+
+      <!-- ============ per_image ============ -->
+      <template v-if="form.billingType === 'per_image'">
+        <el-form-item label="档位 (size × quality)">
+          <div class="tier-table">
+            <div class="tier-row tier-row--head">
+              <span class="col-size">size</span>
+              <span class="col-quality">quality</span>
+              <span class="col-price">{{ form.currency }} / 张</span>
+              <span class="col-op"></span>
+            </div>
+            <div
+              v-for="(row, idx) in form.perImageTiers"
+              :key="idx"
+              class="tier-row"
+            >
+              <el-input
+                v-model="row.size"
+                class="col-size"
+                placeholder="1024x1024"
+                size="small"
+              />
+              <el-input
+                v-model="row.quality"
+                class="col-quality"
+                placeholder="standard / hd / draft"
+                size="small"
+              />
+              <el-input-number
+                v-model="row.pricePerImage"
+                :min="0"
+                :precision="4"
+                :step="0.01"
+                class="col-price"
+                size="small"
+              />
+              <el-button
+                :icon="Delete"
+                link
+                type="danger"
+                class="col-op"
+                :disabled="form.perImageTiers.length <= 1"
+                @click="removeImageTier(idx)"
+              />
+            </div>
+            <el-button
+              :icon="Plus"
+              link
+              type="primary"
+              class="tier-table__add"
+              @click="addImageTier"
+            >
+              新增档位
+            </el-button>
+          </div>
+          <div class="form-hint">
+            档位主键是 (size, quality)；不允许重复。请求带的 size / quality 必须命中。
+          </div>
+        </el-form-item>
+      </template>
+
+      <!-- ============ per_video ============ -->
+      <template v-if="form.billingType === 'per_video'">
+        <el-form-item label="档位 (resolution)">
+          <div class="tier-table">
+            <div class="tier-row tier-row--head">
+              <span class="col-resolution">resolution</span>
+              <span class="col-price">{{ form.currency }} / 秒</span>
+              <span class="col-op"></span>
+            </div>
+            <div
+              v-for="(row, idx) in form.perVideoTiers"
+              :key="idx"
+              class="tier-row"
+            >
+              <el-input
+                v-model="row.resolution"
+                class="col-resolution"
+                placeholder="720p / 1080p / 4k"
+                size="small"
+              />
+              <el-input-number
+                v-model="row.pricePerSecond"
+                :min="0"
+                :precision="4"
+                :step="0.01"
+                class="col-price"
+                size="small"
+              />
+              <el-button
+                :icon="Delete"
+                link
+                type="danger"
+                class="col-op"
+                :disabled="form.perVideoTiers.length <= 1"
+                @click="removeVideoTier(idx)"
+              />
+            </div>
+            <el-button
+              :icon="Plus"
+              link
+              type="primary"
+              class="tier-table__add"
+              @click="addVideoTier"
+            >
+              新增档位
+            </el-button>
+          </div>
+        </el-form-item>
+        <el-form-item label="时长限制">
+          <el-input-number
+            v-model="form.perVideoMinSeconds"
+            :min="0"
+            :precision="0"
+            :step="1"
+            placeholder="最小秒"
+            style="width: 140px"
+          />
+          <span class="range-sep">–</span>
+          <el-input-number
+            v-model="form.perVideoMaxSeconds"
+            :min="0"
+            :precision="0"
+            :step="1"
+            placeholder="最大秒"
+            style="width: 140px"
+          />
+          <span class="suffix">可空。BFF 用于按秒计费的入参合法性校验。</span>
+        </el-form-item>
+      </template>
+
+      <!-- ============ per_audio_minute ============ -->
+      <el-form-item v-if="form.billingType === 'per_audio_minute'" label="分钟价">
         <el-input-number
-          v-model="form.pricePerCall"
+          v-model="form.perAudio.pricePerMinute"
+          :min="0"
+          :precision="4"
+          :step="0.01"
+          style="width: 200px"
+        />
+        <span class="suffix">{{ form.currency }} / 分钟（音频时长）</span>
+      </el-form-item>
+
+      <!-- ============ per_character ============ -->
+      <el-form-item v-if="form.billingType === 'per_character'" label="千字符价">
+        <el-input-number
+          v-model="form.perCharacter.pricePerKChar"
           :min="0"
           :precision="4"
           :step="0.001"
           style="width: 200px"
         />
-        <span class="suffix">CNY / 次</span>
-      </el-form-item>
-
-      <el-form-item v-if="form.mode === 'per_image'" label="单张价">
-        <el-input-number
-          v-model="form.pricePerImage"
-          :min="0"
-          :precision="4"
-          :step="0.01"
-          style="width: 200px"
-        />
-        <span class="suffix">CNY / 张</span>
-      </el-form-item>
-
-      <el-form-item v-if="form.mode === 'per_minute'" label="分钟价">
-        <el-input-number
-          v-model="form.pricePerMinute"
-          :min="0"
-          :precision="4"
-          :step="0.01"
-          style="width: 200px"
-        />
-        <span class="suffix">CNY / 分钟</span>
+        <span class="suffix">{{ form.currency }} / 1K 字符（TTS 文本长度）</span>
       </el-form-item>
 
       <el-form-item label="全局倍率" prop="multiplier">
@@ -242,12 +611,12 @@ async function onSubmit(): Promise<void> {
           :step="0.05"
           style="width: 180px"
         />
-        <span class="suffix">应用于所有 LV 之上的统一调价</span>
+        <span class="suffix">所有 LV 之上的统一调价</span>
       </el-form-item>
 
       <el-form-item label="LV 倍率">
         <div class="tier-rows">
-          <div v-for="(row, idx) in form.tierRows" :key="idx" class="tier-row">
+          <div v-for="(row, idx) in form.multiplierRows" :key="idx" class="tier-row tier-row--lv">
             <el-select v-model="row.level" style="width: 140px">
               <el-option
                 v-for="t in TIER_THRESHOLDS"
@@ -264,20 +633,22 @@ async function onSubmit(): Promise<void> {
               :step="0.05"
               style="width: 140px"
             />
-            <el-button :icon="Delete" link type="danger" @click="removeTierRow(idx)" />
+            <el-button :icon="Delete" link type="danger" @click="removeMultiplierRow(idx)" />
           </div>
           <el-button
             :icon="Plus"
             link
             type="primary"
-            class="tier-row__add"
-            :disabled="form.tierRows.length >= TIER_THRESHOLDS.length"
-            @click="addTierRow"
+            class="tier-rows__add"
+            :disabled="form.multiplierRows.length >= TIER_THRESHOLDS.length"
+            @click="addMultiplierRow"
           >
             新增 LV 倍率
           </el-button>
         </div>
-        <div class="form-hint">未列出的 LV 走 1.0；最终扣费 = 基价 × tokens × 全局倍率 × LV 倍率。</div>
+        <div class="form-hint">
+          未列出的 LV 走 1.0；最终扣费 = 基价 × 全局倍率 × LV 倍率。
+        </div>
       </el-form-item>
 
       <el-form-item label="生效时间">
@@ -306,6 +677,10 @@ async function onSubmit(): Promise<void> {
   color: var(--el-text-color-secondary);
   font-size: 12.5px;
 }
+.range-sep {
+  margin: 0 8px;
+  color: var(--el-text-color-secondary);
+}
 .form-hint {
   font-size: 12px;
   color: var(--el-text-color-secondary);
@@ -316,14 +691,47 @@ async function onSubmit(): Promise<void> {
   flex-direction: column;
   gap: 8px;
 }
-.tier-row {
+.tier-row--lv {
   display: flex;
   align-items: center;
   gap: 10px;
 }
-.tier-row__add {
+.tier-rows__add {
   align-self: flex-start;
 }
+
+/* per_image / per_video 档位表 */
+.tier-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--el-fill-color-light);
+  border-radius: 6px;
+  max-width: 560px;
+}
+.tier-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 32px;
+  gap: 8px;
+  align-items: center;
+}
+.tier-row--head {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  padding: 0 2px;
+}
+.col-resolution {
+  grid-column: span 2;
+}
+.tier-row .col-price :deep(.el-input-number) {
+  width: 100%;
+}
+.tier-table__add {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
