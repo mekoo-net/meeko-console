@@ -17,9 +17,9 @@
 > 设计要点：
 >
 > - `uid` 是单调递增的 snowflake，可作为"上一页 / 下一页" cursor；
-> - `createAt` 是调用发生时间 UTC ISO8601（原命名 `occurredAtUtc` 已简化）；
-> - **租户身份用 `account: { uid, iamId }` 嵌套对象**表达：`uid` 是主账户（扣费主体 / billing 主键），`iamId` 是发起调用的 IAM 子账户。一次拿到关联关系，UI 展示和后端 join 都更方便，替代原先并列的 `accountUid` + `iamUserUid`；
-> - **`providerId` 是模型渠道的 int 主键**（= `Provider.id`，非 string UID）：日志是高吞吐写入数据，int FK 索引比 string UID 紧凑得多，join 性能也更好；前端展示渠道名通过 `provider.id → name` 反查；
+> - `occurredAtUtc` 是调用发生时间 UTC ISO8601；与 00-conventions"时间字段一律以 `AtUtc` 结尾"的全局约定对齐（之前简化命名为 `createAt` 已恢复）；
+> - **租户身份用 `account: { uid, iamUserUid }` 嵌套对象**表达：`uid` 是主账户（扣费主体 / billing 主键），`iamUserUid` 是发起调用的 IAM 子账户（与 02 / 03 / 14 的命名统一）。一次拿到关联关系，UI 展示和后端 join 都更方便，替代原先并列的 `accountUid` + `iamUserUid`；
+> - **`provider: { id, name }` 是模型渠道的嵌套对象**：`id` 是 int 主键（= `Provider.id`，日志高吞吐写入下用 int FK 紧凑且 join 性能好），`name` 由 BFF 在落库 / 读取时联动写入或 join 填充。**对外封装成对象**让前端永远读 `entry.provider.id` / `entry.provider.name`，不再关心底层是 int 还是 string，也便于未来扩 `provider.apiType` / `provider.modelName`；
 > - **`modelName`** 是用户请求体里的 `model` 字段值（如 `'demux-gpt-4o'`），快照写入；上游真实 model 名不再单独记录（之前的 `providerModelId` 字段已删除）—— 知道命中哪个渠道 + 用户请求 `modelName` 足以定位调度路径，多记一份是冗余；
 > - **`convId`** 是会话 ID：多轮对话同一 `convId`，便于按对话排障 / 复盘 / IAM 反查；
 > - **计费快照内聚在 `cost` 对象**：`multiplierSnapshot`（倍率快照）+ `tierSnapshot`（LV 快照）已下沉到 `cost` 内 —— 它们是计费上下文，跟 `cost` 强相关（费用 = 用量 × 单价 × multiplier × tier 折扣），放顶层是错位；
@@ -76,11 +76,12 @@
 >   - `per_character`    → `cost = { pricePerKChar, multiplier/tier, total }`；
 >   - 单价命名与 Pricing 文档**完全一致**，对账时不用脑内 mapping；
 > - **数据库存储建议**：`usage` 与 `cost` 都按 JSON / JSONB 字段落库（PostgreSQL JSONB / ClickHouse JSON / ES nested），方便不同 billingType 共表；用于聚合的 `cost.total` 单独冗余一列做索引；
-> - **`tokenLatency` 语义按 `streamed` 切换**（单位 ms）：
->   - `streamed: true`  → 首字延迟（TTFT，到首 token 的耗时），反映上游响应健康度；
->   - `streamed: false` → 端到端总耗时（请求发出 → 响应完整返回），非流式调用没有"首字"概念，这是唯一有意义的延迟维度；
->   - 失败请求一律 `null`；
->   - **统计聚合（`stats.avgTokenLatency` / `p95TokenLatency`）只取 `streamed && success` 样本** —— 两种语义混合算平均没意义；
+> - **`latency: { ms, kind } | null` 显式分类**（单位 ms）：
+>   - `kind: 'ttft'` → 首字延迟（流式调用的 TTFT，到首 token 的耗时），反映上游响应健康度；
+>   - `kind: 'e2e'`  → 端到端总耗时（非流式：请求发出 → 响应完整返回），非流式调用没有"首字"概念，这是唯一有意义的延迟维度；
+>   - 失败请求一律 `latency: null`；
+>   - **统计聚合（`stats.kpi.latency.avgMs` / `p95Ms`）只取 `kind === 'ttft' && success` 样本** —— 两种语义混合算平均没意义；
+>   - 设计动机：把原来"隐式约定"（`tokenLatency` 的含义随 `streamed` 切换）改成"显式字段"（`kind`），前端 / BI / 客服直接读 `latency.kind` 决定怎么标注；
 > - **`success: boolean` 表达成败二元**：
 >   - `true` → `error` 必为 `null`，不要读取；
 >   - `false` → 必有 `error: { code, message, httpStatus }`，失败的细分类（timeout / rate_limited / cancelled / 上游 5xx 等）全部通过 `error.code` 区分；
@@ -93,10 +94,13 @@
 | 业务动作 | Port 方法 | HTTP | REST 端点 |
 | --- | --- | --- | --- |
 | 列表（带 cursor 友好的 uid 排序） | `list(input)` | GET | `/api/demuxai/logs` |
+| 单条详情（深链 / 客服排障用） | `get(uid)` | GET | `/api/demuxai/logs/{uid}` |
 | 统计（与 list 同 filter） | `stats(filter)` | GET | `/api/demuxai/logs/stats` |
 | Model 字典 | `DemuxaiModelPort.list` | GET | `/api/admin/demuxai/models` |
 | Provider 字典 | `DemuxaiProviderPort.list` | GET | `/api/admin/demuxai/providers` |
 | Account 字典 | `AccountAdminPort.listAccounts` | GET | `/accounts` |
+
+> **`GET /logs/{uid}` 存在理由**：原文档列表 + stats 双端点足够展示页面，但深链分享（`/demuxai/logs?focus=LG-...`）刷新后无法定位单条；客服 curl 排障也需要直查端点。响应结构 = 列表元素同款。
 
 ## 请求 / 响应
 
@@ -111,10 +115,10 @@
 | `fromUtc` | ISO8601 | **是** | 必填，BFF 在缺省时返回 400 |
 | `toUtc` | ISO8601 | **是** | 同上 |
 | `accountUid` | string | 否 | 精确匹配主账户（= `account.uid`） |
-| `iamId` | string | 否 | 精确匹配 IAM 子账户（= `account.iamId`） |
+| `iamUserUid` | string | 否 | 精确匹配 IAM 子账户（= `account.iamUserUid`） |
 | `convId` | string | 否 | 精确匹配会话 ID，常用于按对话排障 |
 | `modelName` | string | 否 | 模糊匹配模型名 |
-| `providerId` | int | 否 | 精确匹配渠道 int 主键（= `Provider.id`） |
+| `providerId` | int | 否 | 精确匹配渠道 int 主键（= `provider.id`） |
 | `apiType` | enum | 否 | 见 `apiTypeValues` |
 | `errorOnly` | boolean | 否 | 仅看失败调用（`success === false`） |
 | `errorCode` | string | 否 | 精确过滤 `error.code`，仅对失败调用生效；常配合 `errorOnly = true` 用于排障（如 `upstream_5xx` / `rate_limited`） |
@@ -126,32 +130,36 @@
   "items": [
     {
       "uid": "LG-1700000000001",
-      "createAt": "2025-09-12T11:00:01Z",
-      "account": { "uid": "100000001", "iamId": "200000050" },
+      "occurredAtUtc": "2025-09-12T11:00:01Z",
+      "account":  { "uid": "100000001", "iamUserUid": "200000050" },
+      "provider": { "id": 1001, "name": "OpenAI 主线" },
       "convId": "CV-050-a3",
       "modelName": "demux-gpt-4o",
-      "providerId": 1001,
-      "apiType": "openai",
       "billingType": "per_token",
+      "request": {
+        "apiType":  "openai",
+        "ip":       "203.0.113.7",
+        "streamed": true
+      },
       "usage": {
         "totalTokens": 787,
         "input": {
           "tokens": 482,
-          "cachedReadTokens": 120,
+          "cachedReadTokens":    120,
           "cachedWrite5mTokens": 0,
           "cachedWrite1hTokens": 0,
-          "audioTokens": 0
+          "audioTokens":         0
         },
         "output": {
-          "tokens": 305,
+          "tokens":          305,
           "reasoningTokens": 0,
-          "audioTokens": 0
+          "audioTokens":     0
         }
       },
       "cost": {
         "input": {
-          "perMToken": 25,
-          "amount": 0.01205,
+          "perMToken":   25,
+          "amount":      0.01205,
           "cachedRead":    { "perMToken": 12.5,  "amount": 0.0015 },
           "cachedWrite5m": { "perMToken": 31.25, "amount": 0 },
           "cachedWrite1h": { "perMToken": 50,    "amount": 0 },
@@ -159,56 +167,42 @@
         },
         "output": {
           "perMToken": 75,
-          "amount": 0.02288,
+          "amount":    0.02288,
           "reasoning": { "perMToken": 0, "amount": 0 },
           "audio":     { "perMToken": 0, "amount": 0 }
         },
         "multiplierSnapshot": 1.2,
-        "tierSnapshot": 3,
-        "total": 0.03523
+        "tierSnapshot":       3,
+        "total":              0.03523
       },
-      "tokenLatency": 320,
+      "latency": { "ms": 320, "kind": "ttft" },
       "success": true,
-      "error": null,
-      "requestIp": "203.0.113.7",
-      "streamed": true
+      "error":   null
     },
     {
       "uid": "LG-1700000000002",
-      "createAt": "2025-09-12T11:00:03Z",
-      "account": { "uid": "100000001", "iamId": "200000050" },
+      "occurredAtUtc": "2025-09-12T11:00:03Z",
+      "account":  { "uid": "100000001", "iamUserUid": "200000050" },
+      "provider": { "id": 1001, "name": "OpenAI 主线" },
       "convId": "CV-050-a3",
       "modelName": "demux-gpt-4o",
-      "providerId": 1001,
-      "apiType": "openai",
       "billingType": "per_token",
+      "request": { "apiType": "openai", "ip": "203.0.113.8", "streamed": true },
       "usage": {
         "totalTokens": 312,
-        "input": {
-          "tokens": 312,
-          "cachedReadTokens": 0,
-          "cachedWrite5mTokens": 0,
-          "cachedWrite1hTokens": 0,
-          "audioTokens": 0
-        },
-        "output": {
-          "tokens": 0,
-          "reasoningTokens": 0,
-          "audioTokens": 0
-        }
+        "input":  { "tokens": 312, "cachedReadTokens": 0, "cachedWrite5mTokens": 0, "cachedWrite1hTokens": 0, "audioTokens": 0 },
+        "output": { "tokens": 0,   "reasoningTokens": 0, "audioTokens": 0 }
       },
       "cost": {
         "input": {
-          "perMToken": 25,
-          "amount": 0.0078,
+          "perMToken": 25, "amount": 0.0078,
           "cachedRead":    { "perMToken": 12.5,  "amount": 0 },
           "cachedWrite5m": { "perMToken": 31.25, "amount": 0 },
           "cachedWrite1h": { "perMToken": 50,    "amount": 0 },
           "audio":         { "perMToken": 0,     "amount": 0 }
         },
         "output": {
-          "perMToken": 75,
-          "amount": 0,
+          "perMToken": 75, "amount": 0,
           "reasoning": { "perMToken": 0, "amount": 0 },
           "audio":     { "perMToken": 0, "amount": 0 }
         },
@@ -216,101 +210,99 @@
         "tierSnapshot": 3,
         "total": 0.0078
       },
-      "tokenLatency": null,
+      "latency": null,
       "success": false,
       "error": {
-        "code": "upstream_5xx",
-        "message": "upstream returned 502 Bad Gateway",
+        "code":       "upstream_5xx",
+        "message":    "upstream returned 502 Bad Gateway",
         "httpStatus": 502
-      },
-      "requestIp": "203.0.113.8",
-      "streamed": true
+      }
     },
     {
       "uid": "LG-1700000000003",
-      "createAt": "2025-09-12T11:00:05Z",
-      "account": { "uid": "100000002", "iamId": "700000010" },
+      "occurredAtUtc": "2025-09-12T11:00:05Z",
+      "account":  { "uid": "100000002", "iamUserUid": "700000010" },
+      "provider": { "id": 1009, "name": "OpenAI 主线（Image）" },
       "convId": "CV-010-b2",
       "modelName": "demux-dalle-3",
-      "providerId": 1009,
-      "apiType": "openai",
       "billingType": "per_image",
+      "request": { "apiType": "openai", "ip": "203.0.113.10", "streamed": false },
       "usage": {
-        "tier": { "size": "1024x1024", "quality": "hd" },
+        "tier":  { "size": "1024x1024", "quality": "hd" },
         "count": 4
       },
       "cost": {
-        "pricePerImage": 0.42,
+        "pricePerImage":      0.42,
+        "amount":             1.68,
         "multiplierSnapshot": 1.0,
-        "tierSnapshot": 3,
-        "total": 1.68
+        "tierSnapshot":       3,
+        "total":              1.68
       },
-      "tokenLatency": 4200,
+      "latency": { "ms": 4200, "kind": "e2e" },
       "success": true,
-      "error": null,
-      "requestIp": "203.0.113.10",
-      "streamed": false
+      "error":   null
     },
     {
       "uid": "LG-1700000000004",
-      "createAt": "2025-09-12T11:00:08Z",
-      "account": { "uid": "100000003", "iamId": "700000020" },
+      "occurredAtUtc": "2025-09-12T11:00:08Z",
+      "account":  { "uid": "100000003", "iamUserUid": "700000020" },
+      "provider": { "id": 1010, "name": "Kling 自部署" },
       "convId": "CV-020-c1",
       "modelName": "demux-kling-v2",
-      "providerId": 1010,
-      "apiType": "self_hosted_openai_compat",
       "billingType": "per_video",
+      "request": { "apiType": "self_hosted_openai_compat", "ip": "203.0.113.20", "streamed": false },
       "usage": {
-        "tier": { "resolution": "1080p" },
+        "tier":    { "resolution": "1080p" },
         "seconds": 8
       },
       "cost": {
-        "pricePerSecond": 1.2,
+        "pricePerSecond":     1.2,
+        "amount":             9.6,
         "multiplierSnapshot": 1.0,
-        "tierSnapshot": 4,
-        "total": 9.6
+        "tierSnapshot":       4,
+        "total":              9.6
       },
-      "tokenLatency": 18500,
+      "latency": { "ms": 18500, "kind": "e2e" },
       "success": true,
-      "error": null,
-      "requestIp": "203.0.113.20",
-      "streamed": false
+      "error":   null
     }
   ],
   "total": 12450
 }
 ```
 
+> **`latency` 设计**：原 `tokenLatency` + `streamed` 双字段（其中 `tokenLatency` 的语义随 `streamed` 切换）已封装为单一 `latency: { ms, kind } | null` 对象。`kind` ∈ `'ttft'`（首字延迟，仅流式成功）/ `'e2e'`（端到端，非流式成功）；失败请求一律 `latency: null`。**封装动机**：把"语义切换"从隐式约定变成显式字段，前端 / BI 直接读 `latency.kind` 决定怎么标注图表，不必再交叉看 `streamed`。`streamed` 本身保留在 `request.streamed` 表达"客户端是否申请流式"——这跟"延迟语义"是两件事。
+
 字段说明（`LogEntry`，详见 `src/features/demuxai/model/log.types.ts`）：
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `uid` | string | snowflake，按 ID 即按时间排序。 |
-| `createAt` | ISO8601 string | 调用发生时间 UTC。原命名 `occurredAtUtc`，简化为 `createAt`。 |
-| `account` | object | 租户身份聚合对象：`{ uid: string, iamId: string }`。`uid` = 主账户 UID（扣费主体 / billing 主键），`iamId` = 发起调用的 IAM 子账户 UID。一次拿到关联关系，UI 展示和后端 join 一步到位。 |
+| `occurredAtUtc` | ISO8601 string | 调用发生时间 UTC。**全局 `*AtUtc` 命名规约**，与 00-conventions 一致。 |
+| `account` | object | 租户身份聚合对象：`{ uid, iamUserUid }`。`uid` = 主账户 UID（扣费主体 / billing 主键），`iamUserUid` = 发起调用的 IAM 子账户 UID。命名与 02 / 03 / 14 / 01 全局统一。 |
+| `provider` | object | 命中渠道封装对象：`{ id: int, name: string }`。`id` 是数据库 int 主键（日志高吞吐写入，int FK 紧凑、join 高效）；`name` 由 BFF 落库时快照写入或读取时 join 填充，前端不必再单独拉 providers 字典做名映射。封装对象后未来扩 `provider.apiType` 也不污染顶层。 |
 | `convId` | string | 多轮对话会话 ID。同一对话的多次调用共享同一 `convId`，便于按对话维度排障 / 复盘。 |
 | `modelName` | string | 用户请求体里的 `model` 字段值（如 `'demux-gpt-4o'`），快照写入。上游真实 model 名不再单独记录。 |
-| `providerId` | int | 命中渠道的**数据库 int 主键**（= `Provider.id`），非 string UID。日志量大，int FK 索引更紧凑。 |
-| `apiType` | enum | 该次调用走的协议。 |
 | `billingType` | enum | 计费类型快照（判别字段）。取值见 [`10-demuxai-pricing.md`](./10-demuxai-pricing.md) 的 `BillingType`。 |
+| `request` | object | 请求元信息族：`{ apiType, ip, streamed }`。封装动机：这三者都是描述"这次调用怎么发起来的"，且彼此独立于业务计费数据；封装后未来加 `request.userAgent` / `request.region` / `request.headers.xRequestId` 不污染顶层。 |
 | `usage` | object | **形状随 `billingType` 变化**，详见下方"`usage` / `cost` 形状对照表"。`per_token` 用量字段与 OpenAI Responses API / Anthropic Messages API 对齐。 |
-| `cost` | object | 扣费快照（元）。**形状随 `billingType` 变化**。`per_token` 按 `input` / `output` 父子集嵌套，每个维度包含一对 `{ perMToken, amount }`（可复用类型 `DimensionCost`），父集 input/output 自身有 `{ perMToken, amount }` 表示主输入/主输出，子维度（`cachedRead` / `cachedWrite5m` / `cachedWrite1h` / `audio` / `reasoning`）作为嵌套 `DimensionCost` —— 未触发为 `0` 不省略；其它 `billingType` 必含对应单价快照 + `multiplierSnapshot` + `tierSnapshot` + `total`。`cost.total` 用于聚合，建议单列冗余落库以便走索引。 |
-| `tokenLatency` | int \| null | 单位 ms。语义**随 `streamed` 切换**：`streamed: true` → 首字延迟（TTFT）；`streamed: false` → 端到端总耗时；失败请求一律 `null`。统计聚合（avg / p95）只取 `streamed && success` 样本，混合算平均没意义。 |
+| `cost` | object | 扣费快照（元）。**形状随 `billingType` 变化**。`per_token` 按 `input` / `output` 父子集嵌套，每个维度包含一对 `{ perMToken, amount }`（可复用类型 `DimensionCost`）；其它 `billingType` 也**必含 `amount` 字段**（与 `total` 同值，单维场景下"该维度小计" = 合计），用于和 per_token 维持"每个维度都有 amount"一致的查询体验。`cost.total` 用于聚合，建议单列冗余落库以便走索引。 |
+| `latency` | `{ ms, kind } \| null` | `kind` ∈ `'ttft'`（首字延迟，流式成功）/ `'e2e'`（端到端，非流式成功）。失败请求一律 `null`。统计聚合（`stats.kpi.latency.avgMs` / `p95Ms`）只取 `kind === 'ttft'` 样本，两种语义混合算平均没意义。 |
 | `success` | boolean | 调用是否成功（二元）。`true` 时 `error` 必为 `null`；`false` 时必有 `error`，失败的细分类全部从 `error.code` 读取。 |
-| `error` | object \| null | `success === true` 时为 `null`；否则 `{ code, message, httpStatus }`。`code` 是上游 / 网关错误码（如 `upstream_5xx` / `upstream_timeout` / `rate_limited` / `context_too_long` / `cancelled`），`message` 是上游原文摘要（≤ 200 字符），`httpStatus` 是上游或网关返回的 HTTP 状态码（无上游响应时填 `0`）。成功调用默认 200 无需单列。 |
-| `requestIp` | string \| null | 用于风控复盘。 |
-| `streamed` | boolean | 是否流式调用。决定 `tokenLatency` 的语义维度。 |
+| `error` | object \| null | `success === true` 时为 `null`；否则 `{ code, message, httpStatus }`。`code` 是上游 / 网关错误码（如 `upstream_5xx` / `upstream_timeout` / `rate_limited` / `context_too_long` / `cancelled`），`message` 是上游原文摘要（≤ 200 字符），`httpStatus` 是上游或网关返回的 HTTP 状态码（无上游响应时填 `0`）。成功调用默认 200 无需单列。**形状与 08 providers / 12 SMTP test / 15 OTP verify 全局统一**。 |
 
 #### `usage` / `cost` 形状对照表
 
 | `billingType` | `usage` 形状 | `cost` 形状 |
 | --- | --- | --- |
 | `per_token` | `{ totalTokens, input: { tokens, cachedReadTokens, cachedWrite5mTokens, cachedWrite1hTokens, audioTokens }, output: { tokens, reasoningTokens, audioTokens } }` （全必填，未触发为 0） | `{ input: { perMToken, amount, cachedRead, cachedWrite5m, cachedWrite1h, audio }, output: { perMToken, amount, reasoning, audio }, multiplierSnapshot, tierSnapshot, total }` —— 其中 input/output 的子维度（`cachedRead` 等）类型是 `DimensionCost = { perMToken, amount }`；全必填、未触发为 0 |
-| `per_call` | `{ calls }` | `{ pricePerCall, cachedPricePerCall, multiplierSnapshot, tierSnapshot, total }` |
-| `per_image` | `{ tier: { size, quality }, count }` | `{ pricePerImage, multiplierSnapshot, tierSnapshot, total }` |
-| `per_video` | `{ tier: { resolution }, seconds }` | `{ pricePerSecond, multiplierSnapshot, tierSnapshot, total }` |
-| `per_audio_minute` | `{ minutes }` | `{ pricePerMinute, multiplierSnapshot, tierSnapshot, total }` |
-| `per_character` | `{ characters }` | `{ pricePerKChar, multiplierSnapshot, tierSnapshot, total }` |
+| `per_call` | `{ calls, cachedCalls }` | `{ pricePerCall, cachedPricePerCall, amount, cachedAmount, multiplierSnapshot, tierSnapshot, total }` |
+| `per_image` | `{ tier: { size, quality }, count }` | `{ pricePerImage, amount, multiplierSnapshot, tierSnapshot, total }` |
+| `per_video` | `{ tier: { resolution }, seconds }` | `{ pricePerSecond, amount, multiplierSnapshot, tierSnapshot, total }` |
+| `per_audio_minute` | `{ minutes }` | `{ pricePerMinute, amount, multiplierSnapshot, tierSnapshot, total }` |
+| `per_character` | `{ characters }` | `{ pricePerKChar, amount, multiplierSnapshot, tierSnapshot, total }` |
+
+> **统一"每个维度都有 amount"**：原 `per_call` ~ `per_character` 只有单价 + total，缺中间维度的 amount，导致前端 / 对账要重新做"单价 × 数量"。补 `amount` 后跟 `per_token` 的 `DimensionCost` 形状一致；单维场景下 `amount === total`，看起来冗余但保证了形状一致性（schema 自我描述、未来 per_call 加缓存维度 `cachedAmount` 无侵入）。`per_call` 顺手补 `cachedCalls / cachedAmount` 两个字段，让"缓存命中省了多少钱" 直接可读。
 
 #### 各 `billingType` 的扣费公式（`m = multiplierSnapshot × tierMultipliers[tierSnapshot]`）
 
@@ -442,31 +434,51 @@ type PerTokenCost = {
   };
 } & SnapshotCommon;
 
+type LogEntryBase = {
+  uid: string;
+  occurredAtUtc: string;
+  account:  { uid: string; iamUserUid: string };
+  provider: { id: number; name: string };
+  convId: string;
+  modelName: string;
+  request: { apiType: ApiType; ip: string | null; streamed: boolean };
+  latency: { ms: number; kind: 'ttft' | 'e2e' } | null;
+  success: boolean;
+  error:   { code: string; message: string; httpStatus: number } | null;
+};
+
 type LogEntry = LogEntryBase & (
   | { billingType: 'per_token';
       usage: PerTokenUsage;
       cost:  PerTokenCost }
   | { billingType: 'per_call';
-      usage: { calls: number };
-      cost: { pricePerCall: number; cachedPricePerCall: number } & SnapshotCommon }
+      usage: { calls: number; cachedCalls: number };
+      cost: { pricePerCall: number; cachedPricePerCall: number;
+              amount: number;       cachedAmount: number } & SnapshotCommon }
   | { billingType: 'per_image';
       usage: { tier: { size: string; quality: string }; count: number };
-      cost: { pricePerImage: number } & SnapshotCommon }
+      cost: { pricePerImage: number; amount: number } & SnapshotCommon }
   | { billingType: 'per_video';
       usage: { tier: { resolution: string }; seconds: number };
-      cost: { pricePerSecond: number } & SnapshotCommon }
+      cost: { pricePerSecond: number; amount: number } & SnapshotCommon }
   | { billingType: 'per_audio_minute';
       usage: { minutes: number };
-      cost: { pricePerMinute: number } & SnapshotCommon }
+      cost: { pricePerMinute: number; amount: number } & SnapshotCommon }
   | { billingType: 'per_character';
       usage: { characters: number };
-      cost: { pricePerKChar: number } & SnapshotCommon }
+      cost: { pricePerKChar: number; amount: number } & SnapshotCommon }
 );
 ```
 
 ### `GET /api/demuxai/logs/stats`
 
 见 [`07-demuxai-overview.md`](./07-demuxai-overview.md)。本页同样调用了 `stats`（行内/抽屉不调，但 Overview 页与本页共享 filter 形态）。
+
+### 单条 `GET /api/demuxai/logs/{uid}`
+
+返回单个 `LogEntry`，结构与列表元素完全一致。用于深链分享（`/demuxai/logs?focus=LG-...`）刷新后定位单条、客服 curl 直查、跨页面跳转保留上下文。
+
+> 不分时间范围限制（既然能拿到 `uid` 就说明已知具体目标）。
 
 ## 已删除模型的 UI 表现
 
@@ -479,10 +491,10 @@ type LogEntry = LogEntryBase & (
 
 ## 已删除渠道的 UI 表现
 
-类似地，如果 `providerId` 在 `Provider` 表查不到（渠道硬删 / 数据漂移）：
+类似地，如果 `provider.id` 在 `Provider` 表查不到（渠道硬删 / 数据漂移）：
 
-- 前端"模型渠道"列回退展示 `#<providerId>`（如 `#1007`）。
-- 详情抽屉一样回退到 `#<providerId>`。
+- 前端"模型渠道"列回退展示 `#<provider.id>`（如 `#1007`）—— `provider.name` 此时由 BFF 填占位串如 `"已删除渠道"` 或空字符串，前端兜底显示 `#id`。
+- 详情抽屉一样回退到 `#<provider.id>`。
 
 > 建议 BFF 端 Provider 也走软删；调用日志 → Provider 反查就稳定了。
 

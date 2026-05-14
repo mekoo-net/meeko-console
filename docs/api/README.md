@@ -62,9 +62,21 @@ Accept: application/json
       "name": "Meeko Demo Org",
       "slug": "meeko-demo",
       "status": "active",
+      "owner": {
+        "displayName": "系统管理员",
+        "email":       "admin@meeko.io"
+      },
+      "iamUserCount": 5,
       "tier": 3,
       "totalRechargedAmount": 12800,
-      "createdAtUtc": "2024-08-12T03:14:22Z"
+      "walletSummary": {
+        "available":     1280.5,
+        "held":          320,
+        "currency":      "CNY",
+        "snapshotAtUtc": "2025-09-12T09:17:30Z"
+      },
+      "createdAtUtc":    "2024-08-12T03:14:22Z",
+      "lastActiveAtUtc": "2025-09-12T09:18:00Z"
     }
   ],
   "total": 1
@@ -72,3 +84,13 @@ Accept: application/json
 ```
 
 失败统一返回 RFC 7807 ProblemDetails，前端会映射为 `AppResult` 失败分支，详见 [`00-conventions.md`](./00-conventions.md)。
+
+## v2 字段族封装原则
+
+本目录在 2026-05 完成一次系统性重构，核心约束写在 [`00-conventions.md` § 10](./00-conventions.md)：
+
+- **对象优于扁平**：同生同灭 / 状态扩展 / 配对单价金额 / 角色族 / 判别联合 字段必须封装为嵌套子对象（如 `owner` / `failure` / `reversal` / `source` / `connection` / `lastTest`）；
+- **`AdminCommandResult` 双轨制已退役**：成功走 HTTP 2xx + 资源体，失败一律 RFC 7807 ProblemDetails；
+- **操作类接口的失败统一为** `ok: false, error: { code, message } | null`（与 `LogEntry.error` 一致）；
+- **命名统一**：时间一律 `*AtUtc`、IAM 主键一律 `iamUserUid`、字段一律 camelCase、枚举一律字符串；
+- **列表 vs 详情投影分层**：含子树的资源列表只返概要，详情才完整下发。

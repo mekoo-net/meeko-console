@@ -11,10 +11,15 @@ import {
   type LogStatsErrorCode,
   type LogStatsTopModel,
   type LogStatsTopProvider,
+  type ReverseLogInput,
+  type ReverseLogResult,
 } from '../../model/log.types';
 import type { DemuxaiLogsPort, ListLogsPage } from '../ports/demuxaiLogsPort';
 
 import { getDemuxaiStore } from './data';
+
+/** Mock 环境约定的"当前 admin"。真接 BFF 时由后端 session 取代。 */
+const MOCK_ADMIN_IAM_UID = '200000099';
 
 function applyFilter(rows: LogEntry[], f: ListLogsFilter): LogEntry[] {
   return rows.filter((r) => {
@@ -189,6 +194,42 @@ export class DemuxaiLogsMock implements DemuxaiLogsPort {
       parsed.push(r.data);
     }
     return ok({ items: parsed, total: filtered.length });
+  }
+
+  async reverse(input: ReverseLogInput): Promise<AppResult<ReverseLogResult>> {
+    await delay();
+    const target = this.store.logs.find((l) => l.uid === input.logUid);
+    if (!target) {
+      return fail({ code: 'not_found', message: `日志 ${input.logUid} 不存在` });
+    }
+    if (!target.bill) {
+      return fail({
+        code: 'validation',
+        message: '该日志未关联账单，无法驳回（可能是历史数据 / BFF 尚未 join）',
+      });
+    }
+    if (target.bill.status === 'reversed') {
+      return fail({
+        code: 'conflict',
+        message: '该账单已被驳回，请勿重复操作',
+      });
+    }
+    const reversedAtUtc = new Date().toISOString();
+    target.bill = {
+      ...target.bill,
+      status: 'reversed',
+      reversedAtUtc,
+      reversedBy: MOCK_ADMIN_IAM_UID,
+      reversedCode: input.reasonCode,
+      reversedRemark: input.remark?.trim() || null,
+    };
+    return ok({
+      logUid: target.uid,
+      billUid: target.bill.uid,
+      reversedAtUtc,
+      reversedBy: MOCK_ADMIN_IAM_UID,
+      reversedCode: input.reasonCode,
+    });
   }
 
   async stats(filter: ListLogsFilter): Promise<AppResult<LogStats>> {

@@ -33,14 +33,16 @@
 
 ```json
 {
-  "channel": "Email",
-  "purpose": "Generic",
+  "channel": "email",
+  "purpose": "generic",
   "recipient": "alice@example.com",
-  "templateCode": "welcome",
-  "locale": "zh-CN",
-  "templateData": {
-    "displayName": "Alice",
-    "appName": "Meeko"
+  "template": {
+    "code":   "welcome",
+    "locale": "zh-CN",
+    "data": {
+      "displayName": "Alice",
+      "appName":     "Meeko"
+    }
   },
   "idempotencyKey": "9c4e1f2a-1c1d-4b7e-99a8-a5e7b1b9b321"
 }
@@ -48,34 +50,39 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `channel` | string | 是 | 当前主要走 `Email`；后续可接入 `SMS`。 |
-| `purpose` | string | 是 | 业务用途分类，`Generic` / `Otp` / `Marketing` 等。 |
+| `channel` | enum | 是 | `email` / `sms`（**小写字符串枚举**，与全局风格一致）。 |
+| `purpose` | enum | 是 | 业务用途分类：`generic` / `otp` / `marketing`。 |
 | `recipient` | string | 是 | 收件人（邮箱 / 手机号）。 |
-| `templateCode` | string | 是 | 模板 code（参见 [`13`](./13-notices-email-templates.md)）。 |
-| `locale` | string | 否 | 缺省取模板 default locale。 |
-| `templateData` | `Record<string,string>` | 否 | 占位符变量；BFF 应在缺占位时返回 400。 |
-| `idempotencyKey` | string | 否 | 24h 内重复请求会返回原 messageId。 |
+| `template` | object | 是 | 模板族：`{ code, locale, data }`。封装后未来加 `version` / `attachments` 不污染顶层。 |
+| `template.code` | string | 是 | 模板 code（参见 [`13`](./13-notices-email-templates.md)）。 |
+| `template.locale` | string | 否 | 缺省取模板 default locale。 |
+| `template.data` | `Record<string,string>` | 否 | 占位符变量；BFF 应在缺占位时返回 400。 |
+| `idempotencyKey` | string | 否 | 24h 内重复请求会返回原 message。 |
 
-成功响应（`SendNotificationResponse`）：
+成功响应：
 
 ```json
 {
-  "messageId": "MSG-001-abc",
-  "status": "queued"
+  "message": {
+    "id":     "MSG-001-abc",
+    "status": "queued"
+  }
 }
 ```
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `messageId` | string | BFF 落库的消息 ID（不一定是 SMTP providerMessageId）。 |
-| `status` | string | `queued` / `sent` / `failed`，由 BFF 决定。 |
+| `message.id` | string | BFF 落库的消息 ID（不一定是 SMTP providerMessageId）。 |
+| `message.status` | enum | `queued` / `sent` / `failed`，由 BFF 决定。 |
+
+> 封装 `message` 子对象后，未来扩 `message.providerMessageId` / `message.deliveredAtUtc` 时不会改顶层结构。
 
 ### `POST /api/notifications/otp/send` （`SendOtpPayload`）
 
 ```json
 {
-  "purpose": 1,
-  "channel": 1,
+  "purpose":   "login",
+  "channel":   "email",
   "recipient": "alice@example.com",
   "accountUid": "100000001",
   "locale": "zh-CN",
@@ -83,58 +90,90 @@
 }
 ```
 
-枚举（数值字面量，前端用 `Number(key)` 渲染）：
+**字符串枚举**（与 00-conventions 第 6 节"全平台字符串枚举"约定对齐；原 magic number 已废弃）：
 
 | 字段 | 取值 | 含义 |
 | --- | --- | --- |
-| `purpose` | 1=登录 / 2=注册 / 3=重置密码 / 4=更换邮箱 / 5=风控核验 / 6=绑定 MFA | |
-| `channel` | 1=邮件 / 2=短信 | 与 `NoticeChannel` 一致 |
+| `purpose` | `login` / `register` / `reset_password` / `change_email` / `risk_verify` / `bind_mfa` | 六种业务场景 |
+| `channel` | `email` / `sms` | 与 `SendNotificationPayload.channel` 一致 |
 
-成功响应（`SendOtpResponse`）：
+> BFF 内部数据库可仍用 tinyint 存储（性能 / 索引），但**对外 API 一律字符串枚举**——magic number 既不利于阅读 swagger、也不利于跨语言客户端类型推导。
+
+成功响应：
 
 ```json
 {
-  "auditUid": "AUDIT-001",
-  "expiresAtUtc": "2025-09-12T11:10:00Z"
+  "audit": {
+    "uid":          "AUDIT-001",
+    "expiresAtUtc": "2025-09-12T11:10:00Z"
+  }
 }
 ```
 
 | 字段 | 说明 |
 | --- | --- |
-| `auditUid` | 审计 ID，便于关联后续 verify 调用。 |
-| `expiresAtUtc` | OTP 失效时间。 |
+| `audit.uid` | 审计 ID，**verify 时回传**以便关联同一 send 事件。 |
+| `audit.expiresAtUtc` | OTP 失效时间。 |
 
 ### `POST /api/notifications/otp/verify` （`VerifyOtpPayload`）
 
 ```json
 {
-  "purpose": 1,
-  "channel": 1,
+  "purpose":   "login",
+  "channel":   "email",
   "recipient": "alice@example.com",
-  "code": "634281"
+  "code":      "634281",
+  "auditUid":  "AUDIT-001"
 }
 ```
 
-成功响应（`VerifyOtpResponse`）：
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `purpose` / `channel` / `recipient` / `code` | — | 是 | — |
+| `auditUid` | string | 否（**强烈推荐**） | send 时拿到的 `audit.uid`；用于审计关联与多发场景下定位"对哪条 OTP 验证"。BFF 在 `recipient + purpose + channel` 仍能唯一定位时可不传。 |
+
+成功响应（OTP 验证通过）：
 
 ```json
 {
-  "status": "ok",
-  "remainingAttempts": 4
+  "ok": true,
+  "remainingAttempts": 4,
+  "error": null
 }
 ```
 
-| 字段 | 说明 |
-| --- | --- |
-| `status` | `ok` / `mismatch` / `expired` / `consumed` / `locked`。 |
-| `remainingAttempts` | 剩余尝试次数，归零后锁 5~10 分钟（BFF 决定）。 |
+失败示例（与 08 / 12 错误对象形状一致）：
+
+```json
+{
+  "ok": false,
+  "remainingAttempts": 3,
+  "error": { "code": "mismatch" }
+}
+```
+
+```json
+{
+  "ok": false,
+  "remainingAttempts": 0,
+  "error": { "code": "locked", "message": "rate-limited for 600s" }
+}
+```
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `ok` | boolean | 是否验证通过。**与 08 / 12 / SMTP test 一致的 `ok + error` 二元结构**。 |
+| `remainingAttempts` | int | 剩余尝试次数，归零后锁 5~10 分钟（BFF 决定）。 |
+| `error` | object \| null | `ok===true` 时为 `null`；否则 `{ code, message? }`，`code` ∈ `mismatch` / `expired` / `consumed` / `locked` / `audit_mismatch`。 |
+
+> **业务级失败 vs 协议级失败**：本接口的 `ok: false` 表示"OTP 没通过验证"（业务语义），HTTP 仍是 `200 OK`——这与登录密码错误返回 `401 unauthorized` 不同：OTP 验证失败是常态、需要让前端拿 `remainingAttempts` 继续展示；只有当 `purpose` / `channel` 非法等**协议层错误**才走 `4xx + ProblemDetails`。
 
 ## 交互流程
 
 ```
-"发送通知" 表单 → sendNotification → 展示 messageId + status
-"发送 OTP" 表单 → sendOtp → 展示 auditUid + expiresAtUtc
-"校验 OTP" 表单 → verifyOtp → 展示 status + remainingAttempts
+"发送通知" 表单 → sendNotification → 展示 message.id + message.status
+"发送 OTP" 表单 → sendOtp → 展示 audit.uid + audit.expiresAtUtc
+"校验 OTP" 表单 → verifyOtp（携带 auditUid）→ 展示 ok / error.code + remainingAttempts
 ```
 
 ## 错误码

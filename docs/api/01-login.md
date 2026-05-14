@@ -15,14 +15,16 @@
 
 | 业务动作 | HTTP | REST 端点 | 入参 | 出参 |
 | --- | --- | --- | --- |
-| 用户名/密码登录 | POST | `/auth/login` 或 `/auth/login-iam` | `LoginRequest` | `LoginResponse` |
+| 用户名/密码登录 | POST | `/auth/login` | `LoginRequest` | `LoginResponse` |
 | 刷新 token | POST | `/auth/refresh` | `{ refreshToken: string }` | `LoginResponse` |
 | 登出（撤销 jti） | POST | `/auth/logout` | — | `void` |
 | 当前会话权限（建议登录成功后立即请求） | GET | `/auth/permissions` 或 BFF 约定路径 | — | `SessionPermissions` |
 
 ## 请求 / 响应
 
-### `POST /auth/login` / `POST /auth/login-iam`
+### `POST /auth/login`
+
+> 平台只暴露**这一个**登录端点；个人账户与组织子账户均走此入口（详见 [`00-conventions.md` § 4.1 统一 IAM 模型](./00-conventions.md#41-统一-iam-模型契约根)）。
 
 请求体：
 
@@ -34,7 +36,7 @@
 }
 ```
 
-- `tenant` 可选，用于组织子账号登录时指定**目标组织账户**（与 BFF 约定，通常为 `account.uid`）；个人账号登录可省略。
+- `tenant` 可选，用于组织子账号登录时指定**目标组织账户**（与 BFF 约定，通常为 `account.uid` 或 `account.slug`）；**个人账号登录省略此字段**，BFF 按 `username` 在个人命名空间内唯一解析。
 
 成功响应：登录接口**只负责** —— 令牌（含过期时长）+ 当前租户锚点 + 首屏展示资料。**不返回**权限清单、菜单结构、产品角色等（那些由 **`GET /auth/permissions`** 单独负责）。
 
@@ -47,16 +49,16 @@
   "account": {
     "uid": "100000001",
     "type": "personal",
-    "sub": "200000001",
+    "iamUserUid": "200000001",
     "nickname": "系统管理员",
     "email": "admin@example.com",
-    "avatar_url": "https://cdn.example.com/avatars/200000001.png"
+    "avatarUrl": "https://cdn.example.com/avatars/200000001.png"
   }
 }
 ```
 
 - **`tokenType` / `expiresIn`**：OAuth 2.0 token 响应惯例。`expiresIn` 是 access token 的**剩余有效秒数**，前端据此安排续期；JWT 内部的 `iat` / `exp` 仅供后端验签，前端**不必解码**。
-- **`account`**：用户与租户的「首屏展示数据」，`uid` 是租户主键，`sub` 是当前登录 IAM 用户。**不放权限字段**。
+- **`account`**：用户与租户的「首屏展示数据」，`uid` 是租户主键，`iamUserUid` 是当前登录 IAM 用户（与 JWT `sub` 一致）。**不放权限字段**。
 
 #### 响应体字段说明
 
@@ -67,15 +69,17 @@
 | `refreshToken` | string | 不透明刷新凭证；用于 `/auth/refresh`，TTL 建议 7~30 天（是否 JWT 由 BFF 决定）。 |
 | `expiresIn` | number（秒） | access token 剩余有效秒数（OAuth 2.0 `expires_in` 命名）；用于前端续期调度。 |
 | `account.uid` | string（long） | 当前会话所属**账户**主键（租户 / 计费边界）。 |
-| `account.type` | `'personal' \| 'organization'` | 个人 / 组织。 |
-| `account.sub` | string（long） | 当前登录 IAM 用户主键（与 JWT `sub` 一致）。 |
+| `account.type` | `'personal' \| 'organization'` | 个人 / 组织。personal 账户内部仍持有 1 个**隐式 IAM 用户**作为登录主体（见 `iamUserUid`），但 IAM 管理 UI 整体隐藏。 |
+| `account.iamUserUid` | string（long），**恒存在** | 当前登录 IAM 用户主键（与 JWT `sub` 一致）。**统一 IAM 模型下不可为 null**：personal 账户取其隐式 IAM 用户的 UID，organization 账户取登录子用户的 UID——前端无需根据 `account.type` 分支。命名与 02 / 03 中的 `owner.iamUserUid` 对齐。 |
 | `account.nickname` | string | 当前登录用户昵称（顶栏等）。 |
 | `account.email` | string，可选 | 登录邮箱。 |
-| `account.avatar_url` | string（URL），可选 | 头像；可与 **`picture`** 统一字段名。 |
+| `account.avatarUrl` | string（URL），可选 | 头像 URL。 |
 
 #### JWT payload 约定（仅供后端 / 网关）
 
 此小节描述 `accessToken` 的内部声明；**前端不需要解码 JWT 来获取业务信息**，相关数据已由本接口响应正文 + 权限接口分别提供。
+
+> JWT 内部声明遵循 RFC 7519，使用 snake_case；这是协议级约定，不与业务 BFF 的 camelCase 风格冲突（前端不解码 JWT，所以也不会与业务字段混淆）。
 
 ```json
 {
@@ -94,7 +98,7 @@
 
 | 声明 | 类型 | 说明 |
 | --- | --- | --- |
-| `sub` | string | IAM 用户 UID；与响应 `account.sub` 一致。 |
+| `sub` | string | IAM 用户 UID；与响应 `account.iamUserUid` 一致。**恒存在**——personal 账户使用其隐式 IAM 用户 UID（详见 [`00-conventions.md` § 4.1](./00-conventions.md#41-统一-iam-模型契约根)）。 |
 | `account_uid` | string | 当前会话租户 / 账户主键。 |
 | `iat` / `exp` | number | 标准 JWT 时间声明（秒）；前端用响应正文 `expiresIn`，不读这两个。 |
 | `scopes` | string[] | **细粒度权限**清单，形如 `<域>:<资源>:<动作>`；**网关 / BFF 用来鉴权**。前端获取人类视图请用 **`GET /auth/permissions`**。 |
@@ -111,7 +115,7 @@
 
 ```json
 {
-  "is_account_owner": true,
+  "isAccountOwner": true,
   "scopes": [
     "demuxai:provider:read",
     "demuxai:provider:update",
@@ -123,7 +127,7 @@
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `is_account_owner` | boolean | 账户主维度，**与 `scopes` 正交**；用于「仅主账号可解约 / 转移所有权」等产品分支。 |
+| `isAccountOwner` | boolean | 账户主维度，**与 `scopes` 正交**；用于「仅主账号可解约 / 转移所有权」等产品分支。 |
 | `scopes` | string[] | 当前会话已被授予的权限点；与 JWT 内 `scopes` 在内容上一致（同一份服务端事实的两种视图：JWT 供网关鉴权，本接口供前端 UI）。 |
 
 - **职责边界**：本接口**不发** token、不带 `tokenType / expiresIn` 等；token 与有效期一律在 `/auth/login`、`/auth/refresh` 里。

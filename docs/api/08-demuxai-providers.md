@@ -24,16 +24,18 @@
 
 ## 接口清单
 
-| 业务动作 | Port 方法 | HTTP | REST 端点 |
-| --- | --- | --- | --- |
-| 列表 | `list` | GET | `/api/admin/demuxai/providers` |
-| 详情（编辑前回填） | `get(uid)` | GET | `/api/admin/demuxai/providers/{uid}` |
-| 新建 | `create(payload)` | POST | `/api/admin/demuxai/providers` |
-| 整体覆盖式更新 | `update(uid, payload)` | PUT | `/api/admin/demuxai/providers/{uid}` |
-| 删除 | `delete(uid)` | DELETE | `/api/admin/demuxai/providers/{uid}` |
-| 切换启停 | `setStatus(uid, status)` | PATCH | `/api/admin/demuxai/providers/{uid}/status` |
-| 连通测试 | `test(uid)` | POST | `/api/admin/demuxai/providers/{uid}/test` |
-| 拉取上游 `/v1/models` | `fetchUpstreamModels(input)` | POST | `/api/admin/demuxai/providers/upstream-models` |
+| 业务动作 | Port 方法 | HTTP | REST 端点 | 投影 |
+| --- | --- | --- | --- | --- |
+| 列表（**轻投影**，不返回 providerModels / modelMappings 全集） | `list` | GET | `/api/admin/demuxai/providers` | 行级概要 + `mappingsCount` / `mappingNames[]` |
+| 详情（编辑前回填，含完整子树） | `get(uid)` | GET | `/api/admin/demuxai/providers/{uid}` | 全字段 |
+| 新建 | `create(payload)` | POST | `/api/admin/demuxai/providers` | 全字段 |
+| 整体覆盖式更新 | `update(uid, payload)` | PUT | `/api/admin/demuxai/providers/{uid}` | 全字段 |
+| 删除 | `delete(uid)` | DELETE | `/api/admin/demuxai/providers/{uid}` | — |
+| 切换启停 | `setStatus(uid, status)` | PATCH | `/api/admin/demuxai/providers/{uid}/status` | 全字段 |
+| 连通测试 | `test(uid)` | POST | `/api/admin/demuxai/providers/{uid}/test` | `ProviderTestResult` |
+| 拉取上游 `/v1/models` | `fetchUpstreamModels(input)` | POST | `/api/admin/demuxai/providers/upstream-models` | `{ upstreamModelNames }` |
+
+> **列表 vs 详情投影分层**：原列表会把每行的 `providerModels[]` + `modelMappings[]` 完整下发，单行可能膨胀到 100+ KB。现按 GitHub repos / OpenAI fine-tunes 等惯例分层 —— 列表只回概要（行可见字段 + `mappingsCount` + 前 5 个 `mappingNames[]` 给 hover 预览），详情 `GET /{uid}` 才回完整子树。
 
 ## 请求 / 响应
 
@@ -51,44 +53,35 @@
 
 响应：
 
+响应（**轻投影**）：
+
 ```json
 {
   "items": [
     {
       "uid": "PR-001",
       "name": "OpenAI 主线",
-      "apiType": "openai",
-      "baseUrl": "https://api.openai.com/v1",
-      "apiKeyMasked": "sk-***abc1",
+      "connection": {
+        "apiType": "openai",
+        "baseUrl": "https://api.openai.com/v1",
+        "apiKey":  { "masked": "sk-***abc1" }
+      },
       "notes": "主用账户，月预算 $5000",
       "status": "enabled",
       "autoDisabledCode": null,
-      "testLatencyMs": 142,
-      "testSucceededAtUtc": "2025-09-12T03:21:08Z",
-      "errorRate24h": 0.012,
-      "callCount24h": 5820,
-      "providerModels": [
-        {
-          "uid": "PM-001",
-          "modelName": "gpt-4o-2024-08-06",
-          "family": "gpt",
-          "capabilities": ["chat", "tool_use", "vision", "json_mode"],
-          "visibleMinTier": 1,
-          "maxContextTokens": 128000,
-          "maxOutputTokens": 16384
-        }
-      ],
-      "modelMappings": [
-        {
-          "uid": "MM-001",
-          "providerModelUid": "PM-001",
-          "displayName": "demux-gpt-4o",
-          "enabled": true,
-          "notes": null,
-          "sortOrder": 0,
-          "mappingWeight": 100
-        }
-      ],
+      "lastTest": {
+        "ok":        true,
+        "latencyMs": 142,
+        "atUtc":     "2025-09-12T03:21:08Z"
+      },
+      "metrics24h": {
+        "callCount": 5820,
+        "errorRate": 0.012
+      },
+      "mappings": {
+        "count": 3,
+        "names": ["demux-gpt-4o", "demux-gpt-4o-mini", "demux-o1-preview"]
+      },
       "createdAtUtc": "2024-09-01T00:00:00Z",
       "updatedAtUtc": "2025-09-12T03:21:08Z"
     }
@@ -97,31 +90,73 @@
 }
 ```
 
-`apiKeyMasked` 是脱敏快照（`sk-***abc1`），完整密钥**永不回流到前端**。BFF 入库前 hash + 加密。
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `connection` | object | 上游连接配置：`{ apiType, baseUrl, apiKey: { masked } }`。`apiKey` 用嵌套对象而非 string，是为未来引入 `keyId` / `rotatedAtUtc` / `expiresAtUtc` 等元数据预留扩展点；前端永远读 `connection.apiKey.masked` 做展示。完整密钥**永不回流**到前端，BFF 入库前 hash + 加密。 |
+| `lastTest` | object \| null | 最近一次连通测试结果快照：`{ ok, latencyMs, atUtc }`。**整组字段同生同灭**，从未测试过时为 `null`。 |
+| `metrics24h` | object | 近 24 小时观测指标：`{ callCount, errorRate }`。BFF 端从日志服务聚合后下发，避免前端再请求 stats。 |
+| `mappings` | object | 列表投影：`{ count, names[] }`。`names` 至多前 5 个，供 hover 预览；想看全部请进详情。 |
+| `autoDisabledCode` | string \| null | 自动停用原因（调度侧写入，UI 只读）。 |
+
+### 详情 `GET /api/admin/demuxai/providers/{uid}`
+
+在轻投影基础上**额外**返回 `providerModels[]` + `modelMappings[]` 完整子树：
+
+```json
+{
+  "...": "（上面所有列表字段）",
+  "providerModels": [
+    {
+      "uid": "PM-001",
+      "modelName": "gpt-4o-2024-08-06",
+      "family": "gpt",
+      "capabilities": ["chat", "tool_use", "vision", "json_mode"],
+      "visibleMinTier": 1,
+      "limits": { "contextTokens": 128000, "outputTokens": 16384 }
+    }
+  ],
+  "modelMappings": [
+    {
+      "uid": "MM-001",
+      "providerModelUid": "PM-001",
+      "displayName": "demux-gpt-4o",
+      "enabled": true,
+      "notes": null,
+      "sortOrder": 0,
+      "mappingWeight": 100
+    }
+  ]
+}
+```
+
+> `providerModels[].limits` 与 [`09-demuxai-models.md`](./09-demuxai-models.md) 的 `Model.limits` 字段形状一致（`{ contextTokens, outputTokens }`），便于前端"映射创建模型"时直接拷贝。
 
 ### 新建 `POST /api/admin/demuxai/providers` （`CreateProviderInput`）
 
 ```json
 {
   "name": "DeepSeek 备线",
-  "apiType": "deepseek",
-  "baseUrl": "https://api.deepseek.com",
-  "apiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "connection": {
+    "apiType": "deepseek",
+    "baseUrl": "https://api.deepseek.com",
+    "apiKey":  { "raw": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }
+  },
   "notes": null,
   "providerModels": [
     {
-      "uid": "tmp-pm-1",
+      "clientTempId": "tmp-pm-1",
       "modelName": "deepseek-chat",
       "family": "deepseek",
       "capabilities": ["chat", "tool_use", "json_mode"],
       "visibleMinTier": 1,
-      "maxContextTokens": 64000,
-      "maxOutputTokens": 8192
+      "limits": { "contextTokens": 64000, "outputTokens": 8192 }
     }
   ],
   "modelMappings": [
     {
-      "providerModelUid": "tmp-pm-1",
+      "providerModelRef": "tmp-pm-1",
       "displayName": "demux-deepseek-chat",
       "enabled": true,
       "notes": null,
@@ -135,22 +170,31 @@
 字段约束：
 
 - `name` 必填，长度 1..64。
-- `apiKey` 必填，明文传输（HTTPS），BFF 入库前 hash + 加密。
-- `providerModels[].uid` 在新建时由前端预生成临时 ID（`tmp-*`），BFF 应替换为正式 UUID v7。
-- `modelMappings[].providerModelUid` 既可指向已存在的 PM uid，也可指向同一请求中临时 PM 的 uid。
+- `connection.apiKey.raw` 写入时只传一次明文（HTTPS），BFF 入库前 hash + 加密；返回时只回 `connection.apiKey.masked`。**raw / masked 同对象不同位置**：`raw` 仅入参、`masked` 仅出参，schema 上互斥不冲突。
+- `providerModels[].clientTempId` —— **重命名自原 `uid` 的临时占位**。原 `"uid":"tmp-pm-1"` 让"客户端临时 ID"与"服务端真实 UID"共用字段歧义；现明确分离：入参用 `clientTempId`（前端 nanoid 生成）、出参用 `uid`（服务端分配 UUID v7）。
+- `modelMappings[].providerModelRef` —— **替代原 `providerModelUid`**。`Ref` 后缀提示这里可能是 `clientTempId`（同请求内引用）或真实 `uid`（已存在的 PM）；BFF 端解析时按"先找同请求 tempId，再找数据库 uid"顺序。
 - `modelMappings[].displayName` 是终端用户可见的"上架名"（即将作为平台 `Model.modelId`）。
 - `mappingWeight` 缺省 100；多映射同 displayName 时用于按比例分流（草稿态）。
 
-成功响应即完整的 `Provider`。
+成功响应：`201 Created` + 完整 `Provider`（含 BFF 分配的真实 `providerModels[].uid`）；如有 `clientTempId` 字段则**额外**返回 `idMappings`，便于前端把表单态的 tempId 替换为真实 uid：
+
+```json
+{
+  "...": "完整 Provider 字段",
+  "idMappings": [
+    { "clientTempId": "tmp-pm-1", "uid": "PM-072" }
+  ]
+}
+```
 
 ### 更新 `PUT /api/admin/demuxai/providers/{uid}`（`UpdateProviderInput`）
 
 整体覆盖式：前端会发送**保存意图下的全集**（含未变更项）。BFF 端 diff 出新增 / 修改 / 删除，并级联清理孤立 mapping、再触发 Model reconcile。
 
-`apiKey` 字段处理：
-- 省略 → 不变更密钥
-- 空字符串 `""` → 清空（仅在解绑场景使用）
-- 非空 → 整体替换
+`connection.apiKey` 字段处理：
+- 字段省略 / `null` → 不变更密钥
+- `{ "raw": "" }` → 清空（仅在解绑场景使用）
+- `{ "raw": "sk-xxx" }` → 整体替换
 
 ### `PATCH /api/admin/demuxai/providers/{uid}/status`
 
@@ -177,8 +221,7 @@ auto_disabled → enabled  // 必须人工恢复
   "ok": true,
   "latencyMs": 145,
   "reachableModelNames": ["gpt-4o-2024-08-06", "gpt-4o-mini"],
-  "errorCode": null,
-  "errorMessage": null
+  "error": null
 }
 ```
 
@@ -189,12 +232,19 @@ auto_disabled → enabled  // 必须人工恢复
   "ok": false,
   "latencyMs": 2000,
   "reachableModelNames": [],
-  "errorCode": "auth_failed",
-  "errorMessage": "Invalid API key"
+  "error": {
+    "code": "auth_failed",
+    "message": "Invalid API key"
+  }
 }
 ```
 
-测试成功后 BFF 应同时刷新 `testLatencyMs` / `testSucceededAtUtc` 字段，前端列表会自动展示。
+> **错误对象统一形状**：所有"操作类"接口的失败信息一律用 `error: { code, message, ...domainExtras }` 嵌套结构表达（与 11-logs 的 `LogEntry.error` 一致）。
+> - `code` 是机器可识别的枚举（`auth_failed` / `dns_failed` / `tls_failed` / `upstream_4xx` / `upstream_5xx` / `upstream_timeout` 等）；
+> - `message` 是上游原文摘要（≤ 200 字符），仅作展示，前端不要 parse；
+> - 成功时 `error === null`，前端先看 `ok`，再读 `error`。
+
+测试成功后 BFF 应同时刷新 `lastTest`（见列表响应的 `lastTest: { ok, latencyMs, atUtc }` 子对象），前端列表会自动展示。
 
 ### `POST /api/admin/demuxai/providers/upstream-models`
 
@@ -202,10 +252,16 @@ auto_disabled → enabled  // 必须人工恢复
 
 ```json
 // 已保存场景
-{ "apiType": "openai", "baseUrl": "https://api.openai.com/v1", "providerUid": "PR-001" }
+{ "providerUid": "PR-001" }
 
 // 草稿场景
-{ "apiType": "openai", "baseUrl": "https://api.openai.com/v1", "apiKey": "sk-xxx" }
+{
+  "connection": {
+    "apiType": "openai",
+    "baseUrl": "https://api.openai.com/v1",
+    "apiKey":  { "raw": "sk-xxx" }
+  }
+}
 ```
 
 响应：
@@ -213,6 +269,8 @@ auto_disabled → enabled  // 必须人工恢复
 ```json
 { "upstreamModelNames": ["gpt-4o", "gpt-4o-mini", "o1-preview"] }
 ```
+
+> `connection` 子对象的使用与列表 / 详情中一致 —— **草稿态把"凭据 + 连接信息"打包发送**，让端点签名直观表达"我在用这套凭据探一探上游"。
 
 ### `DELETE /api/admin/demuxai/providers/{uid}`
 

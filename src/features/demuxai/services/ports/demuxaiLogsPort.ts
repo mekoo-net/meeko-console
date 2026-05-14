@@ -1,6 +1,12 @@
 import type { AppResult } from '@/shared/api/httpTypes';
 
-import type { ListLogsFilter, LogEntry, LogStats } from '../../model/log.types';
+import type {
+  ListLogsFilter,
+  LogEntry,
+  LogStats,
+  ReverseLogInput,
+  ReverseLogResult,
+} from '../../model/log.types';
 
 export interface ListLogsPage {
   items: LogEntry[];
@@ -19,6 +25,10 @@ export interface ListLogsPage {
  *  - 必须传 `fromUtc/toUtc`，最长 7 天；HttpAdapter 在缺省时拒绝（避免全表扫）
  *  - 默认按 occurredAtUtc DESC，pageSize ≤ 100
  *  - stats 与 list 用同一 filter，便于结果一致
+ *
+ * 关于 `reverse(...)`：虽然账单实体属于 billing 域，但驳回的**操作发起点**永远是
+ * 调用日志页（运维直接在排障现场决定"这条扣费要驳"），故方法落在 LogsPort 而非
+ * BillingPort。HttpAdapter 真接 BFF 时由 BFF 内部 join `Bill` 表完成事务。
  */
 export interface DemuxaiLogsPort {
   list(input: {
@@ -29,4 +39,17 @@ export interface DemuxaiLogsPort {
 
   /** 与 list 同 filter 的聚合统计（用于 KPI 卡片） */
   stats(filter: ListLogsFilter): Promise<AppResult<LogStats>>;
+
+  /**
+   * 驳回单条调用日志对应的账单（actualAmount → 0，钱包余额反向冲账）。
+   *
+   * 业务校验：
+   *  - 日志必须存在；不存在 → 404 `not_found`
+   *  - 日志必须有关联账单（`bill != null`）；无账单 → 400 `validation`
+   *  - 账单当前 status 必须是 `completed`；已驳回 → 409 `conflict`
+   *
+   * 成功回执包含**当前操作人**（BFF 端从 session 取，前端 mock 用约定 admin UID），
+   * 前端拿到回执后**就地更新行**，避免重新拉列表丢失滚动 / 过滤上下文。
+   */
+  reverse(input: ReverseLogInput): Promise<AppResult<ReverseLogResult>>;
 }

@@ -11,12 +11,18 @@
  *  - 其它类型    → 按各自 usage 维度展示（图片张数 / 视频秒数 / 音频分钟 / 字符数 / 次数）
  */
 import { computed } from 'vue';
+import { RefreshLeft } from '@element-plus/icons-vue';
 
 import { formatDateTime } from '@/shared/lib/date';
 import { formatMoney } from '@/shared/lib/money';
 import StatusTag from '@/shared/ui/StatusTag.vue';
 
-import { ApiTypeLabel, BillingTypeLabel, LogErrorCodeLabel } from '../model/enums';
+import {
+  ApiTypeLabel,
+  BillingTypeLabel,
+  BillReverseCodeLabel,
+  LogErrorCodeLabel,
+} from '../model/enums';
 import type { LogEntry } from '../model/log.types';
 
 interface Props {
@@ -29,7 +35,11 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>();
+const emit = defineEmits<{
+  (e: 'update:modelValue', v: boolean): void;
+  /** 用户在抽屉底部点了"驳回"，由父组件接管：关抽屉、弹驳回对话框、调 port.reverse() */
+  (e: 'reverse', log: LogEntry): void;
+}>();
 
 const visible = computed({
   get: () => props.modelValue,
@@ -67,6 +77,16 @@ const providerText = computed(() => {
   if (!l) return '';
   return props.providerName ?? `#${l.providerId}`;
 });
+
+/** 是否允许触发驳回：有账单 & 当前状态是 completed */
+const canReverse = computed(() => {
+  const b = props.log?.bill;
+  return b != null && b.status === 'completed';
+});
+
+function onReverseClick(): void {
+  if (props.log && canReverse.value) emit('reverse', props.log);
+}
 
 /**
  * `per_token` 用量 / 扣费按 input / output 父子集分组渲染。
@@ -357,12 +377,62 @@ const outputDims = computed<DimRow[]>(() => {
 
       <div class="log-detail__row">
         <span class="label">总扣费</span>
-        <span class="cost-total">{{ formatMoney(log.cost.total) }}</span>
+        <span
+          class="cost-total"
+          :class="{ 'cost-total--reversed': log.bill?.status === 'reversed' }"
+        >
+          {{ formatMoney(log.cost.total) }}
+        </span>
+        <el-tag
+          v-if="log.bill?.status === 'reversed'"
+          size="small"
+          type="info"
+          effect="plain"
+        >
+          已驳回 · 实际扣费 ¥0
+        </el-tag>
       </div>
       <div class="log-detail__row">
         <span class="label">倍率快照</span>
         <span>× {{ log.cost.multiplierSnapshot }}</span>
       </div>
+
+      <template v-if="log.bill">
+        <el-divider />
+        <h4 class="section-title">账单</h4>
+        <div class="log-detail__row">
+          <span class="label">账单 UID</span>
+          <span class="mono">{{ log.bill.uid }}</span>
+        </div>
+        <div class="log-detail__row">
+          <span class="label">账单状态</span>
+          <el-tag
+            v-if="log.bill.status === 'reversed'"
+            size="small"
+            type="info"
+            effect="plain"
+          >已驳回</el-tag>
+          <el-tag v-else size="small" type="success" effect="plain">已扣费</el-tag>
+        </div>
+        <template v-if="log.bill.status === 'reversed'">
+          <div class="log-detail__row">
+            <span class="label">驳回原因</span>
+            <span>{{ log.bill.reversedCode ? BillReverseCodeLabel[log.bill.reversedCode] : '—' }}</span>
+          </div>
+          <div class="log-detail__row">
+            <span class="label">驳回时间</span>
+            <span>{{ log.bill.reversedAtUtc ? formatDateTime(log.bill.reversedAtUtc, 'YYYY-MM-DD HH:mm:ss') : '—' }}</span>
+          </div>
+          <div class="log-detail__row">
+            <span class="label">操作人</span>
+            <span class="mono">{{ log.bill.reversedBy ?? '—' }}</span>
+          </div>
+          <div v-if="log.bill.reversedRemark" class="log-detail__row log-detail__row--col">
+            <span class="label">备注</span>
+            <span class="reverse-remark">{{ log.bill.reversedRemark }}</span>
+          </div>
+        </template>
+      </template>
 
       <el-divider />
 
@@ -392,6 +462,23 @@ const outputDims = computed<DimRow[]>(() => {
         </div>
       </template>
     </div>
+
+    <template #footer>
+      <div v-if="log" class="drawer-footer">
+        <el-button
+          v-if="canReverse"
+          type="danger"
+          :icon="RefreshLeft"
+          @click="onReverseClick"
+        >
+          驳回扣费
+        </el-button>
+        <el-tag v-else-if="log.bill?.status === 'reversed'" type="info" effect="plain">
+          该账单已驳回
+        </el-tag>
+        <el-tag v-else type="info" effect="plain">无关联账单，无法驳回</el-tag>
+      </div>
+    </template>
   </el-drawer>
 </template>
 
@@ -425,6 +512,27 @@ const outputDims = computed<DimRow[]>(() => {
 .cost-total {
   font-weight: 600;
   color: var(--el-color-warning);
+}
+.cost-total--reversed {
+  color: var(--el-text-color-secondary);
+  text-decoration: line-through;
+  font-weight: 400;
+}
+.reverse-remark {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--el-fill-color-light);
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--el-text-color-regular);
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
 }
 .sub-divider {
   margin: 8px 0;

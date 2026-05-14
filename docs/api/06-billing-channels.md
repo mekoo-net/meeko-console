@@ -85,27 +85,47 @@
 
 ```json
 {
-  "appId": "2021000000000000",
-  "privateKey": "MIIEvQIBADANBgkqhkiG9w0...",
-  "alipayPublicKey": "MIIBIjANBgkqhkiG9w0BAQE...",
-  "signType": "RSA2",
-  "encryptKey": "",
-  "gatewayUrl": "https://openapi.alipay.com/gateway.do",
-  "notifyUrl": "https://api.meeko.example/api/billing/alipay/notify",
-  "returnUrl": "https://app.meeko.example/billing/recharge",
-  "isSandbox": false
+  "app": {
+    "id": "2021000000000000"
+  },
+  "credentials": {
+    "privateKey":      "MIIEvQIBADANBgkqhkiG9w0...",
+    "alipayPublicKey": "MIIBIjANBgkqhkiG9w0BAQE...",
+    "encryptKey":      "",
+    "signType":        "RSA2"
+  },
+  "endpoints": {
+    "gatewayUrl": "https://openapi.alipay.com/gateway.do",
+    "notifyUrl":  "https://api.meeko.example/api/billing/alipay/notify",
+    "returnUrl":  "https://app.meeko.example/billing/recharge"
+  },
+  "environment": {
+    "isSandbox": false
+  }
 }
 ```
 
-> ⚠️ `privateKey`、`alipayPublicKey`、`encryptKey` 是敏感数据，BFF 应：
+字段分组说明：
+
+| 子对象 | 字段 | 说明 |
+| --- | --- | --- |
+| `app` | `id` | 支付宝开放平台 AppId。封装成对象方便未来加 `app.appType` / `app.tenantId`。 |
+| `credentials` | `privateKey` / `alipayPublicKey` / `encryptKey` / `signType` | **整组敏感数据**。脱敏 / 加密策略可"按 credentials 整段做"——前端表单分组渲染、BFF 落库时整段走 KMS / AES-256-GCM。 |
+| `endpoints` | `gatewayUrl` / `notifyUrl` / `returnUrl` | URL 族。封装后可以统一做"必须 HTTPS"校验。 |
+| `environment` | `isSandbox` | 环境开关；未来加 `environment.region` / `environment.profile` 不污染顶层。 |
+
+> ⚠️ `credentials.privateKey`、`credentials.alipayPublicKey`、`credentials.encryptKey` 是敏感数据，BFF 应：
 > - **返回时脱敏**（如只回 `***前 8 位 + 后 4 位***`），或要求 Admin 二次校验后返回明文；
 > - 落库采用加密存储（推荐 KMS / AES-256-GCM）。
 
 ### `PUT /api/admin/billing/channels/alipay/config`
 
-请求体即 `AlipayConfig`（完整覆盖）。空字符串 `""` 表示**清空**该字段；如不修改私钥应**省略**该字段。
+请求体即 `AlipayConfig`（完整覆盖）。**敏感字段更新语义**（与 08 providers / 12 SMTP 一致）：
+- 字段省略 / `null` → 不变更
+- 空字符串 `""` → 清空（仅在解绑场景使用）
+- 非空字符串 → 整体替换
 
-成功返回 `void`（HTTP 204）。
+成功响应：`204 No Content`。
 
 ### `GET /api/admin/billing/channels/wechat_pay/config`
 
@@ -113,21 +133,30 @@
 
 ```json
 {
-  "appId": "wxabcdef0123456789",
-  "mchId": "1900000000",
-  "apiV3Key": "32位随机字符串",
-  "certSerialNo": "5157F09EFDC096DE15EBE81A47057A727...",
-  "privateKey": "-----BEGIN PRIVATE KEY-----\n...",
-  "notifyUrl": "https://api.meeko.example/api/billing/wechat_pay/notify",
-  "isSandbox": false
+  "app": {
+    "id":    "wxabcdef0123456789",
+    "mchId": "1900000000"
+  },
+  "credentials": {
+    "apiV3Key":     "32位随机字符串",
+    "certSerialNo": "5157F09EFDC096DE15EBE81A47057A727...",
+    "privateKey":   "-----BEGIN PRIVATE KEY-----\n..."
+  },
+  "endpoints": {
+    "notifyUrl": "https://api.meeko.example/api/billing/wechat_pay/notify"
+  },
+  "environment": {
+    "isSandbox": false
+  }
 }
 ```
 
-`apiV3Key` 与 `privateKey` 的脱敏 / 加密原则与支付宝一致。
+> 微信支付与支付宝**遵循同一分组结构**（`app` / `credentials` / `endpoints` / `environment`），减少前端表单组件的特殊分支。
+> `credentials.apiV3Key` 与 `credentials.privateKey` 的脱敏 / 加密原则与支付宝一致。
 
 ### `PUT /api/admin/billing/channels/wechat_pay/config`
 
-请求体即 `WechatPayConfig`，成功返回 `void`。
+请求体即 `WechatPayConfig`，敏感字段更新语义同上。成功响应：`204 No Content`。
 
 ## 交互流程
 

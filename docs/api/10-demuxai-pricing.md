@@ -102,13 +102,16 @@
 
 ## 接口清单
 
-| 业务动作 | Port 方法 | HTTP | REST 端点 |
-| --- | --- | --- | --- |
-| 列表 | `list(input)` | GET | `/api/admin/demuxai/pricing` |
-| 按 modelId 取现行价 | `get(modelId)` | GET | `/api/admin/demuxai/pricing/{modelId}` |
-| 新增 / 更新（upsert） | `upsert(input)` | PUT | `/api/admin/demuxai/pricing/{modelId}` |
-| 删除 | `delete(modelId)` | DELETE | `/api/admin/demuxai/pricing/{modelId}` |
-| 未配置模型（前端从 `models - pricing` 派生） | `DemuxaiModelPort.list` | GET | `/api/admin/demuxai/models` |
+| 业务动作 | Port 方法 | HTTP | REST 端点 | 投影 |
+| --- | --- | --- | --- | --- |
+| 列表（**轻投影**） | `list(input)` | GET | `/api/admin/demuxai/pricing` | 行级 `summary` 不返回 `pricing` 子树 |
+| 按 modelId 取现行价（完整） | `get(modelId)` | GET | `/api/admin/demuxai/pricing/{modelId}` | 全字段（含 `pricing` 子树） |
+| 历史价（按 effectiveFromUtc DESC） | `listHistory(modelId, query)` | GET | `/api/admin/demuxai/pricing/{modelId}/history` | 全字段 |
+| 新增 / 更新（upsert） | `upsert(input)` | PUT | `/api/admin/demuxai/pricing/{modelId}` | 全字段 |
+| 删除 | `delete(modelId)` | DELETE | `/api/admin/demuxai/pricing/{modelId}` | — |
+| 未配置模型（前端从 `models - pricing` 派生） | `DemuxaiModelPort.list` | GET | `/api/admin/demuxai/models` | — |
+
+> **列表 vs 详情投影分层**：原列表把整个 `pricing` 对象（per_token 含 10+ 个嵌套字段）下发，行数多时单页 payload 可达数百 KB。现按 Stripe `prices.list` 惯例分层 —— 列表只回 `summary`（最具代表性的两个单价 + currency 等），点击行后再 `GET /{modelId}` 拿完整 `pricing`。
 
 ## 请求 / 响应
 
@@ -123,7 +126,7 @@
 | `keyword` | string | 否 | 模糊匹配 `modelId` |
 | `billingType` | enum/`'all'` | 否 | `per_token` / `per_call` / `per_image` / `per_video` / `per_audio_minute` / `per_character` |
 
-响应：
+响应（**轻投影**）：
 
 ```json
 {
@@ -132,23 +135,16 @@
       "uid": "PRC-001",
       "modelId": "demux-gpt-4o",
       "billingType": "per_token",
-      "pricing": {
-        "input": {
-          "perMToken": 25,
-          "cachedRead": 6.25,
-          "cachedWrite5m": 31.25,
-          "cachedWrite1h": 50
-        },
-        "output": {
-          "perMToken": 75
-        }
+      "summary": {
+        "inputPerMToken":  25,
+        "outputPerMToken": 75
       },
       "multiplier": 1.2,
       "currency": "CNY",
       "tierMultipliers": { "3": 0.9, "5": 0.7 },
       "effectiveFromUtc": "2025-09-01T00:00:00Z",
-      "updatedAtUtc": "2025-09-01T00:00:00Z",
-      "updatedByIamUid": "200000099"
+      "updatedAtUtc":     "2025-09-01T00:00:00Z",
+      "updatedBy":        { "iamUserUid": "200000099" }
     }
   ],
   "total": 12
@@ -161,14 +157,25 @@
 | --- | --- | --- |
 | `uid` | string | 定价记录主键。 |
 | `modelId` | string | 与 `Model` 一一对应。 |
-| `billingType` | enum | 判别字段：`per_token` / `per_call` / `per_image` / `per_video` / `per_audio_minute` / `per_character`；决定 `pricing` 的形状。 |
-| `pricing` | object | 嵌套定价对象，形状由 `billingType` 决定（见下节）。 |
+| `billingType` | enum | 判别字段：`per_token` / `per_call` / `per_image` / `per_video` / `per_audio_minute` / `per_character`；决定详情接口 `pricing` 的形状。 |
+| `summary` | object | **列表投影**：随 `billingType` 形状各异，给最具代表性的 1~2 个单价用于列表展示（见下表）。详情用 `pricing` 字段返回完整结构。 |
 | `multiplier` | number (>0) | 全局倍率。 |
 | `currency` | string | ISO 4217（`CNY` / `USD`）。 |
 | `tierMultipliers` | `{ [tier: string]: number }` | key 为 LV 整数字符串。 |
 | `effectiveFromUtc` | ISO8601 | 未来时间 = 预生效。 |
 | `updatedAtUtc` | ISO8601 | 最近修改时间。 |
-| `updatedByIamUid` | string \| null | 最近改动操作人。 |
+| `updatedBy` | object \| null | `{ iamUserUid }`。封装成子对象便于未来加 `name` / `via`（"网关写入" vs "管理员手动"）。 |
+
+#### `summary` 形状对照表（按 `billingType`）
+
+| `billingType` | `summary` 形状 |
+| --- | --- |
+| `per_token` | `{ inputPerMToken, outputPerMToken }` |
+| `per_call` | `{ pricePerCall }` |
+| `per_image` | `{ tierCount, minPricePerImage, maxPricePerImage }` |
+| `per_video` | `{ tierCount, minPricePerSecond, maxPricePerSecond }` |
+| `per_audio_minute` | `{ pricePerMinute }` |
+| `per_character` | `{ pricePerKChar }` |
 
 ### `billingType` 与 `pricing` 形状
 
@@ -281,7 +288,21 @@ type Pricing = PricingBase & (
 
 ### 现行价 `GET /api/admin/demuxai/pricing/{modelId}`
 
-返回在 `now()` 时点生效的那一条 Pricing（按 `effectiveFromUtc <= now()` DESC 取第一条）。
+返回在 `now()` 时点生效的那一条 Pricing（按 `effectiveFromUtc <= now()` DESC 取第一条）。**响应含完整 `pricing` 子树**（取代列表的 `summary` 投影）。
+
+### 历史价 `GET /api/admin/demuxai/pricing/{modelId}/history`
+
+查询参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `page` | int | 否 | 默认 1 |
+| `pageSize` | int | 否 | 默认 50 |
+| `fromUtc` / `toUtc` | ISO8601 | 否 | 按 `effectiveFromUtc` 过滤 |
+
+成功响应：`{ items: PricingFull[], total: number }`，**按 `effectiveFromUtc` DESC 排序**。每个元素与现行价端点结构一致（外层字段 + 完整 `pricing` 子树）。
+
+> **历史价端点的存在理由**：原文档说"历史价格不可修改、只能新增 effectiveFromUtc=now 覆盖"，但读侧没有列出端点。审计 / 对账 / 调价回看都需要看历史，必须显式暴露。BFF 通常按"按 modelId join pricing 表，order by effectiveFromUtc DESC"即可。
 
 ### upsert `PUT /api/admin/demuxai/pricing/{modelId}` （`UpsertPricingInput`）
 

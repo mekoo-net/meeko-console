@@ -188,8 +188,63 @@ export const LogErrorCodeLabel: Readonly<Record<KnownLogErrorCode, string>> = {
   unknown: '未知错误',
 };
 
+/**
+ * 日志对应账单的状态（精简版）。
+ *
+ * 平台账单完整枚举见 `docs/api/05-billing-bills.md`
+ * （`pending` / `completed` / `failed` / `reversed` / `partial_refunded`），
+ * 但 demuxai 调用日志这一面只需要区分"是否被驳回":
+ *  - `completed`：扣费已正常生效
+ *  - `reversed`：已被人工驳回（actualAmount = 0）
+ *
+ * `partial_refunded` 在 demuxai 用量场景几乎用不到（驳回非全即无，
+ * 不存在"只退一半 token"的业务诉求），所以这里不展开；
+ * 等控制台账单页接入再走完整枚举。
+ */
+export const billStatusValues = ['completed', 'reversed'] as const;
+export type BillStatus = (typeof billStatusValues)[number];
+
+export const BillStatusLabel: Readonly<Record<BillStatus, string>> = {
+  completed: '已扣费',
+  reversed: '已驳回',
+};
+
+/**
+ * 账单驳回原因码（与 `docs/api/05-billing-bills.md` 的 `reversedCode` 完全一致）。
+ *
+ * 选码原则：必须是一个**预设枚举**，禁止自由文本 ——
+ * 财务对账 / BI 聚合都按这个维度 group by，自由文本会导致脏数据。
+ */
+export const billReverseCodeValues = [
+  'duplicate_charge',
+  'metering_error',
+  'service_unavailable',
+  'customer_compensation',
+  'manual_correction',
+] as const;
+export type BillReverseCode = (typeof billReverseCodeValues)[number];
+
+export const BillReverseCodeLabel: Readonly<Record<BillReverseCode, string>> = {
+  duplicate_charge: '重复扣费',
+  metering_error: '计量错误',
+  service_unavailable: '服务不可用',
+  customer_compensation: '客户补偿',
+  manual_correction: '人工纠错',
+};
+
+/** 驳回原因码的简要说明，提示 admin 该场景何时使用 */
+export const BillReverseCodeHint: Readonly<Record<BillReverseCode, string>> = {
+  duplicate_charge: '同一次调用被重复入账',
+  metering_error: '上游 / 网关上报 token 数错误，导致计费偏差',
+  service_unavailable: '调用本身失败但仍扣了费（最常见的驳回场景）',
+  customer_compensation: '客服补偿 / SLA 赔付，与计费正确性无关',
+  manual_correction: '其它需要人工纠错的场景（兜底）',
+};
+
 export const apiTypeSchema = z.enum(apiTypeValues);
 export const providerStatusSchema = z.enum(providerStatusValues);
 export const modelFamilySchema = z.enum(modelFamilyValues);
 export const modelCapabilitySchema = z.enum(modelCapabilityValues);
 export const billingTypeSchema = z.enum(billingTypeValues);
+export const billStatusSchema = z.enum(billStatusValues);
+export const billReverseCodeSchema = z.enum(billReverseCodeValues);

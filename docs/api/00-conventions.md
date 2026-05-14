@@ -91,14 +91,24 @@ Content-Type: application/problem+json
 
 ## 4. 鉴权
 
-请求头：
+### 4.1 统一 IAM 模型（契约根）
+
+> 平台对所有账户走**同一条登录 / 鉴权链路**，区别只在产品 UI 是否暴露 IAM 管理。
+
+- **登录主体永远是 IAM 用户**：无论 `account.type` 是 `personal` 还是 `organization`，BFF 签发的 JWT 中 `sub` 一律为 `iam_user_uid`。
+- **personal 账户内部持有一个 1:1 绑定的隐式 IAM 用户**——仅作为鉴权 / 审计链路的主体存在，**不在 IAM 列表 UI 暴露**，也不允许新增其它 IAM 子用户（业务规则上 `iamUserCount` 恒为 `1`）。
+- **所有审计字段非可空**：`change.byIamUserUid`、`reversal.byIamUserUid`、`owner.iamUserUid` 等永远有值，前端类型可直接收紧为 `string`（非 `string | null`）。
+- **登录端点单一**：只暴露 `POST /auth/login`，BFF 根据 `username` + 可选 `tenant` 解析到唯一 IAM 用户；**不存在** `/auth/login-iam` 之类的二选一端点。
+- **个人 → 组织升级**：升级时新增组织级 IAM 子用户，原隐式用户被标记为 `Owner` 席位；JWT `sub` 维持不变，**历史审计字段不需要回填**。
+
+### 4.2 请求头
 
 ```
 Authorization: Bearer <accessToken>
 ```
 
 - `accessToken` / `refreshToken` 在 `auth` store + `localStorage` 持久化（key：`meeko.admin.session.v1`）。
-- 角色由 IAM 用户决定：`Admin` / `Owner` / `Member`。
+- 角色由 IAM 用户决定：`Admin` / `Owner` / `Member`（personal 账户的隐式用户恒为 `Owner`）。
 - 401 → 前端清空 session 并跳 `/login`。
 - 受 `meta.roles` 保护的路由（如 `/notices/*`、`/demuxai/*`、`/billing/channels`）需要 `Admin` 角色；不满足会被路由守卫重定向到 `/accounts`。
 
@@ -149,6 +159,70 @@ type AppRole = 'Admin' | 'Owner' | 'Member';
 | `Pricing` | 硬删 | 删除后 BFF 拒绝该 modelId 的计费请求。 |
 | `SmtpProvider` | 硬删 | 关联模板回退到默认渠道。 |
 | `EmailTemplate` | 软删（isActive） | 历史不可丢。 |
+
+## 10. 字段族封装原则（"对象优于扁平"）
+
+> 这是 v2 redesign 的核心约束。所有页面文档遵循此原则；下文列举的反模式在新增接口时**应被拒绝**。
+
+### 10.1 必须封装成子对象的字段族
+
+凡是满足以下任一条件的"语义同源"字段必须封装为嵌套子对象：
+
+1. **同生同灭**：几条字段总是一起出现 / 一起为 null。  
+   反例：`reversedAtUtc` / `reversedBy` / `reversedCode` 散落顶层 → 正例：`reversal: { atUtc, byIamUserUid, code } | null`
+2. **状态扩展**：某个状态值开启时才有意义的字段。  
+   反例：`failureCode` 顶层（90% 行是 null）→ 正例：`failure: { code } | null`（与 `status='failed'` 联动）
+3. **配对单价 + 实际金额**：单价快照与扣费金额配对内联。  
+   正例：`DimensionCost = { perMToken, amount }`、`cost.input.cachedRead: DimensionCost`
+4. **角色族**：owner / operator / change.by 等。  
+   正例：`owner: { iamUserUid, displayName, email, phone }`、`change: { byIamUserUid, atUtc, note }`
+5. **判别联合**：同一字段集随判别字段形状变化（10-pricing / 11-logs 已示例）。  
+   正例：`billingType + pricing` / `source.provider + source.refNo` / `latency.kind + latency.ms`
+
+### 10.2 错误对象与命令响应统一形状
+
+**所有操作类接口的失败信息**统一为：
+
+```ts
+type ApiError = {
+  code: string;            // 机器可识别枚举（auth_failed / upstream_5xx / mismatch / ...）
+  message?: string;        // 上游原文摘要 ≤ 200 字符，仅展示
+  httpStatus?: number;     // 上游 / 网关 HTTP 状态码（log 用，其它端点可省）
+};
+```
+
+应用在两种场景：
+
+| 场景 | 形状 |
+| --- | --- |
+| **资源类**（CRUD：list / get / create / update / delete） | 走 HTTP 状态码 + ProblemDetails；body 不再额外封 `success: false`。 |
+| **操作类**（test / verify / dry-run，业务层 ok/fail 是常态） | `200 OK` + body `{ ok: boolean, error: ApiError \| null, ...domainExtras }`。HTTP 仍是 200 表示"调用本身成功了，只是业务结论是 fail"。 |
+
+> **`AdminCommandResult { success, uid, failureCode, failureMessage }` 已退役**：与 ProblemDetails 重复，让前端要在"HTTP + body"两个层面读成败，引入歧义。
+
+### 10.3 计费 cost 形状统一（"每个维度都有 amount"）
+
+所有 `billingType` 的 `cost` 字段对每个**计费维度**都包含 `amount`，便于对账与 BI 直接读：
+
+- `per_token`：每个 `DimensionCost = { perMToken, amount }`（input / output 及各子集均如此）；
+- `per_call` / `per_image` / `per_video` / `per_audio_minute` / `per_character`：除单价 + `total` 外，**额外补 `amount` 字段**，单维场景下 `amount === total`，多维场景（如 `per_call` 的缓存命中拆分 `amount` / `cachedAmount`）按维度小计。
+
+### 10.4 命名一致性
+
+| 概念 | 全局命名 | 反例（已禁用） |
+| --- | --- | --- |
+| 时间字段 | `*AtUtc` 后缀 | `createAt` |
+| IAM 用户主键 | `iamUserUid` | `iamId` / `iamUid` |
+| 字段风格 | camelCase | snake_case（`avatar_url` / `is_account_owner`） |
+| 字符串枚举 | 全小写 / snake_case 字符串 | magic number（OTP `purpose: 1`） |
+| 错误对象 | `error: { code, message, ... }` | `errorCode + errorMessage` / `failureCode + failureMessage` |
+| 单价 / 金额 | 子对象 `amount: { value, currency }` 优于平铺 | 顶层 `amount + currency` 散写（小场景可保留，但同一文档内不混用） |
+
+### 10.5 列表 vs 详情投影分层
+
+资源含子树（如 `Provider.providerModels` / `Pricing.pricing` 详细子树）时，列表只返回**轻投影**（行渲染必需字段 + 子树概要 / 计数 / 首 N 条 names），详情端点 `GET /{uid}` 才返回完整子树。
+
+参考实现：08-providers 列表 `mappings: { count, names[] }` + 详情 `providerModels / modelMappings`；10-pricing 列表 `summary: {...}` + 详情完整 `pricing` 子树。
 
 ---
 

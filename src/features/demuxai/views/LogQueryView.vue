@@ -12,7 +12,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
-import { Search, View, Warning } from '@element-plus/icons-vue';
+import { RefreshLeft, Search, View, Warning } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
@@ -24,8 +24,16 @@ import { formatMoney } from '@/shared/lib/money';
 import { getAccountAdminPort } from '@/features/accounts/services';
 import type { Account } from '@/features/accounts/model/account.types';
 
-import { BillingTypeLabel, LogErrorCodeLabel } from '../model/enums';
-import type { ListLogsFilter, LogEntry } from '../model/log.types';
+import {
+  BillingTypeLabel,
+  BillReverseCodeLabel,
+  LogErrorCodeLabel,
+} from '../model/enums';
+import type {
+  ListLogsFilter,
+  LogEntry,
+  ReverseLogInput,
+} from '../model/log.types';
 import type { Model } from '../model/model.types';
 import type { Provider } from '../model/provider.types';
 import {
@@ -34,6 +42,7 @@ import {
   getDemuxaiProviderPort,
 } from '../services';
 import LogDetailDrawer from '../components/LogDetailDrawer.vue';
+import LogReverseDialog from '../components/LogReverseDialog.vue';
 
 const router = useRouter();
 const logsPort = getDemuxaiLogsPort();
@@ -98,6 +107,10 @@ const providerMap = computed(() => {
 
 const detailOpen = ref(false);
 const detailLog = ref<LogEntry | null>(null);
+
+const reverseOpen = ref(false);
+const reverseLog = ref<LogEntry | null>(null);
+const reverseSubmitting = ref(false);
 
 async function loadDeps(): Promise<void> {
   const [mr, pr, ar] = await Promise.all([
@@ -202,6 +215,63 @@ const displayRecords = computed(() => {
 function openDetail(row: LogEntry): void {
   detailLog.value = row;
   detailOpen.value = true;
+}
+
+function openReverse(row: LogEntry): void {
+  // 没有关联账单（历史数据 / BFF 未 join）→ 早断早提示，比让用户进对话框再失败友好
+  if (!row.bill) {
+    ElMessage.warning('该日志未关联账单，无法驳回');
+    return;
+  }
+  if (row.bill.status === 'reversed') {
+    ElMessage.info('该账单已被驳回，请勿重复操作');
+    return;
+  }
+  reverseLog.value = row;
+  reverseOpen.value = true;
+}
+
+/** 抽屉里点驳回 → 先关抽屉再开对话框，避免两层浮层叠加把焦点抢乱 */
+function onDrawerReverse(row: LogEntry): void {
+  detailOpen.value = false;
+  // 等 drawer 收起的过渡帧后再开 dialog，UX 上更平滑
+  setTimeout(() => openReverse(row), 200);
+}
+
+async function submitReverse(payload: ReverseLogInput): Promise<void> {
+  if (reverseSubmitting.value) return;
+  reverseSubmitting.value = true;
+  try {
+    const r = await logsPort.reverse(payload);
+    if (!r.success) {
+      ElMessage.error(r.error.message);
+      return;
+    }
+    // 就地刷新被驳回行的 bill 状态，避免整页 reload 丢失滚动 / 过滤上下文
+    const idx = records.value.findIndex((it) => it.uid === payload.logUid);
+    if (idx !== -1) {
+      const target = records.value[idx]!;
+      records.value[idx] = {
+        ...target,
+        bill: {
+          uid: r.data.billUid,
+          status: 'reversed',
+          reversedAtUtc: r.data.reversedAtUtc,
+          reversedBy: r.data.reversedBy,
+          reversedCode: r.data.reversedCode,
+          reversedRemark: payload.remark?.trim() || null,
+        },
+      } as LogEntry;
+    }
+    // 若详情抽屉里展示的正是这条日志，同步更新它的 bill 字段
+    if (detailLog.value && detailLog.value.uid === payload.logUid) {
+      detailLog.value = records.value[idx] ?? detailLog.value;
+    }
+    ElMessage.success(`已驳回，扣费金额已归零（${BillReverseCodeLabel[payload.reasonCode]}）`);
+    reverseOpen.value = false;
+  } finally {
+    reverseSubmitting.value = false;
+  }
 }
 
 /**
@@ -379,9 +449,36 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="扣费" width="100" align="right">
+      <el-table-column label="扣费" width="150" align="right">
         <template #default="{ row }: { row: LogEntry }">
-          <span class="cell-cost">{{ formatMoney(row.cost.total, { fractionDigits: 4 }) }}</span>
+          <div class="cell-cost">
+            <div class="cell-cost__line">
+              <span
+                class="cell-cost__amount"
+                :class="{ 'cell-cost__amount--reversed': row.bill?.status === 'reversed' }"
+              >
+                {{ formatMoney(row.cost.total, { fractionDigits: 4 }) }}
+              </span>
+              <el-tooltip content="查看扣费明细" placement="top" :show-after="200">
+                <el-button
+                  :icon="View"
+                  link
+                  type="primary"
+                  class="cell-cost__view"
+                  @click="openDetail(row)"
+                />
+              </el-tooltip>
+            </div>
+            <el-tooltip
+              v-if="row.bill?.status === 'reversed'"
+              :content="`${BillReverseCodeLabel[row.bill.reversedCode!]} · ${formatDateTime(row.bill.reversedAtUtc!, 'MM-DD HH:mm')}`"
+              placement="top"
+            >
+              <el-tag size="small" type="info" effect="plain" class="cell-cost__reversed-tag">
+                已驳回
+              </el-tag>
+            </el-tooltip>
+          </div>
         </template>
       </el-table-column>
 
@@ -417,9 +514,18 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="" width="60" align="center">
+      <el-table-column label="操作" width="100" align="center">
         <template #default="{ row }: { row: LogEntry }">
-          <el-button :icon="View" link type="primary" @click="openDetail(row)" />
+          <el-button
+            v-if="row.bill && row.bill.status !== 'reversed'"
+            :icon="RefreshLeft"
+            link
+            type="danger"
+            @click="openReverse(row)"
+          >
+            驳回
+          </el-button>
+          <span v-else class="cell-muted">—</span>
         </template>
       </el-table-column>
 
@@ -447,6 +553,14 @@ onMounted(() => {
       :log="detailLog"
       :provider-name="detailProviderName"
       :model-display="detailModelDisplay"
+      @reverse="onDrawerReverse"
+    />
+
+    <LogReverseDialog
+      v-model="reverseOpen"
+      :log="reverseLog"
+      :submitting="reverseSubmitting"
+      @submit="submitReverse"
     />
   </div>
 </template>
@@ -559,10 +673,41 @@ onMounted(() => {
   color: var(--el-text-color-secondary);
 }
 .cell-cost {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.3;
+  gap: 2px;
+}
+.cell-cost__line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cell-cost__amount {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
   color: var(--el-color-warning);
   font-weight: 500;
+}
+/* 驳回行：金额加删除线 + 灰化，强调"实际扣费 = 0" */
+.cell-cost__amount--reversed {
+  color: var(--el-text-color-secondary);
+  text-decoration: line-through;
+  font-weight: 400;
+}
+.cell-cost__view {
+  padding: 0;
+  height: auto;
+  min-height: 0;
+}
+.cell-cost__view :deep(.el-icon) {
+  font-size: 15px;
+}
+.cell-cost__reversed-tag {
+  font-size: 11px;
+  height: 18px;
+  padding: 0 6px;
 }
 
 .pagination-bar {

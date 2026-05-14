@@ -54,12 +54,12 @@
       "modelId": "demux-gpt-4o",
       "displayName": "demux-gpt-4o",
       "family": "gpt",
-      "capabilities": ["chat", "tool_use", "vision", "json_mode"],
+      "capabilities": ["chat", "tool_use", "vision", "json_mode", "streaming"],
       "visibleMinTier": 1,
-      "maxContextTokens": 128000,
-      "maxOutputTokens": 16384,
-      "supportsStreaming": true,
-      "supportsFunctionCall": true,
+      "limits": {
+        "contextTokens": 128000,
+        "outputTokens":  16384
+      },
       "description": "GPT-4o，旗舰模型。",
       "createdAtUtc": "2024-09-01T00:00:00Z",
       "updatedAtUtc": "2025-09-01T00:00:00Z"
@@ -75,15 +75,14 @@
 | `modelId` | string | = 用户请求里的 `model` 字段，也是计费 / 配额主键，**不可改**。 |
 | `displayName` | string | UI 展示名；可与 `modelId` 不同（前端默认等同）。 |
 | `family` | enum | UI 分组 / 图标用。 |
-| `capabilities[]` | enum[] | 多选能力位。 |
+| `capabilities[]` | enum[] | 多选能力位：`chat` / `embedding` / `vision` / `tool_use` / `json_mode` / `streaming` / `function_call` / ... |
 | `visibleMinTier` | int (1..99) | 最低可见 LV。 |
-| `maxContextTokens` | int | 上下文窗口，单位 tokens。 |
-| `maxOutputTokens` | int \| null | 单次响应上限；省略则 = `maxContextTokens`。 |
-| `supportsStreaming` | boolean | 是否支持流式。 |
-| `supportsFunctionCall` | boolean | 是否支持函数调用。 |
+| `limits` | object | 容量限制族：`{ contextTokens, outputTokens }`，单位 tokens。`outputTokens` 为 `null` 时表示 = `contextTokens`。封装后未来加 `maxToolCalls` / `maxBatchSize` / `maxAttachmentMb` 不污染顶层。 |
 | `description` | string \| null | 简介。 |
 
 枚举见 `src/features/demuxai/model/enums.ts` 的 `modelFamilyValues`、`modelCapabilityValues`。
+
+> **`supportsStreaming` / `supportsFunctionCall` 已并入 `capabilities[]`**：原两个 boolean 字段与 `capabilities` 表达的是同一份事实——"是否具备某能力"。继续平行存在会造成"两份真相"，前端容易写出 `capabilities.includes('streaming') || supportsStreaming` 这种防御性兜底。统一为枚举位 `'streaming'` / `'function_call'` 后，新增能力只在数组里加值，无需改 schema。
 
 ### 编辑 `PATCH /api/admin/demuxai/models/{uid}`（`UpdateModelInput`）
 
@@ -93,12 +92,12 @@
 {
   "displayName": "demux-gpt-4o",
   "family": "gpt",
-  "capabilities": ["chat", "tool_use", "vision", "json_mode"],
+  "capabilities": ["chat", "tool_use", "vision", "json_mode", "streaming"],
   "visibleMinTier": 2,
-  "maxContextTokens": 128000,
-  "maxOutputTokens": 16384,
-  "supportsStreaming": true,
-  "supportsFunctionCall": true,
+  "limits": {
+    "contextTokens": 128000,
+    "outputTokens":  16384
+  },
   "description": "更新后的简介"
 }
 ```
@@ -106,6 +105,8 @@
 成功返回更新后的 `Model` 完整体。
 
 > **不允许**通过此接口修改 `modelId`、`createdAtUtc`、`updatedAtUtc`。
+>
+> **`limits` 是嵌套对象而非两个顶层数字** —— PATCH 时支持"部分更新"：传 `"limits": { "contextTokens": 200000 }` 而 `outputTokens` 不传，BFF 应保留旧值（按 JSON Merge Patch 语义）；如要清空 outputTokens 传 `null`。
 
 ## 「承载于」反向派生（前端逻辑，不调用接口）
 

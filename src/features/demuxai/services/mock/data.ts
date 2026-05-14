@@ -2,6 +2,7 @@ import { createSnowflakeIdSeq, createUidSeq, type Uid } from '@/shared/lib/id';
 
 import type {
   ApiType,
+  BillReverseCode,
   ModelCapability,
   ModelFamily,
 } from '../../model/enums';
@@ -33,6 +34,8 @@ export const genMappingUid = createUidSeq(16_000_000);
 export const genModelUid = createUidSeq(13_000_000);
 export const genPricingUid = createUidSeq(14_000_000);
 export const genLogUid = createSnowflakeIdSeq();
+/** Bill 命名空间从 9 开头，与文档 `BL-9xxxxxxxx` 一致 */
+export const genBillUid = createUidSeq(900_000_000);
 
 /** 上游模型目录（Provider.fetchUpstreamModels 的 Mock 数据） */
 export const upstreamCatalog: Readonly<Record<ApiType, readonly string[]>> = {
@@ -712,6 +715,15 @@ function seedLogs(providers: Provider[]): LogEntry[] {
     cancelled: 0,
   };
 
+  // 预定义驳回原因码序列，用于种子里展示"已驳回"行的多样性
+  const reverseReasons: BillReverseCode[] = [
+    'service_unavailable',
+    'metering_error',
+    'customer_compensation',
+    'manual_correction',
+    'duplicate_charge',
+  ];
+
   for (let i = 0; i < 320; i += 1) {
     const p = usable[i % usable.length]!;
     const pairs = pairsByProvider.get(p.uid) ?? [];
@@ -727,6 +739,11 @@ function seedLogs(providers: Provider[]): LogEntry[] {
 
     const errorCode = failed ? errorCodes[i % errorCodes.length]! : null;
     const httpStatus = failed ? (errorCodeToHttp[errorCode!] ?? 500) : 200;
+
+    // 失败请求里大约一半是"已扣费"（产品里最有驳回价值的场景），另一半没扣到
+    const hasBill = !failed || (i % 2 === 0);
+    // 每隔约 47 条预先种一条"已驳回"行，方便页面上看到两种状态
+    const preReversed = hasBill && i % 47 === 11;
 
     const inputTokens = prompt;
     const outputTokens = failed ? 0 : completion;
@@ -823,6 +840,25 @@ function seedLogs(providers: Provider[]): LogEntry[] {
         : null,
       requestIp: `203.0.113.${(i % 250) + 1}`,
       streamed,
+      bill: hasBill
+        ? preReversed
+          ? {
+              uid: `BL-${genBillUid()}`,
+              status: 'reversed',
+              reversedAtUtc: iso(new Date(occurred.getTime() + 30 * 60 * 1000)),
+              reversedBy: '200000099',
+              reversedCode: reverseReasons[i % reverseReasons.length]!,
+              reversedRemark: null,
+            }
+          : {
+              uid: `BL-${genBillUid()}`,
+              status: 'completed',
+              reversedAtUtc: null,
+              reversedBy: null,
+              reversedCode: null,
+              reversedRemark: null,
+            }
+        : null,
     });
   }
   return out.sort((a, b) => b.uid.localeCompare(a.uid));
