@@ -24,16 +24,16 @@ const maxCalls = computed(() => props.items.reduce((m, x) => Math.max(m, x.calls
     <table v-if="items.length > 0" class="rank-table">
       <thead>
         <tr>
-          <th class="col--name">modelId</th>
+          <th class="col--name">modelName</th>
           <th class="col--bar">调用量</th>
           <th class="col--num">扣费</th>
           <th class="col--num">失败率</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="m in items" :key="m.modelId">
+        <tr v-for="m in items" :key="m.modelName">
           <td class="rank-table__name">
-            <span class="mono">{{ m.modelId }}</span>
+            <span class="mono">{{ m.modelName }}</span>
           </td>
           <td class="rank-table__bar">
             <div class="bar-inline">

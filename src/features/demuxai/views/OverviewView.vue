@@ -42,7 +42,7 @@ const last24h = (): [string, string] => {
 const dateRange = ref<[string, string] | null>(last24h());
 
 function buildPortFilter(): ListLogsFilter {
-  const f: ListLogsFilter = { status: 'all' };
+  const f: ListLogsFilter = {};
   if (dateRange.value && dateRange.value[0]) f.fromUtc = dateRange.value[0];
   if (dateRange.value && dateRange.value[1]) f.toUtc = dateRange.value[1];
   return f;
@@ -73,13 +73,13 @@ async function loadProviders(): Promise<void> {
 }
 
 const providerNameMap = computed(() => {
-  const m = new Map<string, string>();
-  for (const p of providers.value) m.set(p.uid, p.name);
+  const m = new Map<number, string>();
+  for (const p of providers.value) m.set(p.id, p.name);
   return m;
 });
 
-function resolveProviderName(uid: string): string {
-  return providerNameMap.value.get(uid) ?? uid;
+function resolveProviderName(providerId: number): string {
+  return providerNameMap.value.get(providerId) ?? `#${providerId}`;
 }
 
 watch(dateRange, () => void fetchStats(), { deep: true });
@@ -115,7 +115,8 @@ onMounted(() => {
         />
         <OverviewStatusDonut
           :total-calls="stats?.totalCalls ?? 0"
-          :breakdown="stats?.statusBreakdown ?? []"
+          :success-calls="stats?.successCalls ?? 0"
+          :error-codes="stats?.errorCodes ?? []"
         />
       </div>
 

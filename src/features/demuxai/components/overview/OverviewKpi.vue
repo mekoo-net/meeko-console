@@ -1,8 +1,11 @@
 <script setup lang="ts">
 /**
- * KPI 行 —— 6 张卡：总调用 / RPM / 成功率 / P95 延迟 / 总扣费 / Tokens。
+ * KPI 行 —— 6 张卡：总调用 / RPM / 成功率 / P95 首字延迟 / 总扣费 / Tokens。
  *
  * 不维护状态，仅渲染传入的 `stats`，配色 / 阈值（SLA 95%/90%）固化在本组件。
+ *
+ * 延迟卡片只统计首字延迟（TTFT，单位 ms）—— LLM 总耗时强相关于生成长度，
+ * 对运维定位无意义；TTFT 才反映上游响应健康度。详见 `LogStats`。
  */
 import { computed } from 'vue';
 
@@ -50,13 +53,13 @@ const successRateClass = computed(() => {
       <div class="kpi-card__sub">SLA 阈值 95% / 90%</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-card__label">P95 延迟</div>
+      <div class="kpi-card__label">P95 首字延迟</div>
       <div class="kpi-card__value">
-        {{ (stats?.p95LatencyMs ?? 0).toLocaleString() }}
+        {{ (stats?.p95TokenLatency ?? 0).toLocaleString() }}
         <span class="unit">ms</span>
       </div>
       <div class="kpi-card__sub">
-        均值 <span class="num">{{ (stats?.avgLatencyMs ?? 0).toLocaleString() }}</span> ms
+        均值 <span class="num">{{ (stats?.avgTokenLatency ?? 0).toLocaleString() }}</span> ms
       </div>
     </div>
     <div class="kpi-card">
@@ -67,7 +70,9 @@ const successRateClass = computed(() => {
     <div class="kpi-card">
       <div class="kpi-card__label">Tokens</div>
       <div class="kpi-card__value">{{ shortNumber(stats?.totalTokens ?? 0) }}</div>
-      <div class="kpi-card__sub">{{ (stats?.totalTokens ?? 0).toLocaleString() }} tokens</div>
+      <div class="kpi-card__sub">
+        {{ (stats?.totalTokens ?? 0).toLocaleString() }} tokens · 仅 token 类
+      </div>
     </div>
   </div>
 </template>

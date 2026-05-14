@@ -1,54 +1,80 @@
 <script setup lang="ts">
 /**
- * 状态分布环形图（ok / error / timeout / rate_limited / cancelled）。
+ * 状态分布环形图。
+ *
+ * 设计取舍：
+ *  - 顶层 `success: boolean` 二元成败，失败的细分类全部走 `error.code`；
+ *    所以环形图改成"成功 + Top 错误码"多分类，比"ok/error/timeout/..."更有信息量
  *  - 中心数字：总调用量
- *  - 右侧 legend：所有状态都展示，count=0 时灰显
+ *  - 右侧 legend：成功 + 各错误码（count=0 不渲染）
  */
 import { computed } from 'vue';
 
-import { LogStatusLabel, type LogStatus } from '../../model/enums';
-import type { LogStatsStatus } from '../../model/log.types';
+import { LogErrorCodeLabel } from '../../model/enums';
+import type { LogStatsErrorCode } from '../../model/log.types';
 import Panel from './Panel.vue';
 
 const props = defineProps<{
   totalCalls: number;
-  breakdown: LogStatsStatus[];
+  successCalls: number;
+  /** 已按 count 降序的错误码 Top；其余合并的 `other` 也在内 */
+  errorCodes: LogStatsErrorCode[];
 }>();
 
 const DONUT_RADIUS = 60;
 const DONUT_STROKE = 22;
 const DONUT_CIRCUM = 2 * Math.PI * DONUT_RADIUS;
 
-const statusColor: Readonly<Record<LogStatus, string>> = {
-  ok: '#10b981',
-  error: '#ef4444',
-  timeout: '#f59e0b',
-  rate_limited: '#f97316',
-  cancelled: '#94a3b8',
-};
+const SUCCESS_COLOR = '#10b981';
+/** 错误码调色板（按 Top 排名循环） —— red / orange / amber / fuchsia / rose / slate */
+const ERROR_PALETTE = ['#ef4444', '#f59e0b', '#f97316', '#c026d3', '#e11d48', '#94a3b8'];
+
+interface LegendItem {
+  key: string;
+  label: string;
+  count: number;
+  color: string;
+}
+
+const legend = computed<LegendItem[]>(() => {
+  const items: LegendItem[] = [
+    { key: '__success__', label: '成功', count: props.successCalls, color: SUCCESS_COLOR },
+  ];
+  props.errorCodes.forEach((e, i) => {
+    const label =
+      e.code === 'other'
+        ? '其它错误'
+        : ((LogErrorCodeLabel as Record<string, string>)[e.code] ?? e.code);
+    items.push({
+      key: e.code,
+      label,
+      count: e.count,
+      color: ERROR_PALETTE[i % ERROR_PALETTE.length]!,
+    });
+  });
+  return items;
+});
 
 interface Segment {
-  status: LogStatus;
-  count: number;
+  key: string;
   dasharray: string;
   dashoffset: number;
   color: string;
 }
 
 const segments = computed<Segment[]>(() => {
-  const total = props.breakdown.reduce((s, it) => s + it.count, 0);
+  const total = legend.value.reduce((s, it) => s + it.count, 0);
   if (total === 0) return [];
   let acc = 0;
   const out: Segment[] = [];
-  for (const it of props.breakdown) {
+  for (const it of legend.value) {
     if (it.count === 0) continue;
     const segLen = (it.count / total) * DONUT_CIRCUM;
     out.push({
-      status: it.status,
-      count: it.count,
+      key: it.key,
       dasharray: `${segLen.toFixed(2)} ${(DONUT_CIRCUM - segLen).toFixed(2)}`,
       dashoffset: -acc,
-      color: statusColor[it.status],
+      color: it.color,
     });
     acc += segLen;
   }
@@ -70,7 +96,7 @@ const segments = computed<Segment[]>(() => {
         />
         <circle
           v-for="seg in segments"
-          :key="seg.status"
+          :key="seg.key"
           cx="90"
           cy="90"
           :r="DONUT_RADIUS"
@@ -90,12 +116,12 @@ const segments = computed<Segment[]>(() => {
 
       <ul class="donut-legend">
         <li
-          v-for="s in breakdown"
-          :key="s.status"
+          v-for="s in legend"
+          :key="s.key"
           :class="{ 'donut-legend__item--mute': s.count === 0 }"
         >
-          <span class="legend-dot" :style="{ background: statusColor[s.status] }"></span>
-          <span class="donut-legend__label">{{ LogStatusLabel[s.status] }}</span>
+          <span class="legend-dot" :style="{ background: s.color }"></span>
+          <span class="donut-legend__label">{{ s.label }}</span>
           <span class="donut-legend__count num">{{ s.count.toLocaleString() }}</span>
         </li>
       </ul>
