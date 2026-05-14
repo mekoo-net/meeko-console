@@ -24,12 +24,7 @@ import { formatMoney } from '@/shared/lib/money';
 import { getAccountAdminPort } from '@/features/accounts/services';
 import type { Account } from '@/features/accounts/model/account.types';
 
-import {
-  LogStatusLabel,
-  LogStatusTone,
-  logStatusValues,
-  type LogStatus,
-} from '../model/enums';
+import { BillingTypeLabel, LogErrorCodeLabel } from '../model/enums';
 import type { ListLogsFilter, LogEntry } from '../model/log.types';
 import type { Model } from '../model/model.types';
 import type { Provider } from '../model/provider.types';
@@ -57,9 +52,14 @@ interface PageFilter {
   accountUid: string;
   contactKeyword: string;
   dateRange: [string, string] | null;
-  modelId: string;
-  providerUid: string;
-  status: LogStatus | 'all';
+  /** 模糊匹配 `LogEntry.modelName` */
+  modelName: string;
+  /**
+   * 命中渠道的 int 主键。空字符串 = 未选；UI 用 el-select 选 Provider 后转 number。
+   * 用 number | '' 而非 number | null 是为了让 el-select 的 clearable 行为对齐 Element Plus。
+   */
+  providerId: number | '';
+  /** 仅看失败调用（success === false） */
   errorOnly: boolean;
 }
 
@@ -73,9 +73,8 @@ const defaultFilter = (): PageFilter => ({
   accountUid: '',
   contactKeyword: '',
   dateRange: last24h(),
-  modelId: '',
-  providerUid: '',
-  status: 'all',
+  modelName: '',
+  providerId: '',
   errorOnly: false,
 });
 
@@ -90,9 +89,10 @@ const modelMap = computed(() => {
   for (const it of models.value) m.set(it.modelId, it);
   return m;
 });
+/** 渠道 int 主键 → Provider，供"渠道列"反查显示名。 */
 const providerMap = computed(() => {
-  const m = new Map<string, Provider>();
-  for (const it of providers.value) m.set(it.uid, it);
+  const m = new Map<number, Provider>();
+  for (const it of providers.value) m.set(it.id, it);
   return m;
 });
 
@@ -128,12 +128,11 @@ async function loadDeps(): Promise<void> {
 
 function buildPortFilter(): ListLogsFilter {
   const f: ListLogsFilter = {
-    status: filter.value.status,
     errorOnly: filter.value.errorOnly,
   };
   if (filter.value.accountUid.trim()) f.accountUid = filter.value.accountUid.trim();
-  if (filter.value.modelId.trim()) f.modelId = filter.value.modelId.trim();
-  if (filter.value.providerUid) f.providerUid = filter.value.providerUid;
+  if (filter.value.modelName.trim()) f.modelName = filter.value.modelName.trim();
+  if (filter.value.providerId !== '') f.providerId = filter.value.providerId;
   if (filter.value.dateRange && filter.value.dateRange[0]) f.fromUtc = filter.value.dateRange[0];
   if (filter.value.dateRange && filter.value.dateRange[1]) f.toUtc = filter.value.dateRange[1];
   return f;
@@ -172,9 +171,8 @@ watch(
     [
       filter.value.accountUid,
       filter.value.dateRange,
-      filter.value.modelId,
-      filter.value.providerUid,
-      filter.value.status,
+      filter.value.modelName,
+      filter.value.providerId,
       filter.value.errorOnly,
     ] as const,
   () => {
@@ -193,7 +191,7 @@ const displayRecords = computed(() => {
   const kw = filter.value.contactKeyword.trim().toLowerCase();
   if (!kw) return records.value;
   return records.value.filter((r) => {
-    const a = accountMap.value.get(r.accountUid);
+    const a = accountMap.value.get(r.account.uid);
     if (!a) return false;
     const email = (a.ownerEmail ?? '').toLowerCase();
     const phone = a.ownerPhone ?? '';
@@ -206,20 +204,56 @@ function openDetail(row: LogEntry): void {
   detailOpen.value = true;
 }
 
-function providerName(uid: string): string {
-  return providerMap.value.get(uid)?.name ?? uid;
+/**
+ * 列表里"用量"列的紧凑展示。
+ *
+ * 不同 `billingType` 用量单位完全不同 —— 这里只给一行紧凑摘要，详细展开在抽屉里。
+ */
+function usageSummary(row: LogEntry): { main: string; sub: string } {
+  switch (row.billingType) {
+    case 'per_token':
+      return {
+        main: row.usage.totalTokens.toLocaleString(),
+        sub: `${row.usage.input.tokens} / ${row.usage.output.tokens}`,
+      };
+    case 'per_call':
+      return { main: `${row.usage.calls} 次`, sub: '' };
+    case 'per_image':
+      return {
+        main: `${row.usage.count} 张`,
+        sub: `${row.usage.tier.size} · ${row.usage.tier.quality}`,
+      };
+    case 'per_video':
+      return {
+        main: `${row.usage.seconds}s`,
+        sub: row.usage.tier.resolution,
+      };
+    case 'per_audio_minute':
+      return { main: `${row.usage.minutes} min`, sub: '' };
+    case 'per_character':
+      return { main: `${row.usage.characters.toLocaleString()} 字符`, sub: '' };
+  }
+}
+
+function providerName(id: number): string {
+  return providerMap.value.get(id)?.name ?? `#${id}`;
+}
+
+/** 错误码 → 国际化文案；未识别码原样返回 */
+function errorCodeText(code: string): string {
+  return (LogErrorCodeLabel as Record<string, string>)[code] ?? code;
 }
 
 /** 查不到 = 模型已自动删除（无任何 mapping 引用） */
-function modelDisplayName(modelId: string): string | null {
-  return modelMap.value.get(modelId)?.displayName ?? null;
+function modelDisplayName(modelName: string): string | null {
+  return modelMap.value.get(modelName)?.displayName ?? null;
 }
 
 const detailProviderName = computed(() =>
-  detailLog.value ? providerName(detailLog.value.providerUid) : '',
+  detailLog.value ? providerName(detailLog.value.providerId) : '',
 );
 const detailModelDisplay = computed(() =>
-  detailLog.value ? modelDisplayName(detailLog.value.modelId) : null,
+  detailLog.value ? modelDisplayName(detailLog.value.modelName) : null,
 );
 
 onMounted(() => {
@@ -240,33 +274,22 @@ onMounted(() => {
       @refresh="fetchData"
       @reset="resetFilter"
     >
-      <el-form-item label="modelId">
+      <el-form-item label="模型名">
         <el-input
-          v-model="filter.modelId"
+          v-model="filter.modelName"
           :prefix-icon="Search"
-          placeholder="模糊匹配"
+          placeholder="模糊匹配 modelName"
           clearable
           style="width: 220px"
         />
       </el-form-item>
       <el-form-item label="模型渠道">
-        <el-select v-model="filter.providerUid" clearable placeholder="全部" style="width: 220px">
+        <el-select v-model="filter.providerId" clearable placeholder="全部" style="width: 220px">
           <el-option
             v-for="p in providers"
-            :key="p.uid"
+            :key="p.id"
             :label="p.name"
-            :value="p.uid"
-          />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="状态">
-        <el-select v-model="filter.status" style="width: 160px">
-          <el-option label="全部" value="all" />
-          <el-option
-            v-for="s in logStatusValues"
-            :key="s"
-            :label="LogStatusLabel[s]"
-            :value="s"
+            :value="p.id"
           />
         </el-select>
       </el-form-item>
@@ -290,7 +313,7 @@ onMounted(() => {
     >
       <el-table-column label="时间" width="160">
         <template #default="{ row }: { row: LogEntry }">
-          <span class="cell-date">{{ formatDateTime(row.occurredAtUtc, 'MM-DD HH:mm:ss') }}</span>
+          <span class="cell-date">{{ formatDateTime(row.createAt, 'MM-DD HH:mm:ss') }}</span>
         </template>
       </el-table-column>
 
@@ -300,12 +323,12 @@ onMounted(() => {
             <el-button
               link
               class="cell-account__uid"
-              @click="router.push(`/accounts/${row.accountUid}`)"
+              @click="router.push(`/accounts/${row.account.uid}`)"
             >
-              {{ accountMap.get(row.accountUid)?.name ?? row.accountUid }}
+              {{ accountMap.get(row.account.uid)?.name ?? row.account.uid }}
             </el-button>
             <div class="cell-account__sub">
-              Lv{{ row.tierSnapshot }} · IAM <span class="mono">{{ row.iamUserUid }}</span>
+              Lv{{ row.cost.tierSnapshot }} · IAM <span class="mono">{{ row.account.iamId }}</span>
             </div>
           </div>
         </template>
@@ -314,36 +337,43 @@ onMounted(() => {
       <el-table-column label="模型" min-width="220">
         <template #default="{ row }: { row: LogEntry }">
           <div class="cell-model">
-            <template v-if="modelDisplayName(row.modelId)">
-              <span class="cell-model__name">{{ modelDisplayName(row.modelId) }}</span>
-              <span class="cell-model__id mono">{{ row.modelId }}</span>
+            <template v-if="modelDisplayName(row.modelName)">
+              <span class="cell-model__name">{{ modelDisplayName(row.modelName) }}</span>
+              <span class="cell-model__id mono">{{ row.modelName }}</span>
             </template>
             <template v-else>
               <span class="cell-model__deleted">
                 <el-tag size="small" type="info" effect="plain">已删除</el-tag>
-                <span class="cell-model__id mono">{{ row.modelId }}</span>
+                <span class="cell-model__id mono">{{ row.modelName }}</span>
               </span>
             </template>
-            <div class="cell-model__sub">
-              → <span class="mono">{{ row.providerModelId }}</span>
-            </div>
           </div>
         </template>
       </el-table-column>
 
       <el-table-column label="模型渠道" min-width="160">
         <template #default="{ row }: { row: LogEntry }">
-          <span class="cell-channel">{{ providerName(row.providerUid) }}</span>
+          <span class="cell-channel">{{ providerName(row.providerId) }}</span>
         </template>
       </el-table-column>
 
-      <el-table-column label="Tokens" width="120" align="right">
+      <el-table-column label="会话" width="140">
+        <template #default="{ row }: { row: LogEntry }">
+          <span class="cell-conv mono">{{ row.convId }}</span>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="用量" width="140" align="right">
         <template #default="{ row }: { row: LogEntry }">
           <div class="cell-tokens">
-            <span class="num">{{ row.totalTokens.toLocaleString() }}</span>
+            <span class="num">{{ usageSummary(row).main }}</span>
             <div class="cell-tokens__sub">
-              <span class="num">{{ row.promptTokens }}</span> /
-              <span class="num">{{ row.completionTokens }}</span>
+              <el-tag size="small" type="info" effect="plain" round class="cell-tokens__type">
+                {{ BillingTypeLabel[row.billingType] }}
+              </el-tag>
+              <span v-if="usageSummary(row).sub" class="num cell-tokens__detail">
+                {{ usageSummary(row).sub }}
+              </span>
             </div>
           </div>
         </template>
@@ -351,21 +381,39 @@ onMounted(() => {
 
       <el-table-column label="扣费" width="100" align="right">
         <template #default="{ row }: { row: LogEntry }">
-          <span class="cell-cost">{{ formatMoney(row.totalCost, { fractionDigits: 4 }) }}</span>
+          <span class="cell-cost">{{ formatMoney(row.cost.total, { fractionDigits: 4 }) }}</span>
         </template>
       </el-table-column>
 
-      <el-table-column label="延迟" width="100" align="right">
+      <el-table-column label="延迟" width="130" align="right">
         <template #default="{ row }: { row: LogEntry }">
-          <span class="num" :class="{ 'num-slow': row.latencyMs > 3000 }">
-            {{ row.latencyMs.toLocaleString() }} ms
-          </span>
+          <div v-if="row.tokenLatency != null" class="cell-latency">
+            <span
+              class="num"
+              :class="{ 'num-slow': row.streamed ? row.tokenLatency > 1500 : row.tokenLatency > 5000 }"
+            >
+              {{ row.tokenLatency.toLocaleString() }} ms
+            </span>
+            <span class="cell-latency__sub">
+              {{ row.streamed ? '首字延迟' : '总耗时' }}
+            </span>
+          </div>
+          <span v-else class="cell-muted">—</span>
         </template>
       </el-table-column>
 
-      <el-table-column label="状态" width="100">
+      <el-table-column label="状态" width="140">
         <template #default="{ row }: { row: LogEntry }">
-          <StatusTag :label="LogStatusLabel[row.status]" :tone="LogStatusTone[row.status]" />
+          <StatusTag
+            v-if="row.success"
+            label="成功"
+            tone="success"
+          />
+          <StatusTag
+            v-else
+            :label="row.error ? errorCodeText(row.error.code) : '失败'"
+            tone="danger"
+          />
         </template>
       </el-table-column>
 
@@ -468,6 +516,11 @@ onMounted(() => {
   font-size: 12.5px;
   color: var(--el-text-color-regular);
 }
+.cell-conv {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  word-break: break-all;
+}
 
 .cell-tokens {
   display: flex;
@@ -476,9 +529,34 @@ onMounted(() => {
   line-height: 1.3;
 }
 .cell-tokens__sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11.5px;
   color: var(--el-text-color-secondary);
   margin-top: 2px;
+}
+.cell-tokens__type {
+  font-size: 11px;
+  height: 18px;
+  padding: 0 6px;
+}
+.cell-tokens__detail {
+  font-size: 11.5px;
+}
+.cell-latency {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.3;
+}
+.cell-latency__sub {
+  font-size: 11.5px;
+  color: var(--el-text-color-secondary);
+  margin-top: 2px;
+}
+.cell-muted {
+  color: var(--el-text-color-secondary);
 }
 .cell-cost {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
