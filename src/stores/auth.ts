@@ -44,8 +44,21 @@ function readPersisted(): AuthSession | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as AuthSession;
+    const parsed = JSON.parse(raw) as Partial<AuthSession> | null;
+    // 兼容旧版本残留：缺关键字段视为无效会话，避免 computed 解引用 undefined
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      !parsed.accessToken ||
+      !parsed.account ||
+      !parsed.iamUser
+    ) {
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+    return parsed as AuthSession;
   } catch {
+    localStorage.removeItem(STORAGE_KEY);
     return null;
   }
 }
@@ -54,11 +67,11 @@ export const useAuthStore = defineStore('auth', () => {
   const session = ref<AuthSession | null>(readPersisted());
 
   const isAuthenticated = computed(() => session.value !== null);
-  const role = computed<AppRole | null>(() => session.value?.iamUser.role ?? null);
-  const accountUid = computed<Uid | null>(() => session.value?.account.uid ?? null);
-  const displayName = computed(() => session.value?.iamUser.displayName ?? '未登录');
+  const role = computed<AppRole | null>(() => session.value?.iamUser?.role ?? null);
+  const accountUid = computed<Uid | null>(() => session.value?.account?.uid ?? null);
+  const displayName = computed(() => session.value?.iamUser?.displayName ?? '未登录');
   const displayInitial = computed(() => {
-    const name = session.value?.iamUser.displayName ?? '?';
+    const name = session.value?.iamUser?.displayName ?? '?';
     return name.charAt(0).toUpperCase();
   });
 
