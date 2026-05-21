@@ -70,7 +70,7 @@ const empty = computed(() => !loading.value && items.value.length === 0);
     <el-table
       v-loading="loading"
       :data="items"
-      row-key="uid"
+      row-key="id"
       size="small"
       class="compact-table"
       empty-text="该账户暂未开通任何业务"

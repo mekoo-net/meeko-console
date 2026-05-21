@@ -6,8 +6,44 @@ export const PaymentProviderLabel: Readonly<Record<PaymentProviderCode, string>>
   wechat_pay: '微信支付',
 };
 
+/** 创建渠道时的展示模板（列表中尚无该 code 时使用） */
+export interface PaymentChannelTemplate {
+  name: string;
+  description: string;
+  supportedScenes: number[];
+}
+
+export const paymentChannelTemplates: Readonly<Record<PaymentProviderCode, PaymentChannelTemplate>> = {
+  alipay: {
+    name: '支付宝',
+    description:
+      '支付宝扫码（Native）/ H5 / PC 网站支付，实时到账。需要在支付宝开放平台创建应用并完成签约。',
+    supportedScenes: [0, 1, 4],
+  },
+  wechat_pay: {
+    name: '微信支付',
+    description: '微信 Native / JsApi / H5 支付，需商户平台开通对应支付类型。',
+    supportedScenes: [0, 1, 2],
+  },
+};
+
+export function draftPaymentChannel(code: PaymentProviderCode): PaymentChannel {
+  const tpl = paymentChannelTemplates[code];
+  return {
+    id: '',
+    code,
+    name: tpl.name,
+    description: tpl.description,
+    isActive: false,
+    supportedScenes: [...tpl.supportedScenes],
+    isConfigured: false,
+    createdAtUtc: new Date().toISOString(),
+  };
+}
+
 export interface PaymentChannel {
-  uid: string;
+  /** 渠道配置行主键（API JSON `id`，如 PC-001 / ch-alipay） */
+  id: string;
   code: PaymentProviderCode;
   name: string;
   description: string;

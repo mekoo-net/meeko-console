@@ -21,16 +21,16 @@ const loading = computed(() => unref(list.loading));
 const error = computed(() => unref(list.error));
 const smtpRows = computed(() => smtpList.data.value ?? []);
 
-/** 根据 uid 找到渠道名称 */
-function providerName(uid: string | null | undefined): string {
-  if (!uid) return '默认渠道';
-  const p = smtpRows.value.find((r) => r.uid === uid);
+/** 根据 smtpProviderId 找到渠道名称 */
+function providerName(smtpProviderId: string | null | undefined): string {
+  if (!smtpProviderId) return '默认渠道';
+  const p = smtpRows.value.find((r) => r.id === smtpProviderId);
   return p ? p.name : '未知渠道';
 }
 
-function providerTag(uid: string | null | undefined): 'success' | 'warning' | 'info' {
-  if (!uid) return 'info';
-  const p = smtpRows.value.find((r) => r.uid === uid);
+function providerTag(smtpProviderId: string | null | undefined): 'success' | 'warning' | 'info' {
+  if (!smtpProviderId) return 'info';
+  const p = smtpRows.value.find((r) => r.id === smtpProviderId);
   if (!p) return 'info';
   return p.isDefault ? 'info' : 'success';
 }
@@ -45,7 +45,7 @@ const form = reactive<CreateEmailTemplatePayload>({
   isHtml: true,
   description: '',
   isActive: true,
-  smtpProviderUid: undefined,
+  smtpProviderId: undefined,
 });
 
 function openCreate(): void {
@@ -56,7 +56,7 @@ function openCreate(): void {
   form.isHtml = true;
   form.description = '';
   form.isActive = true;
-  form.smtpProviderUid = undefined;
+  form.smtpProviderId = undefined;
   dialog.value = true;
 }
 
@@ -66,7 +66,7 @@ async function submitCreate(): Promise<void> {
     const r = await getNoticeAdminPort().createEmailTemplate({
       ...form,
       description: form.description || undefined,
-      smtpProviderUid: form.smtpProviderUid || undefined,
+      smtpProviderId: form.smtpProviderId || undefined,
     });
     if (r.success) {
       ElMessage.success('模板已创建');
@@ -111,11 +111,11 @@ function editLink(code: string, locale: string): string {
         <el-table-column label="发信渠道" min-width="160">
           <template #default="{ row }">
             <el-tooltip
-              :content="row.smtpProviderUid ? '已绑定专属渠道' : '使用系统默认渠道'"
+              :content="row.smtpProviderId ? '已绑定专属渠道' : '使用系统默认渠道'"
               placement="top"
             >
-              <el-tag :type="providerTag(row.smtpProviderUid)" size="small" round>
-                {{ providerName(row.smtpProviderUid) }}
+              <el-tag :type="providerTag(row.smtpProviderId)" size="small" round>
+                {{ providerName(row.smtpProviderId) }}
               </el-tag>
             </el-tooltip>
           </template>
@@ -162,15 +162,15 @@ function editLink(code: string, locale: string): string {
         </el-form-item>
         <el-form-item label="发信渠道">
           <el-select
-            v-model="form.smtpProviderUid"
+            v-model="form.smtpProviderId"
             placeholder="使用默认渠道"
             clearable
             style="width: 100%"
           >
             <el-option
               v-for="smtp in smtpRows"
-              :key="smtp.uid"
-              :value="smtp.uid"
+              :key="smtp.id"
+              :value="smtp.id"
               :label="smtp.name"
               :disabled="!smtp.isActive"
             >

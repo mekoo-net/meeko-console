@@ -157,14 +157,14 @@ function isInternalProvider(p: RechargeProvider): boolean {
       <el-table
         v-loading="rechargeLoading"
         :data="rechargeItems"
-        row-key="uid"
+        row-key="id"
         size="small"
         class="compact-table"
         empty-text="暂无充值记录"
       >
-        <el-table-column label="流水号" min-width="180" prop="uid">
+        <el-table-column label="流水号" min-width="180" prop="id">
           <template #default="{ row }: { row: RechargeRecord }">
-            <span class="cell-uid">{{ row.uid }}</span>
+            <span class="cell-uid">{{ row.id }}</span>
           </template>
         </el-table-column>
         <el-table-column label="渠道" width="130">
@@ -249,14 +249,14 @@ function isInternalProvider(p: RechargeProvider): boolean {
       <el-table
         v-loading="billLoading"
         :data="billItems"
-        row-key="uid"
+        row-key="id"
         size="small"
         class="compact-table"
         empty-text="暂无账单记录"
       >
-        <el-table-column label="流水号" min-width="180" prop="uid">
+        <el-table-column label="流水号" min-width="180" prop="id">
           <template #default="{ row }: { row: BillingEntry }">
-            <span class="cell-uid">{{ row.uid }}</span>
+            <span class="cell-uid">{{ row.id }}</span>
           </template>
         </el-table-column>
         <el-table-column label="业务" width="100">

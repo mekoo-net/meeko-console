@@ -39,7 +39,7 @@ function statusTone(s: SubscriptionStatus): 'success' | 'info' | 'warning' | 'da
 }
 
 async function toggleCancel(
-  row: { uid: string; cancelAtPeriodEnd: boolean },
+  row: { id: string; cancelAtPeriodEnd: boolean },
   next: boolean,
 ): Promise<void> {
   const ok = await confirmDanger({
@@ -50,7 +50,7 @@ async function toggleCancel(
     type: 'warning',
   });
   if (!ok) return;
-  const r = await getBillingPort().setSubscriptionCancelAtPeriodEnd(row.uid, next);
+  const r = await getBillingPort().setSubscriptionCancelAtPeriodEnd(row.id, next);
   if (r.success) {
     ElMessage.success('已更新');
     void subs.run();
@@ -72,7 +72,7 @@ async function toggleCancel(
     </template>
 
     <el-table :data="rows" stripe style="width: 100%">
-      <el-table-column prop="uid" label="订阅 UID" min-width="140" />
+      <el-table-column prop="id" label="订阅 ID" min-width="140" />
       <el-table-column prop="productCode" label="商品" min-width="120" />
       <el-table-column label="周期" width="88">
         <template #default="{ row }">{{ periodLabel(row) }}</template>

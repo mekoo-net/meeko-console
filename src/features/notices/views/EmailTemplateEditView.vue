@@ -37,7 +37,7 @@ const form = reactive<UpdateEmailTemplatePayload>({
   description: '',
   isActive: true,
   changeNote: '',
-  smtpProviderUid: undefined,
+  smtpProviderId: undefined,
 });
 
 watch(
@@ -50,7 +50,7 @@ watch(
     form.description = t.description ?? '';
     form.isActive = t.isActive;
     form.changeNote = '';
-    form.smtpProviderUid = t.smtpProviderUid ?? undefined;
+    form.smtpProviderId = t.smtpProviderId ?? undefined;
   },
   { immediate: true },
 );
@@ -62,11 +62,11 @@ async function save(): Promise<void> {
   if (!t) return;
   saving.value = true;
   try {
-    const r = await getNoticeAdminPort().updateEmailTemplate(t.uid, {
+    const r = await getNoticeAdminPort().updateEmailTemplate(t.id, {
       ...form,
       description: form.description || undefined,
       changeNote: form.changeNote || undefined,
-      smtpProviderUid: form.smtpProviderUid || undefined,
+      smtpProviderId: form.smtpProviderId || undefined,
     });
     if (r.success) {
       ElMessage.success('已保存');
@@ -85,8 +85,8 @@ function goBack(): void {
 
 /** 当前绑定的渠道名称 */
 const currentChannelName = computed(() => {
-  if (!form.smtpProviderUid) return '默认渠道';
-  const p = smtpRows.value.find((r) => r.uid === form.smtpProviderUid);
+  if (!form.smtpProviderId) return '默认渠道';
+  const p = smtpRows.value.find((r) => r.id === form.smtpProviderId);
   return p?.name ?? '未知渠道';
 });
 </script>
@@ -147,15 +147,15 @@ const currentChannelName = computed(() => {
                 </el-tooltip>
               </template>
               <el-select
-                v-model="form.smtpProviderUid"
+                v-model="form.smtpProviderId"
                 placeholder="使用默认渠道"
                 clearable
                 style="width: 100%"
               >
                 <el-option
                   v-for="smtp in smtpRows"
-                  :key="smtp.uid"
-                  :value="smtp.uid"
+                  :key="smtp.id"
+                  :value="smtp.id"
                   :label="smtp.name"
                   :disabled="!smtp.isActive"
                 >

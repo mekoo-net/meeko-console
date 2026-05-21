@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
-const uidString = z.union([z.string(), z.number()]).transform((v) => String(v));
+const idString = z.union([z.string(), z.number()]).transform((v) => String(v));
 
 export const smtpProviderDtoSchema = z.object({
-  uid: uidString,
+  id: idString,
   name: z.string(),
   host: z.string(),
   port: z.number().int(),
@@ -67,7 +67,7 @@ export type TestSmtpProviderResult = z.infer<typeof testSmtpResultSchema>;
 
 export const adminCommandResultSchema = z.object({
   success: z.boolean(),
-  uid: uidString,
+  id: idString,
   failureCode: z.string().nullable().optional(),
   failureMessage: z.string().nullable().optional(),
 });

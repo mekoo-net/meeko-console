@@ -23,11 +23,11 @@ export const BusinessStatusTone: Readonly<
   stopped: 'danger',
 };
 
-const uidString = z.union([z.string(), z.number()]).transform((v) => String(v));
+const idString = z.union([z.string(), z.number()]).transform((v) => String(v));
 
 export const businessInstanceSchema = z.object({
-  uid: uidString,
-  accountUid: uidString,
+  id: idString,
+  accountUid: idString,
   productCode: z.string(),
   productName: z.string(),
   status: z.enum(businessStatusValues),

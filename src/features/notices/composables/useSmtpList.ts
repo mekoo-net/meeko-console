@@ -25,8 +25,8 @@ export function useSmtpList() {
     }
   }
 
-  async function remove(uid: string): Promise<AppResult<AdminCommandResult>> {
-    return call(() => getNoticeAdminPort().deleteSmtpProvider(uid));
+  async function remove(id: string): Promise<AppResult<AdminCommandResult>> {
+    return call(() => getNoticeAdminPort().deleteSmtpProvider(id));
   }
 
   onMounted(() => {

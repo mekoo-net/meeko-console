@@ -1,17 +1,20 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 
+import { apiUrl } from '@/shared/api/apiBase';
+import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
+import { isMockMode } from '@/shared/runtime';
+
 import type { Uid } from '@/shared/lib/id';
 
 /**
- * Mock 鉴权。真接 BFF 时只需替换 login()/refresh() 内部实现：
- * - login(): POST /auth/login 或 /auth/login-iam（Keystone），把返回的 access/refresh + Account/IamUser 存入。
- * - logout(): POST /auth/logout 撤销 jti，再清本地。
+ * meeko-console = 平台管理后台，登录主体是 Keystone **Staff 员工**（用户名），不是终端 IAM 邮箱用户。
  *
- * 角色定义对齐 Meeko-Keystone.md：
- *   - `Owner`：Personal Owner / Org Owner
- *   - `Admin`：Org 子账号 admin（管理通知/SMTP 模板）
- *   - `Member`：普通子账号
+ * - login(): POST /staff/auth/login
+ * - logout(): 清 localStorage（Staff 无 refresh token）
+ *
+ * AppRole 仅用于本前端路由守卫；真连后端时由 Staff 角色映射：
+ *   SuperAdmin → Admin，ReadOnly → Member
  */
 export type AppRole = 'Admin' | 'Owner' | 'Member';
 export type AccountType = 'personal' | 'organization';
@@ -90,34 +93,94 @@ export const useAuthStore = defineStore('auth', () => {
     return r !== null && allowed.includes(r);
   }
 
-  /**
-   * Mock 登录：根据 username/role 选择 fixture。
-   * - admin/admin → Admin 角色（可见通知模块）
-   * - owner/owner → Owner（个人/组织主账号）
-   * - 其他 → Member
-   */
-  function login(username: string, _password: string): void {
-    const lower = username.trim().toLowerCase();
-    const detectedRole: AppRole = lower === 'admin' ? 'Admin' : lower === 'owner' ? 'Owner' : 'Member';
+  function mapStaffRole(staffRole: string): AppRole {
+    if (staffRole === 'SuperAdmin') return 'Admin';
+    if (staffRole === 'ReadOnly') return 'Member';
+    return 'Member';
+  }
 
-    const next: AuthSession = {
-      accessToken: `mock-access-${Date.now()}`,
-      refreshToken: `mock-refresh-${Date.now()}`,
-      account: {
-        uid: '100000001',
-        type: detectedRole === 'Owner' ? 'personal' : 'organization',
-        name: detectedRole === 'Owner' ? '个人工作台' : 'Meeko Demo Org',
-        slug: detectedRole === 'Owner' ? 'personal' : 'meeko-demo',
-      },
-      iamUser: {
-        uid: '200000001',
-        username: lower || 'demo',
-        displayName: lower === 'admin' ? '系统管理员' : lower === 'owner' ? '组织主' : '演示用户',
-        role: detectedRole,
-        isAccountOwner: detectedRole !== 'Member',
-      },
-    };
-    persist(next);
+  /**
+   * Mock 模式：用户名决定角色 (admin/owner/其他)。
+   * 真实模式：POST /staff/auth/login（Staff 用户名 + 密码）。
+   */
+  async function login(username: string, password: string): Promise<AppResult<void>> {
+    if (isMockMode) {
+      const lower = username.trim().toLowerCase();
+      const detectedRole: AppRole = lower === 'admin' ? 'Admin' : lower === 'owner' ? 'Owner' : 'Member';
+      persist({
+        accessToken: `mock-access-${Date.now()}`,
+        refreshToken: `mock-refresh-${Date.now()}`,
+        account: {
+          uid: '100000001',
+          type: detectedRole === 'Owner' ? 'personal' : 'organization',
+          name: detectedRole === 'Owner' ? '个人工作台' : 'Meeko Demo Org',
+          slug: detectedRole === 'Owner' ? 'personal' : 'meeko-demo',
+        },
+        iamUser: {
+          uid: '200000001',
+          username: lower || 'demo',
+          displayName: lower === 'admin' ? '系统管理员' : lower === 'owner' ? '组织主' : '演示用户',
+          role: detectedRole,
+          isAccountOwner: detectedRole !== 'Member',
+        },
+      });
+      return ok(undefined);
+    }
+
+    try {
+      const res = await fetch(apiUrl('/staff/auth/login'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username.trim(), password }),
+      });
+
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try {
+          const body = await res.json() as { detail?: string; title?: string };
+          msg = body.detail ?? body.title ?? msg;
+        } catch { /* ignore */ }
+        return fail({ code: res.status === 401 ? 'unauthorized' : 'unknown', message: msg });
+      }
+
+      const data = await res.json() as {
+        accessToken?: string;
+        access_token?: string;
+        staff?: {
+          uid?: string;
+          displayName?: string;
+          display_name?: string;
+          role?: string;
+        };
+      };
+
+      const accessToken = data.accessToken ?? data.access_token;
+      const staff = data.staff;
+      if (!accessToken || !staff?.uid) {
+        return fail({ code: 'unknown', message: '登录响应格式无效' });
+      }
+
+      persist({
+        accessToken,
+        refreshToken: '',
+        account: {
+          uid: '0',
+          type: 'organization',
+          name: 'Meeko Platform',
+          slug: 'platform',
+        },
+        iamUser: {
+          uid: String(staff.uid),
+          username: username.trim(),
+          displayName: staff.displayName ?? staff.display_name ?? username.trim(),
+          role: mapStaffRole(staff.role ?? 'ReadOnly'),
+          isAccountOwner: true,
+        },
+      });
+      return ok(undefined);
+    } catch (err) {
+      return fail({ code: 'unknown', message: err instanceof Error ? err.message : '网络错误' });
+    }
   }
 
   function logout(): void {

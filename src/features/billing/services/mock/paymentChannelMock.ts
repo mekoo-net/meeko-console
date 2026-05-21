@@ -1,17 +1,18 @@
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { delay } from '@/shared/lib/delay';
 
-import type {
-  AlipayConfig,
-  PaymentChannel,
-  PaymentProviderCode,
-  WechatPayConfig,
+import {
+  draftPaymentChannel,
+  type AlipayConfig,
+  type PaymentChannel,
+  type PaymentProviderCode,
+  type WechatPayConfig,
 } from '../../model/paymentChannel.types';
 import type { PaymentChannelPort } from '../ports/paymentChannelPort';
 
 const seedChannels: PaymentChannel[] = [
   {
-    uid: 'ch-001',
+    id: 'PC-001',
     code: 'alipay',
     name: '支付宝',
     description: '支付宝扫码（Native）/ H5 / PC 网站支付，实时到账。需要在支付宝开放平台创建应用并完成签约。',
@@ -21,7 +22,7 @@ const seedChannels: PaymentChannel[] = [
     createdAtUtc: '2026-01-01T00:00:00Z',
   },
   {
-    uid: 'ch-002',
+    id: 'PC-002',
     code: 'wechat_pay',
     name: '微信支付',
     description: '微信 Native / JsApi / H5 支付，需商户平台开通对应支付类型。',
@@ -35,6 +36,18 @@ const seedChannels: PaymentChannel[] = [
 const channelStore = new Map<string, PaymentChannel>(seedChannels.map((c) => [c.code, c]));
 let alipayConfig: AlipayConfig | null = null;
 let wechatPayConfig: WechatPayConfig | null = null;
+
+function ensureChannel(code: PaymentProviderCode): PaymentChannel {
+  const existing = channelStore.get(code);
+  if (existing) return existing;
+  const draft = draftPaymentChannel(code);
+  const ch: PaymentChannel = {
+    ...draft,
+    id: code === 'alipay' ? 'PC-001' : 'PC-002',
+  };
+  channelStore.set(code, ch);
+  return ch;
+}
 
 export class PaymentChannelMock implements PaymentChannelPort {
   async listChannels(): Promise<AppResult<PaymentChannel[]>> {
@@ -68,8 +81,8 @@ export class PaymentChannelMock implements PaymentChannelPort {
       return fail({ code: 'validation', message: '支付宝公钥不能为空' });
     }
     alipayConfig = { ...config };
-    const ch = channelStore.get('alipay');
-    if (ch) channelStore.set('alipay', { ...ch, isConfigured: true });
+    const ch = ensureChannel('alipay');
+    channelStore.set('alipay', { ...ch, isConfigured: true });
     return ok(undefined);
   }
 
@@ -96,8 +109,8 @@ export class PaymentChannelMock implements PaymentChannelPort {
       return fail({ code: 'validation', message: '商户私钥不能为空' });
     }
     wechatPayConfig = { ...config };
-    const ch = channelStore.get('wechat_pay');
-    if (ch) channelStore.set('wechat_pay', { ...ch, isConfigured: true });
+    const ch = ensureChannel('wechat_pay');
+    channelStore.set('wechat_pay', { ...ch, isConfigured: true });
     return ok(undefined);
   }
 }

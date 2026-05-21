@@ -197,13 +197,13 @@ onMounted(() => {
     <el-table
       v-loading="loading"
       :data="displayRecords"
-      row-key="uid"
+      row-key="id"
       size="small"
       class="compact-table"
     >
-      <el-table-column label="流水号" min-width="180" prop="uid">
+      <el-table-column label="流水号" min-width="180" prop="id">
         <template #default="{ row }: { row: RechargeRecord }">
-          <span class="cell-uid">{{ row.uid }}</span>
+          <span class="cell-uid">{{ row.id }}</span>
         </template>
       </el-table-column>
 

@@ -25,8 +25,8 @@ import {
 } from '../../model/smtpProvider.types';
 import type { NoticeAdminPort } from '../ports/noticeAdminPort';
 
-const genTemplateUid = createUidSeq(9_000_000);
-const genSmtpUid = createUidSeq(9_100_000);
+const genTemplateId = createUidSeq(9_000_000);
+const genSmtpId = createUidSeq(9_100_000);
 
 function parseTemplate(v: unknown): AppResult<EmailTemplateDto> {
   const r = emailTemplateDtoSchema.safeParse(v);
@@ -68,11 +68,11 @@ export class NoticeAdminMock implements NoticeAdminPort {
     const prevMonth = '2026-04-15T08:30:00Z';
 
     // ── SMTP 渠道 ────────────────────────────────────────────────────────────
-    const smtpPrimaryUid = genSmtpUid();
-    const smtpBackupUid = genSmtpUid();
+    const smtpPrimaryId = genSmtpId();
+    const smtpBackupId = genSmtpId();
 
     const smtpPrimary: SmtpProviderDto = {
-      uid: smtpPrimaryUid,
+      id: smtpPrimaryId,
       name: '主要邮件渠道',
       host: 'smtp.meeko.io',
       port: 587,
@@ -88,7 +88,7 @@ export class NoticeAdminMock implements NoticeAdminPort {
     };
 
     const smtpBackup: SmtpProviderDto = {
-      uid: smtpBackupUid,
+      id: smtpBackupId,
       name: '备用邮件渠道',
       host: 'smtp-backup.meeko.io',
       port: 587,
@@ -103,15 +103,15 @@ export class NoticeAdminMock implements NoticeAdminPort {
       updatedAtUtc: now,
     };
 
-    this.smtpRows.set(smtpPrimaryUid, smtpPrimary);
-    this.smtpRows.set(smtpBackupUid, smtpBackup);
-    this.smtpSecrets.set(smtpPrimaryUid, '__stub__');
-    this.smtpSecrets.set(smtpBackupUid, '__stub__');
+    this.smtpRows.set(smtpPrimaryId, smtpPrimary);
+    this.smtpRows.set(smtpBackupId, smtpBackup);
+    this.smtpSecrets.set(smtpPrimaryId, '__stub__');
+    this.smtpSecrets.set(smtpBackupId, '__stub__');
 
     // ── 邮件模板 ─────────────────────────────────────────────────────────────
     const seedTemplate = (t: EmailTemplateDto, note = 'initial') => {
       this.templates.set(`${t.code}|${t.locale}`, t);
-      this.revisions.set(t.uid, [
+      this.revisions.set(t.id, [
         {
           version: 1,
           subject: t.subject,
@@ -125,7 +125,7 @@ export class NoticeAdminMock implements NoticeAdminPort {
     };
 
     seedTemplate({
-      uid: genTemplateUid(),
+      id: genTemplateId(),
       code: 'welcome',
       locale: 'zh-CN',
       subject: '欢迎加入 {{orgName}}',
@@ -134,13 +134,13 @@ export class NoticeAdminMock implements NoticeAdminPort {
       description: '用户注册成功欢迎邮件',
       currentVersion: 1,
       isActive: true,
-      smtpProviderUid: smtpPrimaryUid,
+      smtpProviderId: smtpPrimaryId,
       createdAtUtc: prevMonth,
       updatedAtUtc: prevMonth,
     });
 
     seedTemplate({
-      uid: genTemplateUid(),
+      id: genTemplateId(),
       code: 'otp_login',
       locale: 'zh-CN',
       subject: '【Meeko】您的登录验证码',
@@ -149,13 +149,13 @@ export class NoticeAdminMock implements NoticeAdminPort {
       description: '登录 OTP 验证码',
       currentVersion: 2,
       isActive: true,
-      smtpProviderUid: smtpPrimaryUid,
+      smtpProviderId: smtpPrimaryId,
       createdAtUtc: prevMonth,
       updatedAtUtc: now,
     });
 
     seedTemplate({
-      uid: genTemplateUid(),
+      id: genTemplateId(),
       code: 'otp_reset_password',
       locale: 'zh-CN',
       subject: '【Meeko】重置密码验证码',
@@ -164,13 +164,13 @@ export class NoticeAdminMock implements NoticeAdminPort {
       description: '重置密码 OTP',
       currentVersion: 1,
       isActive: true,
-      smtpProviderUid: smtpPrimaryUid,
+      smtpProviderId: smtpPrimaryId,
       createdAtUtc: prevMonth,
       updatedAtUtc: prevMonth,
     });
 
     seedTemplate({
-      uid: genTemplateUid(),
+      id: genTemplateId(),
       code: 'invoice_ready',
       locale: 'zh-CN',
       subject: '您的账单 #{{invoiceNo}} 已生成',
@@ -179,13 +179,13 @@ export class NoticeAdminMock implements NoticeAdminPort {
       description: '账单生成通知',
       currentVersion: 1,
       isActive: true,
-      smtpProviderUid: smtpBackupUid,
+      smtpProviderId: smtpBackupId,
       createdAtUtc: prevMonth,
       updatedAtUtc: prevMonth,
     });
 
     seedTemplate({
-      uid: genTemplateUid(),
+      id: genTemplateId(),
       code: 'ticket_update',
       locale: 'zh-CN',
       subject: '您的工单 #{{ticketNo}} 有新进展',
@@ -194,7 +194,7 @@ export class NoticeAdminMock implements NoticeAdminPort {
       description: '工单状态变更通知',
       currentVersion: 1,
       isActive: true,
-      smtpProviderUid: null,
+      smtpProviderId: null,
       createdAtUtc: prevMonth,
       updatedAtUtc: prevMonth,
     });
@@ -219,9 +219,9 @@ export class NoticeAdminMock implements NoticeAdminPort {
     return parseTemplate(row);
   }
 
-  async listEmailRevisions(uid: string): Promise<AppResult<EmailTemplateRevisionDto[]>> {
+  async listEmailRevisions(id: string): Promise<AppResult<EmailTemplateRevisionDto[]>> {
     await delay();
-    const rows = this.revisions.get(uid) ?? [];
+    const rows = this.revisions.get(id) ?? [];
     const parsed: EmailTemplateRevisionDto[] = [];
     for (const r of rows) {
       const p = parseRevision(r);
@@ -238,10 +238,10 @@ export class NoticeAdminMock implements NoticeAdminPort {
     if (this.templates.has(key)) {
       return fail({ code: 'conflict', message: '模板 code/locale 已存在' });
     }
-    const uid = genTemplateUid();
+    const id = genTemplateId();
     const now = new Date().toISOString();
     const row: EmailTemplateDto = {
-      uid,
+      id,
       code: payload.code,
       locale: payload.locale,
       subject: payload.subject,
@@ -250,14 +250,14 @@ export class NoticeAdminMock implements NoticeAdminPort {
       description: payload.description ?? null,
       currentVersion: 1,
       isActive: payload.isActive,
-      smtpProviderUid: payload.smtpProviderUid ?? null,
+      smtpProviderId: payload.smtpProviderId ?? null,
       createdAtUtc: now,
       updatedAtUtc: now,
     };
     const pr = parseTemplate(row);
     if (!pr.success) return pr;
     this.templates.set(key, pr.data);
-    this.revisions.set(uid, [
+    this.revisions.set(id, [
       {
         version: 1,
         subject: row.subject,
@@ -268,18 +268,18 @@ export class NoticeAdminMock implements NoticeAdminPort {
         changeNote: 'create',
       },
     ]);
-    return parseAdminCmd({ success: true, uid });
+    return parseAdminCmd({ success: true, id });
   }
 
   async updateEmailTemplate(
-    uid: string,
+    id: string,
     payload: UpdateEmailTemplatePayload,
   ): Promise<AppResult<AdminCommandResult>> {
     await delay();
     let hit: EmailTemplateDto | undefined;
     let hitKey: string | undefined;
     for (const [k, v] of this.templates) {
-      if (v.uid === uid) {
+      if (v.id === id) {
         hit = v;
         hitKey = k;
         break;
@@ -294,14 +294,14 @@ export class NoticeAdminMock implements NoticeAdminPort {
       isHtml: payload.isHtml,
       description: payload.description ?? null,
       isActive: payload.isActive,
-      smtpProviderUid: payload.smtpProviderUid !== undefined ? payload.smtpProviderUid : hit.smtpProviderUid,
+      smtpProviderId: payload.smtpProviderId !== undefined ? payload.smtpProviderId : hit.smtpProviderId,
       currentVersion: hit.currentVersion + 1,
       updatedAtUtc: now,
     };
     const pr = parseTemplate(next);
     if (!pr.success) return pr;
     this.templates.set(hitKey, pr.data);
-    const list = this.revisions.get(uid) ?? [];
+    const list = this.revisions.get(id) ?? [];
     list.push({
       version: next.currentVersion,
       subject: next.subject,
@@ -311,8 +311,8 @@ export class NoticeAdminMock implements NoticeAdminPort {
       changedAtUtc: now,
       changeNote: payload.changeNote ?? null,
     });
-    this.revisions.set(uid, list);
-    return parseAdminCmd({ success: true, uid });
+    this.revisions.set(id, list);
+    return parseAdminCmd({ success: true, id });
   }
 
   async listSmtpProviders(): Promise<AppResult<SmtpProviderDto[]>> {
@@ -327,19 +327,19 @@ export class NoticeAdminMock implements NoticeAdminPort {
     return ok(out);
   }
 
-  async getSmtpProvider(uid: string): Promise<AppResult<SmtpProviderDto | null>> {
+  async getSmtpProvider(id: string): Promise<AppResult<SmtpProviderDto | null>> {
     await delay();
-    const r = this.smtpRows.get(uid);
+    const r = this.smtpRows.get(id);
     if (!r) return ok(null);
     return parseSmtp(r);
   }
 
   async createSmtpProvider(payload: CreateSmtpPayload): Promise<AppResult<AdminCommandResult>> {
     await delay();
-    const uid = genSmtpUid();
+    const id = genSmtpId();
     const now = new Date().toISOString();
     const row: SmtpProviderDto = {
-      uid,
+      id,
       name: payload.name,
       host: payload.host,
       port: payload.port,
@@ -355,19 +355,19 @@ export class NoticeAdminMock implements NoticeAdminPort {
     };
     const pr = parseSmtp(row);
     if (!pr.success) return pr;
-    this.smtpRows.set(uid, pr.data);
+    this.smtpRows.set(id, pr.data);
     if (payload.password && payload.password.length > 0) {
-      this.smtpSecrets.set(uid, '[redacted]');
+      this.smtpSecrets.set(id, '[redacted]');
     }
-    return parseAdminCmd({ success: true, uid });
+    return parseAdminCmd({ success: true, id });
   }
 
   async updateSmtpProvider(
-    uid: string,
+    id: string,
     payload: UpdateSmtpPayload,
   ): Promise<AppResult<AdminCommandResult>> {
     await delay();
-    const cur = this.smtpRows.get(uid);
+    const cur = this.smtpRows.get(id);
     if (!cur) return fail({ code: 'not_found', message: 'SMTP 配置不存在' });
     const now = new Date().toISOString();
     const next: SmtpProviderDto = {
@@ -386,24 +386,24 @@ export class NoticeAdminMock implements NoticeAdminPort {
     };
     const pr = parseSmtp(next);
     if (!pr.success) return pr;
-    this.smtpRows.set(uid, pr.data);
+    this.smtpRows.set(id, pr.data);
     if (payload.password && payload.password.length > 0) {
-      this.smtpSecrets.set(uid, '[redacted]');
+      this.smtpSecrets.set(id, '[redacted]');
     }
-    return parseAdminCmd({ success: true, uid });
+    return parseAdminCmd({ success: true, id });
   }
 
-  async deleteSmtpProvider(uid: string): Promise<AppResult<AdminCommandResult>> {
+  async deleteSmtpProvider(id: string): Promise<AppResult<AdminCommandResult>> {
     await delay();
-    if (!this.smtpRows.has(uid)) return fail({ code: 'not_found', message: 'SMTP 配置不存在' });
-    this.smtpRows.delete(uid);
-    this.smtpSecrets.delete(uid);
-    return parseAdminCmd({ success: true, uid });
+    if (!this.smtpRows.has(id)) return fail({ code: 'not_found', message: 'SMTP 配置不存在' });
+    this.smtpRows.delete(id);
+    this.smtpSecrets.delete(id);
+    return parseAdminCmd({ success: true, id });
   }
 
-  async testSmtpProvider(uid: string, _payload: TestSmtpPayload): Promise<AppResult<TestSmtpProviderResult>> {
+  async testSmtpProvider(id: string, _payload: TestSmtpPayload): Promise<AppResult<TestSmtpProviderResult>> {
     await delay();
-    if (!this.smtpRows.has(uid)) return fail({ code: 'not_found', message: 'SMTP 配置不存在' });
+    if (!this.smtpRows.has(id)) return fail({ code: 'not_found', message: 'SMTP 配置不存在' });
     const result = {
       success: true,
       providerMessageId: `mock-${Date.now()}`,

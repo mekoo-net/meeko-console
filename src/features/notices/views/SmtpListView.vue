@@ -20,24 +20,24 @@ const error = computed(() => unref(list.error));
 
 const drawer = ref(false);
 const drawerMode = ref<'create' | 'edit'>('create');
-const editingUid = ref<string | null>(null);
+const editingId = ref<string | null>(null);
 const formRef = ref<InstanceType<typeof SmtpForm> | null>(null);
 
 async function openCreate(): Promise<void> {
   drawerMode.value = 'create';
-  editingUid.value = null;
+  editingId.value = null;
   drawer.value = true;
   await nextTick();
   formRef.value?.resetCreate();
 }
 
-function openEdit(uid: string): void {
+function openEdit(id: string): void {
   drawerMode.value = 'edit';
-  editingUid.value = uid;
+  editingId.value = id;
   drawer.value = true;
 }
 
-const editingRow = computed(() => rows.value.find((r) => r.uid === editingUid.value) ?? null);
+const editingRow = computed(() => rows.value.find((r) => r.id === editingId.value) ?? null);
 
 async function onSubmit(payload: CreateSmtpPayload | UpdateSmtpPayload): Promise<void> {
   const port = getNoticeAdminPort();
@@ -52,9 +52,9 @@ async function onSubmit(payload: CreateSmtpPayload | UpdateSmtpPayload): Promise
     }
     return;
   }
-  const uid = editingUid.value;
-  if (!uid) return;
-  const r = await port.updateSmtpProvider(uid, payload as UpdateSmtpPayload);
+  const id = editingId.value;
+  if (!id) return;
+  const r = await port.updateSmtpProvider(id, payload as UpdateSmtpPayload);
   if (r.success) {
     ElMessage.success('已保存');
     drawer.value = false;
@@ -64,14 +64,14 @@ async function onSubmit(payload: CreateSmtpPayload | UpdateSmtpPayload): Promise
   }
 }
 
-async function onDelete(uid: string): Promise<void> {
+async function onDelete(id: string): Promise<void> {
   const ok = await confirmDanger({
     title: '删除 SMTP',
     message: '确定删除该 SMTP 渠道配置吗？',
     type: 'danger',
   });
   if (!ok) return;
-  const r = await list.remove(uid);
+  const r = await list.remove(id);
   if (r.success) {
     ElMessage.success('已删除');
     void list.run();
@@ -80,8 +80,8 @@ async function onDelete(uid: string): Promise<void> {
   }
 }
 
-async function onTest(uid: string): Promise<void> {
-  const r = await getNoticeAdminPort().testSmtpProvider(uid, {
+async function onTest(id: string): Promise<void> {
+  const r = await getNoticeAdminPort().testSmtpProvider(id, {
     recipient: 'qa@example.com',
     subject: 'Meeko SMTP Test',
     body: 'hello',
@@ -126,9 +126,9 @@ async function onTest(uid: string): Promise<void> {
         </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openEdit(row.uid)">编辑</el-button>
-            <el-button link @click="onTest(row.uid)">测试</el-button>
-            <el-button link type="danger" @click="onDelete(row.uid)">删除</el-button>
+            <el-button link type="primary" @click="openEdit(row.id)">编辑</el-button>
+            <el-button link @click="onTest(row.id)">测试</el-button>
+            <el-button link type="danger" @click="onDelete(row.id)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>

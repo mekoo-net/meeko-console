@@ -20,7 +20,7 @@ export function useEmailTemplateEditor(code: Ref<string>, locale: Ref<string>) {
       if (!t.data) {
         return fail({ code: 'not_found', message: '模板不存在' });
       }
-      const rev = await port.listEmailRevisions(t.data.uid);
+      const rev = await port.listEmailRevisions(t.data.id);
       if (!rev.success) return rev;
       return ok({ template: t.data, revisions: rev.data });
     } catch (e) {

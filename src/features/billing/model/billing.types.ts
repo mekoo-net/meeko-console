@@ -45,11 +45,11 @@ export const BusinessCodeLabel: Readonly<Record<BusinessCode, string>> = {
   platform: '平台',
 };
 
-/** long → string（与仓库其余 UID 约定一致） */
-const uidString = z.union([z.string(), z.number()]).transform((v) => String(v));
+/** long / 雪花 ID → string；用于 `id` 与 `*AccountUid` / `*IamId` 字段 */
+const idString = z.union([z.string(), z.number()]).transform((v) => String(v));
 
 export const walletSnapshotSchema = z.object({
-  accountUid: uidString,
+  accountUid: idString,
   available: z.number(),
   held: z.number(),
   currency: z.string(),
@@ -59,7 +59,7 @@ export const walletSnapshotSchema = z.object({
 export type WalletSnapshot = z.infer<typeof walletSnapshotSchema>;
 
 export const rechargeIntentSchema = z.object({
-  rechargeUid: uidString,
+  rechargeId: idString,
   outTradeNo: z.string(),
   provider: z.string(),
   scene: z.number().int(),
@@ -75,26 +75,26 @@ export const rechargeIntentSchema = z.object({
 export type RechargeIntent = z.infer<typeof rechargeIntentSchema>;
 
 export const placeOrderResultSchema = z.object({
-  orderUid: uidString,
+  orderId: idString,
   status: orderStatusSchema,
   billingMode: billingModeSchema,
-  holdUid: uidString.nullable().optional(),
-  subscriptionUid: uidString.nullable().optional(),
-  invoiceUid: uidString.nullable().optional(),
+  holdId: idString.nullable().optional(),
+  subscriptionId: idString.nullable().optional(),
+  invoiceId: idString.nullable().optional(),
   amount: z.number(),
 });
 
 export type PlaceOrderResult = z.infer<typeof placeOrderResultSchema>;
 
 export const orderDtoSchema = z.object({
-  uid: uidString,
-  accountUid: uidString,
+  id: idString,
+  accountUid: idString,
   productCode: z.string(),
   quantity: z.number().int(),
   billingMode: billingModeSchema,
   unitPriceSnapshot: z.number(),
   status: orderStatusSchema,
-  resourceUid: uidString.nullable().optional(),
+  resourceId: idString.nullable().optional(),
   metadataJson: z.string().nullable().optional(),
   createdAtUtc: z.string(),
   activatedAtUtc: z.string().nullable().optional(),
@@ -104,9 +104,9 @@ export const orderDtoSchema = z.object({
 export type OrderDto = z.infer<typeof orderDtoSchema>;
 
 export const subscriptionDtoSchema = z.object({
-  uid: uidString,
-  accountUid: uidString,
-  orderUid: uidString,
+  id: idString,
+  accountUid: idString,
+  orderId: idString,
   productCode: z.string(),
   period: subscriptionPeriodSchema,
   currentPeriodStartUtc: z.string(),
@@ -121,8 +121,8 @@ export const subscriptionDtoSchema = z.object({
 export type SubscriptionDto = z.infer<typeof subscriptionDtoSchema>;
 
 export const invoiceDtoSchema = z.object({
-  uid: uidString,
-  accountUid: uidString,
+  id: idString,
+  accountUid: idString,
   kind: invoiceKindSchema,
   periodStartUtc: z.string().nullable().optional(),
   periodEndUtc: z.string().nullable().optional(),
@@ -133,8 +133,8 @@ export const invoiceDtoSchema = z.object({
   status: invoiceStatusSchema,
   issuedAtUtc: z.string(),
   paidAtUtc: z.string().nullable().optional(),
-  subscriptionUid: uidString.nullable().optional(),
-  orderUid: uidString.nullable().optional(),
+  subscriptionId: idString.nullable().optional(),
+  orderId: idString.nullable().optional(),
 });
 
 export type InvoiceDto = z.infer<typeof invoiceDtoSchema>;
@@ -155,8 +155,8 @@ export type InvoiceDto = z.infer<typeof invoiceDtoSchema>;
  *      cs_compensation     → 客服工单号
  *      marketing_reward    → 营销活动号（多笔充值可共享同一活动号）
  *      manual              → 内部审批单号
- *  - `operatorUid` 是触发该次入账的内部操作人，仅 manual / cs_compensation /
- *    marketing_reward 有值（用户自主充值时为 null）
+   *  - `operatorIamId` 是触发该次入账的 IAM 操作人 userId，仅 manual / cs_compensation /
+   *    marketing_reward 有值（用户自主充值时为 null）
  *  - 不再保留自由文本"备注"字段——重复内容应通过 provider + refNo 推断
  */
 export const rechargeProviderValues = [
@@ -186,9 +186,10 @@ export const RechargeRefNoLabel: Readonly<Record<RechargeProvider, string>> = {
 };
 
 export const rechargeRecordSchema = z.object({
-  uid: uidString,
-  /** 主账户 UID —— 钱归这个账户 */
-  ownerAccountUid: uidString,
+  /** 充值记录主键（RC-* / 雪花） */
+  id: idString,
+  /** 主账户 userId —— 钱归这个账户 */
+  ownerAccountUid: idString,
   provider: z.enum(rechargeProviderValues),
   scene: z.number().int(),
   /**
@@ -202,10 +203,10 @@ export const rechargeRecordSchema = z.object({
   currency: z.string(),
   status: z.enum(rechargeStatusValues),
   /**
-   * 内部操作人 UID，仅 manual / cs_compensation / marketing_reward 有值。
+   * 内部操作人 IAM userId，仅 manual / cs_compensation / marketing_reward 有值。
    * 用户自主第三方支付时为 null。
    */
-  operatorUid: uidString.nullable().optional(),
+  operatorIamId: idString.nullable().optional(),
   createdAtUtc: z.string(),
   paidAtUtc: z.string().nullable().optional(),
 });
@@ -226,7 +227,7 @@ export type RechargeRecord = z.infer<typeof rechargeRecordSchema>;
  *
  * 错扣回滚 / 部分退款：在原条目上修改 `actualAmount`（实际扣费），
  * 同时把 `status` 置为 `reversed` 或 `partial_refunded`，并记录
- * `reversedAtUtc` / `reversedBy` / `reversedCode`（驳回原因枚举码）。
+ * `reversedAtUtc` / `reversedByIamId` / `reversedCode`（驳回原因枚举码）。
  * 钱包余额结算 = ∑ actualAmount WHERE status ∈ {completed, partial_refunded}。
  */
 /**
@@ -320,12 +321,12 @@ export const BillReversedCodeLabel: Readonly<Record<BillReversedCode, string>> =
 };
 
 export const billingEntrySchema = z.object({
-  /** 雪花 ID，单调递增、按时间有序 */
-  uid: uidString,
-  /** 主账户 UID（钱归它） */
-  ownerAccountUid: uidString,
-  /** 实操账户 UID（主账户本身 or IAM 子账户） */
-  operatorAccountUid: uidString,
+  /** 账单主键（BL-* / 雪花），单调递增、按时间有序 */
+  id: idString,
+  /** 主账户 userId（钱归它） */
+  ownerAccountUid: idString,
+  /** 实操账户 userId（主账户本身 or IAM 子账户） */
+  operatorAccountUid: idString,
   business: z.enum(businessCodeValues),
   /** 产品代码，扣款类必有 */
   productCode: z.string().nullable().optional(),
@@ -342,11 +343,11 @@ export const billingEntrySchema = z.object({
   balanceAfter: z.number().nullable().optional(),
   /** 关联业务实体类型（订阅 / 订单 / 发票），定位上下文用 */
   refType: z.enum(billRefTypeValues).nullable().optional(),
-  refUid: uidString.nullable().optional(),
+  refId: idString.nullable().optional(),
   /** 驳回时间 */
   reversedAtUtc: z.string().nullable().optional(),
-  /** 驳回操作人 UID */
-  reversedBy: uidString.nullable().optional(),
+  /** 驳回操作人 IAM userId */
+  reversedByIamId: idString.nullable().optional(),
   /** 驳回原因码（枚举，仅当 status∈{reversed, partial_refunded} 时有值） */
   reversedCode: z.enum(billReversedCodeValues).nullable().optional(),
   occurredAtUtc: z.string(),

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 
 import { useAuthStore } from '@/stores/auth';
+import { isMockMode } from '@/shared/runtime';
 
 interface LoginForm {
   username: string;
@@ -14,7 +15,10 @@ const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 
-const form = reactive<LoginForm>({ username: 'admin', password: 'mock' });
+const form = reactive<LoginForm>({
+  username: isMockMode ? 'admin' : 'admin',
+  password: isMockMode ? 'mock' : 'Meeko@dev123',
+});
 const loading = ref(false);
 
 async function submit(): Promise<void> {
@@ -24,8 +28,12 @@ async function submit(): Promise<void> {
   }
   loading.value = true;
   try {
-    auth.login(form.username, form.password);
-    ElMessage.success(`欢迎回来，${form.username}`);
+    const result = await auth.login(form.username, form.password);
+    if (!result.success) {
+      ElMessage.error(result.error.message || '登录失败');
+      return;
+    }
+    ElMessage.success(`欢迎回来，${auth.displayName}`);
     const redirect = (route.query.redirect as string | undefined) ?? '/accounts';
     await router.replace(redirect);
   } finally {
@@ -41,7 +49,9 @@ async function submit(): Promise<void> {
         <div class="login__logo">M</div>
         <div>
           <h1 class="login__title">Meeko 管理后台</h1>
-          <p class="login__hint">Mock 模式：admin / owner / member 任选用户名快速登录。</p>
+          <p class="login__hint">
+          {{ isMockMode ? 'Mock 模式：admin / owner / member 任选用户名快速登录。' : '开发默认：admin / Meeko@dev123（Staff 用户名）' }}
+        </p>
         </div>
       </div>
       <el-form label-position="top" @submit.prevent="submit">

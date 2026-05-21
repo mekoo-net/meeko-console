@@ -83,7 +83,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
   };
 
   const o1: OrderDto = {
-    uid: genOrderUid(),
+    id: genOrderUid(),
     accountUid,
     productCode: 'pro-seat',
     quantity: 5,
@@ -98,7 +98,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
   };
 
   const o2: OrderDto = {
-    uid: genOrderUid(),
+    id: genOrderUid(),
     accountUid,
     productCode: 'api-pack',
     quantity: 1,
@@ -111,9 +111,9 @@ function seedForAccount(accountUid: Uid): AccountBilling {
   };
 
   const sub: SubscriptionDto = {
-    uid: genSubUid(),
+    id: genSubUid(),
     accountUid,
-    orderUid: o1.uid,
+    orderId: o1.id,
     productCode: 'pro-seat',
     period: 0,
     currentPeriodStartUtc: iso(new Date(now.getTime() - 7 * 86400000)),
@@ -126,7 +126,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
   };
 
   const inv1: InvoiceDto = {
-    uid: genInvUid(),
+    id: genInvUid(),
     accountUid,
     kind: 0,
     periodStartUtc: sub.currentPeriodStartUtc,
@@ -138,12 +138,12 @@ function seedForAccount(accountUid: Uid): AccountBilling {
     status: 2,
     issuedAtUtc: iso(now),
     paidAtUtc: iso(now),
-    subscriptionUid: sub.uid,
-    orderUid: o1.uid,
+    subscriptionId: sub.id,
+    orderId: o1.id,
   };
 
   const inv2: InvoiceDto = {
-    uid: genInvUid(),
+    id: genInvUid(),
     accountUid,
     kind: 2,
     periodStartUtc: undefined,
@@ -155,13 +155,13 @@ function seedForAccount(accountUid: Uid): AccountBilling {
     status: 2,
     issuedAtUtc: iso(new Date(now.getTime() - 86400000)),
     paidAtUtc: iso(new Date(now.getTime() - 86400000)),
-    subscriptionUid: undefined,
-    orderUid: o2.uid,
+    subscriptionId: undefined,
+    orderId: o2.id,
   };
 
   const recharges: RechargeRecord[] = [
     {
-      uid: genSnowflakeUid(),
+      id: genSnowflakeUid(),
       ownerAccountUid: accountUid,
       provider: 'alipay',
       scene: 0,
@@ -169,12 +169,12 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       amount: 500,
       currency: 'CNY',
       status: 'paid',
-      operatorUid: null,
+      operatorIamId: null,
       createdAtUtc: iso(new Date(now.getTime() - 30 * 86400000)),
       paidAtUtc: iso(new Date(now.getTime() - 30 * 86400000 + 60000)),
     },
     {
-      uid: genSnowflakeUid(),
+      id: genSnowflakeUid(),
       ownerAccountUid: accountUid,
       provider: 'wechat_pay',
       scene: 2,
@@ -182,12 +182,12 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       amount: 12880.5,
       currency: 'CNY',
       status: 'paid',
-      operatorUid: null,
+      operatorIamId: null,
       createdAtUtc: iso(new Date(now.getTime() - 10 * 86400000)),
       paidAtUtc: iso(new Date(now.getTime() - 10 * 86400000 + 30000)),
     },
     {
-      uid: genSnowflakeUid(),
+      id: genSnowflakeUid(),
       ownerAccountUid: accountUid,
       provider: 'cs_compensation',
       scene: 99,
@@ -195,12 +195,12 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       amount: 50,
       currency: 'CNY',
       status: 'paid',
-      operatorUid: '900000001',
+      operatorIamId: '900000001',
       createdAtUtc: iso(new Date(now.getTime() - 3 * 3600000)),
       paidAtUtc: iso(new Date(now.getTime() - 3 * 3600000)),
     },
     {
-      uid: genSnowflakeUid(),
+      id: genSnowflakeUid(),
       ownerAccountUid: accountUid,
       provider: 'marketing_reward',
       scene: 99,
@@ -208,12 +208,12 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       amount: 100,
       currency: 'CNY',
       status: 'paid',
-      operatorUid: '900000002',
+      operatorIamId: '900000002',
       createdAtUtc: iso(new Date(now.getTime() - 20 * 86400000)),
       paidAtUtc: iso(new Date(now.getTime() - 20 * 86400000)),
     },
     {
-      uid: genSnowflakeUid(),
+      id: genSnowflakeUid(),
       ownerAccountUid: accountUid,
       provider: 'alipay',
       scene: 0,
@@ -221,7 +221,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       amount: 200,
       currency: 'CNY',
       status: 'pending',
-      operatorUid: null,
+      operatorIamId: null,
       createdAtUtc: iso(now),
       paidAtUtc: null,
     },
@@ -232,7 +232,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
 
   const bills: BillingEntry[] = [
     {
-      uid: genSnowflakeUid(),
+      id: genSnowflakeUid(),
       ownerAccountUid: accountUid,
       operatorAccountUid: accountUid,
       business: 'platform',
@@ -245,14 +245,14 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       currency: 'CNY',
       balanceAfter: 12880.5,
       refType: 'subscription',
-      refUid: o1.uid,
+      refId: o1.id,
       reversedAtUtc: null,
-      reversedBy: null,
+      reversedByIamId: null,
       reversedCode: null,
       occurredAtUtc: iso(new Date(now.getTime() - 7 * 86400000)),
     },
     {
-      uid: genSnowflakeUid(),
+      id: genSnowflakeUid(),
       ownerAccountUid: accountUid,
       operatorAccountUid: accountUid,
       business: 'platform',
@@ -265,14 +265,14 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       currency: 'CNY',
       balanceAfter: 12381.5,
       refType: 'order',
-      refUid: o2.uid,
+      refId: o2.id,
       reversedAtUtc: null,
-      reversedBy: null,
+      reversedByIamId: null,
       reversedCode: null,
       occurredAtUtc: iso(new Date(now.getTime() - 86400000)),
     },
     {
-      uid: genSnowflakeUid(),
+      id: genSnowflakeUid(),
       ownerAccountUid: accountUid,
       operatorAccountUid: iamSubUid,
       business: 'demux',
@@ -285,14 +285,14 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       currency: 'CNY',
       balanceAfter: 12358.5,
       refType: null,
-      refUid: null,
+      refId: null,
       reversedAtUtc: null,
-      reversedBy: null,
+      reversedByIamId: null,
       reversedCode: null,
       occurredAtUtc: iso(new Date(now.getTime() - 2 * 86400000)),
     },
     {
-      uid: genSnowflakeUid(),
+      id: genSnowflakeUid(),
       ownerAccountUid: accountUid,
       operatorAccountUid: iamSubUid,
       business: 'demux',
@@ -305,14 +305,14 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       currency: 'CNY',
       balanceAfter: 12358.5,
       refType: null,
-      refUid: null,
+      refId: null,
       reversedAtUtc: iso(new Date(now.getTime() - 5 * 86400000 + 3600000)),
-      reversedBy: '900000001',
+      reversedByIamId: '900000001',
       reversedCode: 'duplicate_charge',
       occurredAtUtc: iso(new Date(now.getTime() - 5 * 86400000)),
     },
     {
-      uid: genSnowflakeUid(),
+      id: genSnowflakeUid(),
       ownerAccountUid: accountUid,
       operatorAccountUid: accountUid,
       business: 'demux',
@@ -325,14 +325,14 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       currency: 'CNY',
       balanceAfter: null,
       refType: null,
-      refUid: null,
+      refId: null,
       reversedAtUtc: iso(new Date(now.getTime() - 12 * 86400000)),
-      reversedBy: '900000001',
+      reversedByIamId: '900000001',
       reversedCode: 'service_unavailable',
       occurredAtUtc: iso(new Date(now.getTime() - 12 * 86400000 - 3600000)),
     },
     {
-      uid: genSnowflakeUid(),
+      id: genSnowflakeUid(),
       ownerAccountUid: accountUid,
       operatorAccountUid: iamSubUid,
       business: 'demux',
@@ -345,9 +345,9 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       currency: 'CNY',
       balanceAfter: null,
       refType: null,
-      refUid: null,
+      refId: null,
       reversedAtUtc: null,
-      reversedBy: null,
+      reversedByIamId: null,
       reversedCode: null,
       occurredAtUtc: iso(new Date(now.getTime() - 60 * 60 * 1000)),
     },
@@ -355,7 +355,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
 
   const businesses: BusinessInstance[] = [
     {
-      uid: genBusinessUid(),
+      id: genBusinessUid(),
       accountUid,
       productCode: 'cdn-accel',
       productName: PRODUCT_NAMES['cdn-accel']!,
@@ -364,7 +364,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       currentPeriodEndUtc: iso(new Date(now.getTime() + 30 * 86400000)),
     },
     {
-      uid: genBusinessUid(),
+      id: genBusinessUid(),
       accountUid,
       productCode: 'obj-storage',
       productName: PRODUCT_NAMES['obj-storage']!,
@@ -373,7 +373,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       currentPeriodEndUtc: iso(new Date(now.getTime() + 7 * 86400000)),
     },
     {
-      uid: genBusinessUid(),
+      id: genBusinessUid(),
       accountUid,
       productCode: 'ai-inference',
       productName: PRODUCT_NAMES['ai-inference']!,
@@ -383,7 +383,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       currentPeriodEndUtc: iso(new Date(now.getTime() + 15 * 86400000)),
     },
     {
-      uid: genBusinessUid(),
+      id: genBusinessUid(),
       accountUid,
       productCode: 'api-pack',
       productName: PRODUCT_NAMES['api-pack']!,
@@ -486,7 +486,7 @@ export class BillingMock implements BillingPort {
     const created = iso(new Date());
     const provider = (input.provider ?? 'manual') as RechargeRecord['provider'];
     const intent: RechargeIntent = {
-      rechargeUid: genRechargeUid(),
+      rechargeId: genRechargeUid(),
       outTradeNo: `MOCK-${Date.now()}`,
       provider,
       scene: input.scene ?? 99,
@@ -506,7 +506,7 @@ export class BillingMock implements BillingPort {
       updatedAtUtc: created,
     };
     const record: RechargeRecord = {
-      uid: genSnowflakeUid(),
+      id: genSnowflakeUid(),
       ownerAccountUid: accountUid,
       provider,
       scene: intent.scene,
@@ -514,7 +514,7 @@ export class BillingMock implements BillingPort {
       amount: intent.amount,
       currency: intent.currency,
       status: 'paid',
-      operatorUid: null,
+      operatorIamId: null,
       createdAtUtc: created,
       paidAtUtc: created,
     };
@@ -526,10 +526,10 @@ export class BillingMock implements BillingPort {
     await delay();
     const b = ensure(accountUid);
     const q = input.quantity <= 0 ? 1 : input.quantity;
-    const orderUid = genOrderUid();
+    const orderId = genOrderUid();
     const created = iso(new Date());
     const order: OrderDto = {
-      uid: orderUid,
+      id: orderId,
       accountUid,
       productCode: input.productCode,
       quantity: q,
@@ -545,22 +545,22 @@ export class BillingMock implements BillingPort {
     if (!po.success) return po;
     b.orders.unshift(po.data);
     const result: PlaceOrderResult = {
-      orderUid,
+      orderId,
       status: 0,
       billingMode: 0,
       amount: q,
-      holdUid: undefined,
-      subscriptionUid: undefined,
-      invoiceUid: undefined,
+      holdId: undefined,
+      subscriptionId: undefined,
+      invoiceId: undefined,
     };
     return ok(result);
   }
 
-  async getOrder(accountUid: Uid, orderUid: Uid): Promise<AppResult<OrderDto>> {
+  async getOrder(accountUid: Uid, orderId: Uid): Promise<AppResult<OrderDto>> {
     await delay();
     const b = ensure(accountUid);
-    const row = b.orders.find((o) => o.uid === orderUid);
-    if (!row) return fail({ code: 'not_found', message: `订单 ${orderUid} 不存在` });
+    const row = b.orders.find((o) => o.id === orderId);
+    if (!row) return fail({ code: 'not_found', message: `订单 ${orderId} 不存在` });
     return parseOrder(row);
   }
 
@@ -593,10 +593,10 @@ export class BillingMock implements BillingPort {
     return ok(out);
   }
 
-  async setSubscriptionCancelAtPeriodEnd(subscriptionUid: Uid, flag: boolean): Promise<AppResult<void>> {
+  async setSubscriptionCancelAtPeriodEnd(subscriptionId: Uid, flag: boolean): Promise<AppResult<void>> {
     await delay();
     for (const b of store.values()) {
-      const idx = b.subscriptions.findIndex((s) => s.uid === subscriptionUid);
+      const idx = b.subscriptions.findIndex((s) => s.id === subscriptionId);
       if (idx >= 0) {
         const cur = b.subscriptions[idx];
         if (!cur) return fail({ code: 'not_found', message: '订阅不存在' });
@@ -604,7 +604,7 @@ export class BillingMock implements BillingPort {
         return ok(undefined);
       }
     }
-    return fail({ code: 'not_found', message: `订阅 ${subscriptionUid} 不存在` });
+    return fail({ code: 'not_found', message: `订阅 ${subscriptionId} 不存在` });
   }
 
   async listInvoices(

@@ -86,7 +86,7 @@ function statusTone(s: InvoiceStatus): 'success' | 'info' | 'warning' | 'danger'
     </template>
 
     <el-table :data="rows" stripe style="width: 100%">
-      <el-table-column prop="uid" label="发票 UID" min-width="140" />
+      <el-table-column prop="id" label="发票 ID" min-width="140" />
       <el-table-column label="类型" width="120">
         <template #default="{ row }">{{ kindLabel(row.kind) }}</template>
       </el-table-column>

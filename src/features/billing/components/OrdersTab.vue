@@ -90,7 +90,7 @@ function statusTone(s: OrderStatus): 'success' | 'info' | 'warning' | 'danger' |
     </template>
 
     <el-table :data="orderRows" stripe style="width: 100%">
-      <el-table-column prop="uid" label="订单 UID" min-width="140" />
+      <el-table-column prop="id" label="订单 ID" min-width="140" />
       <el-table-column prop="productCode" label="商品" min-width="120" />
       <el-table-column label="状态" width="120">
         <template #default="{ row }">

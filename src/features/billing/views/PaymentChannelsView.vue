@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Refresh, Setting } from '@element-plus/icons-vue';
+import { Plus, Refresh, Setting } from '@element-plus/icons-vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
+import EmptyState from '@/shared/ui/EmptyState.vue';
 import ChannelConfigDrawer from '../components/ChannelConfigDrawer.vue';
 import {
+  draftPaymentChannel,
+  paymentChannelTemplates,
+  paymentProviderCodes,
   PaymentProviderLabel,
   type PaymentChannel,
   type PaymentProviderCode,
@@ -20,6 +24,15 @@ const togglingCode = ref<PaymentProviderCode | null>(null);
 
 const configDrawerVisible = ref(false);
 const configTarget = ref<PaymentChannel | null>(null);
+
+const createDialogVisible = ref(false);
+const createCode = ref<PaymentProviderCode>('alipay');
+
+const existingCodes = computed(() => new Set(channels.value.map((c) => c.code)));
+const availableToCreate = computed(() =>
+  paymentProviderCodes.filter((code) => !existingCodes.value.has(code)),
+);
+const canCreate = computed(() => availableToCreate.value.length > 0);
 
 const providerColor: Record<PaymentProviderCode, string> = {
   alipay: '#1677ff',
@@ -46,7 +59,7 @@ async function toggle(ch: PaymentChannel): Promise<void> {
   try {
     const r = await port.setActive(ch.code, !ch.isActive);
     if (r.success) {
-      const idx = channels.value.findIndex((c) => c.uid === ch.uid);
+      const idx = channels.value.findIndex((c) => c.code === ch.code);
       if (idx >= 0) channels.value[idx] = r.data;
       ElMessage.success(`渠道「${ch.name}」已${r.data.isActive ? '启用' : '停用'}`);
     } else {
@@ -59,6 +72,25 @@ async function toggle(ch: PaymentChannel): Promise<void> {
 
 function openConfig(ch: PaymentChannel): void {
   configTarget.value = ch;
+  configDrawerVisible.value = true;
+}
+
+function openCreate(): void {
+  if (!canCreate.value) {
+    ElMessage.warning('支付宝与微信支付渠道均已添加');
+    return;
+  }
+  createCode.value = availableToCreate.value[0];
+  createDialogVisible.value = true;
+}
+
+function selectCreateCode(code: PaymentProviderCode): void {
+  createCode.value = code;
+}
+
+function confirmCreate(): void {
+  configTarget.value = draftPaymentChannel(createCode.value);
+  createDialogVisible.value = false;
   configDrawerVisible.value = true;
 }
 
@@ -77,13 +109,24 @@ onMounted(() => void load());
     >
       <template #actions>
         <el-button :icon="Refresh" :loading="loading" @click="load()">刷新</el-button>
+        <el-button type="primary" :icon="Plus" :disabled="!canCreate" @click="openCreate">
+          创建渠道
+        </el-button>
       </template>
     </PageHeader>
 
-    <div v-loading="loading" class="channel-grid">
+    <EmptyState
+      v-if="!loading && channels.length === 0"
+      title="暂无充值渠道"
+      description="接入支付宝或微信支付后，用户可在充值时选择对应方式。"
+    >
+      <el-button type="primary" :icon="Plus" @click="openCreate">创建渠道</el-button>
+    </EmptyState>
+
+    <div v-else v-loading="loading" class="channel-grid">
       <el-card
         v-for="ch in channels"
-        :key="ch.uid"
+        :key="ch.id"
         shadow="never"
         class="channel-card"
         :class="{ 'channel-card--inactive': !ch.isActive }"
@@ -178,6 +221,57 @@ onMounted(() => void load());
       </el-card>
     </div>
 
+    <el-dialog
+      v-model="createDialogVisible"
+      title="创建充值渠道"
+      width="640px"
+      destroy-on-close
+      class="create-dialog"
+    >
+      <p class="create-dialog__hint">选择要接入的支付方式，创建后在配置页填写密钥与回调地址。</p>
+      <div class="create-dialog__cards">
+        <button
+          v-for="code in availableToCreate"
+          :key="code"
+          type="button"
+          class="pick-card"
+          :class="{ 'pick-card--selected': createCode === code }"
+          @click="selectCreateCode(code)"
+        >
+          <div class="pick-card__header">
+            <div
+              class="pick-card__logo"
+              :style="{ background: providerBg[code], color: providerColor[code] }"
+            >
+              <span class="pick-card__logo-text">{{ paymentChannelTemplates[code].name.charAt(0) }}</span>
+            </div>
+            <div class="pick-card__meta">
+              <div class="pick-card__name">{{ PaymentProviderLabel[code] }}</div>
+              <div class="pick-card__code">code: {{ code }}</div>
+            </div>
+            <span v-if="createCode === code" class="pick-card__check" aria-hidden="true">✓</span>
+          </div>
+          <p class="pick-card__desc">{{ paymentChannelTemplates[code].description }}</p>
+          <div class="pick-card__scenes">
+            <span class="pick-card__scenes-label">支持场景：</span>
+            <el-tag
+              v-for="s in paymentChannelTemplates[code].supportedScenes"
+              :key="s"
+              size="small"
+              type="info"
+              effect="plain"
+            >
+              {{ (PaymentSceneLabel as Record<number, string>)[s] ?? `Scene ${s}` }}
+            </el-tag>
+          </div>
+        </button>
+      </div>
+      <template #footer>
+        <el-button @click="createDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmCreate">下一步：配置</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 配置抽屉 -->
     <ChannelConfigDrawer
       v-model:visible="configDrawerVisible"
@@ -270,5 +364,101 @@ onMounted(() => void load());
 }
 .cell-muted {
   color: var(--el-text-color-placeholder);
+}
+.create-dialog__hint {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
+}
+.create-dialog__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.pick-card {
+  display: block;
+  width: 100%;
+  padding: 16px;
+  text-align: left;
+  border: 2px solid var(--el-border-color);
+  border-radius: 12px;
+  background: var(--el-bg-color);
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+.pick-card:hover {
+  border-color: var(--el-color-primary-light-5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+.pick-card--selected {
+  border-color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+  box-shadow: 0 0 0 1px var(--el-color-primary-light-7);
+}
+.pick-card__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.pick-card__logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.pick-card__logo-text {
+  font-size: 18px;
+  font-weight: 800;
+}
+.pick-card__meta {
+  flex: 1;
+  min-width: 0;
+}
+.pick-card__name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+.pick-card__code {
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--el-text-color-secondary);
+  margin-top: 2px;
+}
+.pick-card__check {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--el-color-primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+.pick-card__desc {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--el-text-color-regular);
+}
+.pick-card__scenes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.pick-card__scenes-label {
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
 }
 </style>

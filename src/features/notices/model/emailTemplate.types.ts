@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
-const uidString = z.union([z.string(), z.number()]).transform((v) => String(v));
+const idString = z.union([z.string(), z.number()]).transform((v) => String(v));
 
 export const emailTemplateDtoSchema = z.object({
-  uid: uidString,
+  id: idString,
   code: z.string(),
   locale: z.string(),
   subject: z.string(),
@@ -12,8 +12,8 @@ export const emailTemplateDtoSchema = z.object({
   description: z.string().nullable().optional(),
   currentVersion: z.number().int(),
   isActive: z.boolean(),
-  /** 绑定的 SMTP 渠道 UID，undefined 表示使用默认渠道 */
-  smtpProviderUid: uidString.nullable().optional(),
+  /** 绑定的 SMTP 渠道 id，undefined 表示使用默认渠道 */
+  smtpProviderId: idString.nullable().optional(),
   createdAtUtc: z.string(),
   updatedAtUtc: z.string(),
 });
@@ -41,7 +41,7 @@ export interface CreateEmailTemplatePayload {
   description?: string | undefined;
   isActive: boolean;
   /** 指定使用的 SMTP 渠道，不填则使用默认渠道 */
-  smtpProviderUid?: string | undefined;
+  smtpProviderId?: string | undefined;
 }
 
 export interface UpdateEmailTemplatePayload {
@@ -52,5 +52,5 @@ export interface UpdateEmailTemplatePayload {
   isActive: boolean;
   changeNote?: string | undefined;
   /** 指定使用的 SMTP 渠道，不填则使用默认渠道 */
-  smtpProviderUid?: string | undefined;
+  smtpProviderId?: string | undefined;
 }

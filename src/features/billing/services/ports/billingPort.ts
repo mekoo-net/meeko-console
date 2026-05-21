@@ -63,13 +63,13 @@ export interface BillingPort {
   getWallet(accountUid: Uid): Promise<AppResult<WalletSnapshot | null>>;
   createRecharge(accountUid: Uid, input: CreateRechargeInput): Promise<AppResult<RechargeIntent>>;
   placeOrder(accountUid: Uid, input: PlaceOrderInput): Promise<AppResult<PlaceOrderResult>>;
-  getOrder(accountUid: Uid, orderUid: Uid): Promise<AppResult<OrderDto>>;
+  getOrder(accountUid: Uid, orderId: Uid): Promise<AppResult<OrderDto>>;
   listOrders(
     accountUid: Uid,
     input: { page: number; pageSize: number; filter: ListOrdersFilter },
   ): Promise<AppResult<ListOrdersPage>>;
   listSubscriptions(accountUid: Uid): Promise<AppResult<SubscriptionDto[]>>;
-  setSubscriptionCancelAtPeriodEnd(subscriptionUid: Uid, flag: boolean): Promise<AppResult<void>>;
+  setSubscriptionCancelAtPeriodEnd(subscriptionId: Uid, flag: boolean): Promise<AppResult<void>>;
   listInvoices(
     accountUid: Uid,
     input: { page: number; pageSize: number; filter: ListInvoicesFilter },
