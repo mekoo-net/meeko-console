@@ -1,6 +1,6 @@
 # Meeko 管理后台（Web）
 
-基于 **Vue 3 + Vite + Vue Router + Pinia + TypeScript + Element Plus** 的纯前端管理台。默认使用本地 **Mock** 数据，不发起真实 HTTP；将来接入 BFF 时只新增 `src/features/*/services/bff` 与工厂中的 Adapter 实现，**不修改**各 feature 的 Port 接口与视图/Store 的调用方式。
+基于 **Vue 3 + Vite + Vue Router + Pinia + TypeScript + Element Plus** 的 **Meeko 平台管理后台**。员工登录走 Keystone **`POST /staff/auth/login`（用户名 + 密码）**，不是终端用户的邮箱 `POST /auth/login`。默认使用本地 **Mock**；真连后端时设 `VITE_USE_MOCK=false` 与 `VITE_API_BASE=http://localhost:7000`（见 `.env.development`）。
 
 ## 环境要求
 
