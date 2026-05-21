@@ -3,19 +3,15 @@
 > 所有页面共享的传输层 / 鉴权 / 数据契约。各页面文档（`01-*.md` 之后）只描述与本文件**不同**的部分。
 
 ## 1. 统一返回模型 `AppResult<T>`
-
 后端（`Meeko.Common.Results`）的约定：
-
 - **成功** `ToHttp()` → `200 OK` + 直接返回 `T` 作为响应体。
 - **失败** `ToHttp()` → 返回 RFC 7807 ProblemDetails，HTTP 状态码与 `code` 一一对应。
-
 前端将两者统一为离散类型，定义见 `src/shared/api/httpTypes.ts`：
 
 ```ts
 type AppResult<T> =
   | { success: true; data: T }
   | { success: false; error: AppError };
-
 interface AppError {
   code: 'unknown' | 'validation' | 'unauthorized' | 'forbidden'
       | 'not_found' | 'conflict' | 'too_many_requests'
@@ -26,10 +22,10 @@ interface AppError {
   /** OTP / 充值等需要 Retry-After 的场景。 */
   retryAfterSeconds?: number;
 }
+
 ```
 
 ### HTTP 状态码 ↔ ErrorCode 对照
-
 | HTTP | code | 典型场景 |
 | --- | --- | --- |
 | 400 | `validation` | 入参 zod 失败、字段缺失 |
@@ -47,6 +43,7 @@ interface AppError {
 ```http
 HTTP/1.1 400 Bad Request
 Content-Type: application/problem+json
+
 ```
 
 ```json
@@ -61,10 +58,10 @@ Content-Type: application/problem+json
     "provider": ["不支持的支付渠道"]
   }
 }
+
 ```
 
 ## 2. 分页约定
-
 所有列表接口统一接收 `page` / `pageSize` 查询参数，并返回：
 
 ```json
@@ -72,6 +69,7 @@ Content-Type: application/problem+json
   "items": [/* T[] */],
   "total": 1024
 }
+
 ```
 
 - `page` 从 **1** 开始（前端默认 1）。
@@ -80,21 +78,32 @@ Content-Type: application/problem+json
 - 排序按业务域默认（如 `Account.createdAtUtc DESC`、`LogEntry.occurredAtUtc DESC`），暂不暴露排序参数。
 
 ## 3. 标识符 / 时间 / 金额
-
+**总规则（前端传参 / JSON 字段名）：**
+| 对象 | 主键字段名 | 示例 |
+| --- | --- | --- |
+| **用户**（主账户、IAM 子账户、操作人） | **`uid`**（或带语义的 `*Uid`：`accountUid`、`ownerAccountUid`、`iamUserUid`） | `account.uid`、`operator: { iamUserUid }` |
+| **其它一切业务实体** | **`id`** | 账单 `id: "BL-…"`、充值 `RC-…`、订单 `OD-…`、渠道 `PC-…`、日志 `LG-…` |
+- 传**用户**时**不要**用 `id` 当主键；传**业务行**时**不要**用 `uid` 当主键（避免与账户 userId 混淆）。
+- long 在 JSON 中**始终序列化为 string**（避免 JS Number 精度）。
 | 项 | 约定 |
 | --- | --- |
-| `uid`（long） | JSON 中**始终序列化为 string**（避免 JS Number 精度），前端类型为 `string`。 |
+| `id` | 非用户类实体主键。 |
+| `uid` / `*AccountUid` / `*IamUserUid` | 用户域主键（userId）。 |
 | 时间字段 | 一律以 ISO-8601 UTC 字符串传输，字段名以 `AtUtc` 结尾。 |
 | 金额 | 后端 decimal，前端 `number`，单位**元**；展示走 `formatMoney` 做 banker rounding。 |
 | 货币 | 字段名 `currency`，ISO 4217（`CNY` 默认）。 |
 | `tier` / LV | 1 起的正整数，默认 1。 |
 
 ## 4. 鉴权
+### 4.0 管理后台（本仓库）— Staff 员工登录
+> **`meeko-console` 只服务平台内部员工**，不走下文 4.1 的终端 IAM 邮箱登录。
+- **登录**：`POST /staff/auth/login`，body `{ username, password }`（见 [`01-login.md`](./01-login.md)）。
+- **JWT**：Keystone Staff issuer（`Jwt:Staff`），Gateway 需同时接受 Staff 与 Account 两类 issuer。
+- **无 refresh token**：过期后重新登录。
+- **UI 角色**：`AppRole` 由 Staff `SuperAdmin` → `Admin`、`ReadOnly` → `Member` 映射，用于 `meta.roles` 路由守卫。
 
-### 4.1 统一 IAM 模型（契约根）
-
-> 平台对所有账户走**同一条登录 / 鉴权链路**，区别只在产品 UI 是否暴露 IAM 管理。
-
+### 4.1 统一 IAM 模型（终端用户 / BFF 业务数据契约根）
+> 适用于 **demuxai-web 等用户端** 与 BFF 管理的 **Account / IAM 子用户** 数据；**不是**管理后台的登录方式。
 - **登录主体永远是 IAM 用户**：无论 `account.type` 是 `personal` 还是 `organization`，BFF 签发的 JWT 中 `sub` 一律为 `iam_user_uid`。
 - **personal 账户内部持有一个 1:1 绑定的隐式 IAM 用户**——仅作为鉴权 / 审计链路的主体存在，**不在 IAM 列表 UI 暴露**，也不允许新增其它 IAM 子用户（业务规则上 `iamUserCount` 恒为 `1`）。
 - **所有审计字段非可空**：`change.byIamUserUid`、`reversal.byIamUserUid`、`owner.iamUserUid` 等永远有值，前端类型可直接收紧为 `string`（非 `string | null`）。
@@ -104,34 +113,32 @@ Content-Type: application/problem+json
 ### 4.2 请求头
 
 ```
+
 Authorization: Bearer <accessToken>
+
 ```
 
 - `accessToken` / `refreshToken` 在 `auth` store + `localStorage` 持久化（key：`meeko.admin.session.v1`）。
-- 角色由 IAM 用户决定：`Admin` / `Owner` / `Member`（personal 账户的隐式用户恒为 `Owner`）。
+- 管理端 `AppRole`（`Admin` / `Owner` / `Member`）来自 **Staff 角色映射**（见 4.0）；Mock 模式下由用户名模拟。
 - 401 → 前端清空 session 并跳 `/login`。
 - 受 `meta.roles` 保护的路由（如 `/notices/*`、`/demuxai/*`、`/billing/channels`）需要 `Admin` 角色；不满足会被路由守卫重定向到 `/accounts`。
-
 详见 `src/stores/auth.ts`：
 
 ```ts
 type AppRole = 'Admin' | 'Owner' | 'Member';
+
 ```
 
 ## 5. Mock / 真接 BFF 切换
-
 环境变量（参见根目录 `.env.example` 与 `README.md`）：
-
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
 | `VITE_USE_MOCK` | `true` | `false` 时各 `get*Port()` 返回 HttpAdapter；当前未实现会抛出错误提示。 |
 | `VITE_MOCK_DELAY_MS` | `220` | Mock 延迟（毫秒），便于感受 loading。 |
 | `VITE_API_BASE` | — | 真接 BFF 时的 baseUrl；与 Vite dev proxy 配合。 |
-
 要接入真 BFF，仅需新增 `src/features/*/services/bff/Http*Adapter.ts` 并在工厂 `getXxxPort()` 中按 flag 注册，**不修改** Port 接口与视图代码。
 
 ## 6. 字段级 zod 校验
-
 - 列表 / 详情接口的响应都过 zod schema 校验（schema 集中在各 `model/*.types.ts`）。
 - BFF 字段名一律 **camelCase**；含 long 的字段用 `string`（必要时后端转换）。
 - `null` 与 `undefined` 区分：
@@ -139,17 +146,14 @@ type AppRole = 'Admin' | 'Owner' | 'Member';
   - 切勿用空字符串 `""` 表示无值（除非是输入框默认值）。
 
 ## 7. 时间范围参数 `fromUtc` / `toUtc`
-
 - 列表接口涉及时间过滤时统一使用 `fromUtc`（inclusive）与 `toUtc`（inclusive）。
 - 日志类（`/demuxai/logs`）**必传时间范围且最长 7 天**，BFF 在缺省时应拒绝（避免全表扫）。
 
 ## 8. 幂等
-
 - 充值 / OTP / 通知发送等"会产生副作用"的接口接受可选 `idempotencyKey`，前端在表单层生成 nanoid。
 - 后端需在合理 TTL（≥ 24h）内对重复 key 返回相同业务结果。
 
 ## 9. 软删 / 硬删
-
 | 实体 | 删除策略 | 说明 |
 | --- | --- | --- |
 | `Account` | 软删（status='deleted'） | 列表默认不过滤已删除，UI 用状态标识。 |
@@ -161,26 +165,22 @@ type AppRole = 'Admin' | 'Owner' | 'Member';
 | `EmailTemplate` | 软删（isActive） | 历史不可丢。 |
 
 ## 10. 字段族封装原则（"对象优于扁平"）
-
 > 这是 v2 redesign 的核心约束。所有页面文档遵循此原则；下文列举的反模式在新增接口时**应被拒绝**。
 
 ### 10.1 必须封装成子对象的字段族
-
 凡是满足以下任一条件的"语义同源"字段必须封装为嵌套子对象：
-
-1. **同生同灭**：几条字段总是一起出现 / 一起为 null。  
+1. **同生同灭**：几条字段总是一起出现 / 一起为 null。
    反例：`reversedAtUtc` / `reversedBy` / `reversedCode` 散落顶层 → 正例：`reversal: { atUtc, byIamUserUid, code } | null`
-2. **状态扩展**：某个状态值开启时才有意义的字段。  
+2. **状态扩展**：某个状态值开启时才有意义的字段。
    反例：`failureCode` 顶层（90% 行是 null）→ 正例：`failure: { code } | null`（与 `status='failed'` 联动）
-3. **配对单价 + 实际金额**：单价快照与扣费金额配对内联。  
+3. **配对单价 + 实际金额**：单价快照与扣费金额配对内联。
    正例：`DimensionCost = { perMToken, amount }`、`cost.input.cachedRead: DimensionCost`
-4. **角色族**：owner / operator / change.by 等。  
+4. **角色族**：owner / operator / change.by 等。
    正例：`owner: { iamUserUid, displayName, email, phone }`、`change: { byIamUserUid, atUtc, note }`
-5. **判别联合**：同一字段集随判别字段形状变化（10-pricing / 11-logs 已示例）。  
+5. **判别联合**：同一字段集随判别字段形状变化（10-pricing / 11-logs 已示例）。
    正例：`billingType + pricing` / `source.provider + source.refNo` / `latency.kind + latency.ms`
 
 ### 10.2 错误对象与命令响应统一形状
-
 **所有操作类接口的失败信息**统一为：
 
 ```ts
@@ -189,6 +189,7 @@ type ApiError = {
   message?: string;        // 上游原文摘要 ≤ 200 字符，仅展示
   httpStatus?: number;     // 上游 / 网关 HTTP 状态码（log 用，其它端点可省）
 };
+
 ```
 
 应用在两种场景：
@@ -220,7 +221,7 @@ type ApiError = {
 
 ### 10.5 列表 vs 详情投影分层
 
-资源含子树（如 `Provider.providerModels` / `Pricing.pricing` 详细子树）时，列表只返回**轻投影**（行渲染必需字段 + 子树概要 / 计数 / 首 N 条 names），详情端点 `GET /{uid}` 才返回完整子树。
+资源含子树（如 `Provider.providerModels` / `Pricing.pricing` 详细子树）时，列表只返回**轻投影**（行渲染必需字段 + 子树概要 / 计数 / 首 N 条 names），详情端点 `GET /{id}`（业务实体）或 `GET /accounts/{uid}`（用户）才返回完整子树。
 
 参考实现：08-providers 列表 `mappings: { count, names[] }` + 详情 `providerModels / modelMappings`；10-pricing 列表 `summary: {...}` + 详情完整 `pricing` 子树。
 

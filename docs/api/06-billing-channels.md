@@ -17,9 +17,9 @@
 >
 > - `alipay`（支付宝） · 对齐 essensoft/paylink `AlipayOptions`
 > - `wechat_pay`（微信支付 V3） · 对齐 essensoft/paylink `WeChatPayOptions`
+> **标识**：渠道行主键 JSON 字段为 **`id`**（如 `PC-001`）；`uid` 仅用于账户 / IAM userId（见 [`00-conventions.md`](./00-conventions.md) §3）。
 
 ## 接口清单
-
 | 业务动作 | Port 方法 | HTTP | REST 端点 |
 | --- | --- | --- | --- |
 | 列表渠道（含 isConfigured / isActive） | `listChannels` | GET | `/api/admin/billing/channels` |
@@ -30,15 +30,13 @@
 | 保存微信支付配置 | `saveWechatPayConfig(config)` | PUT | `/api/admin/billing/channels/wechat_pay/config` |
 
 ## 请求 / 响应
-
 ### `GET /api/admin/billing/channels`
-
 成功响应（`PaymentChannel[]`）：
 
 ```json
 [
   {
-    "uid": "PC-001",
+    "id": "PC-001",
     "code": "alipay",
     "name": "支付宝",
     "description": "支持当面付、PC 网站、H5、JsApi 等场景",
@@ -48,7 +46,7 @@
     "isConfigured": true
   },
   {
-    "uid": "PC-002",
+    "id": "PC-002",
     "code": "wechat_pay",
     "name": "微信支付",
     "description": "支持 Native、JsApi、H5、App 等场景",
@@ -58,29 +56,29 @@
     "isConfigured": false
   }
 ]
+
 ```
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `code` | `'alipay' \| 'wechat_pay'` | 业务码，前端枚举固定。 |
+| `id` | string | 渠道配置行主键（如 `PC-001`）。 |
+| `code` | `'alipay' \| 'wechat_pay'` | 业务码，前端枚举固定；REST 路径 `{code}` 亦用它。 |
 | `isActive` | boolean | 是否启用（用户在结算页可选）。 |
 | `isConfigured` | boolean | 是否已保存过完整配置；前端用于展示 "已配置 / 待配置"。 |
 | `supportedScenes` | int[] | 见 `PaymentSceneLabel`（0=Native, 1=H5, 2=JsApi, 3=App, 4=PC, 99=手工入账）。 |
 
 ### `PATCH /api/admin/billing/channels/{code}/active`
-
 请求体：
 
 ```json
 { "active": true }
+
 ```
 
 - 启用前服务端应校验 `isConfigured=true`，否则返回 400 `validation`。
-
 成功返回更新后的 `PaymentChannel`（与列表中条目结构一致）。
 
 ### `GET /api/admin/billing/channels/alipay/config`
-
 成功响应（`AlipayConfig`，未配置时返回 `null`）：
 
 ```json
@@ -103,10 +101,10 @@
     "isSandbox": false
   }
 }
+
 ```
 
 字段分组说明：
-
 | 子对象 | 字段 | 说明 |
 | --- | --- | --- |
 | `app` | `id` | 支付宝开放平台 AppId。封装成对象方便未来加 `app.appType` / `app.tenantId`。 |
@@ -119,16 +117,13 @@
 > - 落库采用加密存储（推荐 KMS / AES-256-GCM）。
 
 ### `PUT /api/admin/billing/channels/alipay/config`
-
 请求体即 `AlipayConfig`（完整覆盖）。**敏感字段更新语义**（与 08 providers / 12 SMTP 一致）：
 - 字段省略 / `null` → 不变更
 - 空字符串 `""` → 清空（仅在解绑场景使用）
 - 非空字符串 → 整体替换
-
 成功响应：`204 No Content`。
 
 ### `GET /api/admin/billing/channels/wechat_pay/config`
-
 成功响应（`WechatPayConfig`，未配置返回 `null`）：
 
 ```json
@@ -149,22 +144,24 @@
     "isSandbox": false
   }
 }
+
 ```
 
 > 微信支付与支付宝**遵循同一分组结构**（`app` / `credentials` / `endpoints` / `environment`），减少前端表单组件的特殊分支。
 > `credentials.apiV3Key` 与 `credentials.privateKey` 的脱敏 / 加密原则与支付宝一致。
 
 ### `PUT /api/admin/billing/channels/wechat_pay/config`
-
 请求体即 `WechatPayConfig`，敏感字段更新语义同上。成功响应：`204 No Content`。
 
 ## 交互流程
 
 ```
+
 onMounted → listChannels()
 点击「配置」 → 抽屉打开 → getAlipayConfig / getWechatPayConfig 回填
 保存 → saveAlipayConfig / saveWechatPayConfig → 重新 listChannels()
 启用/停用 → setActive(code, !isActive) → 更新单行
+
 ```
 
 ## 错误码

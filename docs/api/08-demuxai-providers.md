@@ -1,304 +1,234 @@
-# 08 · 模型渠道（DemuxAI Providers）
+# 08 · 供应商组与模型别名（DemuxAI Providers）
 
 ## 页面信息
 
 | 项 | 值 |
 | --- | --- |
-| 路由 | `/demuxai/providers` |
+| 路由 | `/demuxai/providers`（**主入口**） |
+| 重定向 | `/demuxai/models`、`/demuxai/model-routes`、`/demuxai/channels` → 本页 |
 | 角色 | **Admin** |
-| 视图 | `src/features/demuxai/views/ProviderListView.vue` |
-| 抽屉 | `src/features/demuxai/components/ProviderEditDrawer.vue`（新增 / 编辑） |
-| Port | `src/features/demuxai/services/ports/demuxaiProviderPort.ts` |
+| 视图 | `src/features/demuxai/views/ProviderGroupListView.vue` |
+| 布局 | `ProviderWorkspaceLayout` + `ProviderGroupSidebar` + `ProviderDetailPanel` |
+| 子功能 | 上游模型表 / `ProviderUpstreamModelEditDrawer`（维护对外别名） / `ModelRouteEditDrawer` |
+| Port | `DemuxaiCatalogPort` + `DemuxaiModelRoutePort` |
+
+## 标识约定
+
+| 字段 | 语义 |
+| --- | --- |
+| `id` | 实体主键（`ModelRoute.id`、`Vendor.id` 等） |
+| `uid` | **仅 userId**（账户 / IAM，见 [`11-demuxai-logs.md`](./11-demuxai-logs.md)） |
+
+REST 路径参数写 `{id}`；前端 Port 方法参数名可能仍叫 `uid`，映射到 JSON `id`。
 
 ## 业务定义
 
-> Provider = **一组凭据 + 一种 apiType + 一组 providerModels（上游模型）+ 一组 modelMappings（对外上架映射）**。
+> **新架构（控制台主路径）**：运营对象是 **供应商组（ProviderGroup）**，不是旧版「凭据 + providerModels + modelMappings」单体 Provider。
 >
-> 保存（create / update / delete）时，BFF 做原子 reconcile：
+> | 概念 | 含义 | 与网关对齐 |
+> | --- | --- | --- |
+> | **供应商组** | `queueGroup`（如 `kiro`、`gemini`、`codex`） | demuxai-api `QueueGroup` / NATS `gateway.chat.{queueGroup}` |
+> | **上游模型** | 组内技术注册名 `upstreamModelId` | 网关实例上报的模型 ID |
+> | **对外别名（模型路由）** | 用户请求体 `model` 字段 / 计费主键 `alias` | `ModelRoute`：`alias` → `channelKey` + `upstreamModelId` |
 >
-> - **出现新的 `modelMappings.displayName`** → 自动 create 平台 `Model`（用首条承载它的 ProviderModel 的元数据）；
-> - **全局已无任何 mapping 引用某个 displayName** → 自动 delete 平台 `Model`（前端 Mock 硬删，BFF 软删用于日志 join，对前端透明）；
-> - 因此前端**不**直接 create / delete Model。
-
-`autoDisabledCode` 是调度侧根据连续错误率自动写入的，恢复必须人工 `setStatus('enabled')`，避免抖动来回切换。
+> - 供应商组**仅来自网关注册同步**（不可手工新建组）；可手工**登记**组内上游模型（`source=manual`）。
+> - 同一 `alias` 可有多条路由（`weight` / `priority` 加权分流）；定价在 [`10-demuxai-pricing.md`](./10-demuxai-pricing.md) 按 `modelId`（= `alias`）维护。
+> - 删除上游模型前须先删掉其下全部别名（前端拦截）。
+> **遗留 Vendor 接口**（`DemuxaiProviderPort`）：DemuxAi 域内称 **Vendor**，仅保留 `name` + `status`，供概览 / 日志的字典 join 与过渡兼容；**不再**承载上游模型子树。见本文 § 遗留 Vendor。
 
 ## 接口清单
 
-| 业务动作 | Port 方法 | HTTP | REST 端点 | 投影 |
-| --- | --- | --- | --- | --- |
-| 列表（**轻投影**，不返回 providerModels / modelMappings 全集） | `list` | GET | `/api/admin/demuxai/providers` | 行级概要 + `mappingsCount` / `mappingNames[]` |
-| 详情（编辑前回填，含完整子树） | `get(uid)` | GET | `/api/admin/demuxai/providers/{uid}` | 全字段 |
-| 新建 | `create(payload)` | POST | `/api/admin/demuxai/providers` | 全字段 |
-| 整体覆盖式更新 | `update(uid, payload)` | PUT | `/api/admin/demuxai/providers/{uid}` | 全字段 |
-| 删除 | `delete(uid)` | DELETE | `/api/admin/demuxai/providers/{uid}` | — |
-| 切换启停 | `setStatus(uid, status)` | PATCH | `/api/admin/demuxai/providers/{uid}/status` | 全字段 |
-| 连通测试 | `test(uid)` | POST | `/api/admin/demuxai/providers/{uid}/test` | `ProviderTestResult` |
-| 拉取上游 `/v1/models` | `fetchUpstreamModels(input)` | POST | `/api/admin/demuxai/providers/upstream-models` | `{ upstreamModelNames }` |
+### 供应商组目录（`DemuxaiCatalogPort`）
 
-> **列表 vs 详情投影分层**：原列表会把每行的 `providerModels[]` + `modelMappings[]` 完整下发，单行可能膨胀到 100+ KB。现按 GitHub repos / OpenAI fine-tunes 等惯例分层 —— 列表只回概要（行可见字段 + `mappingsCount` + 前 5 个 `mappingNames[]` 给 hover 预览），详情 `GET /{uid}` 才回完整子树。
+| 业务动作 | Port 方法 | HTTP（规划） | 说明 |
+| --- | --- | --- | --- |
+| 列出全部组 | `listProviderGroups()` | `GET /demuxai/api/admin/catalog/provider-groups` | 左侧栏数据源 |
+| 从网关同步 | `syncFromGateway()` | `POST /demuxai/api/admin/catalog/sync` | 合并网关注册 + 保留 `manual` 登记 |
+| 组内上游模型列表 | `listUpstreamModels(queueGroup)` | `GET .../provider-groups/{queueGroup}/upstream-models` | 右侧主表 |
+| 手工添加上游模型 | `addUpstreamModel(input)` | `POST .../upstream-models` | `source=manual` |
+| 移除手工上游模型 | `removeUpstreamModel(qg, id)` | `DELETE .../upstream-models/{upstreamModelId}` | 仅 `manual` 可删 |
+
+> **接入状态**：`DemuxaiCatalogHttpAdapter` 当前返回 `upstream` 错误；请用 **`VITE_USE_MOCK=true`** 预览 UI。BFF 应对齐 demuxai-api 集群状态 / Provider 注册表。
+
+### 模型路由（`DemuxaiModelRoutePort`）
+
+| 业务动作 | Port 方法 | HTTP（规划） | 说明 |
+| --- | --- | --- | --- |
+| 列表 | `list({ page, pageSize, filter })` | `GET /demuxai/api/admin/model-routes` | `filter.channelKey` = `queueGroup` |
+| 详情 | `get(id)` | `GET /demuxai/api/admin/model-routes/{id}` | 编辑回填 |
+| 新建 | `create(input)` | `POST /demuxai/api/admin/model-routes` | |
+| 更新 | `update(id, input)` | `PUT /demuxai/api/admin/model-routes/{id}` | |
+| 删除 | `delete(id)` | `DELETE /demuxai/api/admin/model-routes/{id}` | |
+| 启停 | `setStatus(id, status)` | `PATCH /demuxai/api/admin/model-routes/{id}/status` | `enabled` / `disabled` / `hidden` |
+
+> **接入状态**：`DemuxaiModelRouteHttpAdapter` 同上，Mock 可用。
 
 ## 请求 / 响应
 
-### 列表 `GET /api/admin/demuxai/providers`
-
-参数：
-
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `page` | int | 是 | 起始 1 |
-| `pageSize` | int | 是 | 默认 20 |
-| `keyword` | string | 否 | 模糊匹配 `name` / `baseUrl` |
-| `apiType` | enum/`'all'` | 否 | 见 `apiTypeValues` |
-| `status` | enum/`'all'` | 否 | `enabled` / `disabled` / `auto_disabled` |
-
-响应：
-
-响应（**轻投影**）：
+### `ProviderGroup`
 
 ```json
 {
-  "items": [
-    {
-      "uid": "PR-001",
-      "name": "OpenAI 主线",
-      "connection": {
-        "apiType": "openai",
-        "baseUrl": "https://api.openai.com/v1",
-        "apiKey":  { "masked": "sk-***abc1" }
-      },
-      "notes": "主用账户，月预算 $5000",
-      "status": "enabled",
-      "autoDisabledCode": null,
-      "lastTest": {
-        "ok":        true,
-        "latencyMs": 142,
-        "atUtc":     "2025-09-12T03:21:08Z"
-      },
-      "metrics24h": {
-        "callCount": 5820,
-        "errorRate": 0.012
-      },
-      "mappings": {
-        "count": 3,
-        "names": ["demux-gpt-4o", "demux-gpt-4o-mini", "demux-o1-preview"]
-      },
-      "createdAtUtc": "2024-09-01T00:00:00Z",
-      "updatedAtUtc": "2025-09-12T03:21:08Z"
-    }
-  ],
-  "total": 8
-}
-```
-
-字段说明：
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `connection` | object | 上游连接配置：`{ apiType, baseUrl, apiKey: { masked } }`。`apiKey` 用嵌套对象而非 string，是为未来引入 `keyId` / `rotatedAtUtc` / `expiresAtUtc` 等元数据预留扩展点；前端永远读 `connection.apiKey.masked` 做展示。完整密钥**永不回流**到前端，BFF 入库前 hash + 加密。 |
-| `lastTest` | object \| null | 最近一次连通测试结果快照：`{ ok, latencyMs, atUtc }`。**整组字段同生同灭**，从未测试过时为 `null`。 |
-| `metrics24h` | object | 近 24 小时观测指标：`{ callCount, errorRate }`。BFF 端从日志服务聚合后下发，避免前端再请求 stats。 |
-| `mappings` | object | 列表投影：`{ count, names[] }`。`names` 至多前 5 个，供 hover 预览；想看全部请进详情。 |
-| `autoDisabledCode` | string \| null | 自动停用原因（调度侧写入，UI 只读）。 |
-
-### 详情 `GET /api/admin/demuxai/providers/{uid}`
-
-在轻投影基础上**额外**返回 `providerModels[]` + `modelMappings[]` 完整子树：
-
-```json
-{
-  "...": "（上面所有列表字段）",
-  "providerModels": [
-    {
-      "uid": "PM-001",
-      "modelName": "gpt-4o-2024-08-06",
-      "family": "gpt",
-      "capabilities": ["chat", "tool_use", "vision", "json_mode"],
-      "visibleMinTier": 1,
-      "limits": { "contextTokens": 128000, "outputTokens": 16384 }
-    }
-  ],
-  "modelMappings": [
-    {
-      "uid": "MM-001",
-      "providerModelUid": "PM-001",
-      "displayName": "demux-gpt-4o",
-      "enabled": true,
-      "notes": null,
-      "sortOrder": 0,
-      "mappingWeight": 100
-    }
-  ]
-}
-```
-
-> `providerModels[].limits` 与 [`09-demuxai-models.md`](./09-demuxai-models.md) 的 `Model.limits` 字段形状一致（`{ contextTokens, outputTokens }`），便于前端"映射创建模型"时直接拷贝。
-
-### 新建 `POST /api/admin/demuxai/providers` （`CreateProviderInput`）
-
-```json
-{
-  "name": "DeepSeek 备线",
-  "connection": {
-    "apiType": "deepseek",
-    "baseUrl": "https://api.deepseek.com",
-    "apiKey":  { "raw": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }
-  },
+  "queueGroup": "gemini",
+  "displayName": "Gemini",
+  "source": "gateway",
+  "status": "active",
+  "instanceCount": 3,
+  "upstreamModelCount": 12,
   "notes": null,
-  "providerModels": [
-    {
-      "clientTempId": "tmp-pm-1",
-      "modelName": "deepseek-chat",
-      "family": "deepseek",
-      "capabilities": ["chat", "tool_use", "json_mode"],
-      "visibleMinTier": 1,
-      "limits": { "contextTokens": 64000, "outputTokens": 8192 }
-    }
-  ],
-  "modelMappings": [
-    {
-      "providerModelRef": "tmp-pm-1",
-      "displayName": "demux-deepseek-chat",
-      "enabled": true,
-      "notes": null,
-      "sortOrder": 0,
-      "mappingWeight": 100
-    }
-  ]
+  "syncedAtUtc": "2025-09-12T08:00:00Z",
+  "createdAtUtc": "2024-09-01T00:00:00Z",
+  "updatedAtUtc": "2025-09-12T08:00:00Z"
 }
+
 ```
 
-字段约束：
+| 字段 | 说明 |
+| --- | --- |
+| `queueGroup` | 全局唯一 QueueGroup；创建后不可改。 |
+| `displayName` | 控制台展示名。 |
+| `source` | `gateway`（同步）/ `manual`（仅上游模型行可能为 manual）。 |
+| `status` | `active` / `disabled`。 |
+| `instanceCount` | 网关注册健康实例数。 |
+| `upstreamModelCount` | 组内上游模型条数（BFF 或同步后重算）。 |
+枚举：`providerCatalogSourceValues`、`providerGroupStatusValues`（`src/features/demuxai/model/enums.ts`）。
 
-- `name` 必填，长度 1..64。
-- `connection.apiKey.raw` 写入时只传一次明文（HTTPS），BFF 入库前 hash + 加密；返回时只回 `connection.apiKey.masked`。**raw / masked 同对象不同位置**：`raw` 仅入参、`masked` 仅出参，schema 上互斥不冲突。
-- `providerModels[].clientTempId` —— **重命名自原 `uid` 的临时占位**。原 `"uid":"tmp-pm-1"` 让"客户端临时 ID"与"服务端真实 UID"共用字段歧义；现明确分离：入参用 `clientTempId`（前端 nanoid 生成）、出参用 `uid`（服务端分配 UUID v7）。
-- `modelMappings[].providerModelRef` —— **替代原 `providerModelUid`**。`Ref` 后缀提示这里可能是 `clientTempId`（同请求内引用）或真实 `uid`（已存在的 PM）；BFF 端解析时按"先找同请求 tempId，再找数据库 uid"顺序。
-- `modelMappings[].displayName` 是终端用户可见的"上架名"（即将作为平台 `Model.modelId`）。
-- `mappingWeight` 缺省 100；多映射同 displayName 时用于按比例分流（草稿态）。
-
-成功响应：`201 Created` + 完整 `Provider`（含 BFF 分配的真实 `providerModels[].uid`）；如有 `clientTempId` 字段则**额外**返回 `idMappings`，便于前端把表单态的 tempId 替换为真实 uid：
+### `ProviderUpstreamModel`
 
 ```json
 {
-  "...": "完整 Provider 字段",
-  "idMappings": [
-    { "clientTempId": "tmp-pm-1", "uid": "PM-072" }
-  ]
+  "queueGroup": "gemini",
+  "upstreamModelId": "gemini-2.5-pro",
+  "label": "Gemini 2.5 Pro",
+  "source": "gateway"
 }
-```
-
-### 更新 `PUT /api/admin/demuxai/providers/{uid}`（`UpdateProviderInput`）
-
-整体覆盖式：前端会发送**保存意图下的全集**（含未变更项）。BFF 端 diff 出新增 / 修改 / 删除，并级联清理孤立 mapping、再触发 Model reconcile。
-
-`connection.apiKey` 字段处理：
-- 字段省略 / `null` → 不变更密钥
-- `{ "raw": "" }` → 清空（仅在解绑场景使用）
-- `{ "raw": "sk-xxx" }` → 整体替换
-
-### `PATCH /api/admin/demuxai/providers/{uid}/status`
-
-请求体：
-
-```json
-{ "status": "disabled" }
-```
-
-合法迁移：
 
 ```
-enabled → disabled
-disabled → enabled
-auto_disabled → enabled  // 必须人工恢复
-```
 
-不允许把 `enabled / disabled` 直接置成 `auto_disabled`（只能由调度器写入）。
+| 字段 | 说明 |
+| --- | --- |
+| `upstreamModelId` | 上游 HTTP 请求体 `model` 技术名。 |
+| `label` | 可选展示名。 |
+| `source` | `gateway` / `manual`；仅 `manual` 可在 UI 删除。 |
 
-### `POST /api/admin/demuxai/providers/{uid}/test` → `ProviderTestResult`
+### `POST .../catalog/sync` → `SyncProviderCatalogResult`
 
 ```json
 {
-  "ok": true,
-  "latencyMs": 145,
-  "reachableModelNames": ["gpt-4o-2024-08-06", "gpt-4o-mini"],
-  "error": null
+  "providerCount": 6,
+  "modelCount": 48,
+  "syncedAtUtc": "2025-09-12T08:00:00Z"
 }
+
 ```
 
-失败示例：
+同步策略（与 Mock 一致）：
+1. 用网关快照**覆盖** `source=gateway` 的组与模型；
+2. **保留** `source=manual` 的手工登记；
+3. 重算各组 `upstreamModelCount`。
+
+### `ModelRoute`
 
 ```json
 {
-  "ok": false,
-  "latencyMs": 2000,
-  "reachableModelNames": [],
-  "error": {
-    "code": "auth_failed",
-    "message": "Invalid API key"
-  }
+  "id": "MR-001",
+  "alias": "demux-gemini-2.5-pro",
+  "channelKey": "gemini",
+  "upstreamModelId": "gemini-2.5-pro",
+  "weight": 100,
+  "priority": 100,
+  "status": "enabled",
+  "notes": null,
+  "createdAtUtc": "2025-09-01T00:00:00Z",
+  "updatedAtUtc": "2025-09-12T08:00:00Z"
 }
+
 ```
 
-> **错误对象统一形状**：所有"操作类"接口的失败信息一律用 `error: { code, message, ...domainExtras }` 嵌套结构表达（与 11-logs 的 `LogEntry.error` 一致）。
-> - `code` 是机器可识别的枚举（`auth_failed` / `dns_failed` / `tls_failed` / `upstream_4xx` / `upstream_5xx` / `upstream_timeout` 等）；
-> - `message` 是上游原文摘要（≤ 200 字符），仅作展示，前端不要 parse；
-> - 成功时 `error === null`，前端先看 `ok`，再读 `error`。
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 路由行主键（如 `MR-001`） |
+| `alias` | 用户可见模型名；= 计费 / 日志 `modelName`；**不可与业务随意改名**（改价 / 日志 join）。 |
+| `channelKey` | = 所属 `queueGroup`。 |
+| `upstreamModelId` | 绑定的上游注册名。 |
+| `weight` | 同 `alias` 多路由时的相对权重（默认 100）。 |
+| `priority` | 调度优先级（0..999，默认 100）。 |
+| `status` | `enabled` / `disabled` / `hidden`。 |
 
-测试成功后 BFF 应同时刷新 `lastTest`（见列表响应的 `lastTest: { ok, latencyMs, atUtc }` 子对象），前端列表会自动展示。
-
-### `POST /api/admin/demuxai/providers/upstream-models`
-
-> 用于"导入上游 model 列表"草稿态。已保存的 Provider 走 `providerUid`（服务端凭据），新建草稿态走 `apiKey + baseUrl`。
+#### 新建 `CreateModelRouteInput`
 
 ```json
-// 已保存场景
-{ "providerUid": "PR-001" }
-
-// 草稿场景
 {
-  "connection": {
-    "apiType": "openai",
-    "baseUrl": "https://api.openai.com/v1",
-    "apiKey":  { "raw": "sk-xxx" }
-  }
+  "alias": "demux-gemini-2.5-pro",
+  "channelKey": "gemini",
+  "upstreamModelId": "gemini-2.5-pro",
+  "weight": 100,
+  "priority": 100,
+  "status": "enabled",
+  "notes": null
 }
+
 ```
 
-响应：
+列表过滤 `ListModelRoutesFilter`：`keyword`、`channelKey`（`'all'` 或具体组）、`status`。
+---
+## 遗留 Vendor（`DemuxaiProviderPort`）
+> 路径前缀：`/demuxai/api/admin/providers`。BFF 实体为 **Vendor**（`VendorDto`），前端类型仍称 `Provider` 以兼容日志 `providerId`。
+| 业务动作 | Port 方法 | HTTP | 说明 |
+| --- | --- | --- | --- |
+| 列表 | `list` | `GET /demuxai/api/admin/providers` | 无查询过滤；返回全量 |
+| 详情 | `get(id)` | `GET /demuxai/api/admin/providers/{id}` | |
+| 新建 | `create` | `POST /demuxai/api/admin/providers` | body `{ name, status? }` |
+| 更新 | `update` | `PUT /demuxai/api/admin/providers/{id}` | 当前仅 `name` |
+| 删除 | `delete` | `DELETE /demuxai/api/admin/providers/{id}` | |
+| 启停 | `setStatus` | `PUT`（复用 upsert） | BFF：`PATCH .../status` **未实现** |
+| 连通测试 | `test` | `POST .../test` | **未实现** |
+| 拉上游模型列表 | `fetchUpstreamModels` | `POST .../upstream-models` | **未实现** |
+
+### `VendorDto` / 列表项
 
 ```json
-{ "upstreamModelNames": ["gpt-4o", "gpt-4o-mini", "o1-preview"] }
+{
+  "id": "1001",
+  "name": "OpenAI 主线",
+  "status": "active",
+  "createdAtUtc": "2024-09-01T00:00:00Z",
+  "updatedAtUtc": "2025-09-12T03:21:08Z"
+}
+
 ```
 
-> `connection` 子对象的使用与列表 / 详情中一致 —— **草稿态把"凭据 + 连接信息"打包发送**，让端点签名直观表达"我在用这套凭据探一探上游"。
+- `status`：`active` ↔ 前端 `enabled`，`disabled` ↔ `disabled`。
+- 已移除 **`code` / `displayName` 双字段**：全局唯一标识改为 **`name`**（见迁移 `VendorNameInsteadOfDisplayName`）。
+- HttpAdapter 将 JSON `id`（int 字符串）映射为前端 `Provider.id` 供日志 `providerId` join；`providerModels` / `modelMappings` 在真接 BFF 时为空数组。
 
-### `DELETE /api/admin/demuxai/providers/{uid}`
-
-无请求体；删除后 BFF 在事务内：
-
-1. 清理本 Provider 的 providerModels + modelMappings；
-2. 触发 Model reconcile：删除全局已无 mapping 的 displayName 对应的平台 Model。
-
-前端在删除确认弹窗中会展示"将级联删除哪些平台 displayName"（基于其他 Provider 的 modelMappings 反算），便于用户判断。
+> 旧文档中的 `connection` / `modelMappings` / 轻投影列表描述适用于 **已废弃的单页 Provider 编辑器**（`ProviderListView` / `ProviderEditDrawer`），不再对应当前主界面。
 
 ## 交互流程
 
 ```
-onMounted → list(...)
-新建 → 打开 ProviderEditDrawer → create(payload) → list()
-编辑 → providerPort.get(uid) → 抽屉 → update(uid, payload) → list()
-测试 → test(uid) → ElMessage 显示连通性
-启停 → setStatus(uid, next)
-删除 → confirmDanger → delete(uid)
+
+onMounted → syncFromGateway({ silent }) → listProviderGroups
+          → 可选：每 60s 自动同步（开关）
+选中左侧组 → listUpstreamModels + list model-routes（channelKey=queueGroup）
+「添加上游模型」→ addUpstreamModel（manual）
+行「编辑」→ ProviderUpstreamModelEditDrawer → 别名 CRUD（ModelRoute port）
+移除 manual 上游模型 → 须先无绑定别名
+
 ```
+
+定价跳转：[`10-demuxai-pricing.md`](./10-demuxai-pricing.md)（按组筛选 `alias`）。
 
 ## 错误码
 
-| HTTP | code | 含义 |
-| --- | --- | --- |
-| 400 | `validation` | 字段缺失、显示名重复、apiType 与 baseUrl 不匹配 |
-| 401 | `unauthorized` | token 失效 |
-| 403 | `forbidden` | 非 Admin |
-| 409 | `conflict` | `name` 唯一性冲突 |
-| 502 | `upstream` | 上游 `/v1/models` 拉取失败（限于 `fetchUpstreamModels`） |
-| 504 | `timeout` | `test` 接口的探测超时 |
+| code | 含义 |
+| --- | --- |
+| `validation` | 别名 / 上游 ID 为空；删除仍有关联路由 |
+| `not_found` | `queueGroup` / `id` 不存在 |
+| `conflict` | `alias` 唯一性（BFF 约定） |
+| `upstream` | 目录或路由 API 未接入（HTTP 适配器占位） |
+
+## 备注
+
+- 模型元数据（`ModelMeta`）与旧版「平台 Model 列表」见 [`09-demuxai-models.md`](./09-demuxai-models.md)。
+- 激活码见路由 `/demuxai/redemption`（`DemuxaiRedemptionPort`，`/demuxai/api/redemption`）。

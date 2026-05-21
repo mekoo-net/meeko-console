@@ -18,28 +18,28 @@
 > - 其中**最多一个** `isDefault=true`（系统默认渠道）；
 > - 未绑定专属渠道的模板会回退到默认渠道。
 > - `isActive=false` 的渠道不会被调度，前端选择器会禁用。
+> **标识**：SMTP 渠道行主键为 **`id`**（如 `SMTP-001`）；`uid` 仅用于用户（见 [`00-conventions.md`](./00-conventions.md) §3）。
 
 ## 接口清单
 
 | 业务动作 | Port 方法 | HTTP | REST 端点 |
 | --- | --- | --- | --- |
 | 列表 | `listSmtpProviders` | GET | `/api/admin/notice/channels/smtp` |
-| 详情 | `getSmtpProvider(uid)` | GET | `/api/admin/notice/channels/smtp/{uid}` |
+| 详情 | `getSmtpProvider(id)` | GET | `/api/admin/notice/channels/smtp/{id}` |
 | 新增 | `createSmtpProvider(payload)` | POST | `/api/admin/notice/channels/smtp` |
-| 更新 | `updateSmtpProvider(uid, payload)` | PUT | `/api/admin/notice/channels/smtp/{uid}` |
-| 删除 | `deleteSmtpProvider(uid)` | DELETE | `/api/admin/notice/channels/smtp/{uid}` |
-| 连通测试 | `testSmtpProvider(uid, payload)` | POST | `/api/admin/notice/channels/smtp/{uid}/test` |
+| 更新 | `updateSmtpProvider(id, payload)` | PUT | `/api/admin/notice/channels/smtp/{id}` |
+| 删除 | `deleteSmtpProvider(id)` | DELETE | `/api/admin/notice/channels/smtp/{id}` |
+| 连通测试 | `testSmtpProvider(id, payload)` | POST | `/api/admin/notice/channels/smtp/{id}/test` |
 
 ## 请求 / 响应
 
 ### 列表 `GET /api/admin/notice/channels/smtp`
-
 成功响应（`SmtpProvider[]`，**无分页**）：
 
 ```json
 [
   {
-    "uid": "SMTP-001",
+    "id": "SMTP-001",
     "name": "Mailgun 主线",
     "server": {
       "host":        "smtp.mailgun.org",
@@ -58,6 +58,7 @@
     "updatedAtUtc": "2025-09-01T00:00:00Z"
   }
 ]
+
 ```
 
 | 字段 | 类型 | 说明 |
@@ -92,11 +93,12 @@
   "isDefault": false,
   "priority": 20
 }
+
 ```
 
 成功响应：`201 Created` + 完整的 `SmtpProvider`（结构与列表元素一致）。
 
-### 更新 `PUT /api/admin/notice/channels/smtp/{uid}` （`UpdateSmtpPayload`）
+### 更新 `PUT /api/admin/notice/channels/smtp/{id}` （`UpdateSmtpPayload`）
 
 ```json
 {
@@ -116,19 +118,18 @@
   "isDefault": true,
   "priority": 10
 }
+
 ```
 
 `server.password` 字段语义：
 - `null` / 字段省略 → **不变更**密码；
 - 非空字符串 → 覆写密码；
 - 空字符串 `""` → 清空（仅在解绑场景使用）。
-
 成功响应：`200 OK` + 更新后的 `SmtpProvider`。
 
 > 设置某条 `isDefault=true` 应由 BFF 在事务内将其它行置为 `false`，确保唯一性。
 
-### 删除 `DELETE /api/admin/notice/channels/smtp/{uid}`
-
+### 删除 `DELETE /api/admin/notice/channels/smtp/{id}`
 成功响应：`204 No Content`。
 
 > 删除后，绑定该渠道的邮件模板会回退到 `isDefault=true` 的默认渠道。
@@ -136,7 +137,7 @@
 > 1. 选择另一个 `isActive=true` 渠道升级为默认；
 > 2. 或返回 `409 conflict` 拒绝删除（推荐，要求用户先指定新默认）。
 
-### 测试 `POST /api/admin/notice/channels/smtp/{uid}/test` （`TestSmtpPayload`）
+### 测试 `POST /api/admin/notice/channels/smtp/{id}/test` （`TestSmtpPayload`）
 
 ```json
 {
@@ -144,6 +145,7 @@
   "subject": "Meeko SMTP Test",
   "body": "hello"
 }
+
 ```
 
 成功响应：
@@ -155,6 +157,7 @@
   "elapsedMs": 612,
   "error": null
 }
+
 ```
 
 失败示例：
@@ -169,6 +172,7 @@
     "message": "535 5.7.8 Username and Password not accepted"
   }
 }
+
 ```
 
 > **统一错误形状**：与 08 providers / 11 logs 一致 —— `ok: boolean` + `error: { code, message } | null`。
@@ -177,10 +181,12 @@
 ## 交互流程
 
 ```
+
 onMounted → useSmtpList.run() → listSmtpProviders()
 新增 / 编辑 → 抽屉 SmtpForm → createSmtpProvider / updateSmtpProvider → run()
 连通测试 → testSmtpProvider(uid, fixedPayload) → ElMessage 显示 ok / error
 删除 → confirmDanger → deleteSmtpProvider → run()
+
 ```
 
 > **`AdminCommandResult` 已退役**：原"`success` + `uid` + `failureCode/failureMessage`"双轨结构与 00-conventions 的 ProblemDetails 体系重复——同一份成败信息出现在两个层级会让前端处理产生歧义。现统一为：
@@ -188,11 +194,10 @@ onMounted → useSmtpList.run() → listSmtpProviders()
 > - 失败 → 4xx/5xx + `application/problem+json`，body 即 00-conventions 的 ProblemDetails。
 
 ## 错误码
-
 | HTTP | code | 含义 |
 | --- | --- | --- |
 | 400 | `validation` | 字段缺失 / `port` 越界 / `fromAddress` 非邮箱格式 |
 | 403 | `forbidden` | 非 Admin |
-| 404 | `not_found` | uid 不存在 |
+| 404 | `not_found` | `id` 不存在 |
 | 409 | `conflict` | 删除默认渠道但无可顶替者 |
 | 502 / 504 | `upstream` / `timeout` | 测试时 SMTP 服务器无响应 |

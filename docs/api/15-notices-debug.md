@@ -46,6 +46,7 @@
   },
   "idempotencyKey": "9c4e1f2a-1c1d-4b7e-99a8-a5e7b1b9b321"
 }
+
 ```
 
 | 字段 | 类型 | 必填 | 说明 |
@@ -58,7 +59,6 @@
 | `template.locale` | string | 否 | 缺省取模板 default locale。 |
 | `template.data` | `Record<string,string>` | 否 | 占位符变量；BFF 应在缺占位时返回 400。 |
 | `idempotencyKey` | string | 否 | 24h 内重复请求会返回原 message。 |
-
 成功响应：
 
 ```json
@@ -68,6 +68,7 @@
     "status": "queued"
   }
 }
+
 ```
 
 | 字段 | 类型 | 说明 |
@@ -88,31 +89,31 @@
   "locale": "zh-CN",
   "idempotencyKey": "9c4e1f2a-1c1d-4b7e-99a8-a5e7b1b9b321"
 }
+
 ```
 
 **字符串枚举**（与 00-conventions 第 6 节"全平台字符串枚举"约定对齐；原 magic number 已废弃）：
-
 | 字段 | 取值 | 含义 |
 | --- | --- | --- |
 | `purpose` | `login` / `register` / `reset_password` / `change_email` / `risk_verify` / `bind_mfa` | 六种业务场景 |
 | `channel` | `email` / `sms` | 与 `SendNotificationPayload.channel` 一致 |
 
 > BFF 内部数据库可仍用 tinyint 存储（性能 / 索引），但**对外 API 一律字符串枚举**——magic number 既不利于阅读 swagger、也不利于跨语言客户端类型推导。
-
 成功响应：
 
 ```json
 {
   "audit": {
-    "uid":          "AUDIT-001",
+    "id":           "AUDIT-001",
     "expiresAtUtc": "2025-09-12T11:10:00Z"
   }
 }
+
 ```
 
 | 字段 | 说明 |
 | --- | --- |
-| `audit.uid` | 审计 ID，**verify 时回传**以便关联同一 send 事件。 |
+| `audit.id` | 审计记录主键，**verify 时回传**以便关联同一 send 事件。 |
 | `audit.expiresAtUtc` | OTP 失效时间。 |
 
 ### `POST /api/notifications/otp/verify` （`VerifyOtpPayload`）
@@ -125,13 +126,13 @@
   "code":      "634281",
   "auditUid":  "AUDIT-001"
 }
+
 ```
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `purpose` / `channel` / `recipient` / `code` | — | 是 | — |
 | `auditUid` | string | 否（**强烈推荐**） | send 时拿到的 `audit.uid`；用于审计关联与多发场景下定位"对哪条 OTP 验证"。BFF 在 `recipient + purpose + channel` 仍能唯一定位时可不传。 |
-
 成功响应（OTP 验证通过）：
 
 ```json
@@ -140,6 +141,7 @@
   "remainingAttempts": 4,
   "error": null
 }
+
 ```
 
 失败示例（与 08 / 12 错误对象形状一致）：
@@ -150,6 +152,7 @@
   "remainingAttempts": 3,
   "error": { "code": "mismatch" }
 }
+
 ```
 
 ```json
@@ -158,6 +161,7 @@
   "remainingAttempts": 0,
   "error": { "code": "locked", "message": "rate-limited for 600s" }
 }
+
 ```
 
 | 字段 | 类型 | 说明 |
@@ -171,9 +175,11 @@
 ## 交互流程
 
 ```
+
 "发送通知" 表单 → sendNotification → 展示 message.id + message.status
 "发送 OTP" 表单 → sendOtp → 展示 audit.uid + audit.expiresAtUtc
 "校验 OTP" 表单 → verifyOtp（携带 auditUid）→ 展示 ok / error.code + remainingAttempts
+
 ```
 
 ## 错误码

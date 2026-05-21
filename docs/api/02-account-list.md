@@ -67,10 +67,10 @@
   ],
   "total": 38
 }
+
 ```
 
 字段说明（核心，详见 `account.types.ts`）：
-
 | 字段 | 类型 | 是否必返 | 说明 |
 | --- | --- | --- | --- |
 | `uid` | string | 必 | 账户主键（long → string）。 |
@@ -91,9 +91,11 @@
 ## 交互流程
 
 ```
+
 onMounted → fetchData()
   └── listAccounts(page, pageSize, filter)   // 单次请求，行内含 wallet 概要
 filter 变化 → page=1 → fetchData()
+
 ```
 
 - 过滤项变化触发 `page=1`，避免越界。
