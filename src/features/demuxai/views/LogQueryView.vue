@@ -248,13 +248,13 @@ async function submitReverse(payload: ReverseLogInput): Promise<void> {
       return;
     }
     // 就地刷新被驳回行的 bill 状态，避免整页 reload 丢失滚动 / 过滤上下文
-    const idx = records.value.findIndex((it) => it.uid === payload.logUid);
+    const idx = records.value.findIndex((it) => it.id === payload.logId);
     if (idx !== -1) {
       const target = records.value[idx]!;
       records.value[idx] = {
         ...target,
         bill: {
-          uid: r.data.billUid,
+          id: r.data.billId,
           status: 'reversed',
           reversedAtUtc: r.data.reversedAtUtc,
           reversedBy: r.data.reversedBy,
@@ -264,7 +264,7 @@ async function submitReverse(payload: ReverseLogInput): Promise<void> {
       } as LogEntry;
     }
     // 若详情抽屉里展示的正是这条日志，同步更新它的 bill 字段
-    if (detailLog.value && detailLog.value.uid === payload.logUid) {
+    if (detailLog.value && detailLog.value.id === payload.logId) {
       detailLog.value = records.value[idx] ?? detailLog.value;
     }
     ElMessage.success(`已驳回，扣费金额已归零（${BillReverseCodeLabel[payload.reasonCode]}）`);
@@ -376,7 +376,7 @@ onMounted(() => {
     <el-table
       v-loading="loading"
       :data="displayRecords"
-      row-key="uid"
+      row-key="id"
       size="small"
       class="compact-table"
       :empty-text="' '"

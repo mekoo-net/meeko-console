@@ -1,72 +1,90 @@
+import { isMockMode } from '@/shared/runtime';
+
+import { DemuxaiCatalogMock } from './mock/demuxaiCatalogMock';
 import { DemuxaiLogsMock } from './mock/demuxaiLogsMock';
+import { DemuxaiRedemptionMock } from './mock/demuxaiRedemptionMock';
 import { DemuxaiModelMock } from './mock/demuxaiModelMock';
+import { DemuxaiModelRouteMock } from './mock/demuxaiModelRouteMock';
 import { DemuxaiPricingMock } from './mock/demuxaiPricingMock';
 import { DemuxaiProviderMock } from './mock/demuxaiProviderMock';
+import { DemuxaiCatalogHttpAdapter } from '@/shared/api/adapters/demuxaiCatalogAdapter';
+import { DemuxaiModelRouteHttpAdapter } from '@/shared/api/adapters/demuxaiModelRouteAdapter';
+import { DemuxaiProviderHttpAdapter } from '@/shared/api/adapters/demuxaiProviderAdapter';
+import { DemuxaiModelHttpAdapter } from '@/shared/api/adapters/demuxaiModelAdapter';
+import { DemuxaiPricingHttpAdapter } from '@/shared/api/adapters/demuxaiPricingAdapter';
+import { DemuxaiLogsHttpAdapter } from '@/shared/api/adapters/demuxaiLogsAdapter';
+import { DemuxaiRedemptionHttpAdapter } from '@/shared/api/adapters/demuxaiRedemptionAdapter';
+import type { DemuxaiCatalogPort } from './ports/demuxaiCatalogPort';
 import type { DemuxaiLogsPort } from './ports/demuxaiLogsPort';
 import type { DemuxaiModelPort } from './ports/demuxaiModelPort';
+import type { DemuxaiModelRoutePort } from './ports/demuxaiModelRoutePort';
 import type { DemuxaiPricingPort } from './ports/demuxaiPricingPort';
 import type { DemuxaiProviderPort } from './ports/demuxaiProviderPort';
+import type { DemuxaiRedemptionPort } from './ports/demuxaiRedemptionPort';
 
 /**
  * demuxai 域端口工厂。
  *
- * 4 个端口对应 2 个微服务：
- *  - Provider / Model / Pricing → 控制面 demuxai-admin
- *  - Logs → 数据面 demuxai-logs（ClickHouse / ES 网关）
- *
- * 真接 BFF 时新增：
- *  - services/bff/httpProviderAdapter.ts
- *  - services/bff/httpModelAdapter.ts
- *  - services/bff/httpPricingAdapter.ts
- *  - services/bff/httpLogsAdapter.ts
- * 然后在下面对应 `getXxxPort()` 工厂里按 env 注册。视图与 composable 不变。
+ * - catalog / modelRoutes：新架构（网关渠道只读 + 别名运营）
+ * - redemption：激活码（CDK 充值，兑换后走 Billing 入账）
+ * - providers / models：旧端口，日志与过渡兼容保留
  */
+abstract class DemuxaiServices {
+  abstract readonly catalog: DemuxaiCatalogPort;
+  abstract readonly modelRoutes: DemuxaiModelRoutePort;
+  abstract readonly redemption: DemuxaiRedemptionPort;
+  abstract readonly providers: DemuxaiProviderPort;
+  abstract readonly models: DemuxaiModelPort;
+  abstract readonly pricing: DemuxaiPricingPort;
+  abstract readonly logs: DemuxaiLogsPort;
+}
 
-let cachedProvider: DemuxaiProviderPort | null = null;
-let cachedModel: DemuxaiModelPort | null = null;
-let cachedPricing: DemuxaiPricingPort | null = null;
-let cachedLogs: DemuxaiLogsPort | null = null;
+class DemuxaiMockServices extends DemuxaiServices {
+  readonly catalog = new DemuxaiCatalogMock();
+  readonly modelRoutes = new DemuxaiModelRouteMock();
+  readonly redemption = new DemuxaiRedemptionMock();
+  readonly providers = new DemuxaiProviderMock();
+  readonly models = new DemuxaiModelMock();
+  readonly pricing = new DemuxaiPricingMock();
+  readonly logs = new DemuxaiLogsMock();
+}
 
-function shouldUseMock(): boolean {
-  const raw = import.meta.env?.VITE_USE_MOCK;
-  if (typeof raw === 'string') return raw.toLowerCase() !== 'false';
-  return true;
+class DemuxaiHttpServices extends DemuxaiServices {
+  readonly catalog = new DemuxaiCatalogHttpAdapter();
+  readonly modelRoutes = new DemuxaiModelRouteHttpAdapter();
+  readonly redemption = new DemuxaiRedemptionHttpAdapter();
+  readonly providers = new DemuxaiProviderHttpAdapter();
+  readonly models = new DemuxaiModelHttpAdapter();
+  readonly pricing = new DemuxaiPricingHttpAdapter();
+  readonly logs = new DemuxaiLogsHttpAdapter();
+}
+
+const services: DemuxaiServices = isMockMode ? new DemuxaiMockServices() : new DemuxaiHttpServices();
+
+export function getDemuxaiCatalogPort(): DemuxaiCatalogPort {
+  return services.catalog;
+}
+
+export function getDemuxaiModelRoutePort(): DemuxaiModelRoutePort {
+  return services.modelRoutes;
+}
+
+export function getDemuxaiRedemptionPort(): DemuxaiRedemptionPort {
+  return services.redemption;
 }
 
 export function getDemuxaiProviderPort(): DemuxaiProviderPort {
-  if (cachedProvider !== null) return cachedProvider;
-  if (shouldUseMock()) {
-    cachedProvider = new DemuxaiProviderMock();
-    return cachedProvider;
-  }
-  throw new Error(
-    'HttpDemuxaiProviderAdapter 尚未实现：请创建 services/bff/httpProviderAdapter.ts 并接入 demuxai-admin。',
-  );
+  return services.providers;
 }
 
 export function getDemuxaiModelPort(): DemuxaiModelPort {
-  if (cachedModel !== null) return cachedModel;
-  if (shouldUseMock()) {
-    cachedModel = new DemuxaiModelMock();
-    return cachedModel;
-  }
-  throw new Error('HttpDemuxaiModelAdapter 尚未实现。');
+  return services.models;
 }
 
 export function getDemuxaiPricingPort(): DemuxaiPricingPort {
-  if (cachedPricing !== null) return cachedPricing;
-  if (shouldUseMock()) {
-    cachedPricing = new DemuxaiPricingMock();
-    return cachedPricing;
-  }
-  throw new Error('HttpDemuxaiPricingAdapter 尚未实现。');
+  return services.pricing;
 }
 
 export function getDemuxaiLogsPort(): DemuxaiLogsPort {
-  if (cachedLogs !== null) return cachedLogs;
-  if (shouldUseMock()) {
-    cachedLogs = new DemuxaiLogsMock();
-    return cachedLogs;
-  }
-  throw new Error('HttpDemuxaiLogsAdapter 尚未实现。');
+  return services.logs;
 }

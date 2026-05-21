@@ -61,6 +61,10 @@ export const routes: RouteRecordRaw[] = [
             component: () => import('@/features/billing/views/PaymentChannelsView.vue'),
             meta: { title: '充值渠道', requiresAuth: true, roles: ['Admin'] },
           },
+          {
+            path: 'redemption',
+            redirect: { name: 'demuxai-redemption' },
+          },
         ],
       },
       {
@@ -78,14 +82,20 @@ export const routes: RouteRecordRaw[] = [
           {
             path: 'providers',
             name: 'demuxai-providers',
-            component: () => import('@/features/demuxai/views/ProviderListView.vue'),
-            meta: { title: '模型渠道', requiresAuth: true, roles: ['Admin'] },
+            component: () => import('@/features/demuxai/views/ProviderGroupListView.vue'),
+            meta: { title: '供应商组', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'model-routes',
+            redirect: { name: 'demuxai-providers' },
+          },
+          {
+            path: 'channels',
+            redirect: { name: 'demuxai-providers' },
           },
           {
             path: 'models',
-            name: 'demuxai-models',
-            component: () => import('@/features/demuxai/views/ModelListView.vue'),
-            meta: { title: '模型列表', requiresAuth: true, roles: ['Admin'] },
+            redirect: { name: 'demuxai-providers' },
           },
           {
             path: 'pricing',
@@ -98,6 +108,12 @@ export const routes: RouteRecordRaw[] = [
             name: 'demuxai-logs',
             component: () => import('@/features/demuxai/views/LogQueryView.vue'),
             meta: { title: '调用日志', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'redemption',
+            name: 'demuxai-redemption',
+            component: () => import('@/features/demuxai/views/RedemptionCodesView.vue'),
+            meta: { title: '激活码', requiresAuth: true, roles: ['Admin'] },
           },
         ],
       },

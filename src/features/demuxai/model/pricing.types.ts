@@ -125,7 +125,8 @@ export type PerCharacterPricing = z.infer<typeof perCharacterPricingSchema>;
 // ---------- 外层共通字段 ----------
 
 const pricingBaseShape = {
-  uid: uidString,
+  /** 定价行主键（PRC-*）；API JSON 字段名 `id`，非 userId `uid` */
+  id: uidString,
   /** 与 Model.modelId 强一致；删除 Model 必须级联删 Pricing */
   modelId: z.string().min(1),
   multiplier: z.number().positive(),
@@ -135,8 +136,8 @@ const pricingBaseShape = {
   /** 生效时间（UTC）；未来时间 = 预生效。BFF 调度按"最近一条已生效"取数。 */
   effectiveFromUtc: z.string(),
   updatedAtUtc: z.string(),
-  /** 最近一次改动操作人 IAM uid */
-  updatedByIamUid: uidString.nullable().optional(),
+  /** 最近一次改动操作人（IAM userId） */
+  updatedBy: z.object({ iamId: uidString }).nullable().optional(),
 };
 
 // ---------- 主 schema（discriminated union） ----------
@@ -176,7 +177,7 @@ export const pricingSchema = z.discriminatedUnion('billingType', [
 
 export type Pricing = z.infer<typeof pricingSchema>;
 
-// ---------- Upsert 入参（同形状，去掉 uid / updatedAtUtc / updatedByIamUid） ----------
+// ---------- Upsert 入参（同形状，去掉 id / updatedAtUtc / updatedBy） ----------
 
 const upsertBaseShape = {
   modelId: z.string().min(1),

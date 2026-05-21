@@ -11,6 +11,8 @@ import type {
   ProviderModel,
   ProviderModelMapping,
 } from '../../model/provider.types';
+import type { ProviderGroup, ProviderUpstreamModel } from '../../model/catalog.types';
+import type { ModelRoute } from '../../model/modelRoute.types';
 import type { Model } from '../../model/model.types';
 import type { Pricing } from '../../model/pricing.types';
 import type { LogEntry } from '../../model/log.types';
@@ -26,6 +28,9 @@ export interface DemuxaiStore {
   models: Model[];
   pricing: Pricing[];
   logs: LogEntry[];
+  providerGroups: ProviderGroup[];
+  upstreamModels: ProviderUpstreamModel[];
+  modelRoutes: ModelRoute[];
 }
 
 export const genProviderUid = createUidSeq(12_000_000);
@@ -34,6 +39,7 @@ export const genMappingUid = createUidSeq(16_000_000);
 export const genModelUid = createUidSeq(13_000_000);
 export const genPricingUid = createUidSeq(14_000_000);
 export const genLogUid = createSnowflakeIdSeq();
+export const genModelRouteUid = createUidSeq(17_000_000);
 /** Bill 命名空间从 9 开头，与文档 `BL-9xxxxxxxx` 一致 */
 export const genBillUid = createUidSeq(900_000_000);
 
@@ -537,7 +543,7 @@ function seedModels(providers: Provider[]): Model[] {
  */
 function seedPricing(models: Model[]): Pricing[] {
   const t = iso(now);
-  type PricingBase = Omit<Pricing, 'uid' | 'modelId' | 'updatedAtUtc' | 'effectiveFromUtc'>;
+  type PricingBase = Omit<Pricing, 'id' | 'modelId' | 'updatedAtUtc' | 'effectiveFromUtc' | 'updatedBy'>;
   const map = new Map<string, PricingBase>([
     [
       'GPT-4o',
@@ -550,7 +556,7 @@ function seedPricing(models: Model[]): Pricing[] {
         multiplier: 1.0,
         currency: 'CNY',
         tierMultipliers: { '5': 0.7, '4': 0.85 },
-        updatedByIamUid: '200000001',
+        updatedBy: { iamId: '200000001' },
       },
     ],
     [
@@ -564,7 +570,7 @@ function seedPricing(models: Model[]): Pricing[] {
         multiplier: 1.0,
         currency: 'CNY',
         tierMultipliers: { '5': 0.6 },
-        updatedByIamUid: '200000001',
+        updatedBy: { iamId: '200000001' },
       },
     ],
     [
@@ -583,7 +589,7 @@ function seedPricing(models: Model[]): Pricing[] {
         multiplier: 1.0,
         currency: 'CNY',
         tierMultipliers: { '5': 0.75 },
-        updatedByIamUid: '200000001',
+        updatedBy: { iamId: '200000001' },
       },
     ],
     [
@@ -597,7 +603,7 @@ function seedPricing(models: Model[]): Pricing[] {
         multiplier: 1.0,
         currency: 'CNY',
         tierMultipliers: {},
-        updatedByIamUid: '200000001',
+        updatedBy: { iamId: '200000001' },
       },
     ],
     [
@@ -611,7 +617,7 @@ function seedPricing(models: Model[]): Pricing[] {
         multiplier: 1.0,
         currency: 'CNY',
         tierMultipliers: {},
-        updatedByIamUid: '200000001',
+        updatedBy: { iamId: '200000001' },
       },
     ],
     [
@@ -625,7 +631,7 @@ function seedPricing(models: Model[]): Pricing[] {
         multiplier: 1.0,
         currency: 'CNY',
         tierMultipliers: {},
-        updatedByIamUid: '200000001',
+        updatedBy: { iamId: '200000001' },
       },
     ],
     [
@@ -639,7 +645,7 @@ function seedPricing(models: Model[]): Pricing[] {
         multiplier: 1.0,
         currency: 'CNY',
         tierMultipliers: { '5': 0.5, '4': 0.75 },
-        updatedByIamUid: '200000001',
+        updatedBy: { iamId: '200000001' },
       },
     ],
     [
@@ -653,7 +659,7 @@ function seedPricing(models: Model[]): Pricing[] {
         multiplier: 1.0,
         currency: 'CNY',
         tierMultipliers: {},
-        updatedByIamUid: '200000001',
+        updatedBy: { iamId: '200000001' },
       },
     ],
   ]);
@@ -664,7 +670,7 @@ function seedPricing(models: Model[]): Pricing[] {
       if (!base) return null;
       return {
         ...base,
-        uid: genPricingUid(),
+        id: genPricingUid(),
         modelId: m.modelId,
         effectiveFromUtc: iso(new Date(now.getTime() - 7 * 86400000)),
         updatedAtUtc: t,
@@ -784,7 +790,7 @@ function seedLogs(providers: Provider[]): LogEntry[] {
     const convId = `CV-${(SEED_IAM_USERS[i % SEED_IAM_USERS.length]!).slice(-3)}-${convSeq.toString(36)}`;
 
     out.push({
-      uid: genLogUid(),
+      id: genLogUid(),
       createAt: occurred.toISOString(),
       account: {
         uid: SEED_ACCOUNTS[i % SEED_ACCOUNTS.length]!,
@@ -838,12 +844,12 @@ function seedLogs(providers: Provider[]): LogEntry[] {
             httpStatus,
           }
         : null,
-      requestIp: `203.0.113.${(i % 250) + 1}`,
+      clientIpV4: ((203 << 24) | (0 << 16) | (113 << 8) | ((i % 250) + 1)) >>> 0,
       streamed,
       bill: hasBill
         ? preReversed
           ? {
-              uid: `BL-${genBillUid()}`,
+              id: `BL-${genBillUid()}`,
               status: 'reversed',
               reversedAtUtc: iso(new Date(occurred.getTime() + 30 * 60 * 1000)),
               reversedBy: '200000099',
@@ -851,7 +857,7 @@ function seedLogs(providers: Provider[]): LogEntry[] {
               reversedRemark: null,
             }
           : {
-              uid: `BL-${genBillUid()}`,
+              id: `BL-${genBillUid()}`,
               status: 'completed',
               reversedAtUtc: null,
               reversedBy: null,
@@ -861,7 +867,184 @@ function seedLogs(providers: Provider[]): LogEntry[] {
         : null,
     });
   }
-  return out.sort((a, b) => b.uid.localeCompare(a.uid));
+  return out.sort((a, b) => b.id.localeCompare(a.id));
+}
+
+/** apiType → 网关 channel key（Mock 简化映射） */
+function apiTypeToChannelKey(apiType: ApiType): string {
+  const m: Partial<Record<ApiType, string>> = {
+    openai: 'openai',
+    anthropic: 'claude',
+    gemini: 'gemini',
+    deepseek: 'deepseek',
+    moonshot: 'kiro',
+    self_hosted_openai_compat: 'kiro',
+  };
+  return m[apiType] ?? apiType;
+}
+
+/** 模拟 GET /cluster/status 聚合后的供应商组（当前环境：Kiro / Gemini / Codex） */
+export function seedProviderGroupsFromGateway(): ProviderGroup[] {
+  const t = iso(now);
+  return [
+    {
+      queueGroup: 'kiro',
+      displayName: 'Kiro',
+      source: 'gateway',
+      status: 'active',
+      instanceCount: 2,
+      upstreamModelCount: 3,
+      notes: null,
+      syncedAtUtc: t,
+      createdAtUtc: t,
+      updatedAtUtc: t,
+    },
+    {
+      queueGroup: 'gemini',
+      displayName: 'Gemini',
+      source: 'gateway',
+      status: 'active',
+      instanceCount: 1,
+      upstreamModelCount: 3,
+      notes: null,
+      syncedAtUtc: t,
+      createdAtUtc: t,
+      updatedAtUtc: t,
+    },
+    {
+      queueGroup: 'codex',
+      displayName: 'Codex',
+      source: 'gateway',
+      status: 'active',
+      instanceCount: 1,
+      upstreamModelCount: 4,
+      notes: null,
+      syncedAtUtc: t,
+      createdAtUtc: t,
+      updatedAtUtc: t,
+    },
+  ];
+}
+
+export function seedUpstreamModelsFromGateway(
+  groups: ProviderGroup[],
+): ProviderUpstreamModel[] {
+  const byGroup: Record<string, readonly string[]> = {
+    kiro: ['claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-opus-4-6'],
+    gemini: ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    codex: ['gpt-4o', 'gpt-4o-mini', 'o1-mini', 'o1-preview'],
+  };
+  const out: ProviderUpstreamModel[] = [];
+  for (const g of groups) {
+    if (g.source !== 'gateway') continue;
+    for (const id of byGroup[g.queueGroup] ?? []) {
+      out.push({
+        queueGroup: g.queueGroup,
+        upstreamModelId: id,
+        label: id,
+        source: 'gateway',
+      });
+    }
+  }
+  return out;
+}
+
+function recomputeGroupModelCounts(
+  groups: ProviderGroup[],
+  models: ProviderUpstreamModel[],
+): void {
+  for (const g of groups) {
+    g.upstreamModelCount = models.filter((m) => m.queueGroup === g.queueGroup).length;
+  }
+}
+
+function toAlias(displayName: string): string {
+  const slug = displayName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug.length >= 2 ? `demux-${slug}` : `demux-m-${Date.now().toString(36)}`;
+}
+
+function seedModelRoutes(providers: Provider[]): ModelRoute[] {
+  const t = iso(now);
+  const routes: ModelRoute[] = [];
+  for (const p of providers) {
+    const channelKey = apiTypeToChannelKey(p.apiType); // = queueGroup
+    for (const mapping of p.modelMappings) {
+      if (!mapping.enabled) continue;
+      const pmRef = p.providerModels.find((x) => x.uid === mapping.providerModelUid);
+      if (!pmRef) continue;
+      routes.push({
+        uid: genModelRouteUid(),
+        alias: toAlias(mapping.displayName),
+        channelKey,
+        upstreamModelId: pmRef.modelName,
+        weight: mapping.mappingWeight ?? 100,
+        priority: 100,
+        status: 'enabled',
+        notes: mapping.notes ?? null,
+        createdAtUtc: t,
+        updatedAtUtc: t,
+      });
+    }
+  }
+  // 演示：同一 alias 双路由加权
+  const gpt4o = routes.find((r) => r.alias === 'demux-gpt-4o');
+  if (gpt4o) {
+    routes.push({
+      ...gpt4o,
+      uid: genModelRouteUid(),
+      upstreamModelId: 'gpt-4-turbo',
+      weight: 20,
+      priority: 90,
+      notes: 'A/B 备线',
+      createdAtUtc: t,
+      updatedAtUtc: t,
+    });
+    gpt4o.weight = 80;
+  }
+  return routes;
+}
+
+/** 与 providerGroups / upstreamModels 对齐的演示别名（供应商组页展开可见） */
+function seedCatalogModelRoutes(
+  upstream: ProviderUpstreamModel[],
+): ModelRoute[] {
+  const t = iso(now);
+  const has = (qg: string, id: string) =>
+    upstream.some((m) => m.queueGroup === qg && m.upstreamModelId === id);
+  const routes: ModelRoute[] = [];
+  const add = (
+    queueGroup: string,
+    upstreamModelId: string,
+    alias: string,
+    weight = 100,
+    notes: string | null = null,
+  ) => {
+    if (!has(queueGroup, upstreamModelId)) return;
+    routes.push({
+      uid: genModelRouteUid(),
+      alias,
+      channelKey: queueGroup,
+      upstreamModelId,
+      weight,
+      priority: 100,
+      status: 'enabled',
+      notes,
+      createdAtUtc: t,
+      updatedAtUtc: t,
+    });
+  };
+  add('kiro', 'claude-sonnet-4-6', 'demux-claude-sonnet');
+  add('kiro', 'claude-haiku-4-5', 'demux-claude-haiku');
+  add('gemini', 'gemini-2.0-flash-exp', 'demux-gemini-flash');
+  add('gemini', 'gemini-1.5-pro', 'demux-gemini-pro');
+  add('codex', 'gpt-4o', 'demux-gpt-4o', 80);
+  add('codex', 'gpt-4o-mini', 'demux-gpt-4o-mini');
+  add('codex', 'o1-mini', 'demux-gpt-4o', 20, '同别名分流备线');
+  return routes;
 }
 
 let cached: DemuxaiStore | null = null;
@@ -873,7 +1056,14 @@ export function getDemuxaiStore(): DemuxaiStore {
   const models = seedModels(providers);
   const pricing = seedPricing(models);
   const logs = seedLogs(providers);
-  cached = { providers, models, pricing, logs };
+  const providerGroups = seedProviderGroupsFromGateway();
+  const upstreamModels = seedUpstreamModelsFromGateway(providerGroups);
+  recomputeGroupModelCounts(providerGroups, upstreamModels);
+  const modelRoutes = [
+    ...seedCatalogModelRoutes(upstreamModels),
+    ...seedModelRoutes(providers),
+  ];
+  cached = { providers, models, pricing, logs, providerGroups, upstreamModels, modelRoutes };
   return cached;
 }
 

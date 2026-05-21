@@ -92,7 +92,7 @@ async function onConfirm(): Promise<void> {
     return;
   }
   emit('submit', {
-    logUid: log.uid,
+    logId: log.id,
     reasonCode: form.value.reasonCode,
     remark: form.value.remark.trim() || undefined,
   });
@@ -126,11 +126,11 @@ function onCancel(): void {
       <div class="reverse-dialog__meta">
         <div class="meta-row">
           <span class="meta-label">日志 UID</span>
-          <span class="mono">{{ log.uid }}</span>
+          <span class="mono">{{ log.id }}</span>
         </div>
         <div class="meta-row">
           <span class="meta-label">账单 UID</span>
-          <span class="mono">{{ log.bill?.uid ?? '—' }}</span>
+          <span class="mono">{{ log.bill?.id ?? '—' }}</span>
         </div>
         <div class="meta-row">
           <span class="meta-label">调用时间</span>

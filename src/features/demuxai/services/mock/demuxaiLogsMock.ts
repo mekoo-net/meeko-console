@@ -198,9 +198,9 @@ export class DemuxaiLogsMock implements DemuxaiLogsPort {
 
   async reverse(input: ReverseLogInput): Promise<AppResult<ReverseLogResult>> {
     await delay();
-    const target = this.store.logs.find((l) => l.uid === input.logUid);
+    const target = this.store.logs.find((l) => l.id === input.logId);
     if (!target) {
-      return fail({ code: 'not_found', message: `日志 ${input.logUid} 不存在` });
+      return fail({ code: 'not_found', message: `日志 ${input.logId} 不存在` });
     }
     if (!target.bill) {
       return fail({
@@ -224,8 +224,8 @@ export class DemuxaiLogsMock implements DemuxaiLogsPort {
       reversedRemark: input.remark?.trim() || null,
     };
     return ok({
-      logUid: target.uid,
-      billUid: target.bill.uid,
+      logId: target.id,
+      billId: target.bill.id,
       reversedAtUtc,
       reversedBy: MOCK_ADMIN_IAM_UID,
       reversedCode: input.reasonCode,

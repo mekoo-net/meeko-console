@@ -14,6 +14,7 @@ import { computed } from 'vue';
 import { RefreshLeft } from '@element-plus/icons-vue';
 
 import { formatDateTime } from '@/shared/lib/date';
+import { formatIpv4 } from '@/shared/lib/ipv4';
 import { formatMoney } from '@/shared/lib/money';
 import StatusTag from '@/shared/ui/StatusTag.vue';
 
@@ -76,6 +77,12 @@ const providerText = computed(() => {
   const l = props.log;
   if (!l) return '';
   return props.providerName ?? `#${l.providerId}`;
+});
+
+const clientIpText = computed(() => {
+  const ip = props.log?.clientIpV4;
+  if (ip == null) return '—';
+  return formatIpv4(ip);
 });
 
 /** 是否允许触发驳回：有账单 & 当前状态是 completed */
@@ -149,7 +156,7 @@ const outputDims = computed<DimRow[]>(() => {
 <template>
   <el-drawer
     v-model="visible"
-    :title="log ? `调用详情 · ${log.uid}` : '调用详情'"
+    :title="log ? `调用详情 · ${log.id}` : '调用详情'"
     direction="rtl"
     size="520px"
   >
@@ -195,7 +202,7 @@ const outputDims = computed<DimRow[]>(() => {
       </div>
       <div class="log-detail__row">
         <span class="label">请求 IP</span>
-        <span class="mono">{{ log.requestIp ?? '—' }}</span>
+        <span class="mono">{{ clientIpText }}</span>
       </div>
 
       <el-divider />
@@ -402,7 +409,7 @@ const outputDims = computed<DimRow[]>(() => {
         <h4 class="section-title">账单</h4>
         <div class="log-detail__row">
           <span class="label">账单 UID</span>
-          <span class="mono">{{ log.bill.uid }}</span>
+          <span class="mono">{{ log.bill.id }}</span>
         </div>
         <div class="log-detail__row">
           <span class="label">账单状态</span>

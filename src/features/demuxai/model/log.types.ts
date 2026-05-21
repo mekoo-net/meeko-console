@@ -18,9 +18,9 @@ const uidString = z.union([z.string(), z.number()]).transform((v) => String(v));
  * 因此 Logs 单独一个 Port，HttpAdapter 也对应独立 baseUrl。
  *
  * 设计要点：
- *  - `uid` 必须是单调递增的 snowflake，前端按它做"上一页 / 下一页" cursor 也可行
- *  - `account: { uid, iamId }`：嵌套对象表达租户身份 —— `uid` 是主账户（扣费主体），
- *    `iamId` 是发起调用的 IAM 子账户；展示和关联一次拿到，不再两个并列字段
+ *  - `id`：本条日志主键（snowflake）；与账户域的 `uid`（userId）区分
+ *  - `account: { uid, iamId }`：租户身份 —— `uid` 是主账户 userId（扣费主体），
+ *    `iamId` 是 IAM 子账户 userId；展示和关联一次拿到，不再两个并列顶层字段
  *  - `providerId` 是**供应商表的 int 主键**（非 string UID）：日志是高吞吐数据，
  *    int FK 索引比 string UID 紧凑得多；前端展示用反查 `provider.id → name`
  *  - `modelName` 即用户请求体里的 `model` 字段（如 `'demux-gpt-4o'`），快照字段
@@ -236,14 +236,14 @@ export type PerCharacterCost = z.infer<typeof perCharacterCostSchema>;
 // ---------- LogEntry 共通字段 ----------
 
 const logEntryBaseShape = {
-  uid: uidString,
+  id: uidString,
   /** 调用发生时间（UTC ISO8601）。原名 `occurredAtUtc`，按"用户感知"语义简化为 `createAt`。 */
   createAt: z.string(),
   /**
-   * 租户身份聚合对象 —— 替代原先并列的 `accountUid` + `iamUserUid`。
+   * 租户身份聚合对象 —— 替代原先并列的 `accountUid` + `iamUserUid` 顶层字段。
    *
-   * - `uid`：主账户 UID（扣费主体，billing 主键，可直接做 GROUP BY 聚合）
-   * - `iamId`：发起调用的 IAM 子账户 UID（实际操作者，用于审计 / 限流 / 审计）
+   * - `uid`：主账户 userId（扣费主体，billing 主键）
+   * - `iamId`：IAM 子账户 userId（实际操作者）
    */
   account: z.object({
     uid: uidString,
@@ -292,8 +292,12 @@ const logEntryBaseShape = {
       httpStatus: z.number().int().nonnegative(),
     })
     .nullable(),
-  /** 调用方 IP，用于风控复盘 */
-  requestIp: z.string().nullable().optional(),
+  /**
+   * 调用方 IPv4，**网络字节序 uint32**（非点分字符串）。
+   * 例：`203.0.113.7` → `3401195783`。展示用 `formatIpv4`（`@/shared/lib/ipv4`）。
+   * 落库 4 字节，支持 `BETWEEN` 网段筛选；IPv6 另字段（待接）再存。
+   */
+  clientIpV4: z.number().int().nonnegative().nullable().optional(),
   /** 是否流式 */
   streamed: z.boolean(),
   /**
@@ -311,13 +315,13 @@ const logEntryBaseShape = {
    */
   bill: z
     .object({
-      /** 账单 UID（= Bill.uid，BL-* 命名空间） */
-      uid: z.string().min(1),
+      /** 账单主键（BL-* 命名空间） */
+      id: z.string().min(1),
       /** 当前账单状态（demuxai 用量只用到 `completed` / `reversed` 两种） */
       status: billStatusSchema,
       /** 已驳回时的操作时间（UTC ISO8601）；`completed` 状态为 null */
       reversedAtUtc: z.string().nullable(),
-      /** 已驳回时的操作人 IAM UID；`completed` 状态为 null */
+      /** 已驳回时的操作人 IAM 主键；`completed` 状态为 null */
       reversedBy: z.string().nullable(),
       /** 已驳回时的原因码；`completed` 状态为 null */
       reversedCode: billReverseCodeSchema.nullable(),
@@ -374,9 +378,9 @@ export type LogEntry = z.infer<typeof logEntrySchema>;
 // ---------- Filter / Stats ----------
 
 export interface ListLogsFilter {
-  /** 主账户 UID 精确匹配（= `account.uid`） */
+  /** 主账户 userId 精确匹配（= `account.uid`） */
   accountUid?: string;
-  /** IAM 子账户 UID 精确匹配（= `account.iamId`） */
+  /** IAM 子账户 userId 精确匹配（= `account.iamId`） */
   iamId?: string;
   /** 模糊匹配 `modelName` */
   modelName?: string;
@@ -476,7 +480,7 @@ export type LogEntryBillingType = z.infer<typeof billingTypeSchema>;
 /**
  * 驳回单条调用日志对应的账单。
  *
- * - `logUid`：要驳回的日志 UID，BFF 端反查 `Bill` 表用 `refType='order' && refUid=logUid`
+ * - `logId`：要驳回的日志主键，BFF 端反查 `Bill` 表用 `refType='order' && refId=logId`
  * - `reasonCode`：必填，从预设枚举里选一个；自由文本通过 `remark` 走
  * - `remark`：可选备注，会写进审计日志（admin 后期复盘用）
  *
@@ -487,15 +491,15 @@ export type LogEntryBillingType = z.infer<typeof billingTypeSchema>;
  *  - 重复驳回 → 409 Conflict
  */
 export interface ReverseLogInput {
-  logUid: string;
+  logId: string;
   reasonCode: BillReverseCode;
   remark?: string;
 }
 
 /** 驳回成功后的回执 —— 用于前端就地刷新行状态，避免整页 reload */
 export interface ReverseLogResult {
-  logUid: string;
-  billUid: string;
+  logId: string;
+  billId: string;
   reversedAtUtc: string;
   reversedBy: string;
   reversedCode: BillReverseCode;

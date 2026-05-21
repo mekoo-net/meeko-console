@@ -116,7 +116,7 @@ function newTmpMpUid(): string {
 }
 
 const rules: FormRules<FormState> = {
-  name: [{ required: true, min: 1, max: 64, message: '名称 1..64 字符', trigger: 'blur' }],
+  name: [{ required: true, min: 1, max: 128, message: '渠道名称 1..128 字符', trigger: 'blur' }],
   apiType: [{ required: true, message: '请选择协议类型', trigger: 'change' }],
   baseUrl: [{ required: true, message: '请填写 baseUrl', trigger: 'blur' }],
   apiKey: [
@@ -478,13 +478,14 @@ const sortedMappings = computed<ProviderModelMappingDraft[]>(() =>
           label-position="right"
           @submit.prevent
         >
-          <el-form-item label="名称" prop="name">
+          <el-form-item label="渠道名称" prop="name">
             <el-input
               v-model="form.name"
               placeholder="OpenAI 直连（主）"
-              maxlength="64"
+              maxlength="128"
               show-word-limit
             />
+            <div class="form-hint">全局唯一；保存后由系统自动生成内部标识，无需另填 code。</div>
           </el-form-item>
 
           <el-form-item label="协议类型" prop="apiType">

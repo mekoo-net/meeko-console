@@ -97,9 +97,9 @@ export class DemuxaiPricingMock implements DemuxaiPricingPort {
       const cur = this.store.pricing[existingIdx]!;
       const next = {
         ...input,
-        uid: cur.uid,
+        id: cur.id,
         updatedAtUtc: t,
-        updatedByIamUid: cur.updatedByIamUid ?? null,
+        updatedBy: cur.updatedBy ?? null,
       } as Pricing;
       const p = parsePricing(next);
       if (!p.success) return p;
@@ -109,9 +109,9 @@ export class DemuxaiPricingMock implements DemuxaiPricingPort {
 
     const row = {
       ...input,
-      uid: genPricingUid(),
+      id: genPricingUid(),
       updatedAtUtc: t,
-      updatedByIamUid: null,
+      updatedBy: null,
     } as Pricing;
     const p = parsePricing(row);
     if (!p.success) return p;

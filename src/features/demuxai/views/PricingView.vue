@@ -1,11 +1,6 @@
 <script setup lang="ts">
 /**
- * 模型定价管理页。
- *
- * 与 Models 1..1 —— 一行展示一个 modelId 的定价。Tab 切换：
- *  - 「模型定价」：已配置定价的列表（带过滤 + 分页）
- *  - 「未配置」：models 与 pricing 对比推导出的未定价模型表格（带分页），
- *    点击行直接 upsert 一条新定价。
+ * 模型定价：左右分栏。左侧按供应商组（QueueGroup）筛选，右侧管理该渠道下别名定价。
  */
 import { computed, onMounted, ref, watch } from 'vue';
 
@@ -17,28 +12,48 @@ import EmptyState from '@/shared/ui/EmptyState.vue';
 import { formatDateTime } from '@/shared/lib/date';
 import { formatMoney } from '@/shared/lib/money';
 import { confirmDanger } from '@/shared/composables/useConfirm';
+import { clientPaginate, usePagination } from '@/shared/composables/usePagination';
 import { TIER_THRESHOLDS } from '@/features/accounts/model/tierConfig';
 
 import {
   ModelFamilyLabel,
+  ProviderGroupLabel,
   billingTypeValues,
   BillingTypeLabel,
   type BillingType,
 } from '../model/enums';
 import type { ListPricingFilter, Pricing, UpsertPricingInput } from '../model/pricing.types';
 import type { Model } from '../model/model.types';
-import { getDemuxaiModelPort, getDemuxaiPricingPort } from '../services';
+import type { ModelRoute } from '../model/modelRoute.types';
+import type { ProviderGroup } from '../model/catalog.types';
+import {
+  getDemuxaiCatalogPort,
+  getDemuxaiModelPort,
+  getDemuxaiModelRoutePort,
+  getDemuxaiPricingPort,
+} from '../services';
+import ProviderWorkspaceLayout from '../components/provider/ProviderWorkspaceLayout.vue';
+import ProviderGroupSidebar from '../components/provider/ProviderGroupSidebar.vue';
+import ProviderDetailPanel from '../components/provider/ProviderDetailPanel.vue';
 import PricingEditDialog from '../components/PricingEditDialog.vue';
 
 const pricingPort = getDemuxaiPricingPort();
 const modelPort = getDemuxaiModelPort();
+const modelRoutePort = getDemuxaiModelRoutePort();
+const catalogPort = getDemuxaiCatalogPort();
 
-const records = ref<Pricing[]>([]);
-const total = ref(0);
-const loading = ref(false);
+const groups = ref<ProviderGroup[]>([]);
+const groupsLoading = ref(false);
+const selectedChannel = ref<string>('all');
 
-const page = ref(1);
-const pageSize = ref(20);
+const allPricing = ref<Pricing[]>([]);
+const pricingLoading = ref(false);
+
+const models = ref<Model[]>([]);
+const modelRoutes = ref<ModelRoute[]>([]);
+
+const pricedPagination = usePagination({ initialPageSize: 20, pageSizes: [10, 20, 50, 100] });
+const unconfiguredPagination = usePagination({ initialPageSize: 15, pageSizes: [10, 15, 30, 50] });
 
 interface PageFilter {
   keyword: string;
@@ -52,13 +67,6 @@ const defaultFilter = (): PageFilter => ({
 
 const filter = ref<PageFilter>(defaultFilter());
 
-const models = ref<Model[]>([]);
-const modelsByModelId = computed(() => {
-  const m = new Map<string, Model>();
-  for (const it of models.value) m.set(it.modelId, it);
-  return m;
-});
-
 const dialogOpen = ref(false);
 const dialogLoading = ref(false);
 const editingPricing = ref<Pricing | null>(null);
@@ -67,69 +75,185 @@ const editingModel = ref<Model | null>(null);
 type TabName = 'priced' | 'unconfigured';
 const activeTab = ref<TabName>('priced');
 
-const unconfiguredPage = ref(1);
-const unconfiguredPageSize = ref(15);
-
-watch(activeTab, (tab) => {
-  if (tab === 'unconfigured') unconfiguredPage.value = 1;
+const modelsByModelId = computed(() => {
+  const m = new Map<string, Model>();
+  for (const it of models.value) m.set(it.modelId, it);
+  return m;
 });
 
-function buildPortFilter(): ListPricingFilter {
+/** alias → channelKey（启用路由） */
+const aliasChannelMap = computed(() => {
+  const m = new Map<string, string>();
+  for (const r of modelRoutes.value) {
+    if (r.status === 'enabled') m.set(r.alias, r.channelKey);
+  }
+  return m;
+});
+
+const selectedGroup = computed(() => {
+  if (selectedChannel.value === 'all') return null;
+  return groups.value.find((g) => g.queueGroup === selectedChannel.value) ?? null;
+});
+
+const channelTitle = computed(() => {
+  if (selectedChannel.value === 'all') return '全部渠道';
+  const g = selectedGroup.value;
+  if (!g) return selectedChannel.value;
+  return ProviderGroupLabel[g.queueGroup] ?? g.displayName;
+});
+
+function matchesChannel(modelId: string): boolean {
+  if (selectedChannel.value === 'all') return true;
+  const ch = aliasChannelMap.value.get(modelId);
+  if (ch) return ch === selectedChannel.value;
+  return false;
+}
+
+function applyListFilter(rows: Pricing[]): Pricing[] {
+  const kw = filter.value.keyword.trim().toLowerCase();
+  const bt = filter.value.billingType;
+  return rows.filter((p) => {
+    if (!matchesChannel(p.modelId)) return false;
+    if (bt !== 'all' && p.billingType !== bt) return false;
+    if (kw && !p.modelId.toLowerCase().includes(kw)) return false;
+    return true;
+  });
+}
+
+const filteredPriced = computed(() => applyListFilter(allPricing.value));
+
+const pagedPriced = computed(() =>
+  clientPaginate(
+    filteredPriced.value,
+    pricedPagination.state.page,
+    pricedPagination.state.pageSize,
+  ),
+);
+
+watch(
+  filteredPriced,
+  (list) => {
+    pricedPagination.setTotal(list.length);
+  },
+  { immediate: true },
+);
+
+function modelFromAlias(alias: string): Model {
+  const t = new Date().toISOString();
   return {
-    keyword: filter.value.keyword.trim(),
-    billingType: filter.value.billingType,
+    uid: alias,
+    modelId: alias,
+    displayName: alias,
+    family: 'other',
+    capabilities: ['chat'],
+    visibleMinTier: 1,
+    maxContextTokens: 128_000,
+    maxOutputTokens: null,
+    supportsStreaming: true,
+    supportsFunctionCall: false,
+    description: null,
+    createdAtUtc: t,
+    updatedAtUtc: t,
   };
 }
 
-async function loadModels(): Promise<void> {
-  const r = await modelPort.list({
-    page: 1,
-    pageSize: 500,
-    filter: { keyword: '', family: 'all', capability: 'all' },
-  });
-  if (r.success) models.value = r.data.items;
+const unconfiguredModels = computed<Model[]>(() => {
+  const configured = new Set(allPricing.value.map((r) => r.modelId));
+  const seen = new Set<string>();
+  const out: Model[] = [];
+  for (const route of modelRoutes.value) {
+    if (route.status !== 'enabled') continue;
+    if (selectedChannel.value !== 'all' && route.channelKey !== selectedChannel.value) {
+      continue;
+    }
+    if (configured.has(route.alias) || seen.has(route.alias)) continue;
+    seen.add(route.alias);
+    out.push(modelFromAlias(route.alias));
+  }
+  for (const m of models.value) {
+    if (selectedChannel.value !== 'all' && !matchesChannel(m.modelId)) continue;
+    if (!configured.has(m.modelId) && !seen.has(m.modelId)) {
+      seen.add(m.modelId);
+      out.push(m);
+    }
+  }
+  return out;
+});
+
+const pagedUnconfigured = computed(() =>
+  clientPaginate(
+    unconfiguredModels.value,
+    unconfiguredPagination.state.page,
+    unconfiguredPagination.state.pageSize,
+  ),
+);
+
+watch(
+  unconfiguredModels,
+  (list) => {
+    unconfiguredPagination.setTotal(list.length);
+  },
+  { immediate: true },
+);
+
+async function loadGroups(): Promise<void> {
+  groupsLoading.value = true;
+  try {
+    const r = await catalogPort.listProviderGroups();
+    if (r.success) groups.value = r.data;
+    else ElMessage.error(r.error.message);
+  } finally {
+    groupsLoading.value = false;
+  }
 }
 
-async function fetchData(): Promise<void> {
-  loading.value = true;
+async function loadModelsAndRoutes(): Promise<void> {
+  const [modelsR, routesR] = await Promise.all([
+    modelPort.list({
+      page: 1,
+      pageSize: 500,
+      filter: { keyword: '', family: 'all', capability: 'all' },
+    }),
+    modelRoutePort.list({
+      page: 1,
+      pageSize: 500,
+      filter: { keyword: '', channelKey: 'all', status: 'enabled' },
+    }),
+  ]);
+  if (modelsR.success) models.value = modelsR.data.items;
+  if (routesR.success) modelRoutes.value = routesR.data.items;
+}
+
+async function fetchAllPricing(): Promise<void> {
+  pricingLoading.value = true;
   try {
+    const portFilter: ListPricingFilter = {
+      keyword: '',
+      billingType: 'all',
+    };
     const r = await pricingPort.list({
-      page: page.value,
-      pageSize: pageSize.value,
-      filter: buildPortFilter(),
+      page: 1,
+      pageSize: 500,
+      filter: portFilter,
     });
     if (r.success) {
-      records.value = r.data.items;
-      total.value = r.data.total;
+      allPricing.value = r.data.items;
     } else {
       ElMessage.error(r.error.message);
     }
   } finally {
-    loading.value = false;
+    pricingLoading.value = false;
   }
 }
 
-watch(
-  () => [page.value, pageSize.value] as const,
-  () => void fetchData(),
-);
-
-watch(
-  () => [filter.value.keyword, filter.value.billingType] as const,
-  () => {
-    page.value = 1;
-    void fetchData();
-  },
-);
-
 function resetFilter(): void {
   filter.value = defaultFilter();
-  page.value = 1;
+  pricedPagination.setPage(1);
 }
 
 function openEdit(p: Pricing): void {
   editingPricing.value = p;
-  editingModel.value = modelsByModelId.value.get(p.modelId) ?? null;
+  editingModel.value = modelsByModelId.value.get(p.modelId) ?? modelFromAlias(p.modelId);
   dialogOpen.value = true;
 }
 
@@ -146,7 +270,7 @@ async function onSubmit(payload: UpsertPricingInput): Promise<void> {
     if (r.success) {
       ElMessage.success('定价已保存');
       dialogOpen.value = false;
-      await fetchData();
+      await fetchAllPricing();
     } else {
       ElMessage.error(r.error.message);
     }
@@ -158,7 +282,7 @@ async function onSubmit(payload: UpsertPricingInput): Promise<void> {
 async function onDelete(row: Pricing): Promise<void> {
   const okp = await confirmDanger({
     title: '删除定价',
-    message: `确认删除 "${row.modelId}" 的定价？删除后该模型不会再有现行价，BFF 会拒绝计费请求直至重新设置。`,
+    message: `确认删除 "${row.modelId}" 的定价？`,
     confirmText: '确认删除',
     type: 'warning',
   });
@@ -166,36 +290,12 @@ async function onDelete(row: Pricing): Promise<void> {
   const r = await pricingPort.delete(row.modelId);
   if (r.success) {
     ElMessage.success('已删除');
-    await fetchData();
+    await fetchAllPricing();
   } else {
     ElMessage.error(r.error.message);
   }
 }
 
-const unconfiguredModels = computed<Model[]>(() => {
-  const configured = new Set(records.value.map((r) => r.modelId));
-  return models.value.filter((m) => !configured.has(m.modelId));
-});
-
-const unconfiguredModelsPage = computed<Model[]>(() => {
-  const start = (unconfiguredPage.value - 1) * unconfiguredPageSize.value;
-  return unconfiguredModels.value.slice(start, start + unconfiguredPageSize.value);
-});
-
-watch(
-  () => unconfiguredModels.value.length,
-  (n) => {
-    const maxPage = Math.max(1, Math.ceil(n / unconfiguredPageSize.value));
-    if (unconfiguredPage.value > maxPage) unconfiguredPage.value = maxPage;
-  },
-);
-
-/**
- * 列表"基础单价"列的简要展示。
- *
- * 单档（per_token / per_call / per_audio_minute / per_character）直接列价；
- * 多档（per_image / per_video）展示"档位数 + 最低-最高价区间"，详情走编辑弹窗。
- */
 function priceSummary(row: Pricing): string {
   switch (row.billingType) {
     case 'per_token': {
@@ -266,64 +366,133 @@ function tierBadgeLabel(level: number, mult: number): string {
   return `${def?.name ?? `Lv${level}`} × ${mult}`;
 }
 
-onMounted(() => {
-  void loadModels();
-  void fetchData();
+function channelLabelFor(modelId: string): string {
+  const key = aliasChannelMap.value.get(modelId);
+  if (!key) return '—';
+  return ProviderGroupLabel[key] ?? key;
+}
+
+watch(
+  () => [filter.value.keyword, filter.value.billingType, selectedChannel.value] as const,
+  () => {
+    pricedPagination.setPage(1);
+    unconfiguredPagination.setPage(1);
+  },
+);
+
+watch(selectedChannel, () => {
+  activeTab.value = 'priced';
+});
+
+watch(activeTab, (tab) => {
+  if (tab === 'unconfigured') unconfiguredPagination.setPage(1);
+});
+
+onMounted(async () => {
+  await Promise.all([loadGroups(), loadModelsAndRoutes(), fetchAllPricing()]);
 });
 </script>
 
 <template>
-  <div class="page">
-    <PageHeader title="模型定价" />
+  <ProviderWorkspaceLayout :loading="groupsLoading && groups.length === 0">
+    <template #header>
+      <PageHeader
+        title="模型定价"
+        description="左侧按供应商组（QueueGroup）筛选对外别名；右侧配置计费类型与单价。别名与路由在「供应商组」页维护。"
+      />
+    </template>
 
-    <el-tabs v-model="activeTab" class="pricing-tabs">
-      <el-tab-pane name="priced">
-        <template #label>
-          <span class="tab-label">
-            模型定价
-            <el-tag v-if="total > 0" size="small" type="info" effect="plain" round>
-              {{ total }}
-            </el-tag>
-          </span>
-        </template>
+    <ProviderGroupSidebar
+      v-model="selectedChannel"
+      :groups="groups"
+      :loading="groupsLoading"
+      show-all-option
+      all-label="全部渠道"
+      search-placeholder="搜索渠道 / QueueGroup"
+      empty-description="请先在「供应商组」页从网关同步 Provider。"
+    />
 
-        <el-card class="filter-card" shadow="never">
-          <el-form inline @submit.prevent>
-            <el-form-item label="搜索">
-              <el-input
-                v-model="filter.keyword"
-                :prefix-icon="Search"
-                placeholder="modelId"
-                style="width: 240px"
-                clearable
+    <ProviderDetailPanel>
+      <template #header>
+        <div class="detail-header__main">
+          <h2 class="provider-detail__title">{{ channelTitle }}</h2>
+          <p v-if="selectedGroup" class="provider-detail__sub">{{ selectedGroup.queueGroup }}</p>
+          <p v-else class="provider-detail__sub">汇总所有 QueueGroup 下已启用别名的定价</p>
+          <div class="provider-detail__stats">
+            <span>已定价 {{ filteredPriced.length }} 个别名</span>
+            <span>未配置 {{ unconfiguredModels.length }} 个</span>
+          </div>
+        </div>
+      </template>
+
+      <template #toolbar>
+        <el-tabs v-model="activeTab" class="pricing-tabs">
+          <el-tab-pane name="priced">
+            <template #label>
+              <span class="tab-label">
+                已配置
+                <el-tag v-if="filteredPriced.length > 0" size="small" type="info" effect="plain" round>
+                  {{ filteredPriced.length }}
+                </el-tag>
+              </span>
+            </template>
+          </el-tab-pane>
+          <el-tab-pane name="unconfigured">
+            <template #label>
+              <span class="tab-label">
+                未配置
+                <el-tag
+                  v-if="unconfiguredModels.length > 0"
+                  size="small"
+                  type="danger"
+                  effect="plain"
+                  round
+                >
+                  {{ unconfiguredModels.length }}
+                </el-tag>
+              </span>
+            </template>
+          </el-tab-pane>
+        </el-tabs>
+
+        <el-form v-if="activeTab === 'priced'" inline class="filter-form" @submit.prevent>
+          <el-form-item label="搜索">
+            <el-input
+              v-model="filter.keyword"
+              :prefix-icon="Search"
+              placeholder="对外别名 modelId"
+              style="width: 220px"
+              clearable
+            />
+          </el-form-item>
+          <el-form-item label="计费类型">
+            <el-select v-model="filter.billingType" style="width: 160px">
+              <el-option label="全部" value="all" />
+              <el-option
+                v-for="m in billingTypeValues"
+                :key="m"
+                :label="BillingTypeLabel[m]"
+                :value="m"
               />
-            </el-form-item>
-            <el-form-item label="计费类型">
-              <el-select v-model="filter.billingType" style="width: 180px">
-                <el-option label="全部" value="all" />
-                <el-option
-                  v-for="m in billingTypeValues"
-                  :key="m"
-                  :label="BillingTypeLabel[m]"
-                  :value="m"
-                />
-              </el-select>
-            </el-form-item>
-            <el-form-item>
-              <el-button :icon="RefreshLeft" @click="resetFilter">重置</el-button>
-            </el-form-item>
-          </el-form>
-        </el-card>
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-button :icon="RefreshLeft" @click="resetFilter">重置</el-button>
+          </el-form-item>
+        </el-form>
+      </template>
 
+      <div v-show="activeTab === 'priced'" class="provider-detail__table-wrap">
         <el-table
-          v-loading="loading"
-          :data="records"
+          v-loading="pricingLoading"
+          :data="pagedPriced"
           row-key="modelId"
           size="small"
           class="compact-table"
+          height="100%"
           :empty-text="' '"
         >
-          <el-table-column label="modelId" min-width="220">
+          <el-table-column label="对外别名" min-width="200">
             <template #default="{ row }: { row: Pricing }">
               <div class="cell-model">
                 <div class="cell-model__name">
@@ -333,7 +502,11 @@ onMounted(() => {
               </div>
             </template>
           </el-table-column>
-
+          <el-table-column v-if="selectedChannel === 'all'" label="渠道" width="110">
+            <template #default="{ row }: { row: Pricing }">
+              <el-tag size="small" effect="plain">{{ channelLabelFor(row.modelId) }}</el-tag>
+            </template>
+          </el-table-column>
           <el-table-column label="计费类型" width="120">
             <template #default="{ row }: { row: Pricing }">
               <el-tag size="small" type="primary" effect="plain" round>
@@ -341,20 +514,17 @@ onMounted(() => {
               </el-tag>
             </template>
           </el-table-column>
-
-          <el-table-column label="基础单价" min-width="320">
+          <el-table-column label="基础单价" min-width="280">
             <template #default="{ row }: { row: Pricing }">
               <span class="cell-price">{{ priceSummary(row) }}</span>
             </template>
           </el-table-column>
-
-          <el-table-column label="全局倍率" width="100" align="center">
+          <el-table-column label="倍率" width="88" align="center">
             <template #default="{ row }: { row: Pricing }">
               <span class="num">× {{ row.multiplier }}</span>
             </template>
           </el-table-column>
-
-          <el-table-column label="LV 倍率" min-width="220">
+          <el-table-column label="LV 倍率" min-width="180">
             <template #default="{ row }: { row: Pricing }">
               <div class="tier-badges">
                 <el-tag
@@ -366,70 +536,55 @@ onMounted(() => {
                 >
                   {{ tierBadgeLabel(Number(lv), Number(mult)) }}
                 </el-tag>
-                <span v-if="Object.keys(row.tierMultipliers).length === 0" class="cell-muted">
-                  —
-                </span>
+                <span v-if="Object.keys(row.tierMultipliers).length === 0" class="cell-muted">—</span>
               </div>
             </template>
           </el-table-column>
-
-          <el-table-column label="生效时间" width="160">
+          <el-table-column label="生效" width="150">
             <template #default="{ row }: { row: Pricing }">
               <span class="cell-date">{{ formatDateTime(row.effectiveFromUtc) }}</span>
             </template>
           </el-table-column>
-
-          <el-table-column label="操作" width="160" align="right" fixed="right">
+          <el-table-column label="操作" width="140" align="right" fixed="right">
             <template #default="{ row }: { row: Pricing }">
               <el-button :icon="Edit" link type="primary" @click="openEdit(row)">编辑</el-button>
               <el-button :icon="Delete" link type="danger" @click="onDelete(row)">删除</el-button>
             </template>
           </el-table-column>
-
           <template #empty>
             <EmptyState
               title="暂无定价"
-              description="尚未为任何模型设置定价；切换到「未配置」可批量补齐。"
+              :description="
+                selectedChannel === 'all'
+                  ? '切换到「未配置」为别名补齐定价。'
+                  : '该渠道下尚无已定价别名；可切换「未配置」或先在供应商组创建别名。'
+              "
             />
           </template>
         </el-table>
+      </div>
 
-        <div class="pagination-bar">
-          <el-pagination
-            v-model:current-page="page"
-            v-model:page-size="pageSize"
-            :total="total"
-            :page-sizes="[20, 50, 100]"
-            layout="total, sizes, prev, pager, next"
-            background
-          />
-        </div>
-      </el-tab-pane>
+      <div v-show="activeTab === 'priced'" class="provider-pagination">
+        <el-pagination
+          v-model:current-page="pricedPagination.state.page"
+          v-model:page-size="pricedPagination.state.pageSize"
+          :total="pricedPagination.state.total"
+          :page-sizes="pricedPagination.pageSizes"
+          layout="total, sizes, prev, pager, next"
+          background
+        />
+      </div>
 
-      <el-tab-pane name="unconfigured">
-        <template #label>
-          <span class="tab-label">
-            未配置
-            <el-tag
-              v-if="unconfiguredModels.length > 0"
-              size="small"
-              type="danger"
-              effect="plain"
-              round
-            >
-              {{ unconfiguredModels.length }}
-            </el-tag>
-          </span>
-        </template>
-
+      <div v-show="activeTab === 'unconfigured'" class="provider-detail__table-wrap">
         <el-table
-          :data="unconfiguredModelsPage"
+          :data="pagedUnconfigured"
           row-key="modelId"
           size="small"
           class="compact-table unconfigured-table"
+          height="100%"
           @row-click="(row: Model) => openCreateFor(row)"
         >
-          <el-table-column label="模型" min-width="280">
+          <el-table-column label="对外别名" min-width="260">
             <template #default="{ row }: { row: Model }">
               <div class="cell-model">
                 <div class="cell-model__name">{{ row.displayName }}</div>
@@ -444,7 +599,7 @@ onMounted(() => {
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="140" align="right" fixed="right">
+          <el-table-column label="操作" width="120" align="right" fixed="right">
             <template #default="{ row }: { row: Model }">
               <el-button size="small" type="primary" plain @click.stop="openCreateFor(row)">
                 设置定价
@@ -452,22 +607,25 @@ onMounted(() => {
             </template>
           </el-table-column>
           <template #empty>
-            <EmptyState title="全部已配置" description="所有已启用模型都已设置定价。" />
+            <EmptyState
+              title="全部已配置"
+              description="当前筛选范围内，所有启用别名均已设置定价。"
+            />
           </template>
         </el-table>
+      </div>
 
-        <div class="pagination-bar">
-          <el-pagination
-            v-model:current-page="unconfiguredPage"
-            v-model:page-size="unconfiguredPageSize"
-            :total="unconfiguredModels.length"
-            :page-sizes="[15, 30, 50, 100]"
-            layout="total, sizes, prev, pager, next"
-            background
-          />
-        </div>
-      </el-tab-pane>
-    </el-tabs>
+      <div v-show="activeTab === 'unconfigured'" class="provider-pagination">
+        <el-pagination
+          v-model:current-page="unconfiguredPagination.state.page"
+          v-model:page-size="unconfiguredPagination.state.pageSize"
+          :total="unconfiguredPagination.state.total"
+          :page-sizes="unconfiguredPagination.pageSizes"
+          layout="total, sizes, prev, pager, next"
+          background
+        />
+      </div>
+    </ProviderDetailPanel>
 
     <PricingEditDialog
       v-model="dialogOpen"
@@ -476,20 +634,33 @@ onMounted(() => {
       :loading="dialogLoading"
       @submit="onSubmit"
     />
-  </div>
+  </ProviderWorkspaceLayout>
 </template>
 
 <style scoped>
-.filter-card {
-  margin-bottom: 14px;
-  border-radius: 8px;
+.detail-header__main {
+  flex: 1;
+  min-width: 0;
 }
-.filter-card :deep(.el-card__body) {
-  padding: 14px 20px 0;
+.pricing-tabs {
+  margin-bottom: 4px;
+}
+.pricing-tabs :deep(.el-tabs__header) {
+  margin-bottom: 0;
+}
+.pricing-tabs :deep(.el-tabs__nav-wrap)::after {
+  height: 1px;
+}
+.tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.filter-form {
+  margin-top: 12px;
 }
 .cell-model__name {
   font-weight: 500;
-  color: var(--el-text-color-primary);
 }
 .cell-model__id {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
@@ -509,26 +680,14 @@ onMounted(() => {
 .num {
   font-variant-numeric: tabular-nums;
 }
-.pagination-bar {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
-}
-.pricing-tabs :deep(.el-tabs__header) {
-  margin-bottom: 14px;
-}
-.pricing-tabs :deep(.el-tabs__nav-wrap)::after {
-  height: 1px;
-}
-.tab-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
 .unconfigured-table :deep(.el-table__row) {
   cursor: pointer;
 }
 .cell-muted {
+  color: var(--el-text-color-secondary);
+}
+.cell-date {
+  font-size: 12px;
   color: var(--el-text-color-secondary);
 }
 </style>

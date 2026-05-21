@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router';
 import {
   Bell,
   ChatLineRound,
-  Cpu,
   CreditCard,
   DataAnalysis,
   DataLine,
@@ -70,8 +69,8 @@ const tree: readonly MenuNode[] = [
     roles: ['Admin'],
     children: [
       { type: 'leaf', index: '/demuxai/overview', title: '概览', icon: DataAnalysis },
-      { type: 'leaf', index: '/demuxai/models', title: '模型列表', icon: Cpu },
-      { type: 'leaf', index: '/demuxai/providers', title: '模型渠道', icon: Link },
+      { type: 'leaf', index: '/demuxai/redemption', title: '激活码', icon: Tickets },
+      { type: 'leaf', index: '/demuxai/providers', title: '供应商组', icon: Link },
       { type: 'leaf', index: '/demuxai/pricing', title: '模型定价', icon: PriceTag },
       { type: 'leaf', index: '/demuxai/logs', title: '调用日志', icon: DataLine },
     ],

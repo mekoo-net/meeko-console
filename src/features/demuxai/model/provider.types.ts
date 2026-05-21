@@ -87,7 +87,8 @@ export const providerSchema = z.object({
    */
   id: z.number().int().positive(),
   uid: uidString,
-  name: z.string().min(1).max(64),
+  /** 渠道名称（全局唯一，用户只填这一项） */
+  name: z.string().min(1).max(128),
   apiType: apiTypeSchema,
   baseUrl: z.string(),
   /** 脱敏快照，仅展示用；真实密钥不出 BFF。 */

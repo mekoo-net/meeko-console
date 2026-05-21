@@ -66,6 +66,65 @@ export const ProviderStatusTone: Readonly<
   auto_disabled: 'danger',
 };
 
+/** 模型路由（对外别名）运营状态 */
+export const modelRouteStatusValues = ['enabled', 'disabled', 'hidden'] as const;
+export type ModelRouteStatus = (typeof modelRouteStatusValues)[number];
+export const modelRouteStatusSchema = z.enum(modelRouteStatusValues);
+
+export const ModelRouteStatusLabel: Readonly<Record<ModelRouteStatus, string>> = {
+  enabled: '已上架',
+  disabled: '已停用',
+  hidden: '隐藏',
+};
+
+export const ModelRouteStatusTone: Readonly<
+  Record<ModelRouteStatus, 'success' | 'warning' | 'danger' | 'info'>
+> = {
+  enabled: 'success',
+  disabled: 'info',
+  hidden: 'warning',
+};
+
+/** 供应商组 QueueGroup → 展示名（与 demuxai-api Providers 对齐） */
+export const ProviderGroupLabel: Readonly<Record<string, string>> = {
+  kiro: 'Kiro',
+  gemini: 'Gemini',
+  codex: 'Codex',
+  claude: 'Claude',
+  openai: 'OpenAI',
+  cursor: 'Cursor',
+  antigravity: 'Antigravity',
+  deepseek: 'DeepSeek',
+};
+
+/** @deprecated 使用 ProviderGroupLabel */
+export const GatewayChannelLabel = ProviderGroupLabel;
+
+export const providerCatalogSourceValues = ['gateway', 'manual'] as const;
+export type ProviderCatalogSource = (typeof providerCatalogSourceValues)[number];
+export const providerCatalogSourceSchema = z.enum(providerCatalogSourceValues);
+
+export const ProviderCatalogSourceLabel: Readonly<Record<ProviderCatalogSource, string>> = {
+  gateway: '网关注册',
+  manual: '手工登记',
+};
+
+export const providerGroupStatusValues = ['active', 'disabled'] as const;
+export type ProviderGroupStatus = (typeof providerGroupStatusValues)[number];
+export const providerGroupStatusSchema = z.enum(providerGroupStatusValues);
+
+export const ProviderGroupStatusLabel: Readonly<Record<ProviderGroupStatus, string>> = {
+  active: '活跃',
+  disabled: '已停用',
+};
+
+export const ProviderGroupStatusTone: Readonly<
+  Record<ProviderGroupStatus, 'success' | 'warning' | 'danger' | 'info'>
+> = {
+  active: 'success',
+  disabled: 'info',
+};
+
 /** 模型族 —— 主要用于 UI 分组 / 图标，不影响路由 */
 export const modelFamilyValues = [
   'gpt',
