@@ -76,6 +76,13 @@ function buildListQuery(input: ListAccountsInput): string {
   return params.toString();
 }
 
+// 路径分两类：
+//   /accounts/current         —— Keystone 用户自助（当前登录账户），由 Keystone 直接处理
+//   /api/admin/accounts/**    —— BFF 后台聚合（StaffOnly），由 BFF 调下游 Keystone
+//   /api/admin/iam/users/**   —— 同上
+const ADMIN_ACCOUNTS = '/api/admin/accounts';
+const ADMIN_IAM_USERS = '/api/admin/iam/users';
+
 export class AccountAdminHttpAdapter implements AccountAdminPort {
   async getCurrentAccount(): Promise<AppResult<Account>> {
     const res = await apiFetch<unknown>('/accounts/current');
@@ -84,7 +91,7 @@ export class AccountAdminHttpAdapter implements AccountAdminPort {
   }
 
   async listAccounts(input: ListAccountsInput): Promise<AppResult<ListAccountsOutput>> {
-    const res = await apiFetch<AccountAdminListWire>(`/accounts?${buildListQuery(input)}`);
+    const res = await apiFetch<AccountAdminListWire>(`${ADMIN_ACCOUNTS}?${buildListQuery(input)}`);
     if (!res.success) return res;
 
     const items: Account[] = [];
@@ -99,14 +106,14 @@ export class AccountAdminHttpAdapter implements AccountAdminPort {
   }
 
   async getAccount(uid: string): Promise<AppResult<Account>> {
-    const res = await apiFetch<unknown>(`/accounts/${encodeURIComponent(uid)}`);
+    const res = await apiFetch<unknown>(`${ADMIN_ACCOUNTS}/${encodeURIComponent(uid)}`);
     if (!res.success) return res;
     return parseAccount(res.data);
   }
 
   async listIamUsers(accountUid: string): Promise<AppResult<IamUser[]>> {
     const res = await apiFetch<unknown[]>(
-      `/iam/users?accountUid=${encodeURIComponent(accountUid)}`,
+      `${ADMIN_IAM_USERS}?accountUid=${encodeURIComponent(accountUid)}`,
     );
     if (!res.success) return res;
     const parsed: IamUser[] = [];
@@ -122,7 +129,7 @@ export class AccountAdminHttpAdapter implements AccountAdminPort {
     accountUid: string,
     payload: CreateIamUserPayload,
   ): Promise<AppResult<IamUser>> {
-    const res = await apiFetch<unknown>(`/iam/users`, {
+    const res = await apiFetch<unknown>(ADMIN_IAM_USERS, {
       method: 'POST',
       body: JSON.stringify({ accountUid, ...payload }),
     });
@@ -131,7 +138,7 @@ export class AccountAdminHttpAdapter implements AccountAdminPort {
   }
 
   async setAccountStatus(uid: string, status: AccountStatus): Promise<AppResult<Account>> {
-    const res = await apiFetch<unknown>(`/accounts/${encodeURIComponent(uid)}/status`, {
+    const res = await apiFetch<unknown>(`${ADMIN_ACCOUNTS}/${encodeURIComponent(uid)}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     });
@@ -141,7 +148,7 @@ export class AccountAdminHttpAdapter implements AccountAdminPort {
 
   async grantAchievement(accountUid: string, code: string): Promise<AppResult<Account>> {
     const res = await apiFetch<unknown>(
-      `/accounts/${encodeURIComponent(accountUid)}/achievements`,
+      `${ADMIN_ACCOUNTS}/${encodeURIComponent(accountUid)}/achievements`,
       { method: 'POST', body: JSON.stringify({ code }) },
     );
     if (!res.success) return res;
@@ -150,7 +157,7 @@ export class AccountAdminHttpAdapter implements AccountAdminPort {
 
   async revokeAchievement(accountUid: string, code: string): Promise<AppResult<Account>> {
     const res = await apiFetch<unknown>(
-      `/accounts/${encodeURIComponent(accountUid)}/achievements/${encodeURIComponent(code)}`,
+      `${ADMIN_ACCOUNTS}/${encodeURIComponent(accountUid)}/achievements/${encodeURIComponent(code)}`,
       { method: 'DELETE' },
     );
     if (!res.success) return res;

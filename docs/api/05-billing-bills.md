@@ -34,7 +34,7 @@
 | 平台级全量账单 | `listBills` | GET | `/api/billing/bills` |
 | 取单条账单详情 | `getBill(id)` | GET | `/api/billing/bills/{id}` |
 | 驳回 / 部分退款（admin / 客服工单） | `reverseBill(id, payload)` | POST | `/api/billing/bills/{id}/reverse` |
-| 账户辅助查询（前端按 UID/邮箱/手机过滤显示） | `accountAdminPort.listAccounts` | GET | `/accounts` |
+| 账户辅助查询（前端按 UID/邮箱/手机过滤显示） | `accountAdminPort.listAccounts` | GET | `/api/admin/accounts` |
 
 ## 请求 / 响应
 

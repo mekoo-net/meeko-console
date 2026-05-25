@@ -15,13 +15,18 @@ export default defineConfig(({ mode }) => {
     return undefined;
   }
 
+  // 与 Gateway 路由前缀（Discovery:Gateway:Routes）对齐：
+  //   /api/**     → BFF + Keystone /api/user
+  //   /auth/**    → Keystone（匿名登录/注册/刷新）
+  //   /staff/**   → Keystone（staff 登录）
+  //   /me/**      → Keystone（当前用户自助）
+  //   /demuxai/** → DemuxAi 产品门面
+  // 旧的 /accounts、/iam 已并入 /api/admin/**，不再需要独立 proxy 条目。
   const proxyRules = {
-    '/api': { target: gatewayTarget, changeOrigin: true },
-    '/accounts': { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
-    '/iam': { target: gatewayTarget, changeOrigin: true },
-    '/auth': { target: gatewayTarget, changeOrigin: true },
-    '/staff': { target: gatewayTarget, changeOrigin: true },
-    '/me': { target: gatewayTarget, changeOrigin: true },
+    '/api':     { target: gatewayTarget, changeOrigin: true },
+    '/auth':    { target: gatewayTarget, changeOrigin: true },
+    '/staff':   { target: gatewayTarget, changeOrigin: true },
+    '/me':      { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
     '/demuxai': { target: gatewayTarget, changeOrigin: true },
   };
 
@@ -34,7 +39,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 5173,
-      // 已设 VITE_API_BASE 时前端直连 Gateway，勿再代理（否则 /accounts 会与 SPA 路由冲突）
+      // 已设 VITE_API_BASE 时前端直连 Gateway，勿再代理（否则会与 SPA 路由冲突）。
       proxy: apiBase ? undefined : proxyRules,
     },
     test: {

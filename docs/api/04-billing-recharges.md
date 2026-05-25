@@ -27,7 +27,7 @@
 | 平台级全量充值记录 | `listRecharges` | GET | `/api/billing/recharges` |
 | 单条详情 | `getRecharge(id)` | GET | `/api/billing/recharges/{id}` |
 | **内部入账写入**（Admin / 客服 / 营销系统专用） | `createInternalRecharge(payload)` | POST | `/api/billing/recharges/internal` |
-| 账户辅助查询（按 UID/邮箱/手机过滤显示） | `accountAdminPort.listAccounts` | GET | `/accounts` |
+| 账户辅助查询（按 UID/邮箱/手机过滤显示） | `accountAdminPort.listAccounts` | GET | `/api/admin/accounts` |
 
 > **`POST /recharges/internal` 端点的存在理由**：业务定义里明确"`manual` / `cs_compensation` / `marketing_reward` 三类内部入账由客服 / 财务 / 运营触发"，但原 API 只暴露读端点，写链路缺失。封装到独立 `/internal` 路径而非通用 `POST /recharges` 是有意区隔——外部支付（`alipay` / `wechat_pay`）入账是回调驱动、不经此端点。
 

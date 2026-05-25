@@ -221,7 +221,7 @@ type ApiError = {
 
 ### 10.5 列表 vs 详情投影分层
 
-资源含子树（如 `Provider.providerModels` / `Pricing.pricing` 详细子树）时，列表只返回**轻投影**（行渲染必需字段 + 子树概要 / 计数 / 首 N 条 names），详情端点 `GET /{id}`（业务实体）或 `GET /accounts/{uid}`（用户）才返回完整子树。
+资源含子树（如 `Provider.providerModels` / `Pricing.pricing` 详细子树）时，列表只返回**轻投影**（行渲染必需字段 + 子树概要 / 计数 / 首 N 条 names），详情端点 `GET /{id}`（业务实体）或 `GET /api/admin/accounts/{uid}`（用户）才返回完整子树。
 
 参考实现：08-providers 列表 `mappings: { count, names[] }` + 详情 `providerModels / modelMappings`；10-pricing 列表 `summary: {...}` + 详情完整 `pricing` 子树。
 

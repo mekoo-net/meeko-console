@@ -35,7 +35,7 @@
 
 | 业务域 | 前缀 | 说明 |
 | --- | --- | --- |
-| Keystone 账户 / IAM | `/accounts`、`/iam/users` | 与 Keystone REST 对齐 |
+| 账户 / IAM 后台 | `/api/admin/accounts`、`/api/admin/iam/users` | BFF 聚合，底层调 Keystone |
 | 计费工作台 | `/api/billing` | 钱包 / 订单 / 订阅 / 发票 / 充值 / 账单 |
 | 充值渠道（平台配置） | `/api/admin/billing/channels` | 仅 Admin |
 | DemuxAI 控制面 | `/demuxai/api/admin/*` | 供应商组目录、模型路由、Vendor、ModelMeta、Pricing |
@@ -49,7 +49,7 @@
 ## 一份请求示例
 
 ```http
-GET /accounts?page=1&pageSize=20&type=organization HTTP/1.1
+GET /api/admin/accounts?page=1&pageSize=20&type=organization HTTP/1.1
 Host: api.meeko.example
 Authorization: Bearer <accessToken>
 Accept: application/json

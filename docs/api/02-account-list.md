@@ -14,7 +14,7 @@
 
 | 业务动作 | Port 方法 | HTTP | REST 端点 |
 | --- | --- | --- | --- |
-| 列表 + 过滤（含每行钱包概要） | `listAccounts` | GET | `/accounts` |
+| 列表 + 过滤（含每行钱包概要） | `listAccounts` | GET | `/api/admin/accounts` |
 
 > 列表里的「可用余额 / 冻结资金」由 BFF **服务端 JOIN 一次取出**（账户表 + 钱包表 / 缓存），随每行下发 `walletSummary` 概要字段；**前端不再按行并发 `getWallet`**，避免 N+1。完整钱包快照（含 `updatedAtUtc` 等审计字段）由 [`03-account-detail.md`](./03-account-detail.md) 的 `wallet` 字段处理。
 >
@@ -22,9 +22,9 @@
 
 ## 请求 / 响应
 
-### `GET /accounts` （listAccounts）
+### `GET /api/admin/accounts` （listAccounts）
 
-> **轻投影**：本接口**只返回**列表 UI 渲染、筛选、排序所需的最小字段；嵌套数组与详情字段（`achievements`、`oauthBindings`、`updatedAtUtc`、`owner.iamUserUid`、`owner.phone` 等）一律在 [`03-account-detail.md`](./03-account-detail.md) 的 `GET /accounts/:uid` 中下发。
+> **轻投影**：本接口**只返回**列表 UI 渲染、筛选、排序所需的最小字段；嵌套数组与详情字段（`achievements`、`oauthBindings`、`updatedAtUtc`、`owner.iamUserUid`、`owner.phone` 等）一律在 [`03-account-detail.md`](./03-account-detail.md) 的 `GET /api/admin/accounts/{uid}` 中下发。
 
 查询参数：
 
