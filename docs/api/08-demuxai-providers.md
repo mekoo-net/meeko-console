@@ -82,14 +82,14 @@ REST 路径参数写 `{queueGroup}` / `{id}`；前端 Port 方法参数名可能
 
 | 业务动作 | Port 方法 | HTTP（规划） | 说明 |
 | --- | --- | --- | --- |
-| 列表 | `list({ page, pageSize, filter })` | `GET /demuxai/api/admin/model-routes` | `filter.channelKey` = `queueGroup` |
-| 详情 | `get(id)` | `GET /demuxai/api/admin/model-routes/{id}` | 编辑回填 |
-| 新建 | `create(input)` | `POST /demuxai/api/admin/model-routes` |  |
-| 更新 | `update(id, input)` | `PUT /demuxai/api/admin/model-routes/{id}` |  |
-| 删除 | `delete(id)` | `DELETE /demuxai/api/admin/model-routes/{id}` |  |
-| 启停 | `setStatus(id, status)` | `PATCH /demuxai/api/admin/model-routes/{id}/status` | `enabled` / `disabled` / `hidden` |
+| 列表 | `list({ page, pageSize, filter })` | `GET /demuxai/api/admin/routes` | `filter.channelKey` = `queueGroup` |
+| 详情 | `get(id)` | `GET /demuxai/api/admin/routes/{id}` | 编辑回填 |
+| 新建 | `create(input)` | `POST /demuxai/api/admin/routes` |  |
+| 更新 | `update(id, input)` | `PUT /demuxai/api/admin/routes/{id}` |  |
+| 删除 | `delete(id)` | `DELETE /demuxai/api/admin/routes/{id}` |  |
+| 启停 | `setStatus(id, status)` | `PATCH /demuxai/api/admin/routes/{id}/status` | `enabled` / `disabled` / `hidden` |
 
-> **接入状态**：`DemuxaiModelRouteHttpAdapter` 同上，Mock 可用。
+> **接入状态**：`DemuxaiModelRouteHttpAdapter` 已对接 `/demuxai/api/admin/routes`。
 
 ## 请求 / 响应
 

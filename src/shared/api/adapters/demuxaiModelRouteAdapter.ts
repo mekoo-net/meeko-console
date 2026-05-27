@@ -1,52 +1,112 @@
-import type { AppResult } from '@/shared/api/httpTypes';
-import { fail } from '@/shared/api/httpTypes';
-import type { Uid } from '@/shared/lib/id';
-
-import type {
-  CreateModelRouteInput,
-  ListModelRoutesFilter,
-  ModelRoute,
-  UpdateModelRouteInput,
+import {
+  modelRouteSchema,
+  type CreateModelRouteInput,
+  type ListModelRoutesFilter,
+  type ModelRoute,
+  type UpdateModelRouteInput,
 } from '@/features/demuxai/model/modelRoute.types';
 import type {
   DemuxaiModelRoutePort,
   ListModelRoutesPage,
 } from '@/features/demuxai/services/ports/demuxaiModelRoutePort';
+import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
+import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
+import type { Uid } from '@/shared/lib/id';
 
-/** 模型路由 API 待接；HTTP 模式暂不可用。 */
-export class DemuxaiModelRouteHttpAdapter implements DemuxaiModelRoutePort {
-  private unavailable(): AppResult<never> {
-    return fail({
-      code: 'upstream',
-      message: '模型路由 API 尚未接入，请使用 Mock 模式预览新界面。',
-    });
+const BASE = '/demuxai/api/admin/routes';
+
+function parseRoute(value: unknown): AppResult<ModelRoute> {
+  const r = modelRouteSchema.safeParse(value);
+  return r.success ? ok(r.data) : fail({ code: 'validation', message: '模型路由格式错误' });
+}
+
+function parseRoutes(value: unknown): AppResult<ModelRoute[]> {
+  const envelope = value as ItemsEnvelope<unknown>;
+  const parsed: ModelRoute[] = [];
+  for (const row of envelope.items ?? []) {
+    const r = parseRoute(row);
+    if (!r.success) return r;
+    parsed.push(r.data);
   }
+  return ok(parsed);
+}
 
-  async list(_input: {
+export class DemuxaiModelRouteHttpAdapter implements DemuxaiModelRoutePort {
+  async list(input: {
     page: number;
     pageSize: number;
     filter: ListModelRoutesFilter;
   }): Promise<AppResult<ListModelRoutesPage>> {
-    return this.unavailable();
+    const res = await requestDemuxAi<ItemsEnvelope<unknown>>(BASE, {
+      query: {
+        page: input.page,
+        pageSize: input.pageSize,
+        keyword: input.filter.keyword || undefined,
+        channelKey: input.filter.channelKey === 'all' ? undefined : input.filter.channelKey,
+        status: input.filter.status === 'all' ? undefined : input.filter.status,
+      },
+    });
+    if (!res.success) return res;
+    const items = parseRoutes(res.data);
+    if (!items.success) return items;
+    return ok({
+      items: items.data,
+      total: res.data.total ?? items.data.length,
+    });
   }
 
-  async get(_uid: Uid): Promise<AppResult<ModelRoute>> {
-    return this.unavailable();
+  async get(uid: Uid): Promise<AppResult<ModelRoute>> {
+    const res = await requestDemuxAi<unknown>(`${BASE}/${encodeURIComponent(uid)}`);
+    if (!res.success) return res;
+    return parseRoute(res.data);
   }
 
-  async create(_input: CreateModelRouteInput): Promise<AppResult<ModelRoute>> {
-    return this.unavailable();
+  async create(input: CreateModelRouteInput): Promise<AppResult<ModelRoute>> {
+    const res = await requestDemuxAi<unknown>(BASE, {
+      method: 'POST',
+      body: {
+        alias: input.alias.trim(),
+        channelKey: input.channelKey.trim(),
+        upstreamModelId: input.upstreamModelId.trim(),
+        weight: input.weight ?? 100,
+        priority: input.priority ?? 100,
+        status: input.status ?? 'enabled',
+        notes: input.notes ?? null,
+      },
+    });
+    if (!res.success) return res;
+    return parseRoute(res.data);
   }
 
-  async update(_uid: Uid, _input: UpdateModelRouteInput): Promise<AppResult<ModelRoute>> {
-    return this.unavailable();
+  async update(uid: Uid, input: UpdateModelRouteInput): Promise<AppResult<ModelRoute>> {
+    const res = await requestDemuxAi<unknown>(`${BASE}/${encodeURIComponent(uid)}`, {
+      method: 'PUT',
+      body: {
+        ...(input.alias !== undefined ? { alias: input.alias.trim() } : {}),
+        ...(input.channelKey !== undefined ? { channelKey: input.channelKey.trim() } : {}),
+        ...(input.upstreamModelId !== undefined
+          ? { upstreamModelId: input.upstreamModelId.trim() }
+          : {}),
+        ...(input.weight !== undefined ? { weight: input.weight } : {}),
+        ...(input.priority !== undefined ? { priority: input.priority } : {}),
+        ...(input.status !== undefined ? { status: input.status } : {}),
+        ...(input.notes !== undefined ? { notes: input.notes?.trim() || null } : {}),
+      },
+    });
+    if (!res.success) return res;
+    return parseRoute(res.data);
   }
 
-  async delete(_uid: Uid): Promise<AppResult<void>> {
-    return this.unavailable();
+  async delete(uid: Uid): Promise<AppResult<void>> {
+    return requestDemuxAi<void>(`${BASE}/${encodeURIComponent(uid)}`, { method: 'DELETE' });
   }
 
-  async setStatus(_uid: Uid, _status: ModelRoute['status']): Promise<AppResult<ModelRoute>> {
-    return this.unavailable();
+  async setStatus(uid: Uid, status: ModelRoute['status']): Promise<AppResult<ModelRoute>> {
+    const res = await requestDemuxAi<unknown>(`${BASE}/${encodeURIComponent(uid)}/status`, {
+      method: 'PATCH',
+      body: { status },
+    });
+    if (!res.success) return res;
+    return parseRoute(res.data);
   }
 }
