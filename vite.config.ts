@@ -5,7 +5,9 @@ import vue from '@vitejs/plugin-vue';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const apiBase = (env.VITE_API_BASE ?? '').replace(/\/$/, '');
+  /** 显式设置了 VITE_API_BASE（含 `/`）即视为已配置，关闭 dev proxy。 */
+  const hasApiBase = env.VITE_API_BASE !== undefined && env.VITE_API_BASE !== '';
+  const apiBase = hasApiBase ? env.VITE_API_BASE.replace(/\/$/, '') : '';
   /** 未设 VITE_API_BASE 时走相对路径，需 dev proxy 转发到 Gateway。 */
   const gatewayTarget = apiBase || 'http://localhost:7000';
 
@@ -27,7 +29,7 @@ export default defineConfig(({ mode }) => {
     '/auth':    { target: gatewayTarget, changeOrigin: true },
     '/staff':   { target: gatewayTarget, changeOrigin: true },
     '/me':      { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
-    '/demuxai': { target: gatewayTarget, changeOrigin: true },
+    '/demuxai': { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
   };
 
   return {
@@ -40,7 +42,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       // 已设 VITE_API_BASE 时前端直连 Gateway，勿再代理（否则会与 SPA 路由冲突）。
-      proxy: apiBase ? undefined : proxyRules,
+      proxy: hasApiBase ? undefined : proxyRules,
     },
     test: {
       environment: 'jsdom',

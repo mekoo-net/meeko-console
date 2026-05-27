@@ -883,73 +883,61 @@ function apiTypeToChannelKey(apiType: ApiType): string {
   return m[apiType] ?? apiType;
 }
 
-/** 模拟 GET /cluster/status 聚合后的供应商组（当前环境：Kiro / Gemini / Codex） */
-export function seedProviderGroupsFromGateway(): ProviderGroup[] {
+/**
+ * 模拟 LLM 网关 `/cluster/status` 的发现源数据。
+ *
+ * 这是「网关此刻能服务的 QueueGroup + 上游模型」的快照；与控制面是否已入库无关。
+ * 比已入库集合多一组 `cursor` 与若干新模型，用于演示「接入」页的过滤行为。
+ */
+export const gatewayDiscoveryCatalog: Readonly<
+  Record<string, { displayName: string; models: readonly string[] }>
+> = {
+  kiro: {
+    displayName: 'Kiro',
+    models: ['claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-opus-4-6', 'claude-opus-4-7-preview'],
+  },
+  gemini: {
+    displayName: 'Gemini',
+    models: ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+  },
+  codex: {
+    displayName: 'Codex',
+    models: ['gpt-4o', 'gpt-4o-mini', 'o1-mini', 'o1-preview'],
+  },
+  cursor: {
+    displayName: 'Cursor',
+    models: ['cursor-large', 'cursor-small'],
+  },
+};
+
+/** 演示用「已入库」初始集合（admin 之前已通过接入页导入的内容）。 */
+export function seedImportedProviderGroups(): ProviderGroup[] {
   const t = iso(now);
   return [
-    {
-      queueGroup: 'kiro',
-      displayName: 'Kiro',
-      source: 'gateway',
-      status: 'active',
-      instanceCount: 2,
-      upstreamModelCount: 3,
-      notes: null,
-      syncedAtUtc: t,
-      createdAtUtc: t,
-      updatedAtUtc: t,
-    },
-    {
-      queueGroup: 'gemini',
-      displayName: 'Gemini',
-      source: 'gateway',
-      status: 'active',
-      instanceCount: 1,
-      upstreamModelCount: 3,
-      notes: null,
-      syncedAtUtc: t,
-      createdAtUtc: t,
-      updatedAtUtc: t,
-    },
-    {
-      queueGroup: 'codex',
-      displayName: 'Codex',
-      source: 'gateway',
-      status: 'active',
-      instanceCount: 1,
-      upstreamModelCount: 4,
-      notes: null,
-      syncedAtUtc: t,
-      createdAtUtc: t,
-      updatedAtUtc: t,
-    },
+    { queueGroup: 'kiro', displayName: 'Kiro', status: 'active', upstreamModelCount: 3,
+      notes: null, importedAtUtc: t, updatedAtUtc: t },
+    { queueGroup: 'gemini', displayName: 'Gemini', status: 'active', upstreamModelCount: 3,
+      notes: null, importedAtUtc: t, updatedAtUtc: t },
+    { queueGroup: 'codex', displayName: 'Codex', status: 'active', upstreamModelCount: 3,
+      notes: null, importedAtUtc: t, updatedAtUtc: t },
   ];
 }
 
-export function seedUpstreamModelsFromGateway(
+/** 演示用「已入库」上游模型集合：每组取网关清单的前 3 条（模拟 admin 当初挑了一部分）。 */
+export function seedImportedUpstreamModels(
   groups: ProviderGroup[],
 ): ProviderUpstreamModel[] {
-  const byGroup: Record<string, readonly string[]> = {
-    kiro: ['claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-opus-4-6'],
-    gemini: ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash'],
-    codex: ['gpt-4o', 'gpt-4o-mini', 'o1-mini', 'o1-preview'],
-  };
   const out: ProviderUpstreamModel[] = [];
   for (const g of groups) {
-    if (g.source !== 'gateway') continue;
-    for (const id of byGroup[g.queueGroup] ?? []) {
-      out.push({
-        queueGroup: g.queueGroup,
-        upstreamModelId: id,
-        label: id,
-        source: 'gateway',
-      });
+    const ids = gatewayDiscoveryCatalog[g.queueGroup]?.models.slice(0, 3) ?? [];
+    for (const id of ids) {
+      out.push({ queueGroup: g.queueGroup, upstreamModelId: id, label: id });
     }
   }
   return out;
 }
 
-function recomputeGroupModelCounts(
+export function recomputeGroupModelCounts(
   groups: ProviderGroup[],
   models: ProviderUpstreamModel[],
 ): void {
@@ -1056,8 +1044,8 @@ export function getDemuxaiStore(): DemuxaiStore {
   const models = seedModels(providers);
   const pricing = seedPricing(models);
   const logs = seedLogs(providers);
-  const providerGroups = seedProviderGroupsFromGateway();
-  const upstreamModels = seedUpstreamModelsFromGateway(providerGroups);
+  const providerGroups = seedImportedProviderGroups();
+  const upstreamModels = seedImportedUpstreamModels(providerGroups);
   recomputeGroupModelCounts(providerGroups, upstreamModels);
   const modelRoutes = [
     ...seedCatalogModelRoutes(upstreamModels),

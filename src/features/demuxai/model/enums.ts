@@ -100,15 +100,6 @@ export const ProviderGroupLabel: Readonly<Record<string, string>> = {
 /** @deprecated 使用 ProviderGroupLabel */
 export const GatewayChannelLabel = ProviderGroupLabel;
 
-export const providerCatalogSourceValues = ['gateway', 'manual'] as const;
-export type ProviderCatalogSource = (typeof providerCatalogSourceValues)[number];
-export const providerCatalogSourceSchema = z.enum(providerCatalogSourceValues);
-
-export const ProviderCatalogSourceLabel: Readonly<Record<ProviderCatalogSource, string>> = {
-  gateway: '网关注册',
-  manual: '手工登记',
-};
-
 export const providerGroupStatusValues = ['active', 'disabled'] as const;
 export type ProviderGroupStatus = (typeof providerGroupStatusValues)[number];
 export const providerGroupStatusSchema = z.enum(providerGroupStatusValues);

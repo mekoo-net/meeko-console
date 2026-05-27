@@ -66,7 +66,7 @@
 
 ## 开发默认账号
 
-`Meeko.Keystone` 在 Development 启动时会种子一条 Staff（见 `Meeko:DevSeed`）：
+`Meeko.Keystone` 每次部署启动（Migrate 后）若无 `admin` 会自动种子一条 Staff：
 | 用户名 | 密码 |
 | --- | --- |
 | `admin` | `Meeko@dev123` |

@@ -7,7 +7,6 @@ import EmptyState from '@/shared/ui/EmptyState.vue';
 import { clientPaginate, usePagination } from '@/shared/composables/usePagination';
 
 import {
-  ProviderCatalogSourceLabel,
   ProviderGroupLabel,
   ProviderGroupStatusLabel,
   ProviderGroupStatusTone,
@@ -35,7 +34,7 @@ const props = withDefaults(defineProps<Props>(), {
   allLabel: '全部渠道',
   searchPlaceholder: '搜索组名 / QueueGroup',
   emptyTitle: '暂无供应商组',
-  emptyDescription: '请从网关注册表同步 Provider。',
+  emptyDescription: '请从「接入供应商」拉取并入库。',
 });
 
 const emit = defineEmits<{
@@ -128,11 +127,7 @@ function select(value: ProviderGroupSelection): void {
         </div>
         <span class="provider-sidebar__item-qg">{{ g.queueGroup }}</span>
         <div class="provider-sidebar__item-meta">
-          <el-tag size="small" effect="plain" :type="g.source === 'gateway' ? 'info' : 'warning'">
-            {{ ProviderCatalogSourceLabel[g.source] }}
-          </el-tag>
-          <span>{{ g.instanceCount }} 实例</span>
-          <span>{{ g.upstreamModelCount }} 模型</span>
+          <span>{{ g.upstreamModelCount }} 个上游模型</span>
         </div>
       </button>
     </div>

@@ -1,8 +1,13 @@
 <script setup lang="ts">
 /**
- * 供应商组：左右分栏主从布局（共享 provider 组件）。
+ * 供应商组（已接入）：列出 admin 导入的 QueueGroup + 上游模型 + 对外别名。
+ *
+ * 入库 / 模型添加由「接入供应商」页统一负责，此处只做：
+ *  - 查看 / 搜索 / 分组浏览
+ *  - 编辑某个上游模型的对外别名（ModelRoute）
+ *  - 删除单模型 / 删除整组（被引用时拒绝）
  */
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 import { Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
@@ -13,23 +18,15 @@ import { fromNow } from '@/shared/lib/date';
 import { confirmDanger } from '@/shared/composables/useConfirm';
 import { clientPaginate, usePagination } from '@/shared/composables/usePagination';
 
-import {
-  ProviderCatalogSourceLabel,
-  ProviderGroupLabel,
-} from '../model/enums';
-import type {
-  CreateUpstreamModelInput,
-  ProviderGroup,
-  ProviderUpstreamModel,
-} from '../model/catalog.types';
+import { ProviderGroupLabel } from '../model/enums';
+import type { ProviderGroup, ProviderUpstreamModel } from '../model/catalog.types';
 import type { ModelRoute } from '../model/modelRoute.types';
 import { getDemuxaiCatalogPort, getDemuxaiModelRoutePort } from '../services';
 import ProviderWorkspaceLayout from '../components/provider/ProviderWorkspaceLayout.vue';
 import ProviderGroupSidebar from '../components/provider/ProviderGroupSidebar.vue';
 import ProviderDetailPanel from '../components/provider/ProviderDetailPanel.vue';
-import ProviderUpstreamModelAddDialog from '../components/ProviderUpstreamModelAddDialog.vue';
 import ProviderUpstreamModelEditDrawer from '../components/ProviderUpstreamModelEditDrawer.vue';
-
+import CatalogImportDialog from '../components/CatalogImportDialog.vue';
 const catalogPort = getDemuxaiCatalogPort();
 const routePort = getDemuxaiModelRoutePort();
 
@@ -39,18 +36,12 @@ const routesByGroup = ref<Record<string, ModelRoute[]>>({});
 
 const loading = ref(false);
 const detailLoading = ref(false);
-const syncing = ref(false);
 
 const selectedQueueGroup = ref('');
 const modelKeyword = ref('');
 
-const lastSyncedAtUtc = ref<string | null>(null);
-const autoSyncEnabled = ref(true);
-const AUTO_SYNC_MS = 60_000;
-let autoSyncTimer: ReturnType<typeof setInterval> | null = null;
+const importDialogOpen = ref(false);
 
-const addModelDialogOpen = ref(false);
-const addModelLoading = ref(false);
 const modelDrawerOpen = ref(false);
 const modelDrawerGroup = ref<ProviderGroup | null>(null);
 const modelDrawerModel = ref<ProviderUpstreamModel | null>(null);
@@ -172,74 +163,6 @@ async function refreshSelectedDetail(): Promise<void> {
   if (qg) await refreshGroupDetail(qg);
 }
 
-async function runGatewaySync(opts?: { silent?: boolean }): Promise<boolean> {
-  syncing.value = true;
-  try {
-    const r = await catalogPort.syncFromGateway();
-    if (!r.success) {
-      if (!opts?.silent) ElMessage.error(r.error.message);
-      return false;
-    }
-    lastSyncedAtUtc.value = r.data.syncedAtUtc;
-    modelsByGroup.value = {};
-    routesByGroup.value = {};
-    await fetchGroups({ silent: opts?.silent });
-    await refreshSelectedDetail();
-    if (!opts?.silent) {
-      ElMessage.success(
-        `已从网关同步 ${r.data.providerCount} 个供应商组、${r.data.modelCount} 个上游模型`,
-      );
-    }
-    return true;
-  } finally {
-    syncing.value = false;
-  }
-}
-
-function startAutoSyncTimer(): void {
-  stopAutoSyncTimer();
-  if (!autoSyncEnabled.value) return;
-  autoSyncTimer = setInterval(() => {
-    if (syncing.value || loading.value) return;
-    void runGatewaySync({ silent: true });
-  }, AUTO_SYNC_MS);
-}
-
-function stopAutoSyncTimer(): void {
-  if (autoSyncTimer !== null) {
-    clearInterval(autoSyncTimer);
-    autoSyncTimer = null;
-  }
-}
-
-function onAutoSyncToggle(enabled: boolean | string | number): void {
-  autoSyncEnabled.value = Boolean(enabled);
-  if (autoSyncEnabled.value) startAutoSyncTimer();
-  else stopAutoSyncTimer();
-}
-
-function openAddModel(): void {
-  if (!selectedGroup.value) return;
-  addModelDialogOpen.value = true;
-}
-
-async function onAddModel(payload: CreateUpstreamModelInput): Promise<void> {
-  addModelLoading.value = true;
-  try {
-    const r = await catalogPort.addUpstreamModel(payload);
-    if (r.success) {
-      ElMessage.success('已添加上游模型');
-      addModelDialogOpen.value = false;
-      await fetchGroups({ silent: true });
-      await refreshGroupDetail(payload.queueGroup);
-    } else {
-      ElMessage.error(r.error.message);
-    }
-  } finally {
-    addModelLoading.value = false;
-  }
-}
-
 function openEditModel(model: ProviderUpstreamModel): void {
   if (!selectedGroup.value) return;
   modelDrawerGroup.value = selectedGroup.value;
@@ -257,12 +180,12 @@ async function onRemoveModel(model: ProviderUpstreamModel): Promise<void> {
   }
   const okp = await confirmDanger({
     title: '删除上游模型',
-    message: `确认从组「${group.displayName}」移除模型 ${model.upstreamModelId}？`,
+    message: `确认从组「${group.displayName}」移除模型 ${model.upstreamModelId}？删除后如需恢复，需通过「接入供应商」重新导入。`,
     confirmText: '确认删除',
     type: 'warning',
   });
   if (!okp) return;
-  const r = await catalogPort.removeUpstreamModel(group.queueGroup, model.upstreamModelId);
+  const r = await catalogPort.deleteUpstreamModel(group.queueGroup, model.upstreamModelId);
   if (r.success) {
     ElMessage.success('已删除');
     await fetchGroups({ silent: true });
@@ -270,6 +193,40 @@ async function onRemoveModel(model: ProviderUpstreamModel): Promise<void> {
   } else {
     ElMessage.error(r.error.message);
   }
+}
+
+async function onRemoveGroup(): Promise<void> {
+  const group = selectedGroup.value;
+  if (!group) return;
+  const aliasN = totalAliasCount(group.queueGroup);
+  if (aliasN > 0) {
+    ElMessage.warning(`该供应商组下仍有 ${aliasN} 条对外别名，请先在各模型「编辑」中删除别名`);
+    return;
+  }
+  const okp = await confirmDanger({
+    title: '删除供应商组',
+    message: `确认删除供应商组「${groupLabel(group.queueGroup, group.displayName)}」及其全部上游模型？`,
+    confirmText: '确认删除',
+    type: 'warning',
+  });
+  if (!okp) return;
+  const r = await catalogPort.deleteProviderGroup(group.queueGroup);
+  if (r.success) {
+    ElMessage.success('已删除');
+    await fetchGroups();
+    await refreshSelectedDetail();
+  } else {
+    ElMessage.error(r.error.message);
+  }
+}
+
+function openImportDialog(): void {
+  importDialogOpen.value = true;
+}
+
+async function onCatalogImported(): Promise<void> {
+  await fetchGroups({ silent: true });
+  await refreshSelectedDetail();
 }
 
 watch(selectedQueueGroup, (qg, prev) => {
@@ -282,12 +239,8 @@ watch(selectedQueueGroup, (qg, prev) => {
 });
 
 onMounted(async () => {
-  await runGatewaySync({ silent: true });
-  startAutoSyncTimer();
-});
-
-onUnmounted(() => {
-  stopAutoSyncTimer();
+  await fetchGroups();
+  await refreshSelectedDetail();
 });
 </script>
 
@@ -296,21 +249,14 @@ onUnmounted(() => {
     <template #header>
       <PageHeader
         title="供应商组"
-        description="供应商组仅来自网关注册（QueueGroup），不可手工新建。左侧选组，右侧管理上游模型与对外别名；定价在「模型定价」页维护。"
+        description="此处仅展示已接入的供应商组。新增 QueueGroup 或上游模型请去「接入供应商」从网关拉取。模型需在「模型定价」配价后方可被调用。"
       >
         <template #actions>
-          <span v-if="lastSyncedAtUtc" class="sync-hint">
-            上次同步 {{ fromNow(lastSyncedAtUtc) }}
-          </span>
-          <el-switch
-            :model-value="autoSyncEnabled"
-            inline-prompt
-            active-text="自动"
-            inactive-text="手动"
-            @change="onAutoSyncToggle"
-          />
-          <el-button :icon="Refresh" type="primary" :loading="syncing" @click="runGatewaySync()">
-            立即同步
+          <el-button :icon="Refresh" plain :loading="loading" @click="fetchGroups()">
+            刷新
+          </el-button>
+          <el-button type="primary" :icon="Plus" @click="openImportDialog">
+            去接入
           </el-button>
         </template>
       </PageHeader>
@@ -319,7 +265,8 @@ onUnmounted(() => {
     <ProviderGroupSidebar
       v-model="selectedQueueGroup"
       :groups="groups"
-      empty-description="点击「立即同步」从网关注册表拉取 Provider。"
+      empty-title="尚未接入任何供应商组"
+      empty-description="点击右上角「去接入」从 LLM 网关拉取并入库。"
     />
 
     <ProviderDetailPanel v-if="selectedGroup">
@@ -330,14 +277,17 @@ onUnmounted(() => {
           </h2>
           <p class="provider-detail__sub">{{ selectedGroup.queueGroup }}</p>
           <div class="provider-detail__stats">
-            <span>{{ ProviderCatalogSourceLabel[selectedGroup.source] }}</span>
-            <span>{{ selectedGroup.instanceCount }} 实例</span>
             <span>{{ selectedGroup.upstreamModelCount }} 上游模型</span>
             <span>{{ totalAliasCount(selectedGroup.queueGroup) }} 个别名</span>
-            <span>同步 {{ fromNow(selectedGroup.syncedAtUtc) }}</span>
+            <span>入库于 {{ fromNow(selectedGroup.importedAtUtc) }}</span>
           </div>
         </div>
-        <el-button type="primary" :icon="Plus" @click="openAddModel">添加上游模型</el-button>
+        <div class="detail-actions">
+          <el-button :icon="Plus" plain @click="openImportDialog">补充模型</el-button>
+          <el-button :icon="Delete" type="danger" plain @click="onRemoveGroup">
+            删除供应商组
+          </el-button>
+        </div>
       </template>
 
       <template #toolbar>
@@ -368,39 +318,24 @@ onUnmounted(() => {
               </span>
             </template>
           </el-table-column>
-          <el-table-column label="来源" width="96">
-            <template #default="{ row: m }: { row: ProviderUpstreamModel }">
-              <el-tag size="small" effect="plain" :type="m.source === 'gateway' ? 'info' : 'warning'">
-                {{ ProviderCatalogSourceLabel[m.source] }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="别名数" width="80" align="center">
+          <el-table-column label="别名数" width="100" align="center">
             <template #default="{ row: m }: { row: ProviderUpstreamModel }">
               <span class="num">{{ aliasCount(selectedGroup.queueGroup, m.upstreamModelId) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="140" align="right" fixed="right">
+          <el-table-column label="操作" width="160" align="right" fixed="right">
             <template #default="{ row: m }: { row: ProviderUpstreamModel }">
               <el-button :icon="Edit" link type="primary" @click="openEditModel(m)">编辑</el-button>
-              <el-button
-                v-if="m.source === 'manual'"
-                :icon="Delete"
-                link
-                type="danger"
-                @click="onRemoveModel(m)"
-              >
-                移除
-              </el-button>
+              <el-button :icon="Delete" link type="danger" @click="onRemoveModel(m)">移除</el-button>
             </template>
           </el-table-column>
           <template #empty>
             <EmptyState
-              :title="modelKeyword ? '无匹配模型' : '暂无上游模型'"
+              :title="modelKeyword ? '无匹配模型' : '该供应商组下暂无上游模型'"
               :description="
                 modelKeyword
                   ? '换个关键词，或清空搜索。'
-                  : '网关注册模型会随同步出现；也可点击「添加上游模型」手工登记。'
+                  : '点击右上角「补充模型」从网关拉取并选择导入。'
               "
             />
           </template>
@@ -421,20 +356,13 @@ onUnmounted(() => {
     <ProviderDetailPanel v-else show-placeholder>
       <template #placeholder>
         <EmptyState
-          title="暂无供应商组"
-          description="点击「立即同步」从网关注册表拉取 Provider。"
-        />
+          title="尚未接入任何供应商组"
+          description="点击右上角「去接入」从 LLM 网关拉取并入库。"
+        >
+          <el-button type="primary" :icon="Plus" @click="openImportDialog">去接入</el-button>
+        </EmptyState>
       </template>
     </ProviderDetailPanel>
-
-    <ProviderUpstreamModelAddDialog
-      v-if="selectedGroup"
-      v-model="addModelDialogOpen"
-      :queue-group="selectedGroup.queueGroup"
-      :display-name="selectedGroup.displayName"
-      :loading="addModelLoading"
-      @submit="onAddModel"
-    />
 
     <ProviderUpstreamModelEditDrawer
       v-model="modelDrawerOpen"
@@ -443,6 +371,8 @@ onUnmounted(() => {
       :provider-groups="groups"
       @refresh="refreshSelectedDetail"
     />
+
+    <CatalogImportDialog v-model="importDialogOpen" @imported="onCatalogImported" />
   </ProviderWorkspaceLayout>
 </template>
 
@@ -451,8 +381,11 @@ onUnmounted(() => {
   flex: 1;
   min-width: 0;
 }
-.provider-detail__header {
-  width: 100%;
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 .mono {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
@@ -468,10 +401,5 @@ onUnmounted(() => {
 }
 .num {
   font-variant-numeric: tabular-nums;
-}
-.sync-hint {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  margin-right: 8px;
 }
 </style>

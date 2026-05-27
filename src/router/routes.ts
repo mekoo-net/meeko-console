@@ -86,6 +86,10 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '供应商组', requiresAuth: true, roles: ['Admin'] },
           },
           {
+            path: 'catalog/import',
+            redirect: { name: 'demuxai-providers' },
+          },
+          {
             path: 'model-routes',
             redirect: { name: 'demuxai-providers' },
           },
@@ -114,6 +118,12 @@ export const routes: RouteRecordRaw[] = [
             name: 'demuxai-redemption',
             component: () => import('@/features/demuxai/views/RedemptionCodesView.vue'),
             meta: { title: '激活码', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'settings',
+            name: 'demuxai-settings',
+            component: () => import('@/features/demuxai/views/SystemSettingsView.vue'),
+            meta: { title: '系统设置', requiresAuth: true, roles: ['Admin'] },
           },
         ],
       },

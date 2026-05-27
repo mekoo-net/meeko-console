@@ -14,7 +14,6 @@ import { formatDateTime } from '@/shared/lib/date';
 import { confirmDanger } from '@/shared/composables/useConfirm';
 
 import {
-  ProviderCatalogSourceLabel,
   ProviderGroupLabel,
   ModelRouteStatusLabel,
   ModelRouteStatusTone,
@@ -184,11 +183,6 @@ watch(
         </el-descriptions-item>
         <el-descriptions-item v-if="model.label" label="显示名">
           {{ model.label }}
-        </el-descriptions-item>
-        <el-descriptions-item label="来源">
-          <el-tag size="small" effect="plain" :type="model.source === 'gateway' ? 'info' : 'warning'">
-            {{ ProviderCatalogSourceLabel[model.source] }}
-          </el-tag>
         </el-descriptions-item>
       </el-descriptions>
 

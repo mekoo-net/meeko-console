@@ -7,6 +7,8 @@ import { DemuxaiModelMock } from './mock/demuxaiModelMock';
 import { DemuxaiModelRouteMock } from './mock/demuxaiModelRouteMock';
 import { DemuxaiPricingMock } from './mock/demuxaiPricingMock';
 import { DemuxaiProviderMock } from './mock/demuxaiProviderMock';
+import { DemuxaiBackendMock } from './mock/demuxaiBackendMock';
+import { DemuxaiBackendHttpAdapter } from '@/shared/api/adapters/demuxaiBackendAdapter';
 import { DemuxaiCatalogHttpAdapter } from '@/shared/api/adapters/demuxaiCatalogAdapter';
 import { DemuxaiModelRouteHttpAdapter } from '@/shared/api/adapters/demuxaiModelRouteAdapter';
 import { DemuxaiProviderHttpAdapter } from '@/shared/api/adapters/demuxaiProviderAdapter';
@@ -21,6 +23,7 @@ import type { DemuxaiModelRoutePort } from './ports/demuxaiModelRoutePort';
 import type { DemuxaiPricingPort } from './ports/demuxaiPricingPort';
 import type { DemuxaiProviderPort } from './ports/demuxaiProviderPort';
 import type { DemuxaiRedemptionPort } from './ports/demuxaiRedemptionPort';
+import type { DemuxaiBackendPort } from './ports/demuxaiBackendPort';
 
 /**
  * demuxai 域端口工厂。
@@ -37,6 +40,7 @@ abstract class DemuxaiServices {
   abstract readonly models: DemuxaiModelPort;
   abstract readonly pricing: DemuxaiPricingPort;
   abstract readonly logs: DemuxaiLogsPort;
+  abstract readonly backend: DemuxaiBackendPort;
 }
 
 class DemuxaiMockServices extends DemuxaiServices {
@@ -47,6 +51,7 @@ class DemuxaiMockServices extends DemuxaiServices {
   readonly models = new DemuxaiModelMock();
   readonly pricing = new DemuxaiPricingMock();
   readonly logs = new DemuxaiLogsMock();
+  readonly backend = new DemuxaiBackendMock();
 }
 
 class DemuxaiHttpServices extends DemuxaiServices {
@@ -57,6 +62,7 @@ class DemuxaiHttpServices extends DemuxaiServices {
   readonly models = new DemuxaiModelHttpAdapter();
   readonly pricing = new DemuxaiPricingHttpAdapter();
   readonly logs = new DemuxaiLogsHttpAdapter();
+  readonly backend = new DemuxaiBackendHttpAdapter();
 }
 
 const services: DemuxaiServices = isMockMode ? new DemuxaiMockServices() : new DemuxaiHttpServices();
@@ -87,4 +93,8 @@ export function getDemuxaiPricingPort(): DemuxaiPricingPort {
 
 export function getDemuxaiLogsPort(): DemuxaiLogsPort {
   return services.logs;
+}
+
+export function getDemuxaiBackendPort(): DemuxaiBackendPort {
+  return services.backend;
 }
