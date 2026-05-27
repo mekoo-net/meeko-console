@@ -1,0 +1,58 @@
+import { z } from 'zod';
+
+export const registrationChannelSchema = z.enum(['email', 'phone', 'both']);
+export type RegistrationChannel = z.infer<typeof registrationChannelSchema>;
+
+export const captchaProviderSchema = z.enum([
+  'none',
+  'turnstile',
+  'recaptcha_v2',
+  'recaptcha_v3',
+  'hcaptcha',
+]);
+export type CaptchaProvider = z.infer<typeof captchaProviderSchema>;
+
+/** Staff 后台：注册/登录策略（GET/PUT /api/admin/platform/auth/setting）。 */
+export const authSettingsAdminSchema = z.object({
+  registrationEnabled: z.boolean(),
+  passwordLogin: z.boolean(),
+  registrationChannel: registrationChannelSchema,
+  captchaEnabled: z.boolean(),
+  captchaProvider: captchaProviderSchema,
+  captchaSiteKey: z.string(),
+  captchaSecretConfigured: z.boolean(),
+  updatedAtUtc: z.string(),
+});
+
+export type AuthSettingsAdmin = z.infer<typeof authSettingsAdminSchema>;
+
+export const updateAuthSettingsSchema = z.object({
+  registrationEnabled: z.boolean().optional(),
+  passwordLogin: z.boolean().optional(),
+  registrationChannel: registrationChannelSchema.optional(),
+  captchaEnabled: z.boolean().optional(),
+  captchaProvider: captchaProviderSchema.optional(),
+  captchaSiteKey: z.string().optional(),
+  /** 留空表示不修改已保存的 Secret。 */
+  captchaSecretKey: z.string().optional(),
+});
+
+export type UpdateAuthSettingsInput = z.infer<typeof updateAuthSettingsSchema>;
+
+/** Staff 后台：邮箱策略（GET/PUT /api/admin/platform/email/setting）。 */
+export const emailSettingsAdminSchema = z.object({
+  emailSuffixRestrictionEnabled: z.boolean(),
+  allowedEmailSuffixes: z.array(z.string()),
+  verificationCodeEnabled: z.boolean(),
+  updatedAtUtc: z.string(),
+});
+
+export type EmailSettingsAdmin = z.infer<typeof emailSettingsAdminSchema>;
+
+export const updateEmailSettingsSchema = z.object({
+  emailSuffixRestrictionEnabled: z.boolean().optional(),
+  allowedEmailSuffixes: z.array(z.string()).optional(),
+  verificationCodeEnabled: z.boolean().optional(),
+});
+
+export type UpdateEmailSettingsInput = z.infer<typeof updateEmailSettingsSchema>;

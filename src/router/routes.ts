@@ -121,9 +121,47 @@ export const routes: RouteRecordRaw[] = [
           },
           {
             path: 'settings',
-            name: 'demuxai-settings',
-            component: () => import('@/features/demuxai/views/SystemSettingsView.vue'),
-            meta: { title: '系统设置', requiresAuth: true, roles: ['Admin'] },
+            redirect: { name: 'settings-auth' },
+          },
+        ],
+      },
+      {
+        path: 'settings',
+        component: () => import('@/features/settings/views/SettingsLayout.vue'),
+        redirect: { name: 'settings-auth' },
+        meta: { title: '系统设置', requiresAuth: true, roles: ['Admin'] },
+        children: [
+          {
+            path: 'auth',
+            name: 'settings-auth',
+            component: () => import('@/features/settings/views/AuthSettingsView.vue'),
+            meta: { title: '注册与登录', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'email',
+            name: 'settings-email',
+            component: () => import('@/features/settings/views/EmailSettingsView.vue'),
+            meta: { title: '邮箱策略', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'notifications',
+            name: 'settings-notifications',
+            component: () => import('@/features/settings/views/SettingsPlaceholderView.vue'),
+            props: {
+              title: '通知渠道设置即将上线',
+              description: 'SMTP / 短信等渠道仍在「通知中心」维护；此处将来用于选择平台默认通知渠道。',
+            },
+            meta: { title: '通知渠道', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'ai',
+            name: 'settings-ai',
+            component: () => import('@/features/settings/views/SettingsPlaceholderView.vue'),
+            props: {
+              title: 'AI 平台设置即将上线',
+              description: 'DemuxAI 等平台级策略将在此统一配置，与渠道、定价等运营功能分离。',
+            },
+            meta: { title: 'AI 平台', requiresAuth: true, roles: ['Admin'] },
           },
         ],
       },
