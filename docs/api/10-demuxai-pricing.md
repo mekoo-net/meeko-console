@@ -52,8 +52,8 @@
 | 列表 | `list(input)` | GET | `/demuxai/api/admin/pricing` | 行级（含 `summary` 或完整 `pricing`，以实现为准） |
 | 按 modelId 取现行价 | `get(modelId)` | GET | `/demuxai/api/admin/pricing/{modelId}` | 全字段 |
 | 历史价 | `listHistory` | GET | `/demuxai/api/admin/model-routes/{modelId}/history` 等 | **前端 Port 有定义；BFF 待接** |
-| upsert | `upsert(input)` | PUT | `/demuxai/api/admin/pricing/{modelId}` | 全字段 |
-| 删除 | `delete(modelId)` | DELETE | `/demuxai/api/admin/pricing/{modelId}?groupCode=default` | — |
+| upsert | `upsert(input)` | PUT | `/demuxai/api/admin/pricing/{groupCode}/{modelId}` | 全字段；单段 `/{modelId}` 时 group=default |
+| 删除 | `delete(modelId)` | DELETE | `/demuxai/api/admin/pricing/{groupCode}/{modelId}` | — |
 | 供应商组字典 | `DemuxaiCatalogPort.listProviderGroups` | GET | 见 [`08`](./08-demuxai-providers.md) | 左侧栏 |
 | 别名列表 | `DemuxaiModelRoutePort.list` | GET | 见 [`08`](./08-demuxai-providers.md) | 筛选 / 未配置 |
 
@@ -121,8 +121,11 @@
 ### 现行价 `GET /demuxai/api/admin/pricing/{modelId}`
 返回 `effectiveFromUtc <= now()` 的最新一条（BFF 约定）。
 
-### upsert `PUT /demuxai/api/admin/pricing/{modelId}`
-Body 为 `UpsertPricingInput`（含 `modelId`、`billingType`、`pricing`、`multiplier`、`currency`、`tierMultipliers`、`effectiveFromUtc`）。
+### upsert `PUT /demuxai/api/admin/pricing/{groupCode}/{modelId}`
+
+`groupCode` 与 Chat 请求体 `model=帕米/gemini-2.5-pro` 的前缀一致（如 `帕米`、`default`）。
+
+Body 为 `UpsertPricingInput`（含 `modelId`、`billingType`、`pricing`、`multiplier`、`currency`、`tierMultipliers`、`effectiveFromUtc`、可选 `groupCode`）。
 
 `per_token` 示例（单位：元 / 1M tokens）：
 

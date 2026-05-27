@@ -28,7 +28,6 @@ import type { ModelRoute } from '../model/modelRoute.types';
 import type { ProviderGroup } from '../model/catalog.types';
 import {
   getDemuxaiCatalogPort,
-  getDemuxaiModelPort,
   getDemuxaiModelRoutePort,
   getDemuxaiPricingPort,
 } from '../services';
@@ -38,7 +37,6 @@ import ProviderDetailPanel from '../components/provider/ProviderDetailPanel.vue'
 import PricingEditDialog from '../components/PricingEditDialog.vue';
 
 const pricingPort = getDemuxaiPricingPort();
-const modelPort = getDemuxaiModelPort();
 const modelRoutePort = getDemuxaiModelRoutePort();
 const catalogPort = getDemuxaiCatalogPort();
 
@@ -49,7 +47,6 @@ const selectedChannel = ref<string>('all');
 const allPricing = ref<Pricing[]>([]);
 const pricingLoading = ref(false);
 
-const models = ref<Model[]>([]);
 const modelRoutes = ref<ModelRoute[]>([]);
 
 const pricedPagination = usePagination({ initialPageSize: 20, pageSizes: [10, 20, 50, 100] });
@@ -75,12 +72,6 @@ const editingModel = ref<Model | null>(null);
 type TabName = 'priced' | 'unconfigured';
 const activeTab = ref<TabName>('priced');
 
-const modelsByModelId = computed(() => {
-  const m = new Map<string, Model>();
-  for (const it of models.value) m.set(it.modelId, it);
-  return m;
-});
-
 /** alias → channelKey（启用路由） */
 const aliasChannelMap = computed(() => {
   const m = new Map<string, string>();
@@ -89,6 +80,19 @@ const aliasChannelMap = computed(() => {
   }
   return m;
 });
+
+/** 已启用路由的对外别名；定价主键应对齐 alias，排除遗留上游 modelName 行 */
+const knownAliasSet = computed(() => {
+  const s = new Set<string>();
+  for (const r of modelRoutes.value) {
+    if (r.status === 'enabled') s.add(r.alias);
+  }
+  return s;
+});
+
+function isBillableAlias(modelId: string): boolean {
+  return knownAliasSet.value.has(modelId);
+}
 
 const selectedGroup = computed(() => {
   if (selectedChannel.value === 'all') return null;
@@ -113,6 +117,7 @@ function applyListFilter(rows: Pricing[]): Pricing[] {
   const kw = filter.value.keyword.trim().toLowerCase();
   const bt = filter.value.billingType;
   return rows.filter((p) => {
+    if (!isBillableAlias(p.modelId)) return false;
     if (!matchesChannel(p.modelId)) return false;
     if (bt !== 'all' && p.billingType !== bt) return false;
     if (kw && !p.modelId.toLowerCase().includes(kw)) return false;
@@ -157,8 +162,11 @@ function modelFromAlias(alias: string): Model {
   };
 }
 
+/** 仅：已启用别名且尚未定价；上游模型无 alias 不可定价，不出现在此列表 */
 const unconfiguredModels = computed<Model[]>(() => {
-  const configured = new Set(allPricing.value.map((r) => r.modelId));
+  const configured = new Set(
+    allPricing.value.filter((p) => isBillableAlias(p.modelId)).map((r) => r.modelId),
+  );
   const seen = new Set<string>();
   const out: Model[] = [];
   for (const route of modelRoutes.value) {
@@ -169,13 +177,6 @@ const unconfiguredModels = computed<Model[]>(() => {
     if (configured.has(route.alias) || seen.has(route.alias)) continue;
     seen.add(route.alias);
     out.push(modelFromAlias(route.alias));
-  }
-  for (const m of models.value) {
-    if (selectedChannel.value !== 'all' && !matchesChannel(m.modelId)) continue;
-    if (!configured.has(m.modelId) && !seen.has(m.modelId)) {
-      seen.add(m.modelId);
-      out.push(m);
-    }
   }
   return out;
 });
@@ -207,20 +208,12 @@ async function loadGroups(): Promise<void> {
   }
 }
 
-async function loadModelsAndRoutes(): Promise<void> {
-  const [modelsR, routesR] = await Promise.all([
-    modelPort.list({
-      page: 1,
-      pageSize: 500,
-      filter: { keyword: '', family: 'all', capability: 'all' },
-    }),
-    modelRoutePort.list({
-      page: 1,
-      pageSize: 500,
-      filter: { keyword: '', channelKey: 'all', status: 'enabled' },
-    }),
-  ]);
-  if (modelsR.success) models.value = modelsR.data.items;
+async function loadModelRoutes(): Promise<void> {
+  const routesR = await modelRoutePort.list({
+    page: 1,
+    pageSize: 500,
+    filter: { keyword: '', channelKey: 'all', status: 'enabled' },
+  });
   if (routesR.success) modelRoutes.value = routesR.data.items;
 }
 
@@ -253,7 +246,7 @@ function resetFilter(): void {
 
 function openEdit(p: Pricing): void {
   editingPricing.value = p;
-  editingModel.value = modelsByModelId.value.get(p.modelId) ?? modelFromAlias(p.modelId);
+  editingModel.value = modelFromAlias(p.modelId);
   dialogOpen.value = true;
 }
 
@@ -266,7 +259,10 @@ function openCreateFor(m: Model): void {
 async function onSubmit(payload: UpsertPricingInput): Promise<void> {
   dialogLoading.value = true;
   try {
-    const r = await pricingPort.upsert(payload);
+    const r = await pricingPort.upsert({
+      ...payload,
+      groupCode: editingPricing.value?.groupCode ?? payload.groupCode ?? 'default',
+    });
     if (r.success) {
       ElMessage.success('定价已保存');
       dialogOpen.value = false;
@@ -287,7 +283,7 @@ async function onDelete(row: Pricing): Promise<void> {
     type: 'warning',
   });
   if (!okp) return;
-  const r = await pricingPort.delete(row.modelId);
+  const r = await pricingPort.delete(row.modelId, row.groupCode ?? 'default');
   if (r.success) {
     ElMessage.success('已删除');
     await fetchAllPricing();
@@ -389,7 +385,7 @@ watch(activeTab, (tab) => {
 });
 
 onMounted(async () => {
-  await Promise.all([loadGroups(), loadModelsAndRoutes(), fetchAllPricing()]);
+  await Promise.all([loadGroups(), loadModelRoutes(), fetchAllPricing()]);
 });
 </script>
 
@@ -398,7 +394,7 @@ onMounted(async () => {
     <template #header>
       <PageHeader
         title="模型定价"
-        description="左侧按供应商组（QueueGroup）筛选对外别名；右侧配置计费类型与单价。别名与路由在「供应商组」页维护。"
+        description="仅对已配置对外别名（模型路由 alias）定价。左侧按 QueueGroup 筛选；未配置列表只展示「有 alias、尚未定价」的条目，上游模型需先在供应商组建别名。"
       />
     </template>
 
@@ -496,7 +492,7 @@ onMounted(async () => {
             <template #default="{ row }: { row: Pricing }">
               <div class="cell-model">
                 <div class="cell-model__name">
-                  {{ modelsByModelId.get(row.modelId)?.displayName ?? row.modelId }}
+                  {{ row.modelId }}
                 </div>
                 <div class="cell-model__id">{{ row.modelId }}</div>
               </div>

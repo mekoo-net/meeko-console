@@ -138,6 +138,8 @@ const pricingBaseShape = {
   updatedAtUtc: z.string(),
   /** 最近一次改动操作人（IAM userId） */
   updatedBy: z.object({ iamId: uidString }).nullable().optional(),
+  /** 定价车道，与 Chat model 前缀一致（如 帕米、default） */
+  groupCode: z.string().optional(),
 };
 
 // ---------- 主 schema（discriminated union） ----------
@@ -220,7 +222,10 @@ export const upsertPricingInputSchema = z.discriminatedUnion('billingType', [
   }),
 ]);
 
-export type UpsertPricingInput = z.infer<typeof upsertPricingInputSchema>;
+export type UpsertPricingInput = z.infer<typeof upsertPricingInputSchema> & {
+  /** 定价车道 / 用户组，与 Chat model 前缀一致（如 帕米、default） */
+  groupCode?: string;
+};
 
 // ---------- 列表筛选 ----------
 

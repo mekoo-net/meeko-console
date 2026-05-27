@@ -22,10 +22,10 @@ export interface DemuxaiPricingPort {
     filter: ListPricingFilter;
   }): Promise<AppResult<ListPricingPage>>;
 
-  /** 按 modelId 取当前生效价（occurredAtUtc = now） */
-  get(modelId: string): Promise<AppResult<Pricing>>;
+  /** 按 modelId 取当前生效价；groupCode 默认 default */
+  get(modelId: string, groupCode?: string): Promise<AppResult<Pricing>>;
 
   upsert(input: UpsertPricingInput): Promise<AppResult<Pricing>>;
 
-  delete(modelId: string): Promise<AppResult<void>>;
+  delete(modelId: string, groupCode?: string): Promise<AppResult<void>>;
 }
