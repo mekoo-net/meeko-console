@@ -1,20 +1,16 @@
 /**
- * Meeko 平台所有 uid 都是 Snowflake/long（int64）。
- * 浏览器 number 只能安全表达 53bit，**必须**统一用 string 承载，避免精度截断。
+ * Meeko 平台 uid 统一用 string 承载（避免 JS number 精度问题）。
  *
- * 约定：
- * - 类型层：`type Uid = string`
- * - 接到 JSON 时直接保留字符串（后端 ASP.NET 默认对 long 序列化为 number；
- *   将来 HttpAdapter 必须用 `bigint` reviver 或 axios 自定义反序列化把它转 string）。
- * - Mock 内存自增 id 也直接生成 string。
+ * - **Account UID**：10–12 位递增账号号（如 100010873156），客服/用户可见。
+ * - **IamUser / 流水等**：Snowflake long，前端同样转 string。
  */
 export type Uid = string;
 
 const isDigit = (ch: string): boolean => ch >= '0' && ch <= '9';
 
-/** 严格判断字符串是不是合法 long uid（只允许 1+ digit，无前导 0、不超过 19 位）。 */
+/** 严格判断字符串是不是合法 Account UID（10–12 位纯数字，无前导 0）。 */
 export function isUid(value: unknown): value is Uid {
-  if (typeof value !== 'string' || value.length === 0 || value.length > 19) return false;
+  if (typeof value !== 'string' || value.length < 10 || value.length > 12) return false;
   if (value.length > 1 && value[0] === '0') return false;
   for (const ch of value) {
     if (!isDigit(ch)) return false;

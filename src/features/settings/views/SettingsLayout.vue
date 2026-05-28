@@ -9,7 +9,7 @@ const route = useRoute();
 const router = useRouter();
 
 const activeName = computed(() =>
-  typeof route.name === 'string' ? route.name : settingsSections[0].name,
+  typeof route.name === 'string' ? route.name : (settingsSections[0]?.name ?? 'settings-auth'),
 );
 
 function onSelect(name: string): void {

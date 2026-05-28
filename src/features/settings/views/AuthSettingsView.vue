@@ -42,11 +42,16 @@ const form = reactive<AuthSettingsForm>({
 });
 
 const captchaProviderOptions: Array<{ value: CaptchaProvider; label: string }> = [
+  { value: 'none', label: '未启用' },
   { value: 'turnstile', label: 'Cloudflare Turnstile' },
   { value: 'recaptcha_v2', label: 'Google reCAPTCHA v2' },
   { value: 'recaptcha_v3', label: 'Google reCAPTCHA v3' },
   { value: 'hcaptcha', label: 'hCaptcha' },
 ];
+
+const captchaProviderLabel = computed(() =>
+  captchaProviderOptions.find((o) => o.value === form.captchaProvider)?.label ?? form.captchaProvider,
+);
 
 const registrationChannelOptions: Array<{ value: RegistrationChannel; label: string; hint: string }> = [
   { value: 'email', label: '邮箱注册', hint: '用户使用邮箱 + 密码注册' },
@@ -89,7 +94,6 @@ watch(
   (enabled) => {
     if (!enabled) {
       form.captchaProvider = 'none';
-      form.captchaSiteKey = '';
       form.captchaSecretKey = '';
     } else if (form.captchaProvider === 'none') {
       form.captchaProvider = 'turnstile';
@@ -273,44 +277,62 @@ onMounted(() => {
 
         <el-form-item label="启用人机验证">
           <el-switch v-model="form.captchaEnabled" :disabled="!form.registrationEnabled" />
-          <span class="settings-panel__item-tip">提交前完成 CAPTCHA 校验</span>
+          <span class="settings-panel__item-tip">注册 / 登录提交前完成 CAPTCHA 校验</span>
         </el-form-item>
 
-        <template v-if="form.captchaEnabled">
-          <el-form-item label="验证提供商" required>
-            <el-select v-model="form.captchaProvider" class="settings-panel__input-wide">
-              <el-option
-                v-for="opt in captchaProviderOptions"
-                :key="opt.value"
-                :label="opt.label"
-                :value="opt.value"
-              />
-            </el-select>
-          </el-form-item>
-
-          <el-form-item label="Site Key" required>
-            <el-input
-              v-model="form.captchaSiteKey"
-              class="settings-panel__input-wide"
-              placeholder="前端 widget 公钥"
-              autocomplete="off"
+        <el-form-item label="验证提供商" :required="form.captchaEnabled">
+          <el-select
+            v-model="form.captchaProvider"
+            class="settings-panel__input-wide"
+            :disabled="!form.captchaEnabled || !form.registrationEnabled"
+          >
+            <el-option
+              v-for="opt in captchaProviderOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+              :disabled="opt.value === 'none' && form.captchaEnabled"
             />
-          </el-form-item>
+          </el-select>
+          <span v-if="!form.captchaEnabled" class="settings-panel__item-tip">
+            当前：{{ captchaProviderLabel }}
+          </span>
+        </el-form-item>
 
-          <el-form-item label="Secret Key">
-            <el-input
-              v-model="form.captchaSecretKey"
-              class="settings-panel__input-wide"
-              type="password"
-              show-password
-              autocomplete="new-password"
-              :placeholder="
-                form.captchaSecretConfigured ? '留空则不修改' : '服务端校验私钥（必填）'
-              "
-            />
-            <span v-if="form.captchaSecretConfigured" class="settings-panel__item-tip">已配置</span>
-          </el-form-item>
-        </template>
+        <el-form-item label="Site Key" :required="form.captchaEnabled">
+          <el-input
+            v-model="form.captchaSiteKey"
+            class="settings-panel__input-wide"
+            placeholder="前端 widget 公钥"
+            autocomplete="off"
+            :disabled="!form.captchaEnabled || !form.registrationEnabled"
+          />
+        </el-form-item>
+
+        <el-form-item label="Secret Key">
+          <el-input
+            v-model="form.captchaSecretKey"
+            class="settings-panel__input-wide"
+            type="password"
+            show-password
+            autocomplete="new-password"
+            :disabled="!form.captchaEnabled || !form.registrationEnabled"
+            :placeholder="
+              form.captchaSecretConfigured ? '留空则不修改' : '服务端校验私钥（首次启用必填）'
+            "
+          />
+          <span class="settings-panel__item-tip">
+            Secret 状态：
+            <el-tag
+              size="small"
+              :type="form.captchaSecretConfigured ? 'success' : 'info'"
+              effect="light"
+              round
+            >
+              {{ form.captchaSecretConfigured ? '已配置' : '未配置' }}
+            </el-tag>
+          </span>
+        </el-form-item>
       </section>
 
       <el-divider />

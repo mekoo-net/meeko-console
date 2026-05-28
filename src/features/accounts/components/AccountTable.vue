@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router';
 import StatusTag from '@/shared/ui/StatusTag.vue';
 import { formatDateTime } from '@/shared/lib/date';
 import { formatMoney } from '@/shared/lib/money';
-import type { WalletSnapshot } from '@/features/billing/model/billing.types';
 
 import {
   accountStatusLabel,
@@ -15,7 +14,6 @@ import {
 
 defineProps<{
   items: Account[];
-  walletMap?: Map<string, WalletSnapshot>;
 }>();
 
 const router = useRouter();
@@ -43,11 +41,9 @@ function openDetail(uid: string): void {
         <div class="cell-contact">
           <div class="cell-contact__email">
             <span v-if="row.ownerEmail">{{ row.ownerEmail }}</span>
-            <span v-else class="cell-muted">—</span>
           </div>
           <div class="cell-contact__phone">
             <span v-if="row.ownerPhone">{{ row.ownerPhone }}</span>
-            <span v-else class="cell-muted">—</span>
           </div>
         </div>
       </template>
@@ -74,11 +70,11 @@ function openDetail(uid: string): void {
 
     <el-table-column label="余额" width="150" align="right">
       <template #default="{ row }: { row: Account }">
-        <template v-if="walletMap?.has(row.uid)">
+        <template v-if="row.walletSummary">
           <span class="cell-money">
             {{
-              formatMoney(walletMap.get(row.uid)!.available, {
-                currency: walletMap.get(row.uid)!.currency,
+              formatMoney(row.walletSummary.available, {
+                currency: row.walletSummary.currency,
               })
             }}
           </span>
@@ -111,21 +107,22 @@ function openDetail(uid: string): void {
 </template>
 
 <style scoped>
-/* 账户单元格：上邮箱、下手机号（此组件特有，其他通用样式见 src/shared/ui/table.css） */
 .cell-contact {
   display: flex;
   flex-direction: column;
   line-height: 1.35;
 }
-.cell-contact__email {
+.cell-contact__phone {
+  min-height: 18px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--el-text-color-primary);
-  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
-.cell-contact__phone {
+.cell-contact__email {
+  min-height: 18px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
-  font-variant-numeric: tabular-nums;
   margin-top: 2px;
 }
 </style>

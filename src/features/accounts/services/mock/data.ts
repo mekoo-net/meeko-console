@@ -5,12 +5,12 @@ import { findAchievementDef } from '../../model/achievementCatalog';
 import { computeTier } from '../../model/tierConfig';
 import type { IamUser } from '../../model/iamUser.types';
 
-const accountUid = createUidSeq(100_000_000);
+const accountUid = createUidSeq(100_000_000_000);
 const iamUid = createUidSeq(200_000_000);
 
 interface SeedAccount {
-  name: string;
-  slug: string;
+  /** Account 展示名：组织名或个人昵称。 */
+  displayName: string;
   type: Account['type'];
   status: Account['status'];
   /** Owner 手机号（Mock 扩展，用于列表展示） */
@@ -37,8 +37,7 @@ interface SeedAccount {
 
 const seeds: readonly SeedAccount[] = [
   {
-    name: 'Meeko Demo Org',
-    slug: 'meeko-demo',
+    displayName: 'Meeko Demo Org',
     type: 'organization',
     status: 'active',
     ownerPhone: '13800138001',
@@ -66,8 +65,7 @@ const seeds: readonly SeedAccount[] = [
     ],
   },
   {
-    name: '极客实验室',
-    slug: 'geeklab',
+    displayName: '极客实验室',
     type: 'organization',
     status: 'active',
     ownerPhone: '13900139002',
@@ -82,8 +80,7 @@ const seeds: readonly SeedAccount[] = [
     ],
   },
   {
-    name: '个人工作台',
-    slug: 'personal-zhang',
+    displayName: '张三',
     type: 'personal',
     status: 'active',
     ownerPhone: '13700137003',
@@ -97,8 +94,7 @@ const seeds: readonly SeedAccount[] = [
     ],
   },
   {
-    name: 'Closed Org',
-    slug: 'closed',
+    displayName: 'Closed Org',
     type: 'organization',
     status: 'suspended',
     createdDaysAgo: 365,
@@ -176,11 +172,26 @@ function buildSeed(): AccountStore {
       ];
     });
 
+    const walletAt = lastActiveAt.toISOString();
+    const available = Math.round(seed.totalRechargedAmount * 0.85 * 100) / 100;
+    const held = Math.round(seed.totalRechargedAmount * 0.05 * 100) / 100;
+    const walletSummary = {
+      available,
+      held,
+      currency: 'CNY',
+      snapshotAtUtc: walletAt,
+    };
+    const wallet = {
+      available,
+      held,
+      currency: 'CNY',
+      updatedAtUtc: walletAt,
+    };
+
     accounts.set(uid, {
       uid,
+      displayName: seed.displayName,
       type: seed.type,
-      name: seed.name,
-      slug: seed.slug,
       status: seed.status,
       ownerIamUserUid: owner?.uid,
       ownerDisplayName: owner?.displayName,
@@ -194,6 +205,8 @@ function buildSeed(): AccountStore {
       totalRechargedAmount: seed.totalRechargedAmount,
       oauthBindings: oauthBindings.length > 0 ? oauthBindings : undefined,
       achievements: achievements.length > 0 ? achievements : undefined,
+      walletSummary,
+      wallet,
     });
     iamUsers.set(uid, users);
   }

@@ -24,7 +24,7 @@ defineProps<{ account: Account }>();
       </div>
       <div class="info-card__main">
         <div class="info-card__title-row">
-          <span class="info-card__title">{{ account.name }}</span>
+          <span class="info-card__title">{{ account.displayName }}</span>
           <el-tag
             :type="account.type === 'organization' ? 'primary' : 'info'"
             effect="light"
@@ -40,8 +40,6 @@ defineProps<{ account: Account }>();
         </div>
         <div class="info-card__meta">
           <span>UID {{ account.uid }}</span>
-          <el-divider direction="vertical" />
-          <span>slug: {{ account.slug }}</span>
         </div>
         <div class="info-card__contact">
           <span v-if="account.ownerEmail">{{ account.ownerEmail }}</span>
@@ -58,7 +56,7 @@ defineProps<{ account: Account }>();
         :tier="account.tier"
         :total-recharged-amount="account.totalRechargedAmount"
       />
-      <AccountWalletCard :account-uid="account.uid" />
+      <AccountWalletCard :wallet="account.wallet" />
       <AccountOAuthCard :bindings="account.oauthBindings" />
     </div>
   </section>

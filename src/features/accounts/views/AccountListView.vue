@@ -31,7 +31,7 @@ const list = useAccountList();
         <div class="toolbar__hint">共 {{ list.total.value }} 个账户</div>
       </template>
 
-      <AccountTable :items="list.items.value" :wallet-map="list.walletMap.value" />
+      <AccountTable :items="list.items.value" />
 
       <template #pagination>
         <el-pagination

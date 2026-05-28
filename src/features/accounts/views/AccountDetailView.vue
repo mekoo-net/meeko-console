@@ -29,6 +29,10 @@ const togglingStatus = ref(false);
 const account = computed(() => detail.account.value);
 const isSuspended = computed(() => account.value?.status === 'suspended');
 
+function accountLabel(a: NonNullable<typeof account.value>): string {
+  return a.displayName || a.ownerEmail || a.ownerPhone || a.uid;
+}
+
 const activeTab = ref<'business' | 'billing' | 'achievements' | 'iam'>('business');
 
 async function toggleSuspend(): Promise<void> {
@@ -39,8 +43,8 @@ async function toggleSuspend(): Promise<void> {
     title: target === 'suspended' ? '停用账户' : '恢复账户',
     message:
       target === 'suspended'
-        ? `停用后该账户将无法登录，是否继续？账户：${a.name}`
-        : `恢复账户 ${a.name} 至活跃状态？`,
+        ? `停用后该账户将无法登录，是否继续？账户：${accountLabel(a)}`
+        : `恢复账户 ${accountLabel(a)} 至活跃状态？`,
     confirmText: target === 'suspended' ? '停用' : '恢复',
   });
   if (!ok) return;

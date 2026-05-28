@@ -13,7 +13,6 @@ import type {
   PlaceOrderResult,
   RechargeIntent,
   SubscriptionDto,
-  WalletSnapshot,
 } from '@/features/billing/model/billing.types';
 import type {
   BusinessInstance,
@@ -30,10 +29,6 @@ import type {
 } from '@/features/billing/services/ports/billingPort';
 
 export class BillingHttpAdapter implements BillingPort {
-  async getWallet(_accountUid: Uid): Promise<AppResult<WalletSnapshot | null>> {
-    return request<WalletSnapshot | null>('/api/billing/wallet');
-  }
-
   async createRecharge(_accountUid: Uid, input: CreateRechargeInput): Promise<AppResult<RechargeIntent>> {
     return request<RechargeIntent>('/api/billing/wallet/recharge', {
       method: 'POST',

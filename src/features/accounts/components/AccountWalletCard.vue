@@ -1,33 +1,28 @@
 <script setup lang="ts">
-import { computed, toRef, unref } from 'vue';
-
 import MoneyText from '@/shared/ui/MoneyText.vue';
-import { useWallet } from '@/features/billing/composables/useWallet';
 
-const props = defineProps<{ accountUid: string }>();
+import type { AccountWallet } from '../model/account.types';
 
-const uidRef = toRef(props, 'accountUid');
-const wallet = useWallet(computed(() => uidRef.value || null));
-
-const snapshot = computed(() => unref(wallet.data));
-const loading = computed(() => unref(wallet.loading));
+defineProps<{
+  wallet?: AccountWallet | null;
+}>();
 </script>
 
 <template>
-  <div v-loading="loading" class="wallet-card">
+  <div class="wallet-card">
     <div class="wallet-card__head">
       <span class="wallet-card__label">账户余额</span>
-      <span v-if="snapshot" class="wallet-card__currency">{{ snapshot.currency }}</span>
+      <span v-if="wallet" class="wallet-card__currency">{{ wallet.currency }}</span>
     </div>
 
-    <div v-if="snapshot" class="wallet-card__amount">
-      <MoneyText :value="snapshot.available" :options="{ currency: snapshot.currency }" />
+    <div v-if="wallet" class="wallet-card__amount">
+      <MoneyText :value="wallet.available" :options="{ currency: wallet.currency }" />
     </div>
     <div v-else class="wallet-card__amount wallet-card__amount--muted">—</div>
 
-    <div v-if="snapshot" class="wallet-card__row">
+    <div v-if="wallet" class="wallet-card__row">
       <span>冻结</span>
-      <MoneyText :value="snapshot.held" :options="{ currency: snapshot.currency }" />
+      <MoneyText :value="wallet.held" :options="{ currency: wallet.currency }" />
     </div>
   </div>
 </template>

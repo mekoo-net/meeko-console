@@ -32,7 +32,14 @@ const contactKeyword = defineModel<string>('contactKeyword', { required: true })
  */
 const dateRange = defineModel<[string, string] | null | undefined>('dateRange');
 
-defineProps<{ loading: boolean }>();
+const props = withDefaults(
+  defineProps<{
+    loading: boolean;
+    /** 第二列标签；账户列表传「账户邮箱」，账单等仍用默认「邮箱 / 手机」。 */
+    contactKeywordLabel?: string;
+  }>(),
+  { contactKeywordLabel: '邮箱 / 手机' },
+);
 
 const emit = defineEmits<{
   (e: 'refresh'): void;
@@ -83,7 +90,7 @@ function onReset(): void {
       <el-form-item label="账户 UID">
         <el-input v-model="accountUid" :prefix-icon="Search" placeholder="精确匹配" clearable />
       </el-form-item>
-      <el-form-item label="邮箱 / 手机">
+      <el-form-item :label="props.contactKeywordLabel">
         <el-input v-model="contactKeyword" :prefix-icon="Search" placeholder="模糊匹配" clearable />
       </el-form-item>
     </div>

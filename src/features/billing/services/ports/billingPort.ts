@@ -16,7 +16,6 @@ import type {
   RechargeRecord,
   RechargeStatus,
   SubscriptionDto,
-  WalletSnapshot,
 } from '../../model/billing.types';
 import type { BusinessInstance, ListBusinessesFilter } from '../../model/business.types';
 
@@ -53,14 +52,13 @@ export interface ListBillsPage {
 export type { ListBillsFilter };
 
 /**
- * 对齐 BFF `/api/billing`（Keystone 当前登录上下文下的账户）。
- * 管理台 Mock 显式传入 `accountUid`，便于按账户切换核对数据。
+ * 对齐 BFF `/api/billing` 管理端聚合（充值 / 账单 / 业务等）。
+ * 钱包余额不在此 Port：列表读 `account.walletSummary`，详情读 `account.wallet`（见 AccountAdminPort）。
  *
  * 说明：`listOrders` 在现有 BFF 中尚无列表端点，仅为 Mock / 未来扩展预留；
  * HttpAdapter 可实现为上游分页或 501。
  */
 export interface BillingPort {
-  getWallet(accountUid: Uid): Promise<AppResult<WalletSnapshot | null>>;
   createRecharge(accountUid: Uid, input: CreateRechargeInput): Promise<AppResult<RechargeIntent>>;
   placeOrder(accountUid: Uid, input: PlaceOrderInput): Promise<AppResult<PlaceOrderResult>>;
   getOrder(accountUid: Uid, orderId: Uid): Promise<AppResult<OrderDto>>;

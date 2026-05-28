@@ -10,7 +10,6 @@ import {
   rechargeIntentSchema,
   rechargeRecordSchema,
   subscriptionDtoSchema,
-  walletSnapshotSchema,
   type BillingEntry,
   type CreateRechargeInput,
   type InvoiceDto,
@@ -414,13 +413,6 @@ function ensure(accountUid: Uid): AccountBilling {
   return b;
 }
 
-function parseWallet(v: unknown): AppResult<WalletSnapshot> {
-  const r = walletSnapshotSchema.safeParse(v);
-  return r.success
-    ? ok(r.data)
-    : fail({ code: 'validation', message: 'WalletSnapshot 格式错误' });
-}
-
 function parseOrder(v: unknown): AppResult<OrderDto> {
   const r = orderDtoSchema.safeParse(v);
   return r.success
@@ -471,12 +463,6 @@ function filterInvoices(rows: InvoiceDto[], f: ListInvoicesFilter): InvoiceDto[]
 }
 
 export class BillingMock implements BillingPort {
-  async getWallet(accountUid: Uid): Promise<AppResult<WalletSnapshot | null>> {
-    await delay();
-    const b = ensure(accountUid);
-    return parseWallet(b.wallet);
-  }
-
   async createRecharge(accountUid: Uid, input: CreateRechargeInput): Promise<AppResult<RechargeIntent>> {
     await delay();
     if (input.amount <= 0) {
