@@ -72,8 +72,8 @@ export type AccountWallet = z.infer<typeof accountWalletSchema>;
 export const accountSchema = z.object({
   uid: z.string().min(1),
   type: z.enum(accountTypeValues),
-  /** Personal = 昵称；Organization = 组织名。 */
-  displayName: z.string().min(1),
+  /** Personal = 昵称；Organization = 组织名。BFF 列表可能返回空串，适配层会兜底。 */
+  displayName: z.string(),
   status: z.enum(accountStatusValues),
   /** Mock 扩展：方便平台视图列表展示，**真实 BFF 不一定返回**，UI 用可选呈现。 */
   ownerIamUserUid: z.string().optional(),
@@ -81,20 +81,20 @@ export const accountSchema = z.object({
   /** Owner 联系邮箱（`owner.email`）。 */
   ownerEmail: z.string().optional(),
   /** Owner 联系手机（`owner.phone`）。 */
-  ownerPhone: z.string().optional(),
+  ownerPhone: z.string().nullish(),
   iamUserCount: z.number().int().nonnegative().optional(),
   createdAtUtc: z.string().optional(),
   updatedAtUtc: z.string().optional(),
   /** 最近活跃时间（任一 IAM 用户登录、API 调用、计费操作）；无记录时 API 可返回 null。 */
   lastActiveAtUtc: z.string().nullable().optional(),
-  /** 账户等级，按累积充值金额自动计算。最小 1。 */
-  tier: z.number().int().min(1),
-  /** 累积充值金额（元），用于计算 tier。 */
-  totalRechargedAmount: z.number().nonnegative(),
+  /** 账户等级；列表 API 可能不返回，默认 1。 */
+  tier: z.number().int().min(1).default(1),
+  /** 累积充值金额（元）；列表 API 可能不返回，默认 0。 */
+  totalRechargedAmount: z.number().nonnegative().default(0),
   /** OAuth 绑定关系，未绑定时省略。 */
-  oauthBindings: z.array(oauthBindingSchema).optional(),
+  oauthBindings: z.array(oauthBindingSchema).nullish(),
   /** 已获得勋章。 */
-  achievements: z.array(achievementSchema).optional(),
+  achievements: z.array(achievementSchema).nullish(),
   /** 列表投影：钱包概要（`GET /api/admin/accounts`）。 */
   walletSummary: walletSummarySchema.nullable().optional(),
   /** 详情投影：完整钱包（`GET /api/admin/accounts/{uid}`）。 */

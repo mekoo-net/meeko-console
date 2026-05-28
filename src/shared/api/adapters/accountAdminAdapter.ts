@@ -14,6 +14,20 @@ interface AccountAdminListWire {
   total: number;
 }
 
+function asOptionalString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function omitNullish<T extends Record<string, unknown>>(obj: T): T {
+  const out = { ...obj };
+  for (const key of Object.keys(out)) {
+    if (out[key] === null || out[key] === undefined) delete out[key];
+  }
+  return out;
+}
+
 function mapWalletSummary(raw: unknown): Record<string, unknown> | null | undefined {
   if (raw === null) return null;
   if (!raw || typeof raw !== 'object') return undefined;
@@ -42,25 +56,34 @@ function mapAccountWallet(raw: unknown): Record<string, unknown> | null | undefi
 
 function mapListItem(raw: Record<string, unknown>): Record<string, unknown> {
   const owner = raw.owner as Record<string, unknown> | undefined;
-  return {
+  const ownerDisplayName = asOptionalString(
+    owner?.displayName ?? owner?.display_name ?? raw.ownerDisplayName ?? raw.owner_display_name,
+  );
+  const ownerEmail = asOptionalString(owner?.email ?? raw.ownerEmail ?? raw.owner_email);
+  const displayName =
+    asOptionalString(raw.displayName ?? raw.display_name)
+    ?? ownerDisplayName
+    ?? ownerEmail
+    ?? '未命名账户';
+
+  return omitNullish({
     uid: String(raw.uid ?? ''),
     type: raw.type,
-    displayName: raw.displayName ?? raw.display_name,
+    displayName,
     status: raw.status,
-    ownerDisplayName:
-      owner?.displayName ?? owner?.display_name ?? raw.ownerDisplayName ?? raw.owner_display_name,
-    ownerEmail: owner?.email ?? raw.ownerEmail ?? raw.owner_email,
+    ownerDisplayName,
+    ownerEmail,
     ownerIamUserUid:
       owner?.iamUserUid !== undefined || owner?.iam_user_uid !== undefined
         ? String(owner?.iamUserUid ?? owner?.iam_user_uid)
         : raw.ownerIamUserUid !== undefined || raw.owner_iam_user_uid !== undefined
           ? String(raw.ownerIamUserUid ?? raw.owner_iam_user_uid)
           : undefined,
-    ownerPhone: owner?.phone ?? raw.ownerPhone ?? raw.owner_phone,
+    ownerPhone: asOptionalString(owner?.phone ?? raw.ownerPhone ?? raw.owner_phone),
     iamUserCount: raw.iamUserCount ?? raw.iam_user_count ?? 0,
-    createdAtUtc: raw.createdAtUtc ?? raw.created_at_utc,
-    updatedAtUtc: raw.updatedAtUtc ?? raw.updated_at_utc,
-    lastActiveAtUtc: raw.lastActiveAtUtc ?? raw.last_active_at_utc ?? undefined,
+    createdAtUtc: asOptionalString(raw.createdAtUtc ?? raw.created_at_utc),
+    updatedAtUtc: asOptionalString(raw.updatedAtUtc ?? raw.updated_at_utc),
+    lastActiveAtUtc: asOptionalString(raw.lastActiveAtUtc ?? raw.last_active_at_utc),
     tier: typeof raw.tier === 'number' ? raw.tier : 1,
     totalRechargedAmount:
       typeof raw.totalRechargedAmount === 'number'
@@ -70,9 +93,11 @@ function mapListItem(raw: Record<string, unknown>): Record<string, unknown> {
           : 0,
     walletSummary: mapWalletSummary(raw.walletSummary ?? raw.wallet_summary),
     wallet: mapAccountWallet(raw.wallet),
-    achievements: raw.achievements,
-    oauthBindings: raw.oauthBindings ?? raw.oauth_bindings,
-  };
+    achievements: Array.isArray(raw.achievements) ? raw.achievements : undefined,
+    oauthBindings: Array.isArray(raw.oauthBindings ?? raw.oauth_bindings)
+      ? (raw.oauthBindings ?? raw.oauth_bindings)
+      : undefined,
+  });
 }
 
 function parseAccount(value: unknown): AppResult<Account> {
