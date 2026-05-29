@@ -106,7 +106,7 @@ export class BillingHttpAdapter implements BillingPort {
     filter: ListBillsFilter;
   }): Promise<AppResult<ListBillsPage>> {
     const { page, pageSize, filter } = input;
-    return request<ListBillsPage>('/api/billing/bills', {
+    return request<ListBillsPage>('/api/admin/billing/bills', {
       query: {
         page,
         pageSize,
