@@ -86,7 +86,7 @@
 字段说明：
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `id` | string | 充值记录主键，雪花单调递增。 |
+| `id` | string | 充值记录主键（PG identity 自增，JSON 为 string）。 |
 | `owner.accountUid` | string | 钱归这个主账户（**userId**）。**封装动机**：未来 owner 可能扩展 `displayName` / `tier` 等同生同灭的辅助快照字段，保留 owner 子对象做扩展点。 |
 | `source` | object | 资金来源族：`{ provider, scene, refNo }`。**判别联合（discriminated union）**：4 类 provider 对应不同的 `refNo` 语义（支付宝 → 第三方支付流水号；cs_compensation → 工单号；marketing_reward → 活动号；manual → 内部审批单号）；按 provider 还可未来扩 `source.ticketUrl` / `source.campaignId` 等专属字段，外层结构不动（与 10-pricing 的 `billingType + pricing` 同套路）。 |
 | `source.scene` | int | 支付场景；内部充值 = 99。前端按 `PaymentSceneLabel` 渲染。 |

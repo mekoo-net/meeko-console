@@ -105,7 +105,7 @@
 字段说明（详见 `src/features/billing/model/billing.types.ts`）：
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `id` | string | 账单主键（雪花 ID）。 |
+| `id` | string | 账单主键（PG identity 自增，JSON 为 string）。 |
 | `owner.accountUid` | string | 主账户 userId（**钱归它扣**，计费主体）。 |
 | `operator.accountUid` | string | 实操账户 userId（主账户 / IAM 子账户）。**与 owner 拆成两个对象**：一是双账户语义独立，二是未来要扩 `operator.iamUserUid` 区分席位级时无侵入。 |
 | `business` | object | `{ domain, productCode }`；`domain` ∈ `demux`/`platform`，`productCode` 在 `platform` 手工调账时可为 `null`。 |
