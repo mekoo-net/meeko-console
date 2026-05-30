@@ -265,6 +265,7 @@ onMounted(() => {
       <el-table-column label="业务" width="120">
         <template #default="{ row }: { row: BillingEntry }">
           <el-tag
+            v-if="row.business != null"
             size="small"
             :type="row.business === 'demux' ? 'primary' : 'info'"
             effect="plain"
@@ -272,6 +273,7 @@ onMounted(() => {
           >
             {{ BusinessCodeLabel[row.business] }}
           </el-tag>
+          <span v-else class="cell-muted">—</span>
         </template>
       </el-table-column>
 
@@ -285,6 +287,7 @@ onMounted(() => {
       <el-table-column label="类型" width="120">
         <template #default="{ row }: { row: BillingEntry }">
           <el-tag
+            v-if="row.subType != null"
             size="small"
             :type="row.subType === 'usage' ? 'warning' : 'info'"
             effect="plain"
@@ -292,6 +295,7 @@ onMounted(() => {
           >
             {{ BillSubTypeLabel[row.subType] }}
           </el-tag>
+          <span v-else class="cell-muted">—</span>
         </template>
       </el-table-column>
 
@@ -312,10 +316,11 @@ onMounted(() => {
               :class="{
                 'cell-money--reverted': isReverseLike(row),
                 'cell-money--failed': row.status === 'failed',
-                'cell-money--out': row.status === 'completed',
+                'cell-money--out': row.status === 'completed' && row.refType !== 'recharge',
+                'cell-money--in': row.refType === 'recharge',
               }"
             >
-              -{{ formatMoney(row.actualAmount, { currency: row.currency }) }}
+              {{ row.refType === 'recharge' ? '+' : '-' }}{{ formatMoney(row.actualAmount, { currency: row.currency }) }}
             </span>
             <span
               v-if="row.actualAmount !== row.originalAmount"
@@ -432,6 +437,9 @@ onMounted(() => {
 .cell-money--out {
   color: var(--el-color-warning);
 }
+.cell-money--in {
+  color: var(--el-color-success);
+}
 .cell-money--reverted {
   color: var(--el-text-color-secondary);
   text-decoration: line-through;
@@ -439,6 +447,11 @@ onMounted(() => {
 .cell-money--failed {
   color: var(--el-color-danger);
   opacity: 0.6;
+}
+
+.cell-muted {
+  color: var(--el-text-color-placeholder);
+  font-size: 13px;
 }
 
 .cell-info-icon {

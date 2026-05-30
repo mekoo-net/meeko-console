@@ -262,6 +262,7 @@ function isInternalProvider(p: RechargeProvider): boolean {
         <el-table-column label="业务" width="100">
           <template #default="{ row }: { row: BillingEntry }">
             <el-tag
+              v-if="row.business != null"
               size="small"
               :type="row.business === 'demux' ? 'primary' : 'info'"
               effect="plain"
@@ -269,6 +270,7 @@ function isInternalProvider(p: RechargeProvider): boolean {
             >
               {{ BusinessCodeLabel[row.business] }}
             </el-tag>
+            <span v-else class="cell-muted">—</span>
           </template>
         </el-table-column>
         <el-table-column label="产品" min-width="160">
@@ -281,6 +283,7 @@ function isInternalProvider(p: RechargeProvider): boolean {
           <template #default="{ row }: { row: BillingEntry }">
             <div class="cell-type">
               <el-tag
+                v-if="row.subType != null"
                 size="small"
                 :type="row.subType === 'usage' ? 'warning' : 'info'"
                 effect="plain"
@@ -288,6 +291,7 @@ function isInternalProvider(p: RechargeProvider): boolean {
               >
                 {{ BillSubTypeLabel[row.subType] }}
               </el-tag>
+              <span v-else class="cell-muted">—</span>
               <span v-if="row.operatorAccountUid !== row.ownerAccountUid" class="cell-type__iam">
                 IAM
               </span>
@@ -302,10 +306,11 @@ function isInternalProvider(p: RechargeProvider): boolean {
                 :class="{
                   'cell-money--reverted': row.status === 'reversed' || row.status === 'partial_refunded',
                   'cell-money--failed': row.status === 'failed',
-                  'cell-money--out': row.status === 'completed',
+                  'cell-money--out': row.status === 'completed' && row.refType !== 'recharge',
+                  'cell-money--in': row.refType === 'recharge',
                 }"
               >
-                -{{ formatMoney(row.actualAmount, { currency: row.currency }) }}
+                {{ row.refType === 'recharge' ? '+' : '-' }}{{ formatMoney(row.actualAmount, { currency: row.currency }) }}
               </span>
               <span
                 v-if="row.actualAmount !== row.originalAmount"
@@ -435,5 +440,10 @@ function isInternalProvider(p: RechargeProvider): boolean {
 .cell-money--failed {
   color: var(--el-color-danger);
   opacity: 0.6;
+}
+
+.cell-muted {
+  color: var(--el-text-color-placeholder);
+  font-size: 13px;
 }
 </style>
