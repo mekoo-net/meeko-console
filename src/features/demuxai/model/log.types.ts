@@ -174,8 +174,11 @@ export const perTokenCostSchema = z.object({
   // ---- 计费上下文快照 ----
   /** 调用时生效的全局倍率，事后改定价不影响历史 */
   multiplierSnapshot: z.number().positive(),
-  /** 调用时账户 LV，事后升降不影响历史 */
-  tierSnapshot: z.number().int().min(1),
+  /**
+   * 调用时账户 LV，事后升降不影响历史。
+   * 当前后端暂未解析 tier_multipliers_json，默认上报 0；前端允许 ≥ 0。
+   */
+  tierSnapshot: z.number().int().min(0),
   /** 总额（所有维度 amount 之和）。 */
   total: z.number().nonnegative(),
 });
@@ -192,7 +195,8 @@ export type PerTokenCost = z.infer<typeof perTokenCostSchema>;
 /** 计费上下文 + 总额；所有非 token cost 都包含。 */
 const costContextShape = {
   multiplierSnapshot: z.number().positive(),
-  tierSnapshot: z.number().int().min(1),
+  /** 当前后端暂未解析 tier，默认上报 0；前端允许 ≥ 0。 */
+  tierSnapshot: z.number().int().min(0),
   total: z.number().nonnegative(),
 };
 
@@ -249,8 +253,8 @@ const logEntryBaseShape = {
     uid: uidString,
     iamId: uidString,
   }),
-  /** 多轮对话的会话 ID。同一对话的多次调用共享同一 convId。 */
-  convId: z.string().min(1),
+  /** 多轮对话的会话 ID。同一对话的多次调用共享同一 convId；无会话上下文时为 null。 */
+  convId: z.string().min(1).nullable().optional(),
   /** 对外暴露的模型名（= 用户请求体里的 `model` 字段，如 `'demux-gpt-4o'`）。 */
   modelName: z.string(),
   /**
@@ -259,9 +263,10 @@ const logEntryBaseShape = {
    * 与 `Provider.id` 强一致，做 join 时直接走 int 索引；不再单独记 `providerModelId`，
    * 上游真实 model 名通过 (`providerId`, `modelName`) → 渠道 mapping 反查即可。
    */
-  providerId: z.number().int().positive(),
-  /** 该次调用走的协议 */
-  apiType: apiTypeSchema,
+  /** 命中渠道 int 主键；best-effort，上游未能解析时为 null。 */
+  providerId: z.number().int().positive().nullable().optional(),
+  /** 该次调用走的协议；未知时为 null。 */
+  apiType: apiTypeSchema.nullable().optional(),
   /**
    * 单位 ms。语义随 `streamed` 切换：
    *  - `streamed: true`  → 首字延迟（TTFT）
@@ -288,7 +293,8 @@ const logEntryBaseShape = {
   error: z
     .object({
       code: z.string().min(1),
-      message: z.string().max(200),
+      /** 错误描述；无上游信息时可能为 null。 */
+      message: z.string().max(512).nullable(),
       httpStatus: z.number().int().nonnegative(),
     })
     .nullable(),
