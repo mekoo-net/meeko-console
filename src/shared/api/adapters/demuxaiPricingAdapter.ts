@@ -27,16 +27,6 @@ interface PricingWire {
   updatedAtUtc: string;
 }
 
-/** legacy ratios 表响应（列表 fallback） */
-interface RatioRowWire {
-  id: string | number;
-  modelName: string;
-  promptRatio: number;
-  completionRatio: number;
-  cachedRatio?: number | null;
-  updatedAtUtc: string;
-}
-
 function parsePricing(value: unknown): AppResult<Pricing> {
   const r = pricingSchema.safeParse(value);
   return r.success ? ok(r.data) : fail({ code: 'validation', message: '定价格式错误' });
@@ -56,36 +46,11 @@ function wireToPricing(row: PricingWire): AppResult<Pricing> {
   });
 }
 
-function ratioRowToPricing(row: RatioRowWire): AppResult<Pricing> {
-  const updatedAtUtc =
-    typeof row.updatedAtUtc === 'string' ? row.updatedAtUtc : new Date().toISOString();
-  return parsePricing({
-    id: row.id,
-    modelId: row.modelName.trim(),
-    billingType: 'per_token',
-    pricing: {
-      input: {
-        perMToken: Number(row.promptRatio) || 0,
-        ...(row.cachedRatio != null ? { cachedRead: Number(row.cachedRatio) } : {}),
-      },
-      output: { perMToken: Number(row.completionRatio) || 0 },
-    },
-    multiplier: 1,
-    currency: 'CNY',
-    tierMultipliers: {},
-    effectiveFromUtc: updatedAtUtc,
-    updatedAtUtc,
-  });
-}
-
 function normalizeListRow(row: unknown): AppResult<Pricing> | null {
   if (!row || typeof row !== 'object') return null;
   const r = row as Record<string, unknown>;
   if (typeof r.modelId === 'string' && r.modelId.trim()) {
     return wireToPricing(row as PricingWire);
-  }
-  if (typeof r.modelName === 'string' && r.modelName.trim()) {
-    return ratioRowToPricing(row as RatioRowWire);
   }
   return null;
 }
