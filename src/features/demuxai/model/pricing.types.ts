@@ -43,12 +43,10 @@ export const perTokenPricingSchema = z.object({
   input: z.object({
     /** 主输入 token 单价（元 / 1M tokens）。 */
     perMToken: z.number().nonnegative(),
-    /** 命中 prompt cache 的输入单价（OpenAI cached input ≈ base × 0.5 / Anthropic cache read ≈ base × 0.1）；省略 = 不支持。 */
+    /** 命中 prompt cache 的输入单价；省略 = 不支持。 */
     cachedRead: z.number().nonnegative().optional(),
-    /** **5 分钟 TTL** cache 写单价（Anthropic 默认 TTL，约 base × 1.25）；省略 = 不支持。 */
-    cachedWrite5m: z.number().nonnegative().optional(),
-    /** **1 小时 TTL** cache 写单价（Anthropic 长 TTL，约 base × 2.0，比 5m 贵 ~60%）；省略 = 不支持。 */
-    cachedWrite1h: z.number().nonnegative().optional(),
+    /** cache 写单价；省略 = 不支持。 */
+    cachedWrite: z.number().nonnegative().optional(),
     /** 输入音频 token 单价（GPT-4o-audio / Realtime，约 base × 16）；省略 = 不支持音频输入。 */
     audio: z.number().nonnegative().optional(),
   }),

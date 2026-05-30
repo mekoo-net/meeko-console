@@ -58,8 +58,7 @@ const uidString = z.union([z.string(), z.number()]).transform((v) => String(v));
  *     input: {
  *       tokens,                  // 总输入 token 数（含所有 input 子维度）
  *       cachedReadTokens,        // 走 cache 读的部分（OpenAI cached_tokens / Anthropic cache_read_input_tokens / Gemini cached_content_token_count）
- *       cachedWrite5mTokens,     // 5min TTL cache 写（Anthropic cache_creation.ephemeral_5m_input_tokens）
- *       cachedWrite1hTokens,     // 1h TTL cache 写（Anthropic cache_creation.ephemeral_1h_input_tokens）
+ *       cachedWriteTokens,       // cache 写
  *       audioTokens,             // 音频 token（GPT-4o-audio / Realtime API；prompt_tokens_details.audio_tokens）
  *     },
  *     output: {
@@ -76,8 +75,7 @@ export const perTokenUsageSchema = z.object({
   input: z.object({
     tokens: z.number().int().nonnegative(),
     cachedReadTokens: z.number().int().nonnegative(),
-    cachedWrite5mTokens: z.number().int().nonnegative(),
-    cachedWrite1hTokens: z.number().int().nonnegative(),
+    cachedWriteTokens: z.number().int().nonnegative(),
     audioTokens: z.number().int().nonnegative(),
   }),
   output: z.object({
@@ -153,10 +151,8 @@ export const perTokenCostSchema = z.object({
     amount: z.number().nonnegative(),
     /** Cache 读（OpenAI cached input / Anthropic cache_read，约 base × 0.1~0.5）。 */
     cachedRead: dimensionCostSchema,
-    /** 5min TTL cache 写（Anthropic 默认 TTL，约 base × 1.25）。 */
-    cachedWrite5m: dimensionCostSchema,
-    /** 1h TTL cache 写（Anthropic 长 TTL，约 base × 2.0）。 */
-    cachedWrite1h: dimensionCostSchema,
+    /** cache 写。 */
+    cachedWrite: dimensionCostSchema,
     /** 输入音频 token（GPT-4o-audio，约 base × 16）。 */
     audio: dimensionCostSchema,
   }),

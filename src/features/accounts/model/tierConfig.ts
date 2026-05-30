@@ -13,11 +13,11 @@ export interface TierConfig {
 }
 
 export const TIER_THRESHOLDS: readonly TierConfig[] = [
-  { level: 1, threshold: 0, name: 'Lv1 体验' },
-  { level: 2, threshold: 100, name: 'Lv2 进阶' },
-  { level: 3, threshold: 500, name: 'Lv3 高级' },
-  { level: 4, threshold: 2000, name: 'Lv4 钻石' },
-  { level: 5, threshold: 10000, name: 'Lv5 至尊' },
+  { level: 1, threshold: 0, name: 'Lv1' },
+  { level: 2, threshold: 100, name: 'Lv2' },
+  { level: 3, threshold: 500, name: 'Lv3' },
+  { level: 4, threshold: 2000, name: 'Lv4' },
+  { level: 5, threshold: 10000, name: 'Lv5' },
 ] as const;
 
 /** 按累积充值金额计算当前等级（向下取整）。 */

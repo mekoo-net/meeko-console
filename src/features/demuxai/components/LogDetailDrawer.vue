@@ -120,16 +120,10 @@ const inputDims = computed<DimRow[]>(() => {
       amount: c.cachedRead.amount,
     },
     {
-      label: 'cached 写 5m',
-      tokens: u.cachedWrite5mTokens,
-      perMToken: c.cachedWrite5m.perMToken,
-      amount: c.cachedWrite5m.amount,
-    },
-    {
-      label: 'cached 写 1h',
-      tokens: u.cachedWrite1hTokens,
-      perMToken: c.cachedWrite1h.perMToken,
-      amount: c.cachedWrite1h.amount,
+      label: 'cache 写',
+      tokens: u.cachedWriteTokens,
+      perMToken: c.cachedWrite.perMToken,
+      amount: c.cachedWrite.amount,
     },
     { label: 'audio', tokens: u.audioTokens, perMToken: c.audio.perMToken, amount: c.audio.amount },
   ];

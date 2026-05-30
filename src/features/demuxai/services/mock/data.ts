@@ -581,8 +581,7 @@ function seedPricing(models: Model[]): Pricing[] {
           input: {
             perMToken: 22,
             cachedRead: 2.2,
-            cachedWrite5m: 27.5, // 5m TTL：base × 1.25
-            cachedWrite1h: 44, // 1h TTL：base × 2.0
+            cachedWrite: 27.5,
           },
           output: { perMToken: 110 },
         },
@@ -757,13 +756,11 @@ function seedLogs(providers: Provider[]): LogEntry[] {
     // ---- 单价快照（元 / 1M tokens） ----
     const inputPerMToken = 18;
     const outputPerMToken = 72;
-    const cachedReadPerMToken = 9; // 约 50% off 基础单价
-    const cachedWrite5mPerMToken = 22.5; // Anthropic 5m TTL：base × 1.25
-    const cachedWrite1hPerMToken = 36; // Anthropic 1h TTL：base × 2.0
+    const cachedReadPerMToken = 9;
+    const cachedWritePerMToken = 22.5;
     // ---- 用量子维度（未触发为 0；mock 模型非音频 / 不计推理） ----
     const cachedReadTokens = 0;
-    const cachedWrite5mTokens = 0;
-    const cachedWrite1hTokens = 0;
+    const cachedWriteTokens = 0;
     const inputAudioTokens = 0;
     const reasoningTokens = 0;
     const outputAudioTokens = 0;
@@ -806,8 +803,7 @@ function seedLogs(providers: Provider[]): LogEntry[] {
         input: {
           tokens: inputTokens,
           cachedReadTokens,
-          cachedWrite5mTokens,
-          cachedWrite1hTokens,
+          cachedWriteTokens,
           audioTokens: inputAudioTokens,
         },
         output: {
@@ -821,8 +817,7 @@ function seedLogs(providers: Provider[]): LogEntry[] {
           perMToken: inputPerMToken,
           amount: inputAmount,
           cachedRead: { perMToken: cachedReadPerMToken, amount: 0 },
-          cachedWrite5m: { perMToken: cachedWrite5mPerMToken, amount: 0 },
-          cachedWrite1h: { perMToken: cachedWrite1hPerMToken, amount: 0 },
+          cachedWrite: { perMToken: cachedWritePerMToken, amount: 0 },
           audio: { perMToken: 0, amount: 0 },
         },
         output: {

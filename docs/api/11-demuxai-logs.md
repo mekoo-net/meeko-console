@@ -104,7 +104,7 @@
 #### `usage` / `cost` 形状对照表
 | `billingType` | `usage` | `cost` |
 | --- | --- | --- |
-| `per_token` | `{ totalTokens, input: { tokens, cachedReadTokens, cachedWrite5mTokens, cachedWrite1hTokens, audioTokens }, output: { tokens, reasoningTokens, audioTokens } }` 全必填，未用为 0 | `{ input: { perMToken, amount, cachedRead, … }, output: { … }, multiplierSnapshot, tierSnapshot, total }` |
+| `per_token` | `{ totalTokens, input: { tokens, cachedReadTokens, cachedWriteTokens, audioTokens }, output: { tokens, reasoningTokens, audioTokens } }` 全必填，未用为 0 | `{ input: { perMToken, amount, cachedRead, cachedWrite, … }, output: { … }, multiplierSnapshot, tierSnapshot, total }` |
 | `per_call` | `{ calls }` | `{ pricePerCall, amount, multiplierSnapshot, tierSnapshot, total }` |
 | `per_image` | `{ tier: { size, quality }, count }` | `{ pricePerImage, amount, multiplierSnapshot, tierSnapshot, total }` |
 | `per_video` | `{ tier: { resolution }, seconds }` | `{ pricePerSecond, amount, …, total }` |
@@ -133,8 +133,7 @@
     "input": {
       "tokens": 482,
       "cachedReadTokens": 120,
-      "cachedWrite5mTokens": 0,
-      "cachedWrite1hTokens": 0,
+      "cachedWriteTokens": 0,
       "audioTokens": 0
     },
     "output": {
@@ -148,8 +147,7 @@
       "perMToken": 25,
       "amount": 0.01205,
       "cachedRead": { "perMToken": 12.5, "amount": 0.0015 },
-      "cachedWrite5m": { "perMToken": 31.25, "amount": 0 },
-      "cachedWrite1h": { "perMToken": 50, "amount": 0 },
+      "cachedWrite": { "perMToken": 31.25, "amount": 0 },
       "audio": { "perMToken": 0, "amount": 0 }
     },
     "output": {

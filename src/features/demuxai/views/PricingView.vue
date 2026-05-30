@@ -13,7 +13,6 @@ import { formatDateTime } from '@/shared/lib/date';
 import { formatMoney } from '@/shared/lib/money';
 import { confirmDanger } from '@/shared/composables/useConfirm';
 import { clientPaginate, usePagination } from '@/shared/composables/usePagination';
-import { TIER_THRESHOLDS } from '@/features/accounts/model/tierConfig';
 
 import {
   ModelFamilyLabel,
@@ -297,11 +296,8 @@ function priceSummary(row: Pricing): string {
       if (p.input.cachedRead != null) {
         extras.push(`cR ${formatMoney(p.input.cachedRead, { fractionDigits: 2 })}`);
       }
-      if (p.input.cachedWrite5m != null) {
-        extras.push(`cW5m ${formatMoney(p.input.cachedWrite5m, { fractionDigits: 2 })}`);
-      }
-      if (p.input.cachedWrite1h != null) {
-        extras.push(`cW1h ${formatMoney(p.input.cachedWrite1h, { fractionDigits: 2 })}`);
+      if (p.input.cachedWrite != null) {
+        extras.push(`cW ${formatMoney(p.input.cachedWrite, { fractionDigits: 2 })}`);
       }
       if (p.output.reasoning != null) {
         extras.push(`reason ${formatMoney(p.output.reasoning, { fractionDigits: 2 })}`);
@@ -355,8 +351,7 @@ function priceSummary(row: Pricing): string {
 }
 
 function tierBadgeLabel(level: number, mult: number): string {
-  const def = TIER_THRESHOLDS.find((t) => t.level === level);
-  return `${def?.name ?? `Lv${level}`} × ${mult}`;
+  return `Lv${level} × ${mult}`;
 }
 
 function channelLabelFor(modelId: string): string {

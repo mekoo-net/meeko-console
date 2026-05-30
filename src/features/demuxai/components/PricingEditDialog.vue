@@ -59,8 +59,7 @@ interface PerTokenForm {
   input: {
     perMToken: number;
     cachedRead: number | null;
-    cachedWrite5m: number | null;
-    cachedWrite1h: number | null;
+    cachedWrite: number | null;
     audio: number | null;
   };
   output: {
@@ -104,8 +103,7 @@ const emptyPerToken = (): PerTokenForm => ({
   input: {
     perMToken: 0,
     cachedRead: null,
-    cachedWrite5m: null,
-    cachedWrite1h: null,
+    cachedWrite: null,
     audio: null,
   },
   output: {
@@ -159,8 +157,7 @@ function loadPricingIntoForm(p: Pricing): FormState {
         input: {
           perMToken: p.pricing.input.perMToken,
           cachedRead: p.pricing.input.cachedRead ?? null,
-          cachedWrite5m: p.pricing.input.cachedWrite5m ?? null,
-          cachedWrite1h: p.pricing.input.cachedWrite1h ?? null,
+          cachedWrite: p.pricing.input.cachedWrite ?? null,
           audio: p.pricing.input.audio ?? null,
         },
         output: {
@@ -247,8 +244,7 @@ function buildPricingPayload(f: FormState): UpsertPricingInput['pricing'] {
         input: {
           perMToken: pt.input.perMToken ?? 0,
           ...(pt.input.cachedRead != null ? { cachedRead: pt.input.cachedRead } : {}),
-          ...(pt.input.cachedWrite5m != null ? { cachedWrite5m: pt.input.cachedWrite5m } : {}),
-          ...(pt.input.cachedWrite1h != null ? { cachedWrite1h: pt.input.cachedWrite1h } : {}),
+          ...(pt.input.cachedWrite != null ? { cachedWrite: pt.input.cachedWrite } : {}),
           ...(pt.input.audio != null ? { audio: pt.input.audio } : {}),
         },
         output: {
@@ -354,27 +350,16 @@ async function onSubmit(): Promise<void> {
           />
           <span class="suffix">命中 cache 的输入折扣价（{{ form.currency }} / 1M，可空）</span>
         </el-form-item>
-        <el-form-item label="cached 写 5m">
+        <el-form-item label="cache 写">
           <el-input-number
-            v-model="form.perToken.input.cachedWrite5m"
+            v-model="form.perToken.input.cachedWrite"
             :min="0"
             :precision="4"
             :step="0.5"
             placeholder="可空"
             style="width: 200px"
           />
-          <span class="suffix">Anthropic 5min TTL cache 写入（约 base × 1.25，可空）</span>
-        </el-form-item>
-        <el-form-item label="cached 写 1h">
-          <el-input-number
-            v-model="form.perToken.input.cachedWrite1h"
-            :min="0"
-            :precision="4"
-            :step="0.5"
-            placeholder="可空"
-            style="width: 200px"
-          />
-          <span class="suffix">Anthropic 1h TTL cache 写入（约 base × 2.0，可空）</span>
+          <span class="suffix">cache 写入单价（{{ form.currency }} / 1M，可空）</span>
         </el-form-item>
         <el-form-item label="输入音频">
           <el-input-number
