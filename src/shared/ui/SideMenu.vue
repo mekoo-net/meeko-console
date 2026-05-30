@@ -85,7 +85,6 @@ const tree: readonly MenuNode[] = [
     index: '/settings',
     title: '系统设置',
     icon: Setting,
-    perm: 'platform.settings.read',
     children: [
       { type: 'leaf', index: '/settings/auth', title: '注册与登录', icon: Setting, perm: 'platform.settings.read' },
       { type: 'leaf', index: '/settings/email', title: '邮箱策略', icon: Message, perm: 'platform.settings.read' },

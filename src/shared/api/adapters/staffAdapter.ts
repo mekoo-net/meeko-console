@@ -23,6 +23,13 @@ interface StaffListWire {
   total: number;
 }
 
+function normalizeStaffStatus(value: unknown): 'Active' | 'Disabled' {
+  const s = String(value ?? '');
+  if (/^active$/i.test(s)) return 'Active';
+  if (/^disabled$/i.test(s)) return 'Disabled';
+  return s as 'Active' | 'Disabled';
+}
+
 function mapStaffUser(raw: Record<string, unknown>): StaffUser {
   return staffUserSchema.parse({
     uid: String(raw.uid ?? ''),
@@ -31,7 +38,7 @@ function mapStaffUser(raw: Record<string, unknown>): StaffUser {
     displayName: raw.displayName ?? raw.display_name,
     roleId: String(raw.roleId ?? raw.role_id ?? ''),
     roleName: raw.roleName ?? raw.role_name,
-    status: raw.status,
+    status: normalizeStaffStatus(raw.status),
     lastLoginAtUtc: raw.lastLoginAtUtc ?? raw.last_login_at_utc ?? null,
     lastLoginIp: raw.lastLoginIp ?? raw.last_login_ip ?? null,
     createdAtUtc: raw.createdAtUtc ?? raw.created_at_utc,
