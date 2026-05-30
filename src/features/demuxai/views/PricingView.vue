@@ -259,10 +259,7 @@ function openCreateFor(m: Model): void {
 async function onSubmit(payload: UpsertPricingInput): Promise<void> {
   dialogLoading.value = true;
   try {
-    const r = await pricingPort.upsert({
-      ...payload,
-      groupCode: editingPricing.value?.groupCode ?? payload.groupCode ?? 'default',
-    });
+    const r = await pricingPort.upsert(payload);
     if (r.success) {
       ElMessage.success('定价已保存');
       dialogOpen.value = false;
@@ -283,7 +280,7 @@ async function onDelete(row: Pricing): Promise<void> {
     type: 'warning',
   });
   if (!okp) return;
-  const r = await pricingPort.delete(row.modelId, row.groupCode ?? 'default');
+  const r = await pricingPort.delete(row.modelId);
   if (r.success) {
     ElMessage.success('已删除');
     await fetchAllPricing();

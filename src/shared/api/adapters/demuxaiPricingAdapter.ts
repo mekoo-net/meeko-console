@@ -18,7 +18,6 @@ const BASE = '/demuxai/api/admin/pricing';
 interface PricingWire {
   id: string | number;
   modelId: string;
-  groupCode?: string;
   billingType: string;
   pricing: unknown;
   multiplier: number;
@@ -31,7 +30,6 @@ interface PricingWire {
 /** legacy ratios 表响应（列表 fallback） */
 interface RatioRowWire {
   id: string | number;
-  groupCode?: string;
   modelName: string;
   promptRatio: number;
   completionRatio: number;
@@ -48,7 +46,6 @@ function wireToPricing(row: PricingWire): AppResult<Pricing> {
   return parsePricing({
     id: row.id,
     modelId: row.modelId,
-    groupCode: row.groupCode,
     billingType: row.billingType,
     pricing: row.pricing,
     multiplier: row.multiplier,
@@ -65,7 +62,6 @@ function ratioRowToPricing(row: RatioRowWire): AppResult<Pricing> {
   return parsePricing({
     id: row.id,
     modelId: row.modelName.trim(),
-    groupCode: row.groupCode,
     billingType: 'per_token',
     pricing: {
       input: {
@@ -94,13 +90,6 @@ function normalizeListRow(row: unknown): AppResult<Pricing> | null {
   return null;
 }
 
-function pricingPath(groupCode: string, modelId: string): string {
-  return `${BASE}/${encodeURIComponent(groupCode)}/${encodeURIComponent(modelId)}`;
-}
-
-function resolveGroupCode(input: UpsertPricingInput): string {
-  return input.groupCode?.trim() || 'default';
-}
 
 export class DemuxaiPricingHttpAdapter implements DemuxaiPricingPort {
   async list(input: {
@@ -129,12 +118,14 @@ export class DemuxaiPricingHttpAdapter implements DemuxaiPricingPort {
     return ok({ items: parsed, total: result.data.total ?? parsed.length });
   }
 
-  async get(modelId: string, groupCode = 'default'): Promise<AppResult<Pricing>> {
-    const result = await requestDemuxAi<unknown>(pricingPath(groupCode, modelId));
+  async get(modelId: string): Promise<AppResult<Pricing>> {
+    const result = await requestDemuxAi<unknown>(`${BASE}/get`, {
+      query: { modelId },
+    });
     if (!result.success) return result;
     const normalized = normalizeListRow(result.data);
     if (!normalized?.success) {
-      return fail({ code: 'not_found', message: `定价 ${groupCode}/${modelId} 不存在` });
+      return fail({ code: 'not_found', message: `定价 ${modelId} 不存在` });
     }
     return normalized;
   }
@@ -148,13 +139,9 @@ export class DemuxaiPricingHttpAdapter implements DemuxaiPricingPort {
       });
     }
 
-    const groupCode = resolveGroupCode(input);
-    const result = await requestDemuxAi<unknown>(pricingPath(groupCode, input.modelId), {
+    const result = await requestDemuxAi<unknown>(BASE, {
       method: 'PUT',
-      body: {
-        ...input,
-        groupCode,
-      },
+      body: input,
     });
     if (!result.success) return result;
     const normalized = normalizeListRow(result.data);
@@ -164,7 +151,10 @@ export class DemuxaiPricingHttpAdapter implements DemuxaiPricingPort {
     return normalized;
   }
 
-  async delete(modelId: string, groupCode = 'default'): Promise<AppResult<void>> {
-    return requestDemuxAi<void>(pricingPath(groupCode, modelId), { method: 'DELETE' });
+  async delete(modelId: string): Promise<AppResult<void>> {
+    return requestDemuxAi<void>(BASE, {
+      method: 'DELETE',
+      query: { modelId },
+    });
   }
 }
