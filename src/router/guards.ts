@@ -7,7 +7,6 @@ export function installGuards(router: Router): void {
     const auth = useAuthStore();
 
     if (to.meta.requiresAuth === false) {
-      // 已登录访问登录页：跳到首页
       if (to.name === 'login' && auth.isAuthenticated) {
         return { path: '/accounts', replace: true };
       }
@@ -16,6 +15,13 @@ export function installGuards(router: Router): void {
 
     if (!auth.isAuthenticated) {
       return { name: 'login', query: { redirect: to.fullPath }, replace: true };
+    }
+
+    const requiredPermissions = to.meta.permissions;
+    if (requiredPermissions && requiredPermissions.length > 0) {
+      if (!auth.hasPermission(...requiredPermissions)) {
+        return { name: 'accounts', replace: true };
+      }
     }
 
     const requiredRoles = to.meta.roles;

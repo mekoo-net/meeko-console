@@ -1,6 +1,10 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 
+import {
+  ALL_STAFF_PERMISSIONS,
+  READ_ONLY_STAFF_PERMISSIONS,
+} from '@/features/staff/model/staff.types';
 import { apiUrl } from '@/shared/api/apiBase';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { isMockMode } from '@/shared/runtime';
@@ -15,6 +19,8 @@ import type { Uid } from '@/shared/lib/id';
  *
  * AppRole 仅用于本前端路由守卫；真连后端时由 Staff 角色映射：
  *   SuperAdmin → Admin，ReadOnly → Member
+ *
+ * 菜单/路由优先按 `permissions[]` 权限码驱动；`AppRole` 保留兼容旧页面。
  */
 export type AppRole = 'Admin' | 'Owner' | 'Member';
 export type AccountType = 'personal' | 'organization';
@@ -39,6 +45,9 @@ interface AuthSession {
   refreshToken: string;
   account: AuthAccount;
   iamUser: AuthIamUser;
+  staffUid: string;
+  staffRole: string;
+  permissions: string[];
 }
 
 const STORAGE_KEY = 'meeko.admin.session.v1';
@@ -48,7 +57,6 @@ function readPersisted(): AuthSession | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<AuthSession> | null;
-    // 兼容旧版本残留：缺关键字段视为无效会话，避免 computed 解引用 undefined
     if (
       !parsed ||
       typeof parsed !== 'object' ||
@@ -59,7 +67,12 @@ function readPersisted(): AuthSession | null {
       localStorage.removeItem(STORAGE_KEY);
       return null;
     }
-    return parsed as AuthSession;
+    return {
+      ...(parsed as AuthSession),
+      staffUid: parsed.staffUid ?? parsed.iamUser.uid ?? '',
+      staffRole: parsed.staffRole ?? 'ReadOnly',
+      permissions: Array.isArray(parsed.permissions) ? parsed.permissions : [],
+    };
   } catch {
     localStorage.removeItem(STORAGE_KEY);
     return null;
@@ -72,6 +85,9 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => session.value !== null);
   const role = computed<AppRole | null>(() => session.value?.iamUser?.role ?? null);
   const accountUid = computed<Uid | null>(() => session.value?.account?.uid ?? null);
+  const staffUid = computed(() => session.value?.staffUid ?? null);
+  const staffRole = computed(() => session.value?.staffRole ?? null);
+  const permissions = computed(() => session.value?.permissions ?? []);
   const displayName = computed(() => session.value?.iamUser?.displayName ?? '未登录');
   const displayInitial = computed(() => {
     const name = session.value?.iamUser?.displayName ?? '?';
@@ -93,9 +109,16 @@ export const useAuthStore = defineStore('auth', () => {
     return r !== null && allowed.includes(r);
   }
 
-  function mapStaffRole(staffRole: string): AppRole {
-    if (staffRole === 'SuperAdmin') return 'Admin';
-    if (staffRole === 'ReadOnly') return 'Member';
+  /** 任一权限码命中即通过；未传参时仅校验已登录。 */
+  function hasPermission(...codes: string[]): boolean {
+    if (codes.length === 0) return isAuthenticated.value;
+    const set = new Set(permissions.value);
+    return codes.some((c) => set.has(c));
+  }
+
+  function mapStaffRole(staffRoleName: string): AppRole {
+    if (staffRoleName === 'SuperAdmin') return 'Admin';
+    if (staffRoleName === 'ReadOnly') return 'Member';
     return 'Member';
   }
 
@@ -107,6 +130,11 @@ export const useAuthStore = defineStore('auth', () => {
     if (isMockMode) {
       const lower = username.trim().toLowerCase();
       const detectedRole: AppRole = lower === 'admin' ? 'Admin' : lower === 'owner' ? 'Owner' : 'Member';
+      const mockStaffRole = lower === 'admin' ? 'SuperAdmin' : 'ReadOnly';
+      const mockPermissions =
+        lower === 'admin'
+          ? [...ALL_STAFF_PERMISSIONS]
+          : [...READ_ONLY_STAFF_PERMISSIONS];
       persist({
         accessToken: `mock-access-${Date.now()}`,
         refreshToken: `mock-refresh-${Date.now()}`,
@@ -123,6 +151,9 @@ export const useAuthStore = defineStore('auth', () => {
           role: detectedRole,
           isAccountOwner: detectedRole !== 'Member',
         },
+        staffUid: '300000001',
+        staffRole: mockStaffRole,
+        permissions: mockPermissions,
       });
       return ok(undefined);
     }
@@ -151,6 +182,7 @@ export const useAuthStore = defineStore('auth', () => {
           displayName?: string;
           display_name?: string;
           role?: string;
+          permissions?: string[];
         };
       };
 
@@ -160,6 +192,7 @@ export const useAuthStore = defineStore('auth', () => {
         return fail({ code: 'unknown', message: '登录响应格式无效' });
       }
 
+      const staffRoleName = staff.role ?? 'ReadOnly';
       persist({
         accessToken,
         refreshToken: '',
@@ -173,9 +206,12 @@ export const useAuthStore = defineStore('auth', () => {
           uid: String(staff.uid),
           username: username.trim(),
           displayName: staff.displayName ?? staff.display_name ?? username.trim(),
-          role: mapStaffRole(staff.role ?? 'ReadOnly'),
+          role: mapStaffRole(staffRoleName),
           isAccountOwner: true,
         },
+        staffUid: String(staff.uid),
+        staffRole: staffRoleName,
+        permissions: staff.permissions ?? [],
       });
       return ok(undefined);
     } catch (err) {
@@ -195,9 +231,13 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     role,
     accountUid,
+    staffUid,
+    staffRole,
+    permissions,
     displayName,
     displayInitial,
     hasRole,
+    hasPermission,
     login,
     logout,
   };

@@ -365,6 +365,15 @@ export interface CreateRechargeInput {
   openId?: string | undefined;
 }
 
+/** Admin 后台人工入账（不经第三方支付）。 */
+export interface CreateInternalRechargeInput {
+  ownerAccountUid: string;
+  amount: number;
+  source: RechargeProvider;
+  note?: string | undefined;
+  idempotencyKey?: string | undefined;
+}
+
 export interface PlaceOrderInput {
   productCode: string;
   quantity: number;

@@ -3,17 +3,24 @@ import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
+import { useAuthStore } from '@/stores/auth';
+
 import { settingsSections } from '../model/settingsNav';
 
 const route = useRoute();
 const router = useRouter();
+const auth = useAuthStore();
+
+const visibleSections = computed(() =>
+  settingsSections.filter((s) => !s.permission || auth.hasPermission(s.permission)),
+);
 
 const activeName = computed(() =>
-  typeof route.name === 'string' ? route.name : (settingsSections[0]?.name ?? 'settings-auth'),
+  typeof route.name === 'string' ? route.name : (visibleSections.value[0]?.name ?? 'settings-auth'),
 );
 
 function onSelect(name: string): void {
-  const section = settingsSections.find((s) => s.name === name);
+  const section = visibleSections.value.find((s) => s.name === name);
   if (!section || section.disabled) return;
   if (route.name === name) return;
   void router.push({ name });
@@ -35,7 +42,7 @@ function onSelect(name: string): void {
           @select="onSelect"
         >
           <el-menu-item
-            v-for="section in settingsSections"
+            v-for="section in visibleSections"
             :key="section.name"
             :index="section.name"
             :disabled="section.disabled"

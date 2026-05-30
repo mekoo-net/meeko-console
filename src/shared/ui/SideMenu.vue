@@ -14,6 +14,7 @@ import {
   Money,
   Operation,
   PriceTag,
+  Lock,
   Setting,
   Tickets,
   User,
@@ -36,6 +37,8 @@ interface LeafItem {
   disabled?: boolean;
   badge?: string;
   roles?: ReadonlyArray<AppRole>;
+  /** 可见所需权限码（任一即可）；优先于 roles。 */
+  perm?: string;
 }
 
 interface GroupItem {
@@ -44,6 +47,7 @@ interface GroupItem {
   title: string;
   icon?: unknown;
   roles?: ReadonlyArray<AppRole>;
+  perm?: string;
   children: Array<LeafItem | GroupItem>;
 }
 
@@ -77,11 +81,17 @@ const tree: readonly MenuNode[] = [
     ],
   },
   {
-    type: 'leaf',
+    type: 'group',
     index: '/settings',
     title: '系统设置',
     icon: Setting,
-    roles: ['Admin'],
+    perm: 'platform.settings.read',
+    children: [
+      { type: 'leaf', index: '/settings/auth', title: '注册与登录', icon: Setting, perm: 'platform.settings.read' },
+      { type: 'leaf', index: '/settings/email', title: '邮箱策略', icon: Message, perm: 'platform.settings.read' },
+      { type: 'leaf', index: '/settings/staff', title: '管理员', icon: User, perm: 'platform.staff.read' },
+      { type: 'leaf', index: '/settings/roles', title: '角色权限', icon: Lock, perm: 'platform.role.read' },
+    ],
   },
   {
     type: 'group',
@@ -130,18 +140,28 @@ const tree: readonly MenuNode[] = [
 ];
 
 function isVisible(node: MenuNode): boolean {
-  if (!node.roles || node.roles.length === 0) return true;
-  return auth.role !== null && node.roles.includes(auth.role);
+  if (node.perm) {
+    return auth.hasPermission(node.perm);
+  }
+  if (node.roles && node.roles.length > 0) {
+    return auth.role !== null && node.roles.includes(auth.role);
+  }
+  return true;
 }
 
 function filterTree(nodes: readonly MenuNode[]): MenuNode[] {
   return nodes
-    .filter(isVisible)
     .map((n) =>
       n.type === 'group'
         ? ({ ...n, children: filterTree(n.children) } satisfies GroupItem)
         : n,
-    );
+    )
+    .filter((n) => {
+      if (n.type === 'group') {
+        return isVisible(n) && n.children.length > 0;
+      }
+      return isVisible(n);
+    });
 }
 
 const visible = computed<MenuNode[]>(() => filterTree(tree));

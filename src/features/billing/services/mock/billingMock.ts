@@ -12,6 +12,7 @@ import {
   subscriptionDtoSchema,
   type BillingEntry,
   type CreateRechargeInput,
+  type CreateInternalRechargeInput,
   type InvoiceDto,
   type ListBillsFilter,
   type ListInvoicesFilter,
@@ -506,6 +507,46 @@ export class BillingMock implements BillingPort {
     };
     b.recharges.unshift(record);
     return ok(p.data);
+  }
+
+  async createInternalRecharge(
+    input: CreateInternalRechargeInput,
+  ): Promise<AppResult<RechargeRecord>> {
+    await delay();
+    if (!input.ownerAccountUid.trim()) {
+      return fail({ code: 'validation', message: '请选择账户' });
+    }
+    if (input.amount <= 0) {
+      return fail({ code: 'validation', message: '入账金额必须大于 0' });
+    }
+    const accountUid = input.ownerAccountUid.trim();
+    const b = ensure(accountUid);
+    const created = iso(new Date());
+    b.wallet = {
+      ...b.wallet,
+      available: b.wallet.available + input.amount,
+      updatedAtUtc: created,
+    };
+    const refNo = input.idempotencyKey?.trim() || `MOCK-INT-${Date.now()}`;
+    const record: RechargeRecord = {
+      id: genSnowflakeUid(),
+      ownerAccountUid: accountUid,
+      provider: input.source,
+      scene: 99,
+      refNo,
+      amount: input.amount,
+      currency: b.wallet.currency,
+      status: 'paid',
+      operatorIamId: '900001',
+      createdAtUtc: created,
+      paidAtUtc: created,
+    };
+    const parsed = rechargeRecordSchema.safeParse(record);
+    if (!parsed.success) {
+      return fail({ code: 'validation', message: 'RechargeRecord 格式错误' });
+    }
+    b.recharges.unshift(parsed.data);
+    return ok(parsed.data);
   }
 
   async placeOrder(accountUid: Uid, input: PlaceOrderInput): Promise<AppResult<PlaceOrderResult>> {

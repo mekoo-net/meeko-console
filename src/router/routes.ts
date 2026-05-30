@@ -6,6 +6,8 @@ declare module 'vue-router' {
   interface RouteMeta {
     title: string;
     requiresAuth?: boolean;
+    /** 命中的权限码（任一即可）；优先于 roles。 */
+    permissions?: ReadonlyArray<string>;
     /** 命中的角色集合（任一即可）；缺省表示已登录任意角色都行。 */
     roles?: ReadonlyArray<AppRole>;
   }
@@ -129,19 +131,19 @@ export const routes: RouteRecordRaw[] = [
         path: 'settings',
         component: () => import('@/features/settings/views/SettingsLayout.vue'),
         redirect: { name: 'settings-auth' },
-        meta: { title: '系统设置', requiresAuth: true, roles: ['Admin'] },
+        meta: { title: '系统设置', requiresAuth: true },
         children: [
           {
             path: 'auth',
             name: 'settings-auth',
             component: () => import('@/features/settings/views/AuthSettingsView.vue'),
-            meta: { title: '注册与登录', requiresAuth: true, roles: ['Admin'] },
+            meta: { title: '注册与登录', requiresAuth: true, permissions: ['platform.settings.read'] },
           },
           {
             path: 'email',
             name: 'settings-email',
             component: () => import('@/features/settings/views/EmailSettingsView.vue'),
-            meta: { title: '邮箱策略', requiresAuth: true, roles: ['Admin'] },
+            meta: { title: '邮箱策略', requiresAuth: true, permissions: ['platform.settings.read'] },
           },
           {
             path: 'notifications',
@@ -151,7 +153,7 @@ export const routes: RouteRecordRaw[] = [
               title: '通知渠道设置即将上线',
               description: 'SMTP / 短信等渠道仍在「通知中心」维护；此处将来用于选择平台默认通知渠道。',
             },
-            meta: { title: '通知渠道', requiresAuth: true, roles: ['Admin'] },
+            meta: { title: '通知渠道', requiresAuth: true, permissions: ['platform.settings.read'] },
           },
           {
             path: 'ai',
@@ -161,7 +163,27 @@ export const routes: RouteRecordRaw[] = [
               title: 'AI 平台设置即将上线',
               description: 'DemuxAI 等平台级策略将在此统一配置，与渠道、定价等运营功能分离。',
             },
-            meta: { title: 'AI 平台', requiresAuth: true, roles: ['Admin'] },
+            meta: { title: 'AI 平台', requiresAuth: true, permissions: ['platform.settings.read'] },
+          },
+          {
+            path: 'staff',
+            name: 'settings-staff',
+            component: () => import('@/features/staff/views/StaffListView.vue'),
+            meta: {
+              title: '管理员',
+              requiresAuth: true,
+              permissions: ['platform.staff.read'],
+            },
+          },
+          {
+            path: 'roles',
+            name: 'settings-roles',
+            component: () => import('@/features/staff/views/RoleListView.vue'),
+            meta: {
+              title: '角色权限',
+              requiresAuth: true,
+              permissions: ['platform.role.read'],
+            },
           },
         ],
       },

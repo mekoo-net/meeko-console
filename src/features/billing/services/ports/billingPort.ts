@@ -3,6 +3,7 @@ import type { Uid } from '@/shared/lib/id';
 
 import type {
   BillingEntry,
+  CreateInternalRechargeInput,
   CreateRechargeInput,
   InvoiceDto,
   ListBillsFilter,
@@ -82,6 +83,9 @@ export interface BillingPort {
     pageSize: number;
     filter: ListRechargesFilter;
   }): Promise<AppResult<ListRechargesPage>>;
+
+  /** Admin 后台人工入账：选定账户后直接加余额。 */
+  createInternalRecharge(input: CreateInternalRechargeInput): Promise<AppResult<RechargeRecord>>;
 
   /**
    * 平台级全量账单（钱包扣款流水），accountUid 为空时查所有账户。

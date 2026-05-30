@@ -4,6 +4,7 @@ import { request } from '@/shared/api/httpClient';
 import type { Uid } from '@/shared/lib/id';
 
 import type {
+  CreateInternalRechargeInput,
   CreateRechargeInput,
   InvoiceDto,
   ListInvoicesFilter,
@@ -12,6 +13,9 @@ import type {
   PlaceOrderInput,
   PlaceOrderResult,
   RechargeIntent,
+  RechargeProvider,
+  RechargeRecord,
+  RechargeStatus,
   SubscriptionDto,
 } from '@/features/billing/model/billing.types';
 import type {
@@ -27,6 +31,34 @@ import type {
   ListRechargesFilter,
   ListRechargesPage,
 } from '@/features/billing/services/ports/billingPort';
+
+interface RechargeDtoWire {
+  id: string;
+  owner: { accountUid: string | number };
+  source: { provider: string; scene: number; refNo: string };
+  amount: { value: number; currency: string };
+  status: string;
+  operator?: { iamUserUid?: string | number | null } | null;
+  createdAtUtc: string;
+  paidAtUtc?: string | null;
+}
+
+function mapRechargeDto(dto: RechargeDtoWire): RechargeRecord {
+  return {
+    id: dto.id,
+    ownerAccountUid: String(dto.owner.accountUid),
+    provider: dto.source.provider as RechargeProvider,
+    scene: dto.source.scene,
+    refNo: dto.source.refNo,
+    amount: dto.amount.value,
+    currency: dto.amount.currency,
+    status: dto.status as RechargeStatus,
+    operatorIamId:
+      dto.operator?.iamUserUid != null ? String(dto.operator.iamUserUid) : null,
+    createdAtUtc: dto.createdAtUtc,
+    paidAtUtc: dto.paidAtUtc ?? null,
+  };
+}
 
 export class BillingHttpAdapter implements BillingPort {
   async createRecharge(_accountUid: Uid, input: CreateRechargeInput): Promise<AppResult<RechargeIntent>> {
@@ -98,6 +130,23 @@ export class BillingHttpAdapter implements BillingPort {
         toUtc: filter.toUtc,
       },
     });
+  }
+
+  async createInternalRecharge(
+    input: CreateInternalRechargeInput,
+  ): Promise<AppResult<RechargeRecord>> {
+    const res = await request<RechargeDtoWire>('/api/billing/recharges/internal', {
+      method: 'POST',
+      body: {
+        ownerAccountUid: Number(input.ownerAccountUid),
+        source: input.source,
+        amount: input.amount,
+        note: input.note,
+        idempotencyKey: input.idempotencyKey,
+      },
+    });
+    if (!res.success) return res;
+    return { success: true, data: mapRechargeDto(res.data) };
   }
 
   async listBills(input: {
