@@ -23,6 +23,15 @@ import type {
   ListBusinessesFilter,
 } from '@/features/billing/model/business.types';
 import type {
+  BillingEntry,
+  BillFailureCode,
+  BillRefType,
+  BillReversedCode,
+  BillStatus,
+  BillSubType,
+  BusinessCode,
+} from '@/features/billing/model/billing.types';
+import type {
   BillingPort,
   ListBillsFilter,
   ListBillsPage,
@@ -31,6 +40,11 @@ import type {
   ListRechargesFilter,
   ListRechargesPage,
 } from '@/features/billing/services/ports/billingPort';
+
+interface RechargeListWire {
+  items: RechargeDtoWire[];
+  total: number;
+}
 
 interface RechargeDtoWire {
   id: string;
@@ -43,20 +57,72 @@ interface RechargeDtoWire {
   paidAtUtc?: string | null;
 }
 
-function mapRechargeDto(dto: RechargeDtoWire): RechargeRecord {
+function mapRechargeDto(raw: Record<string, unknown>): RechargeRecord {
+  const owner = (raw.owner ?? raw.Owner) as Record<string, unknown> | undefined;
+  const source = (raw.source ?? raw.Source) as Record<string, unknown> | undefined;
+  const amountBlock = raw.amount ?? raw.Amount;
+  const operator = (raw.operator ?? raw.Operator) as Record<string, unknown> | null | undefined;
+
+  let amount = 0;
+  let currency = 'CNY';
+  if (amountBlock != null && typeof amountBlock === 'object') {
+    const block = amountBlock as Record<string, unknown>;
+    amount = Number(block.value ?? block.Value ?? 0);
+    currency = String(block.currency ?? block.Currency ?? 'CNY');
+  } else if (typeof amountBlock === 'number') {
+    amount = amountBlock;
+    currency = String(raw.currency ?? raw.Currency ?? 'CNY');
+  }
+
   return {
-    id: dto.id,
-    ownerAccountUid: String(dto.owner.accountUid),
-    provider: dto.source.provider as RechargeProvider,
-    scene: dto.source.scene,
-    refNo: dto.source.refNo,
-    amount: dto.amount.value,
-    currency: dto.amount.currency,
-    status: dto.status as RechargeStatus,
+    id: String(raw.id ?? raw.Id ?? ''),
+    ownerAccountUid: String(owner?.accountUid ?? owner?.AccountUid ?? ''),
+    provider: String(source?.provider ?? source?.Provider ?? 'manual') as RechargeProvider,
+    scene: Number(source?.scene ?? source?.Scene ?? 0),
+    refNo: String(source?.refNo ?? source?.RefNo ?? ''),
+    amount,
+    currency,
+    status: String(raw.status ?? raw.Status ?? 'pending') as RechargeStatus,
     operatorIamId:
-      dto.operator?.iamUserUid != null ? String(dto.operator.iamUserUid) : null,
-    createdAtUtc: dto.createdAtUtc,
-    paidAtUtc: dto.paidAtUtc ?? null,
+      operator?.iamUserUid != null || operator?.IamUserUid != null
+        ? String(operator.iamUserUid ?? operator.IamUserUid)
+        : null,
+    createdAtUtc: String(raw.createdAtUtc ?? raw.CreatedAtUtc ?? ''),
+    paidAtUtc:
+      raw.paidAtUtc != null || raw.PaidAtUtc != null
+        ? String(raw.paidAtUtc ?? raw.PaidAtUtc)
+        : null,
+  };
+}
+
+function mapBillDto(raw: Record<string, unknown>): BillingEntry {
+  const owner    = raw.owner    as Record<string, unknown> | null | undefined;
+  const operator = raw.operator as Record<string, unknown> | null | undefined;
+  const business = raw.business as Record<string, unknown> | null | undefined;
+  const amount   = raw.amount   as Record<string, unknown> | null | undefined;
+  const ref      = raw.ref      as Record<string, unknown> | null | undefined;
+  const failure  = raw.failure  as Record<string, unknown> | null | undefined;
+  const reversal = raw.reversal as Record<string, unknown> | null | undefined;
+
+  return {
+    id:                  String(raw.id ?? ''),
+    ownerAccountUid:     String(owner?.accountUid ?? ''),
+    operatorAccountUid:  String(operator?.accountUid ?? ''),
+    business:            (business?.domain ?? null) as BusinessCode | null,
+    productCode:         business?.productCode != null ? String(business.productCode) : null,
+    subType:             (raw.subType ?? null) as BillSubType | null,
+    status:              String(raw.status ?? 'pending') as BillStatus,
+    failureCode:         failure?.code != null ? (String(failure.code) as BillFailureCode) : null,
+    originalAmount:      Number(amount?.original ?? 0),
+    actualAmount:        Number(amount?.actual ?? 0),
+    currency:            String(amount?.currency ?? 'CNY'),
+    balanceAfter:        amount?.balanceAfter != null ? Number(amount.balanceAfter) : null,
+    refType:             ref?.type != null ? (String(ref.type) as BillRefType) : null,
+    refId:               ref?.id != null ? String(ref.id) : null,
+    reversedAtUtc:       reversal?.atUtc != null ? String(reversal.atUtc) : null,
+    reversedByIamId:     reversal?.byIamUserUid != null ? String(reversal.byIamUserUid) : null,
+    reversedCode:        reversal?.code != null ? (String(reversal.code) as BillReversedCode) : null,
+    occurredAtUtc:       String(raw.occurredAtUtc ?? ''),
   };
 }
 
@@ -119,7 +185,7 @@ export class BillingHttpAdapter implements BillingPort {
     filter: ListRechargesFilter;
   }): Promise<AppResult<ListRechargesPage>> {
     const { page, pageSize, filter } = input;
-    return request<ListRechargesPage>('/api/billing/recharges', {
+    const res = await request<RechargeListWire>('/api/billing/recharges', {
       query: {
         page,
         pageSize,
@@ -130,6 +196,14 @@ export class BillingHttpAdapter implements BillingPort {
         toUtc: filter.toUtc,
       },
     });
+    if (!res.success) return res;
+    return {
+      success: true,
+      data: {
+        items: res.data.items.map((row) => mapRechargeDto(row as unknown as Record<string, unknown>)),
+        total: res.data.total,
+      },
+    };
   }
 
   async createInternalRecharge(
@@ -146,7 +220,7 @@ export class BillingHttpAdapter implements BillingPort {
       },
     });
     if (!res.success) return res;
-    return { success: true, data: mapRechargeDto(res.data) };
+    return { success: true, data: mapRechargeDto(res.data as unknown as Record<string, unknown>) };
   }
 
   async listBills(input: {
@@ -155,18 +229,29 @@ export class BillingHttpAdapter implements BillingPort {
     filter: ListBillsFilter;
   }): Promise<AppResult<ListBillsPage>> {
     const { page, pageSize, filter } = input;
-    return request<ListBillsPage>('/api/admin/billing/bills', {
-      query: {
-        page,
-        pageSize,
-        accountUid: filter.accountUid,
-        business: filter.business === 'all' ? undefined : filter.business,
-        subType: filter.subType === 'all' ? undefined : filter.subType,
-        status: filter.status === 'all' ? undefined : filter.status,
-        fromUtc: filter.fromUtc,
-        toUtc: filter.toUtc,
+    const res = await request<{ items: Record<string, unknown>[]; total: number }>(
+      '/api/admin/billing/bills',
+      {
+        query: {
+          page,
+          pageSize,
+          accountUid: filter.accountUid,
+          business:  filter.business === 'all'  ? undefined : filter.business,
+          subType:   filter.subType === 'all'   ? undefined : filter.subType,
+          status:    filter.status === 'all'    ? undefined : filter.status,
+          fromUtc:   filter.fromUtc,
+          toUtc:     filter.toUtc,
+        },
       },
-    });
+    );
+    if (!res.success) return res;
+    return {
+      success: true,
+      data: {
+        items: res.data.items.map(mapBillDto),
+        total: res.data.total,
+      },
+    };
   }
 
   async listBusinesses(accountUid: Uid, _filter: ListBusinessesFilter): Promise<AppResult<BusinessInstance[]>> {

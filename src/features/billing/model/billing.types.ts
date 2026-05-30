@@ -273,7 +273,7 @@ export const BillStatusTone: Readonly<
   partial_refunded: 'warning',
 };
 
-export const billRefTypeValues = ['order', 'subscription', 'invoice'] as const;
+export const billRefTypeValues = ['order', 'subscription', 'invoice', 'recharge', 'hold', 'manual'] as const;
 export type BillRefType = (typeof billRefTypeValues)[number];
 
 /**
@@ -327,10 +327,10 @@ export const billingEntrySchema = z.object({
   ownerAccountUid: idString,
   /** 实操账户 userId（主账户本身 or IAM 子账户） */
   operatorAccountUid: idString,
-  business: z.enum(businessCodeValues),
+  business: z.enum(businessCodeValues).nullable().optional(),
   /** 产品代码，扣款类必有 */
   productCode: z.string().nullable().optional(),
-  subType: z.enum(billSubTypeValues),
+  subType: z.enum(billSubTypeValues).nullable().optional(),
   status: z.enum(billStatusValues),
   /** 失败码（枚举，仅当 status='failed' 时有值） */
   failureCode: z.enum(billFailureCodeValues).nullable().optional(),

@@ -53,6 +53,7 @@ export function normalizeMoneyInput(raw: string, fractionDigits = 2): string {
 function toFiniteNumber(value: number | string | null | undefined): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   if (trimmed === '') return null;
   const n = Number(trimmed);
