@@ -34,12 +34,12 @@ import type {
   LogEntry,
   ReverseLogInput,
 } from '../model/log.types';
+import type { ProviderGroup } from '../model/catalog.types';
 import type { Model } from '../model/model.types';
-import type { Provider } from '../model/provider.types';
 import {
+  getDemuxaiCatalogPort,
   getDemuxaiLogsPort,
   getDemuxaiModelPort,
-  getDemuxaiProviderPort,
 } from '../services';
 import LogDetailDrawer from '../components/LogDetailDrawer.vue';
 import LogReverseDialog from '../components/LogReverseDialog.vue';
@@ -47,7 +47,7 @@ import LogReverseDialog from '../components/LogReverseDialog.vue';
 const router = useRouter();
 const logsPort = getDemuxaiLogsPort();
 const modelPort = getDemuxaiModelPort();
-const providerPort = getDemuxaiProviderPort();
+const catalogPort = getDemuxaiCatalogPort();
 const accountPort = getAccountAdminPort();
 
 const records = ref<LogEntry[]>([]);
@@ -63,11 +63,8 @@ interface PageFilter {
   dateRange: [string, string] | null;
   /** 模糊匹配 `LogEntry.modelName` */
   modelName: string;
-  /**
-   * 命中渠道的 int 主键。空字符串 = 未选；UI 用 el-select 选 Provider 后转 number。
-   * 用 number | '' 而非 number | null 是为了让 el-select 的 clearable 行为对齐 Element Plus。
-   */
-  providerId: number | '';
+  /** 供应商 QueueGroup；空字符串 = 全部。 */
+  providerQueueGroup: string;
   /** 仅看失败调用（success === false） */
   errorOnly: boolean;
 }
@@ -83,14 +80,14 @@ const defaultFilter = (): PageFilter => ({
   contactKeyword: '',
   dateRange: last24h(),
   modelName: '',
-  providerId: '',
+  providerQueueGroup: '',
   errorOnly: false,
 });
 
 const filter = ref<PageFilter>(defaultFilter());
 
 const models = ref<Model[]>([]);
-const providers = ref<Provider[]>([]);
+const providerGroups = ref<ProviderGroup[]>([]);
 const accountMap = ref<Map<string, Account>>(new Map());
 
 const modelMap = computed(() => {
@@ -98,10 +95,10 @@ const modelMap = computed(() => {
   for (const it of models.value) m.set(it.modelId, it);
   return m;
 });
-/** 渠道 int 主键 → Provider，供"渠道列"反查显示名。 */
-const providerMap = computed(() => {
-  const m = new Map<number, Provider>();
-  for (const it of providers.value) m.set(it.id, it);
+/** QueueGroup → 供应商组（/demuxai/providers 页入库的渠道）。 */
+const providerGroupMap = computed(() => {
+  const m = new Map<string, ProviderGroup>();
+  for (const g of providerGroups.value) m.set(g.queueGroup, g);
   return m;
 });
 
@@ -113,17 +110,13 @@ const reverseLog = ref<LogEntry | null>(null);
 const reverseSubmitting = ref(false);
 
 async function loadDeps(): Promise<void> {
-  const [mr, pr, ar] = await Promise.all([
+  const [mr, gr, ar] = await Promise.all([
     modelPort.list({
       page: 1,
       pageSize: 500,
       filter: { keyword: '', family: 'all', capability: 'all' },
     }),
-    providerPort.list({
-      page: 1,
-      pageSize: 200,
-      filter: { keyword: '', apiType: 'all', status: 'all' },
-    }),
+    catalogPort.listProviderGroups(),
     accountPort.listAccounts({
       page: 1,
       pageSize: 200,
@@ -131,7 +124,7 @@ async function loadDeps(): Promise<void> {
     }),
   ]);
   if (mr.success) models.value = mr.data.items;
-  if (pr.success) providers.value = pr.data.items;
+  if (gr.success) providerGroups.value = gr.data;
   if (ar.success) {
     const m = new Map<string, Account>();
     ar.data.items.forEach((a) => m.set(a.uid, a));
@@ -145,7 +138,12 @@ function buildPortFilter(): ListLogsFilter {
   };
   if (filter.value.accountUid.trim()) f.accountUid = filter.value.accountUid.trim();
   if (filter.value.modelName.trim()) f.modelName = filter.value.modelName.trim();
-  if (filter.value.providerId !== '') f.providerId = filter.value.providerId;
+  const qg = filter.value.providerQueueGroup.trim();
+  if (qg) {
+    const prefix = `${qg}/`;
+    const kw = (f.modelName ?? '').trim();
+    f.modelName = kw ? (kw.startsWith(prefix) ? kw : `${prefix}${kw}`) : prefix;
+  }
   if (filter.value.dateRange && filter.value.dateRange[0]) f.fromUtc = filter.value.dateRange[0];
   if (filter.value.dateRange && filter.value.dateRange[1]) f.toUtc = filter.value.dateRange[1];
   return f;
@@ -185,7 +183,7 @@ watch(
       filter.value.accountUid,
       filter.value.dateRange,
       filter.value.modelName,
-      filter.value.providerId,
+      filter.value.providerQueueGroup,
       filter.value.errorOnly,
     ] as const,
   () => {
@@ -287,7 +285,7 @@ function usageSummary(row: LogEntry): { main: string; sub: string } {
         sub: `${row.usage.input.tokens} / ${row.usage.output.tokens}`,
       };
     case 'per_call':
-      return { main: `${row.usage.calls} 次`, sub: '' };
+      return { main: '', sub: '' };
     case 'per_image':
       return {
         main: `${row.usage.count} 张`,
@@ -305,8 +303,26 @@ function usageSummary(row: LogEntry): { main: string; sub: string } {
   }
 }
 
-function providerName(id: number): string {
-  return providerMap.value.get(id)?.name ?? `#${id}`;
+/** `group/model` 形态时取 group 作为 queueGroup（如 gemini/gemini-3.1-pro-preview → gemini）。 */
+function queueGroupFromModelName(modelName: string): string | null {
+  const i = modelName.indexOf('/');
+  return i > 0 ? modelName.slice(0, i) : null;
+}
+
+/** 供应商渠道：对齐 /demuxai/providers 入库的 ProviderGroup。 */
+function channelLabel(row: LogEntry): string {
+  const key = queueGroupFromModelName(row.modelName);
+  if (!key) return '—';
+  return providerGroupMap.value.get(key)?.displayName ?? key;
+}
+
+/** 模型列：displayName 与 modelName 相同时只显示一行。 */
+function modelCell(row: LogEntry): { title: string; subtitle: string | null; deleted: boolean } {
+  const display = modelDisplayName(row.modelName);
+  if (display && display !== row.modelName) {
+    return { title: display, subtitle: row.modelName, deleted: false };
+  }
+  return { title: row.modelName, subtitle: null, deleted: display == null };
 }
 
 /** 错误码 → 国际化文案；未识别码原样返回 */
@@ -319,8 +335,8 @@ function modelDisplayName(modelName: string): string | null {
   return modelMap.value.get(modelName)?.displayName ?? null;
 }
 
-const detailProviderName = computed(() =>
-  detailLog.value ? providerName(detailLog.value.providerId) : '',
+const detailChannelLabel = computed(() =>
+  detailLog.value ? channelLabel(detailLog.value) : '',
 );
 const detailModelDisplay = computed(() =>
   detailLog.value ? modelDisplayName(detailLog.value.modelName) : null,
@@ -353,13 +369,13 @@ onMounted(() => {
           style="width: 220px"
         />
       </el-form-item>
-      <el-form-item label="模型渠道">
-        <el-select v-model="filter.providerId" clearable placeholder="全部" style="width: 220px">
+      <el-form-item label="供应商">
+        <el-select v-model="filter.providerQueueGroup" clearable placeholder="全部" style="width: 220px">
           <el-option
-            v-for="p in providers"
-            :key="p.id"
-            :label="p.name"
-            :value="p.id"
+            v-for="g in providerGroups"
+            :key="g.queueGroup"
+            :label="g.displayName"
+            :value="g.queueGroup"
           />
         </el-select>
       </el-form-item>
@@ -378,134 +394,28 @@ onMounted(() => {
       :data="displayRecords"
       row-key="id"
       size="small"
-      class="compact-table"
+      stripe
+      class="log-table"
       :empty-text="' '"
     >
-      <el-table-column label="时间" width="160">
+      <el-table-column label="时间" width="172" fixed>
         <template #default="{ row }: { row: LogEntry }">
-          <span class="cell-date">{{ formatDateTime(row.createAt, 'MM-DD HH:mm:ss') }}</span>
+          <span class="cell-time mono">{{ formatDateTime(row.createAt, 'YYYY-MM-DD HH:mm:ss') }}</span>
         </template>
       </el-table-column>
 
-      <el-table-column label="账户" min-width="200">
+      <el-table-column label="Conv" min-width="148">
         <template #default="{ row }: { row: LogEntry }">
-          <div class="cell-account">
-            <el-button
-              link
-              class="cell-account__uid"
-              @click="router.push(`/accounts/${row.account.uid}`)"
-            >
-              {{ accountMap.get(row.account.uid)?.name ?? row.account.uid }}
-            </el-button>
-            <div class="cell-account__sub">
-              Lv{{ row.cost.tierSnapshot }} · IAM <span class="mono">{{ row.account.iamId }}</span>
-            </div>
-          </div>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="模型" min-width="220">
-        <template #default="{ row }: { row: LogEntry }">
-          <div class="cell-model">
-            <template v-if="modelDisplayName(row.modelName)">
-              <span class="cell-model__name">{{ modelDisplayName(row.modelName) }}</span>
-              <span class="cell-model__id mono">{{ row.modelName }}</span>
-            </template>
-            <template v-else>
-              <span class="cell-model__deleted">
-                <el-tag size="small" type="info" effect="plain">已删除</el-tag>
-                <span class="cell-model__id mono">{{ row.modelName }}</span>
-              </span>
-            </template>
-          </div>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="模型渠道" min-width="160">
-        <template #default="{ row }: { row: LogEntry }">
-          <span class="cell-channel">{{ providerName(row.providerId) }}</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="会话" width="140">
-        <template #default="{ row }: { row: LogEntry }">
-          <span class="cell-conv mono">{{ row.convId }}</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="用量" width="140" align="right">
-        <template #default="{ row }: { row: LogEntry }">
-          <div class="cell-tokens">
-            <span class="num">{{ usageSummary(row).main }}</span>
-            <div class="cell-tokens__sub">
-              <el-tag size="small" type="info" effect="plain" round class="cell-tokens__type">
-                {{ BillingTypeLabel[row.billingType] }}
-              </el-tag>
-              <span v-if="usageSummary(row).sub" class="num cell-tokens__detail">
-                {{ usageSummary(row).sub }}
-              </span>
-            </div>
-          </div>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="扣费" width="150" align="right">
-        <template #default="{ row }: { row: LogEntry }">
-          <div class="cell-cost">
-            <div class="cell-cost__line">
-              <span
-                class="cell-cost__amount"
-                :class="{ 'cell-cost__amount--reversed': row.bill?.status === 'reversed' }"
-              >
-                {{ formatMoney(row.cost.total, { fractionDigits: 4 }) }}
-              </span>
-              <el-tooltip content="查看扣费明细" placement="top" :show-after="200">
-                <el-button
-                  :icon="View"
-                  link
-                  type="primary"
-                  class="cell-cost__view"
-                  @click="openDetail(row)"
-                />
-              </el-tooltip>
-            </div>
-            <el-tooltip
-              v-if="row.bill?.status === 'reversed'"
-              :content="`${BillReverseCodeLabel[row.bill.reversedCode!]} · ${formatDateTime(row.bill.reversedAtUtc!, 'MM-DD HH:mm')}`"
-              placement="top"
-            >
-              <el-tag size="small" type="info" effect="plain" class="cell-cost__reversed-tag">
-                已驳回
-              </el-tag>
-            </el-tooltip>
-          </div>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="延迟" width="130" align="right">
-        <template #default="{ row }: { row: LogEntry }">
-          <div v-if="row.tokenLatency != null" class="cell-latency">
-            <span
-              class="num"
-              :class="{ 'num-slow': row.streamed ? row.tokenLatency > 1500 : row.tokenLatency > 5000 }"
-            >
-              {{ row.tokenLatency.toLocaleString() }} ms
-            </span>
-            <span class="cell-latency__sub">
-              {{ row.streamed ? '首字延迟' : '总耗时' }}
-            </span>
-          </div>
+          <el-tooltip v-if="row.convId" :content="row.convId" placement="top" :show-after="200">
+            <span class="cell-conv mono">{{ row.convId }}</span>
+          </el-tooltip>
           <span v-else class="cell-muted">—</span>
         </template>
       </el-table-column>
 
-      <el-table-column label="状态" width="140">
+      <el-table-column label="状态" width="88" align="center">
         <template #default="{ row }: { row: LogEntry }">
-          <StatusTag
-            v-if="row.success"
-            label="成功"
-            tone="success"
-          />
+          <StatusTag v-if="row.success" label="成功" tone="success" />
           <StatusTag
             v-else
             :label="row.error ? errorCodeText(row.error.code) : '失败'"
@@ -514,18 +424,89 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="操作" width="100" align="center">
+      <el-table-column label="模型" min-width="200">
         <template #default="{ row }: { row: LogEntry }">
+          <div class="cell-model">
+            <span
+              class="cell-model__primary"
+              :class="{ 'cell-model__primary--gone': modelCell(row).deleted }"
+            >
+              {{ modelCell(row).title }}
+            </span>
+            <span v-if="modelCell(row).subtitle" class="cell-model__sub mono">{{ modelCell(row).subtitle }}</span>
+          </div>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="供应商" width="100">
+        <template #default="{ row }: { row: LogEntry }">
+          <span class="cell-channel">{{ channelLabel(row) }}</span>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="计费" width="120" align="center">
+        <template #default="{ row }: { row: LogEntry }">
+          <div class="cell-billing">
+            <el-tag size="small" type="info" effect="plain" round>
+              {{ BillingTypeLabel[row.billingType] }}
+            </el-tag>
+            <span v-if="usageSummary(row).main" class="cell-billing__usage num">{{ usageSummary(row).main }}</span>
+          </div>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="扣费" width="112" align="right">
+        <template #default="{ row }: { row: LogEntry }">
+          <div class="cell-cost">
+            <span
+              class="cell-cost__amount"
+              :class="{ 'cell-cost__amount--reversed': row.bill?.status === 'reversed' }"
+            >
+              {{ formatMoney(row.cost.total, { fractionDigits: 4 }) }}
+            </span>
+            <el-tag v-if="row.bill?.status === 'reversed'" size="small" type="info" effect="plain" class="cell-cost__tag">
+              已驳回
+            </el-tag>
+          </div>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="耗时" width="100" align="right">
+        <template #default="{ row }: { row: LogEntry }">
+          <span
+            v-if="row.tokenLatency != null"
+            class="cell-latency num"
+            :class="{ 'num-slow': row.streamed && row.tokenLatency > 1500 }"
+          >
+            {{ row.tokenLatency.toLocaleString() }} ms
+          </span>
+          <span v-else class="cell-muted">—</span>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="账户" min-width="120">
+        <template #default="{ row }: { row: LogEntry }">
+          <el-button
+            link
+            type="primary"
+            class="cell-account-link"
+            @click="router.push(`/accounts/${row.account.uid}`)"
+          >
+            {{ accountMap.get(row.account.uid)?.name ?? row.account.uid }}
+          </el-button>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="" width="88" align="center" fixed="right">
+        <template #default="{ row }: { row: LogEntry }">
+          <el-button :icon="View" link type="primary" @click="openDetail(row)">详情</el-button>
           <el-button
             v-if="row.bill && row.bill.status !== 'reversed'"
             :icon="RefreshLeft"
             link
             type="danger"
             @click="openReverse(row)"
-          >
-            驳回
-          </el-button>
-          <span v-else class="cell-muted">—</span>
+          >驳回</el-button>
         </template>
       </el-table-column>
 
@@ -551,7 +532,7 @@ onMounted(() => {
     <LogDetailDrawer
       v-model="detailOpen"
       :log="detailLog"
-      :provider-name="detailProviderName"
+      :channel-label="detailChannelLabel"
       :model-display="detailModelDisplay"
       @reverse="onDrawerReverse"
     />
@@ -573,6 +554,10 @@ onMounted(() => {
   color: var(--el-color-warning);
 }
 
+.log-table {
+  margin-top: 4px;
+}
+
 .mono {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
@@ -584,105 +569,59 @@ onMounted(() => {
   font-weight: 500;
 }
 
-.cell-account {
-  display: flex;
-  flex-direction: column;
+.cell-time {
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+  white-space: nowrap;
+}
+.cell-conv {
+  font-size: 12px;
+  color: var(--el-text-color-primary);
+  word-break: break-all;
   line-height: 1.35;
 }
-.cell-account__uid {
-  padding: 0;
-  height: auto;
-  line-height: 1.4;
-  justify-content: flex-start;
-  font-size: 12.5px;
-  color: var(--el-color-primary);
-}
-.cell-account__sub {
-  font-size: 11.5px;
-  color: var(--el-text-color-secondary);
-  margin-top: 2px;
+.cell-muted {
+  color: var(--el-text-color-placeholder);
 }
 
-.cell-model__name {
+.cell-model {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.35;
+}
+.cell-model__primary {
   font-size: 12.5px;
   color: var(--el-text-color-primary);
-  margin-right: 6px;
 }
-.cell-model__id {
-  font-size: 11.5px;
+.cell-model__primary--gone {
   color: var(--el-text-color-secondary);
+  text-decoration: line-through;
 }
 .cell-model__sub {
   font-size: 11.5px;
   color: var(--el-text-color-secondary);
-  margin-top: 2px;
-}
-.cell-model__deleted {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.cell-model__deleted .cell-model__id {
-  text-decoration: line-through;
 }
 
 .cell-channel {
   font-size: 12.5px;
   color: var(--el-text-color-regular);
 }
-.cell-conv {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  word-break: break-all;
-}
-
-.cell-tokens {
+.cell-billing {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.3;
-}
-.cell-tokens__sub {
-  display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+.cell-billing__usage {
   font-size: 11.5px;
-  color: var(--el-text-color-secondary);
-  margin-top: 2px;
-}
-.cell-tokens__type {
-  font-size: 11px;
-  height: 18px;
-  padding: 0 6px;
-}
-.cell-tokens__detail {
-  font-size: 11.5px;
-}
-.cell-latency {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.3;
-}
-.cell-latency__sub {
-  font-size: 11.5px;
-  color: var(--el-text-color-secondary);
-  margin-top: 2px;
-}
-.cell-muted {
   color: var(--el-text-color-secondary);
 }
 .cell-cost {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  line-height: 1.3;
   gap: 2px;
-}
-.cell-cost__line {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
 }
 .cell-cost__amount {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
@@ -690,24 +629,24 @@ onMounted(() => {
   color: var(--el-color-warning);
   font-weight: 500;
 }
-/* 驳回行：金额加删除线 + 灰化，强调"实际扣费 = 0" */
 .cell-cost__amount--reversed {
   color: var(--el-text-color-secondary);
   text-decoration: line-through;
   font-weight: 400;
 }
-.cell-cost__view {
-  padding: 0;
-  height: auto;
-  min-height: 0;
-}
-.cell-cost__view :deep(.el-icon) {
-  font-size: 15px;
-}
-.cell-cost__reversed-tag {
+.cell-cost__tag {
   font-size: 11px;
   height: 18px;
   padding: 0 6px;
+}
+.cell-latency {
+  font-size: 12.5px;
+}
+.cell-account-link {
+  padding: 0;
+  height: auto;
+  font-size: 12.5px;
+  justify-content: flex-start;
 }
 
 .pagination-bar {

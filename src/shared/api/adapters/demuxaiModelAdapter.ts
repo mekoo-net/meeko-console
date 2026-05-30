@@ -14,6 +14,23 @@ import type {
 
 const BASE = '/demuxai/api/admin/models';
 
+/**
+ * 后端 ModelMetaAdminDto 字段名与前端 Model schema 存在差异：
+ *  - `modelName`  → `modelId`（后端用 modelName，前端 log 查找用 modelId 作 map key）
+ *  - `id`         → `uid`（后端返回数值 id，前端统一用 uid string）
+ *
+ * 若后端已对齐字段名（直接返回 modelId/uid），此映射为无害的 identity。
+ */
+function mapModel(raw: unknown): Model {
+  if (!raw || typeof raw !== 'object') return raw as Model;
+  const r = raw as Record<string, unknown>;
+  return {
+    ...r,
+    modelId: r['modelId'] ?? r['modelName'] ?? '',
+    uid: r['uid'] ?? (r['id'] != null ? String(r['id']) : ''),
+  } as unknown as Model;
+}
+
 export class DemuxaiModelHttpAdapter implements DemuxaiModelPort {
   async list(input: {
     page: number;
@@ -22,7 +39,7 @@ export class DemuxaiModelHttpAdapter implements DemuxaiModelPort {
   }): Promise<AppResult<ListModelsPage>> {
     const { page, pageSize, filter } = input;
     const path = filter.keyword ? `${BASE}/search` : BASE;
-    const result = await requestDemuxAi<ItemsEnvelope<Model>>(path, {
+    const result = await requestDemuxAi<ItemsEnvelope<unknown>>(path, {
       query: {
         p: page,
         size: pageSize,
@@ -30,11 +47,14 @@ export class DemuxaiModelHttpAdapter implements DemuxaiModelPort {
       },
     });
     if (!result.success) return result;
-    return { success: true, data: { items: result.data.items, total: result.data.total } };
+    const items = (result.data.items as unknown[]).map(mapModel);
+    return { success: true, data: { items, total: result.data.total } };
   }
 
   async get(uid: Uid): Promise<AppResult<Model>> {
-    return requestDemuxAi<Model>(`${BASE}/${uid}`);
+    const result = await requestDemuxAi<unknown>(`${BASE}/${uid}`);
+    if (!result.success) return result;
+    return { success: true, data: mapModel(result.data) };
   }
 
   async update(uid: Uid, input: UpdateModelInput): Promise<AppResult<Model>> {

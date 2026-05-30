@@ -29,8 +29,8 @@ import type { LogEntry } from '../model/log.types';
 interface Props {
   modelValue: boolean;
   log: LogEntry | null;
-  /** 由父组件查 Provider 表得到的显示名；查不到时回退到 uid */
-  providerName?: string;
+  /** 供应商组显示名（/demuxai/providers 的 ProviderGroup.displayName） */
+  channelLabel?: string;
   /** 由父组件查 Model 表得到的显示名；查不到 = 该模型已被自动删除 */
   modelDisplay?: string | null;
 }
@@ -48,14 +48,14 @@ const visible = computed({
 });
 
 /**
- * 延迟"慢"判定阈值随 streamed 切换：
- *  - 流式 (TTFT) > 1500ms 即视为慢
- *  - 非流式 (总耗时) > 5000ms 才视为慢（因为包含完整生成时间）
+ * "慢"判定仅对流式请求的 TTFT 有意义（> 1500ms）。
+ * 非流式的总耗时包含完整推理生成时间，与提示词长度、模型复杂度强相关，
+ * 不适合用固定阈值判定"慢"，不予标记。
  */
 const slowLatency = computed(() => {
   const l = props.log;
-  if (!l || l.tokenLatency == null) return false;
-  return l.streamed ? l.tokenLatency > 1500 : l.tokenLatency > 5000;
+  if (!l || l.tokenLatency == null || !l.streamed) return false;
+  return l.tokenLatency > 1500;
 });
 
 const latencyLabel = computed(() => (props.log?.streamed ? '首字延迟' : '总耗时'));
@@ -66,17 +66,25 @@ function errorCodeText(code: string): string {
 
 const modelDeleted = computed(() => props.log != null && props.modelDisplay == null);
 
-const modelText = computed(() => {
+const modelTitle = computed(() => {
   const l = props.log;
   if (!l) return '';
-  if (props.modelDisplay != null) return props.modelDisplay;
-  return `<已删除> ${l.modelName}`;
+  const display = props.modelDisplay;
+  if (display && display !== l.modelName) return display;
+  return l.modelName;
 });
 
-const providerText = computed(() => {
+const modelSubtitle = computed(() => {
   const l = props.log;
-  if (!l) return '';
-  return props.providerName ?? `#${l.providerId}`;
+  if (!l || props.modelDisplay == null || props.modelDisplay === l.modelName) return null;
+  return l.modelName;
+});
+
+const channelText = computed(() => props.channelLabel?.trim() || '—');
+
+const hasCharge = computed(() => {
+  const l = props.log;
+  return l != null && l.success && Number(l.cost.total) > 0;
 });
 
 const clientIpText = computed(() => {
@@ -150,84 +158,86 @@ const outputDims = computed<DimRow[]>(() => {
 <template>
   <el-drawer
     v-model="visible"
-    :title="log ? `调用详情 · ${log.id}` : '调用详情'"
+    :title="log ? '调用详情' : '调用详情'"
     direction="rtl"
-    size="520px"
+    size="560px"
   >
     <div v-if="log" class="log-detail">
-      <div class="log-detail__row">
-        <span class="label">状态</span>
-        <StatusTag
-          v-if="log.success"
-          label="成功"
-          tone="success"
-        />
-        <StatusTag
-          v-else
-          :label="log.error ? errorCodeText(log.error.code) : '失败'"
-          tone="danger"
-        />
-        <span v-if="log.error" class="http-status">HTTP {{ log.error.httpStatus || '—' }}</span>
-      </div>
-
-      <div class="log-detail__row">
-        <span class="label">发生时间</span>
-        <span>{{ formatDateTime(log.createAt, 'YYYY-MM-DD HH:mm:ss') }}</span>
-      </div>
+      <el-descriptions :column="2" border size="small" class="log-detail__summary">
+        <el-descriptions-item label="状态">
+          <StatusTag v-if="log.success" label="成功" tone="success" />
+          <StatusTag
+            v-else
+            :label="log.error ? errorCodeText(log.error.code) : '失败'"
+            tone="danger"
+          />
+        </el-descriptions-item>
+        <el-descriptions-item label="耗时">
+          <span v-if="log.tokenLatency != null" class="num">
+            {{ log.tokenLatency.toLocaleString() }} ms
+            <span class="latency-hint">{{ log.streamed ? '首字' : '总计' }}</span>
+          </span>
+          <span v-else>—</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="发生时间" :span="2">
+          {{ formatDateTime(log.createAt, 'YYYY-MM-DD HH:mm:ss') }}
+        </el-descriptions-item>
+        <el-descriptions-item label="Conv" :span="2">
+          <span class="mono conv-id">{{ log.convId ?? '—' }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="模型" :span="2">
+          <div class="model-cell">
+            <span class="mono" :class="{ 'deleted-model': modelDeleted }">{{ modelTitle }}</span>
+            <span v-if="modelSubtitle" class="mono model-cell__sub">{{ modelSubtitle }}</span>
+          </div>
+        </el-descriptions-item>
+        <el-descriptions-item label="供应商">{{ channelText }}</el-descriptions-item>
+        <el-descriptions-item label="计费">
+          {{ BillingTypeLabel[log.billingType] }}
+        </el-descriptions-item>
+        <el-descriptions-item label="扣费">
+          <span class="cost-total">{{ formatMoney(log.cost.total) }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="账户">
+          <span class="mono">{{ log.account.uid }}</span>
+        </el-descriptions-item>
+      </el-descriptions>
 
       <el-divider />
 
-      <h4 class="section-title">租户上下文</h4>
-      <div class="log-detail__row">
-        <span class="label">账户 UID</span>
-        <span class="mono">{{ log.account.uid }}</span>
-      </div>
+      <h4 class="section-title">调用方</h4>
       <div class="log-detail__row">
         <span class="label">IAM 用户</span>
-        <span class="mono">{{ log.account.iamId }}</span>
+        <span class="mono">{{ log.account.iamId ?? '—' }}</span>
       </div>
       <div class="log-detail__row">
         <span class="label">LV 快照</span>
         <span>Lv{{ log.cost.tierSnapshot }}</span>
       </div>
       <div class="log-detail__row">
-        <span class="label">会话 ID</span>
-        <span class="mono">{{ log.convId }}</span>
-      </div>
-      <div class="log-detail__row">
         <span class="label">请求 IP</span>
         <span class="mono">{{ clientIpText }}</span>
+      </div>
+      <div class="log-detail__row">
+        <span class="label">日志编号</span>
+        <span class="mono log-id-muted">{{ log.id }}</span>
       </div>
 
       <el-divider />
 
-      <h4 class="section-title">模型与渠道</h4>
+      <h4 class="section-title">链路</h4>
       <div class="log-detail__row">
-        <span class="label">模型名</span>
-        <span class="mono" :class="{ 'deleted-model': modelDeleted }">{{ modelText }}</span>
-        <el-tag v-if="modelDeleted" size="small" type="info" effect="plain">已删除</el-tag>
-      </div>
-      <div class="log-detail__row">
-        <span class="label">实际渠道</span>
-        <span class="mono">{{ providerText }}</span>
-        <span class="provider-tag">#{{ log.providerId }}</span>
-        <span class="provider-tag">{{ ApiTypeLabel[log.apiType] }}</span>
-      </div>
-      <div class="log-detail__row">
-        <span class="label">计费类型</span>
-        <el-tag size="small" type="primary" effect="plain" round>
-          {{ BillingTypeLabel[log.billingType] }}
-        </el-tag>
+        <span class="label">协议</span>
+        <span>{{ log.apiType ? ApiTypeLabel[log.apiType] : '—' }}</span>
       </div>
       <div class="log-detail__row">
         <span class="label">流式</span>
         <el-tag v-if="log.streamed" size="small" type="success" effect="plain">是</el-tag>
         <el-tag v-else size="small" type="info" effect="plain">否</el-tag>
       </div>
-
       <el-divider />
 
-      <h4 class="section-title">用量 & 计费</h4>
+      <h4 class="section-title">计费明细</h4>
 
       <!-- ============ per_token ============ -->
       <template v-if="log.billingType === 'per_token'">
@@ -285,22 +295,14 @@ const outputDims = computed<DimRow[]>(() => {
 
       <!-- ============ per_call ============ -->
       <template v-else-if="log.billingType === 'per_call'">
-        <div class="log-detail__row">
-          <span class="label">调用次数</span>
-          <span class="num">{{ log.usage.calls.toLocaleString() }}</span>
-        </div>
-
-        <el-divider class="sub-divider" />
         <div class="snapshot-hint">调用时单价快照</div>
         <div class="log-detail__row">
           <span class="label">单次价</span>
           <span class="num">{{ formatMoney(log.cost.pricePerCall) }} / 次</span>
         </div>
-        <div class="log-detail__row">
+        <div v-if="log.cost.cachedPricePerCall > 0" class="log-detail__row">
           <span class="label">缓存单价</span>
-          <span class="num" :class="{ 'snapshot-zero': log.cost.cachedPricePerCall === 0 }">
-            {{ formatMoney(log.cost.cachedPricePerCall) }} / 次
-          </span>
+          <span class="num">{{ formatMoney(log.cost.cachedPricePerCall) }} / 次</span>
         </div>
       </template>
 
@@ -393,7 +395,7 @@ const outputDims = computed<DimRow[]>(() => {
           已驳回 · 实际扣费 ¥0
         </el-tag>
       </div>
-      <div class="log-detail__row">
+      <div v-if="log.cost.multiplierSnapshot !== 1" class="log-detail__row">
         <span class="label">倍率快照</span>
         <span>× {{ log.cost.multiplierSnapshot }}</span>
       </div>
@@ -477,7 +479,10 @@ const outputDims = computed<DimRow[]>(() => {
         <el-tag v-else-if="log.bill?.status === 'reversed'" type="info" effect="plain">
           该账单已驳回
         </el-tag>
-        <el-tag v-else type="info" effect="plain">无关联账单，无法驳回</el-tag>
+        <el-tag v-else-if="hasCharge" type="warning" effect="plain">
+          已扣费，暂未关联钱包流水（请刷新；仍无则核对 DemuxAi 与 Billing 同库）
+        </el-tag>
+        <el-tag v-else type="info" effect="plain">未扣费，无法驳回</el-tag>
       </div>
     </template>
   </el-drawer>
@@ -487,6 +492,25 @@ const outputDims = computed<DimRow[]>(() => {
 .log-detail {
   font-size: 13px;
   line-height: 1.6;
+}
+.log-detail__summary {
+  margin-bottom: 4px;
+}
+.log-detail__summary :deep(.el-descriptions__label) {
+  width: 88px;
+}
+.conv-id {
+  word-break: break-all;
+}
+.latency-hint {
+  margin-left: 6px;
+  font-size: 11.5px;
+  color: var(--el-text-color-secondary);
+  font-family: var(--el-font-family);
+}
+.log-id-muted {
+  font-size: 12px;
+  color: var(--el-text-color-placeholder);
 }
 .log-detail__row {
   display: flex;
@@ -624,6 +648,15 @@ const outputDims = computed<DimRow[]>(() => {
 .deleted-model {
   color: var(--el-text-color-secondary);
   text-decoration: line-through;
+}
+.model-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.model-cell__sub {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 .error-msg {
   width: 100%;

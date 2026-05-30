@@ -247,7 +247,8 @@ const logEntryBaseShape = {
    */
   account: z.object({
     uid: uidString,
-    iamId: uidString,
+    /** IAM 子账户 userId；主账户直接调用时为 null。 */
+    iamId: uidString.nullable().optional(),
   }),
   /** 多轮对话的会话 ID。同一对话的多次调用共享同一 convId；无会话上下文时为 null。 */
   convId: z.string().min(1).nullable().optional(),
