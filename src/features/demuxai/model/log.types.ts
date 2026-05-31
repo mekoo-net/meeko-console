@@ -314,31 +314,33 @@ const logEntryBaseShape = {
   /**
    * 关联账单（钱包扣费事件）快照。
    *
-   * - 一次成功扣费的调用 → 必有一条 Bill，`status='completed'`、`actualAmount = cost.total`
+   * - 一次成功扣费的调用 → 必有一条 Bill，`status='completed'`
    * - 调用失败但仍触发扣费（如已开始流式输出后断流）→ 同样会写入 Bill，admin 可走"驳回"流程
    * - 历史导入数据 / BFF 暂未 join 上 Bill → 字段为 `null`，UI 兜底显示"扣费"金额但不允许驳回
    *
    * 驳回不另起一条流水，而是**就地改原账单**（与 `docs/api/05-billing-bills.md` 一致）：
-   *   `status='reversed'` + `actualAmount=0` + 写入 `reversedAtUtc/By/Code`
+   *   `status='reversed'` + 嵌套 `reversal` 对象
    *
    * 钱包余额结算公式：`Σ actualAmount WHERE status ∈ {completed, partial_refunded}`，
    * 驳回行自然落空，不需要再生成一条"反向"流水。
    */
   bill: z
-    .object({
-      /** 账单主键（BL-* 命名空间） */
-      id: z.string().min(1),
-      /** 当前账单状态（demuxai 用量只用到 `completed` / `reversed` 两种） */
-      status: billStatusSchema,
-      /** 已驳回时的操作时间（Unix 毫秒 UTC）；`completed` 状态为 null */
-      reversedAtUtc: epochMillisNullableSchema,
-      /** 已驳回时的操作人 IAM 主键；`completed` 状态为 null */
-      reversedBy: z.string().nullable(),
-      /** 已驳回时的原因码；`completed` 状态为 null */
-      reversedCode: billReverseCodeSchema.nullable(),
-      /** 驳回备注（可选）；`completed` 状态为 null */
-      reversedRemark: z.string().nullable().optional(),
-    })
+    .discriminatedUnion('status', [
+      z.object({
+        id: z.string().min(1),
+        status: z.literal('completed'),
+      }),
+      z.object({
+        id: z.string().min(1),
+        status: z.literal('reversed'),
+        reversal: z.object({
+          atUtc: epochMillisSchema,
+          by: z.string().nullable(),
+          code: billReverseCodeSchema,
+          remark: z.string().nullable().optional(),
+        }),
+      }),
+    ])
     .nullable()
     .optional(),
 };

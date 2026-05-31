@@ -88,28 +88,39 @@
 | `streamed` | boolean | 是否流式请求 |
 | `bill` | object \| null | 见下 |
 
-`bill` 快照：
+`bill` 快照（按状态多态）：
+
+`completed` — 仅 `id` + `status`：
 ```json
 {
   "id": "BL-001",
-  "status": "completed",
-  "reversedAtUtc": null,
-  "reversedBy": null,
-  "reversedCode": null,
-  "reversedRemark": null
+  "status": "completed"
 }
+```
 
+`reversed` — 额外嵌套 `reversal` 对象：
+```json
+{
+  "id": "BL-001",
+  "status": "reversed",
+  "reversal": {
+    "atUtc": 1757679001000,
+    "by": "200000099",
+    "code": "service_unavailable",
+    "remark": "上游 502 仍扣费"
+  }
+}
 ```
 
 #### `usage` / `cost` 形状对照表
 | `billingType` | `usage` | `cost` |
 | --- | --- | --- |
 | `per_token` | `{ totalTokens, input: { tokens, cachedReadTokens, cachedWriteTokens, audioTokens }, output: { tokens, reasoningTokens, audioTokens } }` 全必填，未用为 0 | `{ input: { perMToken, amount, cachedRead, cachedWrite, … }, output: { … }, multiplierSnapshot, tierSnapshot, total }` |
-| `per_call` | `{ calls }` | `{ pricePerCall, amount, multiplierSnapshot, tierSnapshot, total }` |
-| `per_image` | `{ tier: { size, quality }, count }` | `{ pricePerImage, amount, multiplierSnapshot, tierSnapshot, total }` |
-| `per_video` | `{ tier: { resolution }, seconds }` | `{ pricePerSecond, amount, …, total }` |
-| `per_audio_minute` | `{ minutes }` | `{ pricePerMinute, amount, …, total }` |
-| `per_character` | `{ characters }` | `{ pricePerKChar, amount, …, total }` |
+| `per_call` | `{ calls }` | `{ pricePerCall, cachedPricePerCall, multiplierSnapshot, tierSnapshot, total }` |
+| `per_image` | `{ tier: { size, quality }, count }` | `{ pricePerImage, multiplierSnapshot, tierSnapshot, total }` |
+| `per_video` | `{ tier: { resolution }, seconds }` | `{ pricePerSecond, multiplierSnapshot, tierSnapshot, total }` |
+| `per_audio_minute` | `{ minutes }` | `{ pricePerMinute, multiplierSnapshot, tierSnapshot, total }` |
+| `per_character` | `{ characters }` | `{ pricePerKChar, multiplierSnapshot, tierSnapshot, total }` |
 
 `per_token` 样本（成功）：
 
@@ -162,10 +173,7 @@
   },
   "bill": {
     "id": "BL-8821",
-    "status": "completed",
-    "reversedAtUtc": null,
-    "reversedBy": null,
-    "reversedCode": null
+    "status": "completed"
   }
 }
 

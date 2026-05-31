@@ -216,12 +216,14 @@ export class DemuxaiLogsMock implements DemuxaiLogsPort {
     }
     const reversedAtUtc = Date.now();
     target.bill = {
-      ...target.bill,
+      id: target.bill.id,
       status: 'reversed',
-      reversedAtUtc,
-      reversedBy: MOCK_ADMIN_IAM_UID,
-      reversedCode: input.reasonCode,
-      reversedRemark: input.remark?.trim() || null,
+      reversal: {
+        atUtc: reversedAtUtc,
+        by: MOCK_ADMIN_IAM_UID,
+        code: input.reasonCode,
+        remark: input.remark?.trim() || null,
+      },
     };
     return ok({
       logId: target.id,

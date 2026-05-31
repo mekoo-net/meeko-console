@@ -206,10 +206,12 @@ async function submitReverse(payload: ReverseLogInput): Promise<void> {
         bill: {
           id: r.data.billId,
           status: 'reversed',
-          reversedAtUtc: r.data.reversedAtUtc,
-          reversedBy: r.data.reversedBy,
-          reversedCode: r.data.reversedCode,
-          reversedRemark: payload.remark?.trim() || null,
+          reversal: {
+            atUtc: r.data.reversedAtUtc,
+            by: r.data.reversedBy,
+            code: r.data.reversedCode,
+            remark: payload.remark?.trim() || null,
+          },
         },
       } as LogEntry;
     }

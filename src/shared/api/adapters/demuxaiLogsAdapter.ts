@@ -42,47 +42,15 @@ interface DailyRow {
 }
 
 /**
- * 后端 AiUsageLogDto 的 Usage/Cost 字段目前固定使用 per_token 结构（硬编码 DTO），
- * 与 billingType 无关。当 billingType 是 per_call/per_image 等时需在前端归一化。
- *
- * per_call 归一化规则：
- *  - usage → { calls: 1 }（每次调用计 1 次；后端未实际上报 calls 字段时补默认值）
- *  - cost  → { pricePerCall: total, cachedPricePerCall: 0, multiplierSnapshot, tierSnapshot, total }
- */
-function normalizeUsageCostForBillingType(
-  r: Record<string, unknown>,
-): Record<string, unknown> {
-  const billingType = r['billingType'];
-  if (billingType === 'per_call') {
-    const rawCost = r['cost'] as Record<string, unknown> | undefined;
-    const rawUsage = r['usage'] as Record<string, unknown> | undefined;
-    if (rawUsage && 'calls' in rawUsage) return r; // 后端已正确返回 per_call 格式，跳过
-    return {
-      ...r,
-      usage: { calls: 1 },
-      cost: {
-        pricePerCall: rawCost?.['total'] ?? 0,
-        cachedPricePerCall: 0,
-        multiplierSnapshot: rawCost?.['multiplierSnapshot'] ?? 1,
-        tierSnapshot: rawCost?.['tierSnapshot'] ?? 0,
-        total: rawCost?.['total'] ?? 0,
-      },
-    };
-  }
-  return r;
-}
-
-/**
  * 将后端原始日志行映射为前端 LogEntry 形状：
  *  - `account.iamUserUid` → `account.iamId`（后端字段名与前端 schema 不同）
- *  - billingType 与 usage/cost 结构不匹配时做归一化（见 normalizeUsageCostForBillingType）
  *  - 对 logEntrySchema 做 safeParse；解析失败时返回原始对象（兜底显示，不崩页面）
  */
 function mapRawItem(raw: unknown): LogEntry {
   if (!raw || typeof raw !== 'object') return raw as LogEntry;
   const r = raw as Record<string, unknown>;
   const account = r['account'];
-  let remapped: Record<string, unknown> = {
+  const remapped: Record<string, unknown> = {
     ...r,
     account:
       account && typeof account === 'object'
@@ -95,9 +63,6 @@ function mapRawItem(raw: unknown): LogEntry {
           }
         : account,
   };
-
-  // 当后端 DTO 与 billingType 不匹配时归一化（目前已知后端 per_call 返回 per_token 结构）
-  remapped = normalizeUsageCostForBillingType(remapped);
 
   const parsed = logEntrySchema.safeParse(remapped);
   if (!parsed.success) {

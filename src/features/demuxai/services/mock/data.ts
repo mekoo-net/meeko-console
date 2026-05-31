@@ -859,18 +859,16 @@ function seedLogs(providers: Provider[]): LogEntry[] {
           ? {
               id: `BL-${genBillUid()}`,
               status: 'reversed',
-              reversedAtUtc: epochMs(new Date(occurred.getTime() + 30 * 60 * 1000)),
-              reversedBy: '200000099',
-              reversedCode: reverseReasons[i % reverseReasons.length]!,
-              reversedRemark: null,
+              reversal: {
+                atUtc: epochMs(new Date(occurred.getTime() + 30 * 60 * 1000)),
+                by: '200000099',
+                code: reverseReasons[i % reverseReasons.length]!,
+                remark: null,
+              },
             }
           : {
               id: `BL-${genBillUid()}`,
               status: 'completed',
-              reversedAtUtc: null,
-              reversedBy: null,
-              reversedCode: null,
-              reversedRemark: null,
             }
         : null,
     });

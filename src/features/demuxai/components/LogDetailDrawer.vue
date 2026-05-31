@@ -400,19 +400,19 @@ const outputDims = computed<DimRow[]>(() => {
         <template v-if="log.bill.status === 'reversed'">
           <div class="log-detail__row">
             <span class="label">驳回原因</span>
-            <span>{{ log.bill.reversedCode ? BillReverseCodeLabel[log.bill.reversedCode] : '—' }}</span>
+            <span>{{ log.bill.reversal.code ? BillReverseCodeLabel[log.bill.reversal.code] : '—' }}</span>
           </div>
           <div class="log-detail__row">
             <span class="label">驳回时间</span>
-            <span>{{ log.bill.reversedAtUtc ? formatDateTime(log.bill.reversedAtUtc, 'YYYY-MM-DD HH:mm:ss') : '—' }}</span>
+            <span>{{ formatDateTime(log.bill.reversal.atUtc, 'YYYY-MM-DD HH:mm:ss') }}</span>
           </div>
           <div class="log-detail__row">
             <span class="label">操作人</span>
-            <span class="mono">{{ log.bill.reversedBy ?? '—' }}</span>
+            <span class="mono">{{ log.bill.reversal.by ?? '—' }}</span>
           </div>
-          <div v-if="log.bill.reversedRemark" class="log-detail__row log-detail__row--col">
+          <div v-if="log.bill.reversal.remark" class="log-detail__row log-detail__row--col">
             <span class="label">备注</span>
-            <span class="reverse-remark">{{ log.bill.reversedRemark }}</span>
+            <span class="reverse-remark">{{ log.bill.reversal.remark }}</span>
           </div>
         </template>
       </template>
