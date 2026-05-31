@@ -332,6 +332,18 @@ export const billingEntrySchema = z.object({
   ownerAccountUid: idString,
   /** 实操账户 userId（主账户本身 or IAM 子账户） */
   operatorAccountUid: idString,
+  /** BFF enrich：主账户展示名 */
+  ownerDisplayName: z.string().nullable().optional(),
+  /** BFF enrich：主账户联系邮箱 */
+  ownerEmail: z.string().nullable().optional(),
+  /** BFF enrich：主账户联系手机 */
+  ownerPhone: z.string().nullish(),
+  /** BFF enrich：操作账户展示名 */
+  operatorDisplayName: z.string().nullable().optional(),
+  /** BFF enrich：操作账户联系邮箱 */
+  operatorEmail: z.string().nullable().optional(),
+  /** BFF enrich：操作账户联系手机 */
+  operatorPhone: z.string().nullish(),
   business: z.enum(businessCodeValues).nullable().optional(),
   /** 产品代码，扣款类必有 */
   productCode: z.string().nullable().optional(),

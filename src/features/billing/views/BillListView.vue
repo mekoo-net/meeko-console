@@ -167,6 +167,24 @@ function operatorLabel(row: BillingEntry): string {
   return `IAM 子账户 · ${row.operatorAccountUid}`;
 }
 
+function ownerPrimaryLine(row: BillingEntry): string {
+  const fromApi = row.ownerDisplayName?.trim();
+  if (fromApi) return fromApi;
+  const fromMap = accountMap.value.get(row.ownerAccountUid)?.displayName?.trim();
+  if (fromMap) return fromMap;
+  return row.ownerAccountUid;
+}
+
+function ownerSecondaryLine(row: BillingEntry): string {
+  const email = row.ownerEmail?.trim()
+    || accountMap.value.get(row.ownerAccountUid)?.ownerEmail?.trim()
+    || '—';
+  const phone = row.ownerPhone?.trim()
+    || accountMap.value.get(row.ownerAccountUid)?.ownerPhone?.trim()
+    || '—';
+  return `${email} · ${phone}`;
+}
+
 function isReverseLike(row: BillingEntry): boolean {
   return row.status === 'reversed' || row.status === 'partial_refunded';
 }
@@ -245,10 +263,14 @@ onMounted(() => {
           <div class="cell-account">
             <el-button
               link
-              class="cell-account__uid"
+              type="primary"
+              class="cell-account__link"
               @click="router.push(`/accounts/${row.ownerAccountUid}`)"
             >
-              {{ row.ownerAccountUid }}
+              <span class="cell-account__lines">
+                <span class="cell-account__primary">{{ ownerPrimaryLine(row) }}</span>
+                <span class="cell-account__secondary">{{ ownerSecondaryLine(row) }}</span>
+              </span>
             </el-button>
             <div
               class="cell-account__role"
@@ -382,30 +404,39 @@ onMounted(() => {
   margin-top: 16px;
 }
 
-/* 账户列：第一行 UID 链接，第二行 主账户/IAM 标签 */
+/* 账户列：第一行名称，第二行邮箱/手机，第三行 主账户/IAM 标签 */
 .cell-account {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   line-height: 1.35;
 }
-.cell-account__uid {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 12.5px;
-  font-variant-numeric: tabular-nums;
-  color: var(--el-text-color-secondary);
+.cell-account__link {
   padding: 0;
   height: auto;
-  line-height: 1.4;
   justify-content: flex-start;
 }
-.cell-account__uid:hover {
-  color: var(--el-color-primary);
+.cell-account__lines {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+}
+.cell-account__primary {
+  font-size: 12.5px;
+  color: var(--el-text-color-primary);
+  word-break: break-all;
+}
+.cell-account__secondary {
+  font-size: 11.5px;
+  color: var(--el-text-color-secondary);
+  word-break: break-all;
 }
 .cell-account__role {
   font-size: 12px;
   color: var(--el-text-color-secondary);
-  margin-top: 2px;
+  margin-top: 4px;
 }
 .cell-account__role--iam {
   color: var(--el-color-warning);

@@ -93,34 +93,81 @@ function mapRechargeDto(raw: Record<string, unknown>): RechargeRecord {
   };
 }
 
+function readParty(raw: Record<string, unknown> | null | undefined) {
+  if (!raw) {
+    return {
+      accountUid: '',
+      displayName: null as string | null,
+      email: null as string | null,
+      phone: null as string | null,
+    };
+  }
+  return {
+    accountUid: String(raw.accountUid ?? raw.AccountUid ?? ''),
+    displayName: raw.displayName != null || raw.DisplayName != null
+      ? String(raw.displayName ?? raw.DisplayName)
+      : null,
+    email: raw.email != null || raw.Email != null
+      ? String(raw.email ?? raw.Email)
+      : null,
+    phone: raw.phone != null || raw.Phone != null
+      ? String(raw.phone ?? raw.Phone)
+      : null,
+  };
+}
+
 function mapBillDto(raw: Record<string, unknown>): BillingEntry {
-  const owner    = raw.owner    as Record<string, unknown> | null | undefined;
-  const operator = raw.operator as Record<string, unknown> | null | undefined;
-  const business = raw.business as Record<string, unknown> | null | undefined;
-  const amount   = raw.amount   as Record<string, unknown> | null | undefined;
-  const ref      = raw.ref      as Record<string, unknown> | null | undefined;
-  const failure  = raw.failure  as Record<string, unknown> | null | undefined;
-  const reversal = raw.reversal as Record<string, unknown> | null | undefined;
+  const owner    = readParty((raw.owner ?? raw.Owner) as Record<string, unknown> | null | undefined);
+  const operator = readParty((raw.operator ?? raw.Operator) as Record<string, unknown> | null | undefined);
+  const business = (raw.business ?? raw.Business) as Record<string, unknown> | null | undefined;
+  const amount   = (raw.amount ?? raw.Amount) as Record<string, unknown> | null | undefined;
+  const ref      = (raw.ref ?? raw.Ref) as Record<string, unknown> | null | undefined;
+  const failure  = (raw.failure ?? raw.Failure) as Record<string, unknown> | null | undefined;
+  const reversal = (raw.reversal ?? raw.Reversal) as Record<string, unknown> | null | undefined;
+
+  const businessDomain = business?.domain ?? business?.Domain;
 
   return {
-    id:                  String(raw.id ?? ''),
-    ownerAccountUid:     String(owner?.accountUid ?? ''),
-    operatorAccountUid:  String(operator?.accountUid ?? ''),
-    business:            (business?.domain ?? null) as BusinessCode | null,
-    productCode:         business?.productCode != null ? String(business.productCode) : null,
-    subType:             (raw.subType ?? null) as BillSubType | null,
-    status:              String(raw.status ?? 'pending') as BillStatus,
-    failureCode:         failure?.code != null ? (String(failure.code) as BillFailureCode) : null,
-    originalAmount:      Number(amount?.original ?? 0),
-    actualAmount:        Number(amount?.actual ?? 0),
-    currency:            String(amount?.currency ?? 'CNY'),
-    balanceAfter:        amount?.balanceAfter != null ? Number(amount.balanceAfter) : null,
-    refType:             ref?.type != null ? (String(ref.type) as BillRefType) : null,
-    refId:               ref?.id != null ? String(ref.id) : null,
-    reversedAtUtc:       asEpochMillisNullable(reversal?.atUtc),
-    reversedByIamId:     reversal?.byIamUserUid != null ? String(reversal.byIamUserUid) : null,
-    reversedCode:        reversal?.code != null ? (String(reversal.code) as BillReversedCode) : null,
-    occurredAtUtc:       asEpochMillis(raw.occurredAtUtc) ?? 0,
+    id:                  String(raw.id ?? raw.Id ?? ''),
+    ownerAccountUid:     owner.accountUid,
+    operatorAccountUid:  operator.accountUid || owner.accountUid,
+    ownerDisplayName:    owner.displayName,
+    ownerEmail:          owner.email,
+    ownerPhone:          owner.phone,
+    operatorDisplayName: operator.displayName,
+    operatorEmail:       operator.email,
+    operatorPhone:       operator.phone,
+    business:            businessDomain != null ? (String(businessDomain) as BusinessCode) : null,
+    productCode:         business?.productCode != null || business?.ProductCode != null
+      ? String(business.productCode ?? business.ProductCode)
+      : null,
+    subType:             raw.subType != null || raw.SubType != null
+      ? (String(raw.subType ?? raw.SubType) as BillSubType)
+      : null,
+    status:              String(raw.status ?? raw.Status ?? 'pending') as BillStatus,
+    failureCode:         failure?.code != null || failure?.Code != null
+      ? (String(failure.code ?? failure.Code) as BillFailureCode)
+      : null,
+    originalAmount:      Number(amount?.original ?? amount?.Original ?? 0),
+    actualAmount:        Number(amount?.actual ?? amount?.Actual ?? 0),
+    currency:            String(amount?.currency ?? amount?.Currency ?? 'CNY'),
+    balanceAfter:        amount?.balanceAfter != null || amount?.BalanceAfter != null
+      ? Number(amount.balanceAfter ?? amount.BalanceAfter)
+      : null,
+    refType:             ref?.type != null || ref?.Type != null
+      ? (String(ref.type ?? ref.Type) as BillRefType)
+      : null,
+    refId:               ref?.id != null || ref?.Id != null
+      ? String(ref.id ?? ref.Id)
+      : null,
+    reversedAtUtc:       asEpochMillisNullable(reversal?.atUtc ?? reversal?.AtUtc),
+    reversedByIamId:     reversal?.byIamUserUid != null || reversal?.ByIamUserUid != null
+      ? String(reversal.byIamUserUid ?? reversal.ByIamUserUid)
+      : null,
+    reversedCode:        reversal?.code != null || reversal?.Code != null
+      ? (String(reversal.code ?? reversal.Code) as BillReversedCode)
+      : null,
+    occurredAtUtc:       asEpochMillis(raw.occurredAtUtc ?? raw.OccurredAtUtc) ?? 0,
   };
 }
 
