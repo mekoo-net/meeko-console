@@ -347,6 +347,18 @@ onMounted(() => {
       class="log-table"
       :empty-text="' '"
     >
+      <el-table-column label="详情" width="56" align="center" fixed>
+        <template #default="{ row }: { row: LogEntry }">
+          <el-button
+            :icon="View"
+            link
+            type="primary"
+            title="查看详情"
+            @click="openDetail(row)"
+          />
+        </template>
+      </el-table-column>
+
       <el-table-column label="时间" width="172" fixed>
         <template #default="{ row }: { row: LogEntry }">
           <span class="cell-time mono">{{ formatDateTime(row.createAt, 'YYYY-MM-DD HH:mm:ss') }}</span>
@@ -448,16 +460,16 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="" width="88" align="center" fixed="right">
+      <el-table-column label="操作" width="72" align="center" fixed="right">
         <template #default="{ row }: { row: LogEntry }">
-          <el-button :icon="View" link type="primary" @click="openDetail(row)">详情</el-button>
           <el-button
             v-if="row.bill && row.bill.status !== 'reversed'"
             :icon="RefreshLeft"
             link
             type="danger"
-            @click="openReverse(row)"
+            @click.stop="openReverse(row)"
           >驳回</el-button>
+          <span v-else class="cell-muted">—</span>
         </template>
       </el-table-column>
 
