@@ -95,7 +95,7 @@
 `completed` — 仅 `id` + `status`：
 ```json
 {
-  "id": "BL-001",
+  "id": "BL20260531000001234",
   "status": "completed"
 }
 ```
@@ -103,7 +103,7 @@
 `reversed` — 额外嵌套 `reversal` 对象：
 ```json
 {
-  "id": "BL-001",
+  "id": "BL20260531000001234",
   "status": "reversed",
   "reversal": {
     "atUtc": 1757679001000,
@@ -174,7 +174,7 @@
     "total": 0.03523
   },
   "bill": {
-    "id": "BL-8821",
+    "id": "BL20260531000008821",
     "status": "completed"
   }
 }

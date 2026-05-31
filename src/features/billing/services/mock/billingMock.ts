@@ -1,6 +1,6 @@
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { clientPaginate } from '@/shared/composables/usePagination';
-import { createSnowflakeIdSeq, createUidSeq, type Uid } from '@/shared/lib/id';
+import { createUidSeq, type Uid } from '@/shared/lib/id';
 import { delay } from '@/shared/lib/delay';
 
 import {
@@ -54,8 +54,26 @@ const genSubUid = createUidSeq(6_000_000);
 const genInvUid = createUidSeq(7_000_000);
 const genRechargeUid = createUidSeq(8_000_000);
 const genBusinessUid = createUidSeq(11_000_000);
-/** 账单 + 充值记录共用一套雪花 ID（按时间递增） */
-const genSnowflakeUid = createSnowflakeIdSeq();
+const genBillSerialSeq = createUidSeq(1);
+const genRechargeSerialSeq = createUidSeq(1);
+const genOrderSerialSeq = createUidSeq(1);
+
+function formatSerial(prefix: string, at: Date, seq: number): string {
+  const ymd = at.toISOString().slice(0, 10).replace(/-/g, '');
+  return `${prefix}${ymd}${String(seq).padStart(9, '0')}`;
+}
+
+function genBillSerial(at: Date = new Date()): string {
+  return formatSerial('BL', at, genBillSerialSeq());
+}
+
+function genRechargeSerial(at: Date = new Date()): string {
+  return formatSerial('RC', at, genRechargeSerialSeq());
+}
+
+function genOrderSerial(at: Date = new Date()): string {
+  return formatSerial('OD', at, genOrderSerialSeq());
+}
 
 /** 业务产品名称字典（前后端共识，前端为方便展示常驻一份）。 */
 const PRODUCT_NAMES: Readonly<Record<string, string>> = {
@@ -84,6 +102,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
 
   const o1: OrderDto = {
     id: genOrderUid(),
+    serialNo: genOrderSerial(now),
     accountUid,
     productCode: 'pro-seat',
     quantity: 5,
@@ -99,6 +118,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
 
   const o2: OrderDto = {
     id: genOrderUid(),
+    serialNo: genOrderSerial(new Date(now.getTime() - 86400000)),
     accountUid,
     productCode: 'api-pack',
     quantity: 1,
@@ -161,7 +181,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
 
   const recharges: RechargeRecord[] = [
     {
-      id: genSnowflakeUid(),
+      id: genRechargeSerial(new Date(now.getTime() - 30 * 86400000)),
       ownerAccountUid: accountUid,
       provider: 'alipay',
       scene: 0,
@@ -174,7 +194,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       paidAtUtc: epochMs(new Date(now.getTime() - 30 * 86400000 + 60000)),
     },
     {
-      id: genSnowflakeUid(),
+      id: genRechargeSerial(new Date(now.getTime() - 10 * 86400000)),
       ownerAccountUid: accountUid,
       provider: 'wechat_pay',
       scene: 2,
@@ -187,7 +207,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       paidAtUtc: epochMs(new Date(now.getTime() - 10 * 86400000 + 30000)),
     },
     {
-      id: genSnowflakeUid(),
+      id: genRechargeSerial(new Date(now.getTime() - 3 * 3600000)),
       ownerAccountUid: accountUid,
       provider: 'cs_compensation',
       scene: 99,
@@ -200,7 +220,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       paidAtUtc: epochMs(new Date(now.getTime() - 3 * 3600000)),
     },
     {
-      id: genSnowflakeUid(),
+      id: genRechargeSerial(new Date(now.getTime() - 20 * 86400000)),
       ownerAccountUid: accountUid,
       provider: 'marketing_reward',
       scene: 99,
@@ -213,7 +233,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       paidAtUtc: epochMs(new Date(now.getTime() - 20 * 86400000)),
     },
     {
-      id: genSnowflakeUid(),
+      id: genRechargeSerial(now),
       ownerAccountUid: accountUid,
       provider: 'alipay',
       scene: 0,
@@ -232,7 +252,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
 
   const bills: BillingEntry[] = [
     {
-      id: genSnowflakeUid(),
+      id: genBillSerial(new Date(now.getTime() - 7 * 86400000)),
       ownerAccountUid: accountUid,
       operatorAccountUid: accountUid,
       business: 'platform',
@@ -252,7 +272,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       occurredAtUtc: epochMs(new Date(now.getTime() - 7 * 86400000)),
     },
     {
-      id: genSnowflakeUid(),
+      id: genBillSerial(new Date(now.getTime() - 86400000)),
       ownerAccountUid: accountUid,
       operatorAccountUid: accountUid,
       business: 'platform',
@@ -272,7 +292,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       occurredAtUtc: epochMs(new Date(now.getTime() - 86400000)),
     },
     {
-      id: genSnowflakeUid(),
+      id: genBillSerial(new Date(now.getTime() - 2 * 86400000)),
       ownerAccountUid: accountUid,
       operatorAccountUid: iamSubUid,
       business: 'demux',
@@ -292,7 +312,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       occurredAtUtc: epochMs(new Date(now.getTime() - 2 * 86400000)),
     },
     {
-      id: genSnowflakeUid(),
+      id: genBillSerial(new Date(now.getTime() - 5 * 86400000)),
       ownerAccountUid: accountUid,
       operatorAccountUid: iamSubUid,
       business: 'demux',
@@ -312,7 +332,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       occurredAtUtc: epochMs(new Date(now.getTime() - 5 * 86400000)),
     },
     {
-      id: genSnowflakeUid(),
+      id: genBillSerial(new Date(now.getTime() - 12 * 86400000 - 3600000)),
       ownerAccountUid: accountUid,
       operatorAccountUid: accountUid,
       business: 'demux',
@@ -332,7 +352,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       occurredAtUtc: epochMs(new Date(now.getTime() - 12 * 86400000 - 3600000)),
     },
     {
-      id: genSnowflakeUid(),
+      id: genBillSerial(new Date(now.getTime() - 60 * 60 * 1000)),
       ownerAccountUid: accountUid,
       operatorAccountUid: iamSubUid,
       business: 'demux',
@@ -493,7 +513,7 @@ export class BillingMock implements BillingPort {
       updatedAtUtc: created,
     };
     const record: RechargeRecord = {
-      id: genSnowflakeUid(),
+      id: genRechargeSerial(new Date()),
       ownerAccountUid: accountUid,
       provider,
       scene: intent.scene,
@@ -529,7 +549,7 @@ export class BillingMock implements BillingPort {
     };
     const refNo = input.idempotencyKey?.trim() || `MOCK-INT-${Date.now()}`;
     const record: RechargeRecord = {
-      id: genSnowflakeUid(),
+      id: genRechargeSerial(new Date()),
       ownerAccountUid: accountUid,
       provider: input.source,
       scene: 99,

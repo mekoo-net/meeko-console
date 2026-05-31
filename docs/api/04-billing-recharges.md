@@ -19,7 +19,7 @@
 
 `scene` 为支付场景枚举（0=Native, 1=H5, 2=JsApi, 3=App, 4=PC, 99=手工入账）。
 
-> **标识**：充值行主键 JSON 字段为 **`id`**（如 `RC-*`）；`uid` / `*AccountUid` 仅表示账户或 IAM **userId**（见 [`00-conventions.md`](./00-conventions.md) §3）。
+> **标识**：充值行主键 JSON 字段为 **`id`**（如 `RC20260531000001234`）；`uid` / `*AccountUid` 仅表示账户或 IAM **userId**（见 [`00-conventions.md`](./00-conventions.md) §3）。
 
 ## 接口清单
 | 业务动作 | Port 方法 | HTTP | REST 端点 |
@@ -50,7 +50,7 @@
 {
   "items": [
     {
-      "id": "RC-700000001",
+      "id": "RC20260531000001234",
       "owner": { "accountUid": "100000001" },
       "source": {
         "provider": "alipay",
@@ -64,7 +64,7 @@
       "paidAtUtc":    "2025-09-12T08:57:01Z"
     },
     {
-      "id": "RC-700000002",
+      "id": "RC20260531000001235",
       "owner": { "accountUid": "100000002" },
       "source": {
         "provider": "cs_compensation",
@@ -97,7 +97,7 @@
 | `paidAtUtc` | ISO8601 \| null | 入账时间；仅 `paid` 状态必有。 |
 
 ### 单条详情 `GET /api/billing/recharges/{id}`
-返回单个 Recharge，结构与列表元素一致。用于深链 `?focus=RC-xxx` 与客服排障。
+返回单个 Recharge，结构与列表元素一致。用于深链 `?focus=RC20260531000001234` 与客服排障。
 
 ### 内部入账写入 `POST /api/billing/recharges/internal` （`CreateInternalRechargePayload`）
 > 仅对 `cs_compensation` / `marketing_reward` / `manual` 三类内部 provider 开放；外部支付（alipay / wechat_pay）入账必须走支付回调，**不能**走此端点（避免绕开三方账实校验）。

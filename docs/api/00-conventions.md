@@ -82,7 +82,7 @@ Content-Type: application/problem+json
 | 对象 | 主键字段名 | 示例 |
 | --- | --- | --- |
 | **用户**（主账户、IAM 子账户、操作人） | **`uid`**（或带语义的 `*Uid`：`accountUid`、`ownerAccountUid`、`iamUserUid`） | `account.uid`、`operator: { iamUserUid }` |
-| **其它一切业务实体** | **`id`** | 账单 `id: "BL-…"`、充值 `RC-…`、订单 `OD-…`、渠道 `PC-…`、日志 `LG-…` |
+| **其它一切业务实体** | **`id`** | 账单 `id: "BL20260531…"`、充值 `RC20260531…`、订单 `OD20260531…`、渠道 `PC-…`、日志 `LG-…` |
 - 传**用户**时**不要**用 `id` 当主键；传**业务行**时**不要**用 `uid` 当主键（避免与账户 userId 混淆）。
 - long 在 JSON 中**始终序列化为 string**（避免 JS Number 精度）。
 | 项 | 约定 |

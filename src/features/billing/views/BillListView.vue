@@ -17,8 +17,6 @@ import FilterBar from '@/shared/ui/FilterBar.vue';
 import { formatMoney } from '@/shared/lib/money';
 import { formatDateTime } from '@/shared/lib/date';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
-import { getAccountAdminPort } from '@/features/accounts/services';
-import type { Account } from '@/features/accounts/model/account.types';
 
 import {
   billStatusValues,
@@ -40,7 +38,6 @@ import type { ListBillsFilter } from '../services/ports/billingPort';
 
 const router = useRouter();
 const billingPort = getBillingPort();
-const accountPort = getAccountAdminPort();
 
 const records = ref<BillingEntry[]>([]);
 const total = ref(0);
@@ -68,20 +65,6 @@ const defaultFilter = (): PageFilter => ({
 });
 
 const filter = ref<PageFilter>(defaultFilter());
-const accountMap = ref<Map<string, Account>>(new Map());
-
-async function loadAccounts(): Promise<void> {
-  const r = await accountPort.listAccounts({
-    page: 1,
-    pageSize: 999,
-    filter: { accountUid: '', contactKeyword: '', type: 'all', status: 'all' },
-  });
-  if (r.success) {
-    const m = new Map<string, Account>();
-    r.data.items.forEach((a) => m.set(a.uid, a));
-    accountMap.value = m;
-  }
-}
 
 function buildPortFilter(): ListBillsFilter {
   const f: ListBillsFilter = {
@@ -119,10 +102,8 @@ const displayRecords = computed(() => {
   const kw = filter.value.contactKeyword.trim().toLowerCase();
   if (!kw) return records.value;
   return records.value.filter((r) => {
-    const a = accountMap.value.get(r.ownerAccountUid);
-    if (!a) return false;
-    const email = (a.ownerEmail ?? '').toLowerCase();
-    const phone = a.ownerPhone ?? '';
+    const email = (r.ownerEmail ?? '').toLowerCase();
+    const phone = r.ownerPhone ?? '';
     return email.includes(kw) || phone.includes(kw);
   });
 });
@@ -168,20 +149,12 @@ function operatorLabel(row: BillingEntry): string {
 }
 
 function ownerPrimaryLine(row: BillingEntry): string {
-  const fromApi = row.ownerDisplayName?.trim();
-  if (fromApi) return fromApi;
-  const fromMap = accountMap.value.get(row.ownerAccountUid)?.displayName?.trim();
-  if (fromMap) return fromMap;
-  return row.ownerAccountUid;
+  return row.ownerDisplayName?.trim() || row.ownerAccountUid;
 }
 
 function ownerSecondaryLine(row: BillingEntry): string {
-  const email = row.ownerEmail?.trim()
-    || accountMap.value.get(row.ownerAccountUid)?.ownerEmail?.trim()
-    || '—';
-  const phone = row.ownerPhone?.trim()
-    || accountMap.value.get(row.ownerAccountUid)?.ownerPhone?.trim()
-    || '—';
+  const email = row.ownerEmail?.trim() || '—';
+  const phone = row.ownerPhone?.trim() || '—';
   return `${email} · ${phone}`;
 }
 
@@ -190,7 +163,6 @@ function isReverseLike(row: BillingEntry): boolean {
 }
 
 onMounted(() => {
-  void loadAccounts();
   void fetchData();
 });
 </script>

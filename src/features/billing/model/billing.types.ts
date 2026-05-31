@@ -93,6 +93,8 @@ export type PlaceOrderResult = z.infer<typeof placeOrderResultSchema>;
 
 export const orderDtoSchema = z.object({
   id: idString,
+  /** 对外流水号，如 OD20260531000001234 */
+  serialNo: idString.nullable().optional(),
   accountUid: idString,
   productCode: z.string(),
   quantity: z.number().int(),
@@ -110,6 +112,8 @@ export type OrderDto = z.infer<typeof orderDtoSchema>;
 
 export const subscriptionDtoSchema = z.object({
   id: idString,
+  /** 对外流水号，如 SB20260531000001234 */
+  serialNo: idString.nullable().optional(),
   accountUid: idString,
   orderId: idString,
   productCode: z.string(),
@@ -191,7 +195,7 @@ export const RechargeRefNoLabel: Readonly<Record<RechargeProvider, string>> = {
 };
 
 export const rechargeRecordSchema = z.object({
-  /** 充值记录主键（RC-* / 雪花） */
+  /** 充值记录主键（RC + 日期 + 9 位序列，如 RC20260531000001234） */
   id: idString,
   /** 主账户 userId —— 钱归这个账户 */
   ownerAccountUid: idString,
@@ -326,7 +330,7 @@ export const BillReversedCodeLabel: Readonly<Record<BillReversedCode, string>> =
 };
 
 export const billingEntrySchema = z.object({
-  /** 账单主键（BL-* / 雪花），单调递增、按时间有序 */
+  /** 账单主键（BL + UTC 日期 + 9 位序列，如 BL20260531000001234），按时间有序 */
   id: idString,
   /** 主账户 userId（钱归它） */
   ownerAccountUid: idString,

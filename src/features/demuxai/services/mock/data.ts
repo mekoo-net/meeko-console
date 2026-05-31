@@ -40,8 +40,12 @@ export const genModelUid = createUidSeq(13_000_000);
 export const genPricingUid = createUidSeq(14_000_000);
 export const genLogUid = createSnowflakeIdSeq();
 export const genModelRouteUid = createUidSeq(17_000_000);
-/** Bill 命名空间从 9 开头，与文档 `BL-9xxxxxxxx` 一致 */
-export const genBillUid = createUidSeq(900_000_000);
+/** 生成日期+序列风格账单流水号，如 BL20260531000001234 */
+const _billSerialSeq = createUidSeq(1);
+export function genBillSerial(at: Date = new Date()): string {
+  const ymd = at.toISOString().slice(0, 10).replace(/-/g, '');
+  return `BL${ymd}${String(_billSerialSeq()).padStart(9, '0')}`;
+}
 
 /** 上游模型目录（Provider.fetchUpstreamModels 的 Mock 数据） */
 export const upstreamCatalog: Readonly<Record<ApiType, readonly string[]>> = {
@@ -868,7 +872,7 @@ function seedLogs(providers: Provider[]): LogEntry[] {
       bill: hasBill
         ? preReversed
           ? {
-              id: `BL-${genBillUid()}`,
+              id: genBillSerial(occurred),
               status: 'reversed',
               reversal: {
                 atUtc: epochMs(new Date(occurred.getTime() + 30 * 60 * 1000)),
@@ -878,7 +882,7 @@ function seedLogs(providers: Provider[]): LogEntry[] {
               },
             }
           : {
-              id: `BL-${genBillUid()}`,
+              id: genBillSerial(occurred),
               status: 'completed',
             }
         : null,

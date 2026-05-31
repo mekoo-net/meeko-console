@@ -25,7 +25,7 @@
 > - `amount`：金额族（原值 / 实付 / 扣后余额）封装后未来加 `tax` / `subsidy` / `fxRate` 无侵入；
 > - `ref`：关联实体的"类型 + id"二元组永远一起出现；
 > - `failure` / `reversal`：状态扩展信息，跟随 `status` 出现 / 消失——避免"5 个 null 占 4 个"扁平反范式。
-> **标识**：账单行主键 JSON 字段为 **`id`**（如 `BL-*`）；`ref.id` 为关联实体主键；`owner.accountUid` / `operator.accountUid` 为账户 **userId**；`reversal.byIamUserUid` 为 IAM userId。
+> **标识**：账单行主键 JSON 字段为 **`id`**（如 `BL20260531000001234`，前缀 + UTC 日期 + 9 位序列）；`ref.id` 为关联实体流水号；`owner.accountUid` / `operator.accountUid` 为账户 **userId**；`reversal.byIamUserUid` 为 IAM userId。
 
 ## 接口清单
 
@@ -56,7 +56,7 @@
 {
   "items": [
     {
-      "id": "BL-900000001",
+      "id": "BL20260531000001234",
       "owner":    { "accountUid": "100000001" },
       "operator": { "accountUid": "100000001" },
       "business": { "domain": "demux", "productCode": "demux-gpt-4o" },
@@ -68,13 +68,13 @@
         "currency": "CNY",
         "balanceAfter": 1279.265
       },
-      "ref": { "type": "order", "id": "OD-100000001" },
+      "ref": { "type": "order", "id": "OD202605310000000001" },
       "failure": null,
       "reversal": null,
       "occurredAtUtc": "2025-09-12T11:00:01Z"
     },
     {
-      "id": "BL-900000002",
+      "id": "BL20260531000001235",
       "owner":    { "accountUid": "100000001" },
       "operator": { "accountUid": "200000050" },
       "business": { "domain": "demux", "productCode": "demux-gpt-4o" },
@@ -134,7 +134,7 @@
 `duplicate_charge` / `metering_error` / `service_unavailable` / `customer_compensation` / `manual_correction`。
 
 ### 单条详情 `GET /api/billing/bills/{id}`
-返回单个 Bill，结构与列表元素一致。用于深链 `?focus=BL-xxx`、客服侧排障。
+返回单个 Bill，结构与列表元素一致。用于深链 `?focus=BL20260531000001234`、客服侧排障。
 
 ### 驳回 / 部分退款 `POST /api/billing/bills/{id}/reverse` （`ReverseBillPayload`）
 
