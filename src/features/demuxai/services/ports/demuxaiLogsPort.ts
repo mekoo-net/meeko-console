@@ -1,6 +1,7 @@
 import type { AppResult } from '@/shared/api/httpTypes';
 
 import type {
+  ChannelConsumptionRow,
   ListLogsFilter,
   LogEntry,
   LogStats,
@@ -39,6 +40,14 @@ export interface DemuxaiLogsPort {
 
   /** 与 list 同 filter 的聚合统计（用于 KPI 卡片） */
   stats(filter: ListLogsFilter): Promise<AppResult<LogStats>>;
+
+  /**
+   * 按渠道（供应商组）聚合的消费统计。
+   *
+   * 归集口径来自每条日志关联的定价快照绑定（`channelKey`），故"调用当时命中的渠道"
+   * 即使别名/供应商事后被删也能完整统计。`filter.channelKey` 非空时只统计该渠道。
+   */
+  statByChannel(filter: ListLogsFilter): Promise<AppResult<ChannelConsumptionRow[]>>;
 
   /**
    * 驳回单条调用日志对应的账单（actualAmount → 0，钱包余额反向冲账）。

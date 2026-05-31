@@ -4,6 +4,7 @@ import { delay } from '@/shared/lib/delay';
 
 import {
   logEntrySchema,
+  type ChannelConsumptionRow,
   type ListLogsFilter,
   type LogEntry,
   type LogStats,
@@ -26,6 +27,7 @@ function applyFilter(rows: LogEntry[], f: ListLogsFilter): LogEntry[] {
     if (f.accountUid && r.account.uid !== f.accountUid) return false;
     if (f.iamId && r.account.iamId !== f.iamId) return false;
     if (f.modelName && !r.modelName.toLowerCase().includes(f.modelName.toLowerCase())) return false;
+    if (f.channelKey && channelOf(r).toLowerCase() !== f.channelKey.toLowerCase()) return false;
     if (f.providerId != null && r.providerId !== f.providerId) return false;
     if (f.apiType && r.apiType !== f.apiType) return false;
     if (f.convId && r.convId !== f.convId) return false;
@@ -54,6 +56,22 @@ function percentile(values: number[], p: number): number {
 /** 只有 per_token 才有"token 数"概念；非 token 类型返回 0（不计入 token 聚合）。 */
 function tokenCountOf(row: LogEntry): number {
   return row.billingType === 'per_token' ? row.usage.totalTokens : 0;
+}
+
+/**
+ * 取日志所属渠道：优先用快照绑定的 `channelKey`；
+ * Mock 旧种子数据没有该字段时，退化为 `vendor/model` 形态的 vendor 前缀。
+ */
+function channelOf(row: LogEntry): string {
+  if (row.channelKey && row.channelKey.trim()) return row.channelKey.trim();
+  const i = row.modelName.indexOf('/');
+  return i > 0 ? row.modelName.slice(0, i) : row.modelName;
+}
+
+/** per_token 输入 / 输出 token 拆分（非 token 类型记 0）。 */
+function promptCompletionOf(row: LogEntry): { prompt: number; completion: number } {
+  if (row.billingType !== 'per_token') return { prompt: 0, completion: 0 };
+  return { prompt: row.usage.input.tokens, completion: row.usage.output.tokens };
 }
 
 /**
@@ -300,5 +318,45 @@ export class DemuxaiLogsMock implements DemuxaiLogsPort {
       topProviders: buildTopProviders(filtered),
       errorCodes: buildErrorCodes(filtered),
     });
+  }
+
+  async statByChannel(filter: ListLogsFilter): Promise<AppResult<ChannelConsumptionRow[]>> {
+    await delay();
+    // 只统计成功调用，与后端 StatByChannelAsync 口径一致。
+    const filtered = applyFilter(this.store.logs, filter).filter((r) => r.success);
+
+    type Agg = {
+      requestCount: number;
+      prompt: number;
+      completion: number;
+      cost: number;
+      upstreams: Set<string>;
+    };
+    const m = new Map<string, Agg>();
+    for (const r of filtered) {
+      const key = channelOf(r);
+      const a = m.get(key) ?? { requestCount: 0, prompt: 0, completion: 0, cost: 0, upstreams: new Set<string>() };
+      const { prompt, completion } = promptCompletionOf(r);
+      a.requestCount += 1;
+      a.prompt += prompt;
+      a.completion += completion;
+      a.cost += r.cost.total;
+      const upstream = r.upstreamModelId?.trim() || r.modelName;
+      if (upstream) a.upstreams.add(upstream);
+      m.set(key, a);
+    }
+
+    const rows = [...m.entries()]
+      .map<ChannelConsumptionRow>(([channelKey, a]) => ({
+        channelKey,
+        requestCount: a.requestCount,
+        totalPromptTokens: a.prompt,
+        totalCompletionTokens: a.completion,
+        totalCost: Math.round(a.cost * 10000) / 10000,
+        upstreamModelCount: a.upstreams.size,
+      }))
+      .sort((x, y) => y.totalCost - x.totalCost);
+
+    return ok(rows);
   }
 }

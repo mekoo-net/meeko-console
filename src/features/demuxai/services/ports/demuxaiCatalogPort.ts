@@ -41,14 +41,14 @@ export interface DemuxaiCatalogPort {
   ): Promise<AppResult<ImportProviderGroupResult>>;
 
   /**
-   * 删除已入库的供应商组（连同其下全部上游模型）。
-   * 若仍有 ModelRoute 引用，应在后端拦截返回 `conflict`，前端先提示。
+   * 删除已入库的供应商组，级联删除其下全部上游模型与对外别名（ModelRoute）。
+   * 前端在调用前需向用户确认将要级联移除的模型 / 别名数量。
    */
   deleteProviderGroup(queueGroup: string): Promise<AppResult<void>>;
 
   /**
-   * 删除单个已入库的上游模型。
-   * 若该模型仍被 ModelRoute 引用，应在后端拦截返回 `conflict`。
+   * 删除单个已入库的上游模型，级联删除指向该模型的对外别名（ModelRoute）。
+   * 前端在调用前需向用户确认将要级联移除的别名数量。
    */
   deleteUpstreamModel(queueGroup: string, upstreamModelId: string): Promise<AppResult<void>>;
 }

@@ -5,6 +5,7 @@ import { asEpochMillis } from '@/shared/lib/epoch';
 
 import { logEntrySchema } from '@/features/demuxai/model/log.types';
 import type {
+  ChannelConsumptionRow,
   ListLogsFilter,
   LogEntry,
   LogStats,
@@ -39,6 +40,16 @@ interface DailyRow {
   totalPromptTokens: number;
   totalCompletionTokens: number;
   totalQuota: number;
+}
+
+/** 后端 AiChannelStatDto（按渠道聚合行）形状。 */
+interface ChannelRow {
+  channelKey: string;
+  requestCount: number;
+  totalPromptTokens: number;
+  totalCompletionTokens: number;
+  totalQuota: number;
+  upstreamModelCount: number;
 }
 
 /**
@@ -119,6 +130,7 @@ export class DemuxaiLogsHttpAdapter implements DemuxaiLogsPort {
         apiType:    filter.apiType    || undefined,
         convId:     filter.convId     || undefined,
         modelName:  filter.modelName  || undefined,
+        channelKey: filter.channelKey || undefined,
         errorOnly:  filter.errorOnly  || undefined,
         errorCode:  filter.errorCode  || undefined,
         fromUtc:    filter.fromUtc,
@@ -128,6 +140,27 @@ export class DemuxaiLogsHttpAdapter implements DemuxaiLogsPort {
     if (!result.success) return result;
     const items = (result.data.items as unknown[]).map(mapRawItem);
     return { success: true, data: { items, total: result.data.total } };
+  }
+
+  async statByChannel(filter: ListLogsFilter): Promise<AppResult<ChannelConsumptionRow[]>> {
+    const result = await requestDemuxAi<ItemsEnvelope<ChannelRow>>(`${BASE}/stats/by-channel`, {
+      query: {
+        fromUtc:    filter.fromUtc,
+        toUtc:      filter.toUtc,
+        accountUid: filter.accountUid || undefined,
+        channelKey: filter.channelKey || undefined,
+      },
+    });
+    if (!result.success) return result;
+    const rows = result.data.items.map((r): ChannelConsumptionRow => ({
+      channelKey:            r.channelKey,
+      requestCount:          r.requestCount,
+      totalPromptTokens:     r.totalPromptTokens,
+      totalCompletionTokens: r.totalCompletionTokens,
+      totalCost:             r.totalQuota,
+      upstreamModelCount:    r.upstreamModelCount,
+    }));
+    return { success: true, data: rows };
   }
 
   async stats(filter: ListLogsFilter): Promise<AppResult<LogStats>> {

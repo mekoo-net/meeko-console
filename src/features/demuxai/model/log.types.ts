@@ -271,6 +271,10 @@ const logEntryBaseShape = {
     .optional(),
   /** 对外暴露的模型名（= 用户请求体里的 `model` 字段，如 `'demux-gpt-4o'`）。 */
   modelName: z.string(),
+  /** 命中渠道（供应商组）。来自定价快照绑定，别名/供应商删除后历史仍可还原；未绑定时为 null。 */
+  channelKey: z.string().nullable().optional(),
+  /** 命中的上游真实模型名。来自定价快照绑定；未绑定时为 null。 */
+  upstreamModelId: z.string().nullable().optional(),
   /**
    * 命中的模型渠道**数据库主键（int）**，非 string UID。
    *
@@ -406,6 +410,8 @@ export interface ListLogsFilter {
   iamId?: string;
   /** 模糊匹配 `modelName` */
   modelName?: string;
+  /** 按渠道（供应商组）精确过滤；匹配定价快照绑定的 `channelKey`。 */
+  channelKey?: string;
   /** 命中渠道的 int 主键（= `Provider.id`） */
   providerId?: number;
   apiType?: ApiType;
@@ -494,6 +500,27 @@ export interface LogStats {
   topProviders: LogStatsTopProvider[];
   /** 错误码分布（仅 `success === false`，≤ 5 条；其余合入 `other`） */
   errorCodes: LogStatsErrorCode[];
+}
+
+/**
+ * 按渠道（供应商组）聚合的消费统计行。
+ *
+ * 数据来自定价快照绑定（`ModelPricing.channelKey`）—— 别名/供应商被删后历史仍可统计，
+ * 故金额/调用量按"调用当时实际命中的渠道"归集，永不丢数据。
+ */
+export interface ChannelConsumptionRow {
+  /** 渠道（供应商组 / queue_group）。 */
+  channelKey: string;
+  /** 调用次数（仅成功调用）。 */
+  requestCount: number;
+  /** 累计输入 token。 */
+  totalPromptTokens: number;
+  /** 累计输出 token。 */
+  totalCompletionTokens: number;
+  /** 累计扣费（元）。 */
+  totalCost: number;
+  /** 该渠道下出现过的上游真实模型数（去重）。 */
+  upstreamModelCount: number;
 }
 
 // 让 TS 能从外部 import 这个判别签名（虽然 zod schema 已经导出）。

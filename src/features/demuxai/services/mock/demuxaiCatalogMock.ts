@@ -167,17 +167,16 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
     const key = normalizeQueueGroup(queueGroup);
     const idx = this.store.providerGroups.findIndex((g) => g.queueGroup === key);
     if (idx < 0) return fail({ code: 'not_found', message: '供应商组不存在' });
-    const bound = this.store.modelRoutes.filter((r) => r.channelKey === key);
-    if (bound.length > 0) {
-      return fail({
-        code: 'conflict',
-        message: `该供应商组下仍有 ${bound.length} 条对外别名，请先删除别名再移除供应商组`,
-      });
-    }
     this.store.providerGroups.splice(idx, 1);
     for (let i = this.store.upstreamModels.length - 1; i >= 0; i -= 1) {
       if (this.store.upstreamModels[i]!.queueGroup === key) {
         this.store.upstreamModels.splice(i, 1);
+      }
+    }
+    // Cascade: removing the group removes all of its outbound aliases too.
+    for (let i = this.store.modelRoutes.length - 1; i >= 0; i -= 1) {
+      if (this.store.modelRoutes[i]!.channelKey === key) {
+        this.store.modelRoutes.splice(i, 1);
       }
     }
     return ok(undefined);
@@ -194,16 +193,14 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
       (m) => m.queueGroup === key && m.upstreamModelId === id,
     );
     if (idx < 0) return fail({ code: 'not_found', message: '上游模型不存在' });
-    const bound = this.store.modelRoutes.filter(
-      (r) => r.channelKey === key && r.upstreamModelId === id,
-    );
-    if (bound.length > 0) {
-      return fail({
-        code: 'conflict',
-        message: `该模型仍被 ${bound.length} 条别名引用，请先删除对应别名`,
-      });
-    }
     this.store.upstreamModels.splice(idx, 1);
+    // Cascade: removing the upstream model removes the aliases pointing at it.
+    for (let i = this.store.modelRoutes.length - 1; i >= 0; i -= 1) {
+      const r = this.store.modelRoutes[i]!;
+      if (r.channelKey === key && r.upstreamModelId === id) {
+        this.store.modelRoutes.splice(i, 1);
+      }
+    }
     recomputeGroupModelCounts(this.store.providerGroups, this.store.upstreamModels);
     return ok(undefined);
   }

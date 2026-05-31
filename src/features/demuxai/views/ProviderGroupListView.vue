@@ -173,14 +173,14 @@ function openEditModel(model: ProviderUpstreamModel): void {
 async function onRemoveModel(model: ProviderUpstreamModel): Promise<void> {
   const group = selectedGroup.value;
   if (!group) return;
-  const bound = routesForModel(group.queueGroup, model.upstreamModelId);
-  if (bound.length > 0) {
-    ElMessage.warning('请先在「编辑」中删除该模型的全部对外别名，再移除上游模型');
-    return;
-  }
+  const aliasN = routesForModel(group.queueGroup, model.upstreamModelId).length;
+  const aliasNote =
+    aliasN > 0
+      ? `该模型下的 ${aliasN} 个对外别名将一并删除。`
+      : '';
   const okp = await confirmDanger({
     title: '删除上游模型',
-    message: `确认从组「${group.displayName}」移除模型 ${model.upstreamModelId}？删除后如需恢复，需通过「接入供应商」重新导入。`,
+    message: `确认从组「${group.displayName}」移除模型 ${model.upstreamModelId}？${aliasNote}删除后如需恢复，需通过「接入供应商」重新导入。`,
     confirmText: '确认删除',
     type: 'warning',
   });
@@ -199,14 +199,15 @@ async function onRemoveGroup(): Promise<void> {
   const group = selectedGroup.value;
   if (!group) return;
   const aliasN = totalAliasCount(group.queueGroup);
-  if (aliasN > 0) {
-    ElMessage.warning(`该供应商组下仍有 ${aliasN} 条对外别名，请先在各模型「编辑」中删除别名`);
-    return;
-  }
+  const modelN = group.upstreamModelCount;
+  const parts: string[] = [];
+  if (modelN > 0) parts.push(`${modelN} 个上游模型`);
+  if (aliasN > 0) parts.push(`${aliasN} 个对外别名`);
+  const cascadeNote = parts.length > 0 ? `将一并删除其下 ${parts.join(' 和 ')}。` : '';
   const okp = await confirmDanger({
     title: '删除供应商组',
-    message: `确认删除供应商组「${groupLabel(group.queueGroup, group.displayName)}」及其全部上游模型？`,
-    confirmText: '确认删除',
+    message: `确认删除供应商组「${groupLabel(group.queueGroup, group.displayName)}」？${cascadeNote}此操作不可恢复，如需恢复请通过「接入供应商」重新导入。`,
+    confirmText: '全部移除',
     type: 'warning',
   });
   if (!okp) return;

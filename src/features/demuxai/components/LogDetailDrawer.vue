@@ -53,9 +53,13 @@ function channelFromModelName(modelName: string): string {
 }
 
 const channelText = computed(() => {
-  const name = props.log?.modelName;
-  return name ? channelFromModelName(name) : '—';
+  const l = props.log;
+  if (!l) return '—';
+  // 优先用定价快照钉死的真实渠道；缺失时退化为 modelName 前缀。
+  return l.channelKey?.trim() || channelFromModelName(l.modelName);
 });
+
+const upstreamModelText = computed(() => props.log?.upstreamModelId?.trim() || '—');
 
 const hasCharge = computed(() => {
   const l = props.log;
@@ -167,6 +171,7 @@ const outputDims = computed<DimRow[]>(() => {
         <el-descriptions-item label="模型" :span="2">
           <div class="model-cell">
             <span class="mono">{{ log.modelName }}</span>
+            <span v-if="log.upstreamModelId" class="model-cell__upstream mono">↳ 上游 {{ upstreamModelText }}</span>
           </div>
         </el-descriptions-item>
         <el-descriptions-item label="渠道">{{ channelText }}</el-descriptions-item>
@@ -637,6 +642,10 @@ const outputDims = computed<DimRow[]>(() => {
   color: var(--el-text-color-secondary);
 }
 .model-cell__sub {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.model-cell__upstream {
   font-size: 12px;
   color: var(--el-text-color-secondary);
 }
