@@ -68,6 +68,11 @@ const clientIpText = computed(() => {
   return formatIpv4(ip);
 });
 
+const sourceText = computed(() => {
+  const name = props.log?.token?.name?.trim();
+  return name || 'PG';
+});
+
 /** 是否允许触发驳回：有账单 & 当前状态是 completed */
 const canReverse = computed(() => {
   const b = props.log?.bill;
@@ -186,6 +191,10 @@ const outputDims = computed<DimRow[]>(() => {
       <el-divider />
 
       <h4 class="section-title">调用方</h4>
+      <div class="log-detail__row">
+        <span class="label">调用来源</span>
+        <span>{{ sourceText }}</span>
+      </div>
       <div class="log-detail__row">
         <span class="label">IAM 用户</span>
         <span class="mono">{{ log.account.iamId ?? '—' }}</span>

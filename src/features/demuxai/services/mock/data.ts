@@ -736,6 +736,9 @@ function seedLogs(providers: Provider[]): LogEntry[] {
     'duplicate_charge',
   ];
 
+  const mockTokenNames = ['生产 API', '测试环境', 'CI 流水线', '移动端 SDK', '内部工具'];
+  const mockTokenIds = mockTokenNames.map((_, idx) => String(880001 + idx));
+
   for (let i = 0; i < 320; i += 1) {
     const p = usable[i % usable.length]!;
     const pairs = pairsByProvider.get(p.uid) ?? [];
@@ -795,6 +798,13 @@ function seedLogs(providers: Provider[]): LogEntry[] {
 
     const accountUid = SEED_ACCOUNTS[i % SEED_ACCOUNTS.length]!;
     const accountContact = SEED_ACCOUNT_CONTACTS[accountUid];
+    const isPg = i % 5 === 0;
+    const token = isPg
+      ? null
+      : {
+          id: mockTokenIds[i % mockTokenIds.length]!,
+          name: mockTokenNames[i % mockTokenNames.length]!,
+        };
 
     out.push({
       id: genLogUid(),
@@ -807,6 +817,7 @@ function seedLogs(providers: Provider[]): LogEntry[] {
         phone: accountContact.phone,
       },
       convId,
+      token,
       modelName: pair.displayName,
       providerId: p.id,
       apiType: p.apiType,

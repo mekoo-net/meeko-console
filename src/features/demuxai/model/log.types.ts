@@ -260,6 +260,16 @@ const logEntryBaseShape = {
   }),
   /** 多轮对话的会话 ID。同一对话的多次调用共享同一 convId；无会话上下文时为 null。 */
   convId: z.string().min(1).nullable().optional(),
+  /**
+   * 调用来源令牌快照。sk- 后端调用时有 `{ id, name }`；PG 页面直发时为 null（UI 显示 "PG"）。
+   */
+  token: z
+    .object({
+      id: uidString,
+      name: z.string(),
+    })
+    .nullable()
+    .optional(),
   /** 对外暴露的模型名（= 用户请求体里的 `model` 字段，如 `'demux-gpt-4o'`）。 */
   modelName: z.string(),
   /**

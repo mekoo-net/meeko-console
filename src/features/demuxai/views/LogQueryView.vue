@@ -55,6 +55,8 @@ interface PageFilter {
   modelName: string;
   /** 渠道 QueueGroup；空字符串 = 全部。 */
   providerQueueGroup: string;
+  /** 会话 ID 精确匹配（点击 Conv 列钻取） */
+  convId: string;
   /** 仅看失败调用（success === false） */
   errorOnly: boolean;
 }
@@ -71,6 +73,7 @@ const defaultFilter = (): PageFilter => ({
   dateRange: last24h(),
   modelName: '',
   providerQueueGroup: '',
+  convId: '',
   errorOnly: false,
 });
 
@@ -98,6 +101,8 @@ function buildPortFilter(): ListLogsFilter {
   if (filter.value.dateRange?.[0] && filter.value.dateRange[1]) {
     Object.assign(f, dateRangeToEpochMillis(filter.value.dateRange));
   }
+  const conv = filter.value.convId.trim();
+  if (conv) f.convId = conv;
   return f;
 }
 
@@ -136,6 +141,7 @@ watch(
       filter.value.dateRange,
       filter.value.modelName,
       filter.value.providerQueueGroup,
+      filter.value.convId,
       filter.value.errorOnly,
     ] as const,
   () => {
@@ -268,6 +274,20 @@ function errorCodeText(code: string): string {
   return (LogErrorCodeLabel as Record<string, string>)[code] ?? code;
 }
 
+function sourceLabel(row: LogEntry): string {
+  return row.token?.name?.trim() || 'PG';
+}
+
+function drillByConvId(convId: string): void {
+  filter.value.convId = convId;
+  page.value = 1;
+}
+
+function clearConvFilter(): void {
+  filter.value.convId = '';
+  page.value = 1;
+}
+
 onMounted(() => {
   void fetchData();
 });
@@ -311,6 +331,11 @@ onMounted(() => {
           </span>
         </el-checkbox>
       </el-form-item>
+      <el-form-item v-if="filter.convId" label="会话">
+        <el-tag closable type="info" @close="clearConvFilter">
+          {{ filter.convId }}
+        </el-tag>
+      </el-form-item>
     </FilterBar>
 
     <el-table
@@ -331,9 +356,20 @@ onMounted(() => {
       <el-table-column label="Conv" min-width="148">
         <template #default="{ row }: { row: LogEntry }">
           <el-tooltip v-if="row.convId" :content="row.convId" placement="top" :show-after="200">
-            <span class="cell-conv mono">{{ row.convId }}</span>
+            <el-button link type="primary" class="cell-conv mono" @click="drillByConvId(row.convId!)">
+              {{ row.convId }}
+            </el-button>
           </el-tooltip>
           <span v-else class="cell-muted">—</span>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="来源" width="120">
+        <template #default="{ row }: { row: LogEntry }">
+          <el-tag v-if="row.token?.name" size="small" effect="plain" type="info">
+            {{ sourceLabel(row) }}
+          </el-tag>
+          <span v-else class="cell-source-pg">PG</span>
         </template>
       </el-table-column>
 
@@ -488,6 +524,14 @@ onMounted(() => {
   color: var(--el-text-color-primary);
   word-break: break-all;
   line-height: 1.35;
+  padding: 0;
+  height: auto;
+  white-space: normal;
+  text-align: left;
+}
+.cell-source-pg {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 .cell-muted {
   color: var(--el-text-color-placeholder);

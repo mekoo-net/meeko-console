@@ -21,7 +21,8 @@
 > - **`account: { uid, iamUserUid }`**：主账户 + IAM 子账户（扣费主体 vs 操作者）。
 > - **`providerId`**：Vendor **int 主键**（非 string UID）；展示名由前端 join `DemuxaiProviderPort.list`。
 > - **`modelName`**：用户请求体 `model`（通常 = 模型路由 `alias`）。
-> - **`convId`**：多轮会话 ID。
+> - **`convId`**：多轮会话 ID；列表页点击 Conv 可钻取过滤同会话调用（不归组）。
+> - **`token`**：调用来源令牌快照 `{ id, name }`；sk- 后端调用时有值，PG 页面直发（`/demuxai/api/pg`）时为 `null`，UI 显示 **PG**。
 > - **`billingType`**：判别字段；`usage` / `cost` 形状见下表。
 > - **`tokenLatency`**（ms，`null` 表示失败）：`streamed: true` → TTFT；`streamed: false` → 端到端总耗时。
 > - **`success` + `error`**：二元成败；失败必有 `error: { code, message, httpStatus }`。
@@ -77,7 +78,8 @@
 | `id` | string | 日志主键 |
 | `createAt` | number | 调用时间（Unix 毫秒 UTC） |
 | `account` | `{ uid, iamUserUid }` | 主账户 `uid` + IAM `iamUserUid`（均为 userId） |
-| `convId` | string | |
+| `convId` | string | 多轮会话 ID；点击可钻取过滤 |
+| `token` | `{ id, name }` \| null | sk- 令牌快照；PG 直发时为 null |
 | `modelName` | string | 对外模型名 |
 | `providerId` | int | Vendor 主键 |
 | `apiType` | enum | 协议族 |
