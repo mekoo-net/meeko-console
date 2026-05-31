@@ -80,7 +80,8 @@ function openCreate(): void {
     ElMessage.warning('支付宝与微信支付渠道均已添加');
     return;
   }
-  createCode.value = availableToCreate.value[0];
+  const next = availableToCreate.value[0];
+  if (next) createCode.value = next;
   createDialogVisible.value = true;
 }
 

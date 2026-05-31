@@ -1,12 +1,11 @@
 import { z } from 'zod';
 
-import { epochMillisNullableSchema, epochMillisSchema } from '@/shared/lib/epoch';
+import { epochMillisSchema } from '@/shared/lib/epoch';
 
 import {
   apiTypeSchema,
   billingTypeSchema,
   billReverseCodeSchema,
-  billStatusSchema,
   type ApiType,
   type BillReverseCode,
 } from './enums';

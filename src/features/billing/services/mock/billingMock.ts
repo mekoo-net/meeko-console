@@ -58,7 +58,7 @@ const genBillSerialSeq = createUidSeq(1);
 const genRechargeSerialSeq = createUidSeq(1);
 const genOrderSerialSeq = createUidSeq(1);
 
-function formatSerial(prefix: string, at: Date, seq: number): string {
+function formatSerial(prefix: string, at: Date, seq: number | string): string {
   const ymd = at.toISOString().slice(0, 10).replace(/-/g, '');
   return `${prefix}${ymd}${String(seq).padStart(9, '0')}`;
 }
@@ -109,7 +109,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
     billingMode: 1,
     unitPriceSnapshot: 99,
     status: 2,
-    resourceUid: undefined,
+    resourceId: undefined,
     metadataJson: undefined,
     createdAtUtc: epochMs(now),
     activatedAtUtc: epochMs(now),

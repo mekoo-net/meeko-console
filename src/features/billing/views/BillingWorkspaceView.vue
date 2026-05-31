@@ -47,7 +47,7 @@ onMounted(() => {
             <el-option
               v-for="a in accountOptions"
               :key="a.uid"
-              :label="`${a.name} (${a.uid})`"
+              :label="`${a.displayName} (${a.uid})`"
               :value="a.uid"
             />
           </el-select>
