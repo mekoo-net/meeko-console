@@ -19,7 +19,7 @@
  *     </el-form-item>
  *   </FilterBar>
  *
- * 时间字段语义：传给后端的 `dateRange` 是 `[fromIso, toIso]`，对应 `fromUtc / toUtc`。
+ * 时间字段语义：UI 内 `dateRange` 仍用 ISO 字符串维护；提交 API 前在 adapter / 视图层转为 Unix 毫秒 `fromUtc / toUtc`。
  */
 import { ref, watch } from 'vue';
 import { RefreshLeft, Search } from '@element-plus/icons-vue';

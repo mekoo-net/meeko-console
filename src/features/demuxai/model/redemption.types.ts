@@ -55,7 +55,7 @@ export const redemptionCodeSchema = z.object({
   /** 领取明细；一码一次时通常 0~1 条。 */
   claims: z.array(redemptionClaimSchema),
   createdBy: redemptionStaffSchema,
-  /** 截止领取时间（Unix 秒）；null 表示长期有效。 */
+  /** 截止领取时间（Unix 毫秒）；null 表示长期有效。 */
   expiredTime: z.number().nullable(),
 });
 

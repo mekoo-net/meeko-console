@@ -22,7 +22,7 @@ interface AuthSettingsForm {
   captchaSiteKey: string;
   captchaSecretKey: string;
   captchaSecretConfigured: boolean;
-  updatedAtUtc: string;
+  updatedAtUtc: number;
 }
 
 const port = getAuthSettingsPort();
@@ -38,7 +38,7 @@ const form = reactive<AuthSettingsForm>({
   captchaSiteKey: '',
   captchaSecretKey: '',
   captchaSecretConfigured: false,
-  updatedAtUtc: '',
+  updatedAtUtc: 0,
 });
 
 const captchaProviderOptions: Array<{ value: CaptchaProvider; label: string }> = [

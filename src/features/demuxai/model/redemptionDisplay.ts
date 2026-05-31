@@ -10,8 +10,8 @@ export function snapshotRedemptionCode(row: RedemptionCode): RedemptionCode {
 
 type Tone = 'success' | 'warning' | 'danger' | 'info';
 
-export function isRedemptionExpired(row: RedemptionCode, nowSec = Math.floor(Date.now() / 1000)): boolean {
-  return row.expiredTime != null && row.expiredTime > 0 && row.expiredTime <= nowSec;
+export function isRedemptionExpired(row: RedemptionCode, nowMs = Date.now()): boolean {
+  return row.expiredTime != null && row.expiredTime > 0 && row.expiredTime <= nowMs;
 }
 
 export function isRedemptionExhausted(row: RedemptionCode): boolean {

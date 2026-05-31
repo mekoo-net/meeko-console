@@ -84,7 +84,7 @@ export class DemuxaiModelMock implements DemuxaiModelPort {
         ? { supportsFunctionCall: input.supportsFunctionCall }
         : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
-      updatedAtUtc: new Date().toISOString(),
+      updatedAtUtc: Date.now(),
     };
     const p = parseModel(next);
     if (!p.success) return p;

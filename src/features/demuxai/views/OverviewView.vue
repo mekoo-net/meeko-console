@@ -14,6 +14,7 @@ import { ElMessage } from 'element-plus';
 import PageHeader from '@/shared/ui/PageHeader.vue';
 
 import type { ListLogsFilter, LogStats } from '../model/log.types';
+import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 import type { Provider } from '../model/provider.types';
 import { getDemuxaiLogsPort, getDemuxaiProviderPort } from '../services';
 
@@ -43,8 +44,9 @@ const dateRange = ref<[string, string] | null>(last24h());
 
 function buildPortFilter(): ListLogsFilter {
   const f: ListLogsFilter = {};
-  if (dateRange.value && dateRange.value[0]) f.fromUtc = dateRange.value[0];
-  if (dateRange.value && dateRange.value[1]) f.toUtc = dateRange.value[1];
+  if (dateRange.value?.[0] && dateRange.value[1]) {
+    Object.assign(f, dateRangeToEpochMillis(dateRange.value));
+  }
   return f;
 }
 

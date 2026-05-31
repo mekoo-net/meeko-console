@@ -39,10 +39,10 @@ export interface ListRechargesFilter {
   accountUid?: string;
   provider: RechargeProvider | 'all';
   status: RechargeStatus | 'all';
-  /** 创建时间起点（ISO8601，inclusive） */
-  fromUtc?: string;
-  /** 创建时间终点（ISO8601，inclusive） */
-  toUtc?: string;
+  /** 创建时间起点（Unix 毫秒 UTC，inclusive） */
+  fromUtc?: number;
+  /** 创建时间终点（Unix 毫秒 UTC，inclusive） */
+  toUtc?: number;
 }
 
 export interface ListBillsPage {

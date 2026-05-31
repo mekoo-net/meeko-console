@@ -9,7 +9,7 @@ import type {
 } from '../../model/redemption.types';
 
 function ts(y: number, m: number, d: number, h = 0, min = 0): number {
-  return Math.floor(Date.UTC(y, m - 1, d, h, min, 0) / 1000);
+  return Date.UTC(y, m - 1, d, h, min, 0);
 }
 
 export const MOCK_STAFF_ADMIN: RedemptionStaff = {
@@ -52,7 +52,7 @@ function buildSpringClaims(): RedemptionClaim[] {
     if (!acc) continue;
     claims.push({
       account: acc,
-      redeemedTime: base + i * 3600 * 4,
+      redeemedTime: base + i * 4 * 3600 * 1000,
     });
   }
   return claims.sort((a, b) => b.redeemedTime - a.redeemedTime);

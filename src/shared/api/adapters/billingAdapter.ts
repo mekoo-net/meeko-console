@@ -2,6 +2,7 @@ import type { AppResult } from '@/shared/api/httpTypes';
 import { fail } from '@/shared/api/httpTypes';
 import { request } from '@/shared/api/httpClient';
 import type { Uid } from '@/shared/lib/id';
+import { asEpochMillis, asEpochMillisNullable } from '@/shared/lib/epoch';
 
 import type {
   CreateInternalRechargeInput,
@@ -53,8 +54,8 @@ interface RechargeDtoWire {
   amount: { value: number; currency: string };
   status: string;
   operator?: { iamUserUid?: string | number | null } | null;
-  createdAtUtc: string;
-  paidAtUtc?: string | null;
+  createdAtUtc: number | string;
+  paidAtUtc?: number | string | null;
 }
 
 function mapRechargeDto(raw: Record<string, unknown>): RechargeRecord {
@@ -87,11 +88,8 @@ function mapRechargeDto(raw: Record<string, unknown>): RechargeRecord {
       operator?.iamUserUid != null || operator?.IamUserUid != null
         ? String(operator.iamUserUid ?? operator.IamUserUid)
         : null,
-    createdAtUtc: String(raw.createdAtUtc ?? raw.CreatedAtUtc ?? ''),
-    paidAtUtc:
-      raw.paidAtUtc != null || raw.PaidAtUtc != null
-        ? String(raw.paidAtUtc ?? raw.PaidAtUtc)
-        : null,
+    createdAtUtc: asEpochMillis(raw.createdAtUtc ?? raw.CreatedAtUtc) ?? 0,
+    paidAtUtc: asEpochMillisNullable(raw.paidAtUtc ?? raw.PaidAtUtc),
   };
 }
 
@@ -119,10 +117,10 @@ function mapBillDto(raw: Record<string, unknown>): BillingEntry {
     balanceAfter:        amount?.balanceAfter != null ? Number(amount.balanceAfter) : null,
     refType:             ref?.type != null ? (String(ref.type) as BillRefType) : null,
     refId:               ref?.id != null ? String(ref.id) : null,
-    reversedAtUtc:       reversal?.atUtc != null ? String(reversal.atUtc) : null,
+    reversedAtUtc:       asEpochMillisNullable(reversal?.atUtc),
     reversedByIamId:     reversal?.byIamUserUid != null ? String(reversal.byIamUserUid) : null,
     reversedCode:        reversal?.code != null ? (String(reversal.code) as BillReversedCode) : null,
-    occurredAtUtc:       String(raw.occurredAtUtc ?? ''),
+    occurredAtUtc:       asEpochMillis(raw.occurredAtUtc) ?? 0,
   };
 }
 

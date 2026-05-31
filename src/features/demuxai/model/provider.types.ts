@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
 import {
+  epochMillisNullableSchema,
+  epochMillisSchema,
+} from '@/shared/lib/epoch';
+
+import {
   apiTypeSchema,
   modelCapabilitySchema,
   modelFamilySchema,
@@ -100,7 +105,7 @@ export const providerSchema = z.object({
   autoDisabledCode: z.string().nullable().optional(),
   /** 最近一次 ping 延迟，仅参考。 */
   testLatencyMs: z.number().int().nullable().optional(),
-  testSucceededAtUtc: z.string().nullable().optional(),
+  testSucceededAtUtc: epochMillisNullableSchema.optional(),
   /** 24h 错误率（0..1），由 BFF 聚合写回。 */
   errorRate24h: z.number().min(0).max(1).optional(),
   /** 24h 调用次数，用于 UI 排序参考 */
@@ -109,8 +114,8 @@ export const providerSchema = z.object({
   providerModels: z.array(providerModelSchema),
   /** 对外上架映射（displayName → providerModel） */
   modelMappings: z.array(providerModelMappingSchema),
-  createdAtUtc: z.string(),
-  updatedAtUtc: z.string(),
+  createdAtUtc: epochMillisSchema,
+  updatedAtUtc: epochMillisSchema,
 });
 
 export type Provider = z.infer<typeof providerSchema>;

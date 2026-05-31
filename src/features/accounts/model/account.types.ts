@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
 import type { Uid } from '@/shared/lib/id';
+import {
+  epochMillisNullableSchema,
+  epochMillisOptionalSchema,
+  epochMillisSchema,
+} from '@/shared/lib/epoch';
 
 /**
  * 与 Keystone REST 对齐（/accounts/current、IKeystoneQueryService.GetAccountAsync）：
@@ -30,7 +35,7 @@ export const oauthBindingSchema = z.object({
   externalUid: z.string(),
   /** 显示昵称，可选 */
   nickname: z.string().optional(),
-  boundAtUtc: z.string(),
+  boundAtUtc: epochMillisSchema,
 });
 
 export type OAuthBinding = z.infer<typeof oauthBindingSchema>;
@@ -44,7 +49,7 @@ export const achievementSchema = z.object({
   icon: z.string(),
   /** 勋章插画 URL（SVG / PNG / JPG），授予时从勋章库快照写入，可选 */
   image: z.string().nullable().optional(),
-  grantedAtUtc: z.string(),
+  grantedAtUtc: epochMillisSchema,
 });
 
 export type Achievement = z.infer<typeof achievementSchema>;
@@ -54,7 +59,7 @@ export const walletSummarySchema = z.object({
   available: z.number(),
   held: z.number(),
   currency: z.string(),
-  snapshotAtUtc: z.string(),
+  snapshotAtUtc: epochMillisSchema,
 });
 
 export type WalletSummary = z.infer<typeof walletSummarySchema>;
@@ -64,7 +69,7 @@ export const accountWalletSchema = z.object({
   available: z.number(),
   held: z.number(),
   currency: z.string(),
-  updatedAtUtc: z.string(),
+  updatedAtUtc: epochMillisSchema,
 });
 
 export type AccountWallet = z.infer<typeof accountWalletSchema>;
@@ -83,10 +88,10 @@ export const accountSchema = z.object({
   /** Owner 联系手机（`owner.phone`）。 */
   ownerPhone: z.string().nullish(),
   iamUserCount: z.number().int().nonnegative().optional(),
-  createdAtUtc: z.string().optional(),
-  updatedAtUtc: z.string().optional(),
+  createdAtUtc: epochMillisOptionalSchema,
+  updatedAtUtc: epochMillisOptionalSchema,
   /** 最近活跃时间（任一 IAM 用户登录、API 调用、计费操作）；无记录时 API 可返回 null。 */
-  lastActiveAtUtc: z.string().nullable().optional(),
+  lastActiveAtUtc: epochMillisNullableSchema.optional(),
   /** 账户等级；列表 API 可能不返回，默认 1。 */
   tier: z.number().int().min(1).default(1),
   /** 累积充值金额（元）；列表 API 可能不返回，默认 0。 */

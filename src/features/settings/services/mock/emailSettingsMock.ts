@@ -11,7 +11,7 @@ let state: EmailSettingsAdmin = {
   emailSuffixRestrictionEnabled: false,
   allowedEmailSuffixes: [],
   verificationCodeEnabled: false,
-  updatedAtUtc: new Date().toISOString(),
+  updatedAtUtc: Date.now(),
 };
 
 function parseSettings(v: unknown): AppResult<EmailSettingsAdmin> {
@@ -20,7 +20,7 @@ function parseSettings(v: unknown): AppResult<EmailSettingsAdmin> {
 }
 
 function touch(): void {
-  state = { ...state, updatedAtUtc: new Date().toISOString() };
+  state = { ...state, updatedAtUtc: Date.now() };
 }
 
 export class EmailSettingsMock implements EmailSettingsPort {

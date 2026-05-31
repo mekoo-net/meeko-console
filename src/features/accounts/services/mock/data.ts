@@ -154,7 +154,7 @@ function buildSeed(): AccountStore {
       provider: p,
       externalUid: `${p}_${uid}_${idx}`,
       nickname: owner?.displayName,
-      boundAtUtc: new Date(createdAt.getTime() + idx * hourMs).toISOString(),
+      boundAtUtc: new Date(createdAt.getTime() + idx * hourMs).getTime(),
     }));
 
     const achievements: Achievement[] = seed.achievementCodes.flatMap((code, idx) => {
@@ -167,12 +167,12 @@ function buildSeed(): AccountStore {
           description: def.description,
           icon: def.icon,
           image: def.image ?? null,
-          grantedAtUtc: new Date(createdAt.getTime() + (idx + 1) * dayMs).toISOString(),
+          grantedAtUtc: new Date(createdAt.getTime() + (idx + 1) * dayMs).getTime(),
         },
       ];
     });
 
-    const walletAt = lastActiveAt.toISOString();
+    const walletAt = lastActiveAt.getTime();
     const available = Math.round(seed.totalRechargedAmount * 0.85 * 100) / 100;
     const held = Math.round(seed.totalRechargedAmount * 0.05 * 100) / 100;
     const walletSummary = {
@@ -198,9 +198,9 @@ function buildSeed(): AccountStore {
       ownerEmail: owner?.email ?? undefined,
       ownerPhone: seed.ownerPhone,
       iamUserCount: users.length,
-      createdAtUtc: createdAt.toISOString(),
-      updatedAtUtc: lastActiveAt.toISOString(),
-      lastActiveAtUtc: lastActiveAt.toISOString(),
+      createdAtUtc: createdAt.getTime(),
+      updatedAtUtc: lastActiveAt.getTime(),
+      lastActiveAtUtc: lastActiveAt.getTime(),
       tier: computeTier(seed.totalRechargedAmount),
       totalRechargedAmount: seed.totalRechargedAmount,
       oauthBindings: oauthBindings.length > 0 ? oauthBindings : undefined,

@@ -11,7 +11,7 @@ interface EmailSettingsForm {
   emailSuffixRestrictionEnabled: boolean;
   allowedEmailSuffixes: string[];
   verificationCodeEnabled: boolean;
-  updatedAtUtc: string;
+  updatedAtUtc: number;
 }
 
 const port = getEmailSettingsPort();
@@ -22,7 +22,7 @@ const form = reactive<EmailSettingsForm>({
   emailSuffixRestrictionEnabled: false,
   allowedEmailSuffixes: [],
   verificationCodeEnabled: false,
-  updatedAtUtc: '',
+  updatedAtUtc: 0,
 });
 
 function applyStatus(status: EmailSettingsAdmin): void {

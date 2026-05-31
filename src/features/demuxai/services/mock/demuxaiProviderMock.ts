@@ -174,7 +174,7 @@ export class DemuxaiProviderMock implements DemuxaiProviderPort {
     await delay();
     // MVP 阶段没有 priority/weight，按 createdAtUtc 倒序（新建在前）
     const sorted = [...this.store.providers].sort((a, b) =>
-      b.createdAtUtc.localeCompare(a.createdAtUtc),
+      b.createdAtUtc - a.createdAtUtc,
     );
     const filtered = applyFilter(sorted, input.filter);
     const slice = clientPaginate(filtered, input.page, input.pageSize);
@@ -215,7 +215,7 @@ export class DemuxaiProviderMock implements DemuxaiProviderPort {
       });
     }
 
-    const t = new Date().toISOString();
+    const t = Date.now();
     // 模拟数据库自增主键：从现有 max(id)+1，没有就从 1001 起步
     const nextId = this.store.providers.reduce((m, p) => Math.max(m, p.id), 1000) + 1;
     const row: Provider = {
@@ -279,7 +279,7 @@ export class DemuxaiProviderMock implements DemuxaiProviderPort {
       ...(input.notes !== undefined ? { notes: input.notes?.trim() || null } : {}),
       providerModels: nextModels,
       modelMappings: nextMappings,
-      updatedAtUtc: new Date().toISOString(),
+      updatedAtUtc: Date.now(),
     };
     const p = parseProvider(next);
     if (!p.success) return p;
@@ -309,7 +309,7 @@ export class DemuxaiProviderMock implements DemuxaiProviderPort {
         status === 'auto_disabled'
           ? cur.autoDisabledCode ?? 'manual_recovery_required'
           : null,
-      updatedAtUtc: new Date().toISOString(),
+      updatedAtUtc: Date.now(),
     };
     const p = parseProvider(next);
     if (!p.success) return p;
@@ -323,7 +323,7 @@ export class DemuxaiProviderMock implements DemuxaiProviderPort {
     if (idx < 0) return fail({ code: 'not_found', message: `模型渠道 ${uid} 不存在` });
     const cur = this.store.providers[idx]!;
     const ok10 = Math.random() < 0.9;
-    const t = new Date().toISOString();
+    const t = Date.now();
     const latencyMs = 80 + Math.floor(Math.random() * 600);
     const catalog = upstreamCatalog[cur.apiType] ?? [];
     const result: ProviderTestResult = ok10

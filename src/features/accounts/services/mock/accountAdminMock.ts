@@ -126,7 +126,7 @@ export class AccountAdminMock implements AccountAdminPort {
     store.accounts.set(accountUid, {
       ...account,
       iamUserCount: users.length,
-      updatedAtUtc: new Date().toISOString(),
+      updatedAtUtc: Date.now(),
     });
     return parseIamUser(created);
   }
@@ -139,7 +139,7 @@ export class AccountAdminMock implements AccountAdminPort {
     if (a.status === status) {
       return ok(a);
     }
-    const next: Account = { ...a, status, updatedAtUtc: new Date().toISOString() };
+    const next: Account = { ...a, status, updatedAtUtc: Date.now() };
     store.accounts.set(uid, next);
     return parseAccount(next);
   }
@@ -161,12 +161,12 @@ export class AccountAdminMock implements AccountAdminPort {
       description: def.description,
       icon: def.icon,
       image: def.image ?? null,
-      grantedAtUtc: new Date().toISOString(),
+      grantedAtUtc: Date.now(),
     };
     const next: Account = {
       ...a,
       achievements: [...current, granted],
-      updatedAtUtc: new Date().toISOString(),
+      updatedAtUtc: Date.now(),
     };
     store.accounts.set(accountUid, next);
     return parseAccount(next);
@@ -185,7 +185,7 @@ export class AccountAdminMock implements AccountAdminPort {
     const next: Account = {
       ...a,
       achievements: filtered.length > 0 ? filtered : undefined,
-      updatedAtUtc: new Date().toISOString(),
+      updatedAtUtc: Date.now(),
     };
     store.accounts.set(accountUid, next);
     return parseAccount(next);

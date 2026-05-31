@@ -34,8 +34,8 @@
 查询参数（与 [`11-demuxai-logs.md`](./11-demuxai-logs.md) 的 `ListLogsFilter` 共用子集）：
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `fromUtc` | ISO8601 | 是 | 区间起点（inclusive）。 |
-| `toUtc` | ISO8601 | 是 | 区间终点（inclusive）；UI 最长 7 天。 |
+| `fromUtc` | number | 是 | Unix 毫秒；区间起点（inclusive）。 |
+| `toUtc` | number | 是 | Unix 毫秒；区间终点（inclusive）；UI 最长 7 天。 |
 | `accountUid` | string | 否 | 主账户 UID。 |
 | `tokenId` | string | 否 | sk- 令牌实体主键（`id`）；与 `iamUserUid`（用户）勿混用。 |
 | `modelName` | string | 否 | 模糊匹配对外模型名（= 用户请求体 `model` / 别名 `alias`）。 |

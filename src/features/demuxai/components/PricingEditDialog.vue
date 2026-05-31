@@ -96,7 +96,7 @@ interface FormState {
   multiplier: number;
   currency: string;
   multiplierRows: MultiplierRow[];
-  effectiveFromUtc: string;
+  effectiveFromUtc: number;
 }
 
 const emptyPerToken = (): PerTokenForm => ({
@@ -127,7 +127,7 @@ const emptyForm = (modelId: string): FormState => ({
   multiplier: 1.0,
   currency: 'CNY',
   multiplierRows: [],
-  effectiveFromUtc: new Date().toISOString(),
+  effectiveFromUtc: Date.now(),
 });
 
 const form = ref<FormState>(emptyForm(''));
@@ -638,10 +638,10 @@ async function onSubmit(): Promise<void> {
 
       <el-form-item label="生效时间">
         <el-date-picker
-          v-model="form.effectiveFromUtc"
+          :model-value="form.effectiveFromUtc ? new Date(form.effectiveFromUtc) : null"
           type="datetime"
-          value-format="YYYY-MM-DDTHH:mm:ss[Z]"
           placeholder="选择生效时间"
+          @update:model-value="(d: Date | null) => { form.effectiveFromUtc = d ? d.getTime() : Date.now(); }"
         />
         <div class="form-hint">未来时间 = 预生效，BFF 调度按"最近一条已生效"计费。</div>
       </el-form-item>

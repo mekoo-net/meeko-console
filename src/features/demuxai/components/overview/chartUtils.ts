@@ -3,7 +3,7 @@
  *
  * 这些函数**无 Vue 依赖**，与组件解耦，便于单测与跨组件复用。
  */
-import { formatDateTime } from '@/shared/lib/date';
+import { formatDateTime, type DateInput } from '@/shared/lib/date';
 
 export interface XY {
   x: number;
@@ -53,7 +53,7 @@ export function niceCeil(v: number): number {
 }
 
 /** 按桶宽自适应时间轴标签格式 */
-export function formatBucketLabel(tsUtc: string, bucketSizeSec: number): string {
+export function formatBucketLabel(tsUtc: DateInput, bucketSizeSec: number): string {
   if (bucketSizeSec >= 24 * 3600) return formatDateTime(tsUtc, 'MM-DD');
   if (bucketSizeSec >= 3 * 3600) return formatDateTime(tsUtc, 'MM-DD HH:00');
   return formatDateTime(tsUtc, 'HH:mm');

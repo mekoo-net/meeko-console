@@ -19,7 +19,7 @@ import type {
   UpdateStaffInput,
 } from '../ports/staffPort';
 
-const now = () => new Date().toISOString();
+const now = () => Date.now();
 
 let nextStaffUid = 300000010;
 let nextRoleId = 1003;
@@ -32,7 +32,7 @@ const roles: StaffRole[] = [
     isSystem: true,
     permissionCodes: [...ALL_STAFF_PERMISSIONS],
     memberCount: 1,
-    createdAtUtc: '2024-01-01T00:00:00.000Z',
+    createdAtUtc: Date.parse('2024-01-01T00:00:00.000Z'),
   },
   {
     id: '1002',
@@ -41,7 +41,7 @@ const roles: StaffRole[] = [
     isSystem: true,
     permissionCodes: [...READ_ONLY_STAFF_PERMISSIONS],
     memberCount: 0,
-    createdAtUtc: '2024-01-01T00:00:00.000Z',
+    createdAtUtc: Date.parse('2024-01-01T00:00:00.000Z'),
   },
 ];
 
@@ -56,7 +56,7 @@ const staffUsers: StaffUser[] = [
     status: 'Active',
     lastLoginAtUtc: now(),
     lastLoginIp: '127.0.0.1',
-    createdAtUtc: '2024-01-01T00:00:00.000Z',
+    createdAtUtc: Date.parse('2024-01-01T00:00:00.000Z'),
     updatedAtUtc: now(),
   },
   {
@@ -69,7 +69,7 @@ const staffUsers: StaffUser[] = [
     status: 'Active',
     lastLoginAtUtc: null,
     lastLoginIp: null,
-    createdAtUtc: '2024-06-01T00:00:00.000Z',
+    createdAtUtc: Date.parse('2024-06-01T00:00:00.000Z'),
     updatedAtUtc: now(),
   },
 ];

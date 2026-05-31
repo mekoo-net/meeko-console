@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { epochMillisNullableSchema, epochMillisSchema } from '@/shared/lib/epoch';
+
 /**
  * 业务（已开通服务）实例。语义上属于"账户已激活的产品资源"——
  * 与订单（OrderDto，下单/支付/完结过程）、订阅（SubscriptionDto，计费周期）解耦。
@@ -31,11 +33,11 @@ export const businessInstanceSchema = z.object({
   productCode: z.string(),
   productName: z.string(),
   status: z.enum(businessStatusValues),
-  openedAtUtc: z.string(),
-  pausedAtUtc: z.string().nullable().optional(),
-  stoppedAtUtc: z.string().nullable().optional(),
+  openedAtUtc: epochMillisSchema,
+  pausedAtUtc: epochMillisNullableSchema.optional(),
+  stoppedAtUtc: epochMillisNullableSchema.optional(),
   /** 当前计费周期到期时间；停止业务可省略。 */
-  currentPeriodEndUtc: z.string().nullable().optional(),
+  currentPeriodEndUtc: epochMillisNullableSchema.optional(),
 });
 
 export type BusinessInstance = z.infer<typeof businessInstanceSchema>;

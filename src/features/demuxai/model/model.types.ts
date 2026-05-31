@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { epochMillisSchema } from '@/shared/lib/epoch';
+
 import {
   modelCapabilitySchema,
   modelFamilySchema,
@@ -39,8 +41,10 @@ export const modelSchema = z.object({
   supportsStreaming: z.boolean(),
   supportsFunctionCall: z.boolean(),
   description: z.string().nullable().optional(),
-  createdAtUtc: z.string(),
-  updatedAtUtc: z.string(),
+  /** 所属渠道（BFF `ModelMetaAdminDto.vendorName`） */
+  vendorName: z.string().optional(),
+  createdAtUtc: epochMillisSchema,
+  updatedAtUtc: epochMillisSchema,
 });
 
 export type Model = z.infer<typeof modelSchema>;

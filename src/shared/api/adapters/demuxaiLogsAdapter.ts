@@ -1,6 +1,7 @@
 import type { AppResult, ErrorCode } from '@/shared/api/httpTypes';
 import { fail } from '@/shared/api/httpTypes';
 import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
+import { asEpochMillis } from '@/shared/lib/epoch';
 
 import { logEntrySchema } from '@/features/demuxai/model/log.types';
 import type {
@@ -33,7 +34,7 @@ function mapFailureCode(code: string | null | undefined): ErrorCode {
 
 /** 后端 AiLogStatDto（daily 聚合行）形状。 */
 interface DailyRow {
-  dateUtc: string;
+  dateUtc: number;
   requestCount: number;
   totalPromptTokens: number;
   totalCompletionTokens: number;
@@ -87,8 +88,10 @@ function mapRawItem(raw: unknown): LogEntry {
       account && typeof account === 'object'
         ? {
             uid: (account as Record<string, unknown>)['uid'],
-            // iamUserUid 可为 null（主账户直接调用，无 IAM 子账户）
             iamId: (account as Record<string, unknown>)['iamUserUid'] ?? null,
+            displayName: (account as Record<string, unknown>)['displayName'] ?? undefined,
+            email: (account as Record<string, unknown>)['email'] ?? undefined,
+            phone: (account as Record<string, unknown>)['phone'] ?? undefined,
           }
         : account,
   };
@@ -180,7 +183,7 @@ export class DemuxaiLogsHttpAdapter implements DemuxaiLogsPort {
     const result = await requestDemuxAi<{
       success: boolean;
       billId?: string | null;
-      reversedAtUtc?: string | null;
+      reversedAtUtc?: number | null;
       reversedBy?: string | null;
       reversedCode?: string | null;
       failureCode?: string | null;
@@ -207,7 +210,7 @@ export class DemuxaiLogsHttpAdapter implements DemuxaiLogsPort {
       data: {
         logId: input.logId,
         billId: row.billId ?? '',
-        reversedAtUtc: row.reversedAtUtc ?? new Date().toISOString(),
+        reversedAtUtc: asEpochMillis(row.reversedAtUtc) ?? Date.now(),
         reversedBy: row.reversedBy ?? '',
         reversedCode: (row.reversedCode ?? input.reasonCode) as ReverseLogResult['reversedCode'],
       },

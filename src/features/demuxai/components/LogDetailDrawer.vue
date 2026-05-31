@@ -29,10 +29,6 @@ import type { LogEntry } from '../model/log.types';
 interface Props {
   modelValue: boolean;
   log: LogEntry | null;
-  /** 供应商组显示名（/demuxai/providers 的 ProviderGroup.displayName） */
-  channelLabel?: string;
-  /** 由父组件查 Model 表得到的显示名；查不到 = 该模型已被自动删除 */
-  modelDisplay?: string | null;
 }
 
 const props = defineProps<Props>();
@@ -47,40 +43,19 @@ const visible = computed({
   set: (v) => emit('update:modelValue', v),
 });
 
-/**
- * "慢"判定仅对流式请求的 TTFT 有意义（> 1500ms）。
- * 非流式的总耗时包含完整推理生成时间，与提示词长度、模型复杂度强相关，
- * 不适合用固定阈值判定"慢"，不予标记。
- */
-const slowLatency = computed(() => {
-  const l = props.log;
-  if (!l || l.tokenLatency == null || !l.streamed) return false;
-  return l.tokenLatency > 1500;
-});
-
-const latencyLabel = computed(() => (props.log?.streamed ? '首字延迟' : '总耗时'));
-
 function errorCodeText(code: string): string {
   return (LogErrorCodeLabel as Record<string, string>)[code] ?? code;
 }
 
-const modelDeleted = computed(() => props.log != null && props.modelDisplay == null);
+function channelFromModelName(modelName: string): string {
+  const i = modelName.indexOf('/');
+  return i > 0 ? modelName.slice(0, i) : '—';
+}
 
-const modelTitle = computed(() => {
-  const l = props.log;
-  if (!l) return '';
-  const display = props.modelDisplay;
-  if (display && display !== l.modelName) return display;
-  return l.modelName;
+const channelText = computed(() => {
+  const name = props.log?.modelName;
+  return name ? channelFromModelName(name) : '—';
 });
-
-const modelSubtitle = computed(() => {
-  const l = props.log;
-  if (!l || props.modelDisplay == null || props.modelDisplay === l.modelName) return null;
-  return l.modelName;
-});
-
-const channelText = computed(() => props.channelLabel?.trim() || '—');
 
 const hasCharge = computed(() => {
   const l = props.log;
@@ -175,7 +150,6 @@ const outputDims = computed<DimRow[]>(() => {
         <el-descriptions-item label="耗时">
           <span v-if="log.tokenLatency != null" class="num">
             {{ log.tokenLatency.toLocaleString() }} ms
-            <span class="latency-hint">{{ log.streamed ? '首字' : '总计' }}</span>
           </span>
           <span v-else>—</span>
         </el-descriptions-item>
@@ -187,11 +161,17 @@ const outputDims = computed<DimRow[]>(() => {
         </el-descriptions-item>
         <el-descriptions-item label="模型" :span="2">
           <div class="model-cell">
-            <span class="mono" :class="{ 'deleted-model': modelDeleted }">{{ modelTitle }}</span>
-            <span v-if="modelSubtitle" class="mono model-cell__sub">{{ modelSubtitle }}</span>
+            <span class="mono">{{ log.modelName }}</span>
           </div>
         </el-descriptions-item>
-        <el-descriptions-item label="供应商">{{ channelText }}</el-descriptions-item>
+        <el-descriptions-item label="渠道">{{ channelText }}</el-descriptions-item>
+        <el-descriptions-item label="账户">
+          <div class="account-cell">
+            <span v-if="log.account.displayName" class="account-cell__name">{{ log.account.displayName }}</span>
+            <span>{{ log.account.email || '—' }}</span>
+            <span class="account-cell__sub">{{ log.account.phone || '—' }}</span>
+          </div>
+        </el-descriptions-item>
         <el-descriptions-item label="计费">
           {{ BillingTypeLabel[log.billingType] }}
         </el-descriptions-item>
@@ -437,17 +417,6 @@ const outputDims = computed<DimRow[]>(() => {
         </template>
       </template>
 
-      <el-divider />
-
-      <h4 class="section-title">性能</h4>
-      <div class="log-detail__row">
-        <span class="label">{{ latencyLabel }}</span>
-        <span class="num">
-          {{ log.tokenLatency?.toLocaleString() ?? '—' }}<span v-if="log.tokenLatency != null"> ms</span>
-          <el-tag v-if="slowLatency" size="small" type="warning" effect="plain">慢</el-tag>
-        </span>
-      </div>
-
       <template v-if="log.error">
         <el-divider />
         <h4 class="section-title">错误信息</h4>
@@ -501,12 +470,6 @@ const outputDims = computed<DimRow[]>(() => {
 }
 .conv-id {
   word-break: break-all;
-}
-.latency-hint {
-  margin-left: 6px;
-  font-size: 11.5px;
-  color: var(--el-text-color-secondary);
-  font-family: var(--el-font-family);
 }
 .log-id-muted {
   font-size: 12px;
@@ -645,14 +608,24 @@ const outputDims = computed<DimRow[]>(() => {
   border-radius: 4px;
   color: var(--el-text-color-secondary);
 }
-.deleted-model {
-  color: var(--el-text-color-secondary);
-  text-decoration: line-through;
-}
 .model-cell {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+.account-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.4;
+}
+.account-cell__name {
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+}
+.account-cell__sub {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 .model-cell__sub {
   font-size: 12px;

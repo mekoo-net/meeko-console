@@ -168,8 +168,8 @@ export class DemuxaiRedemptionHttpAdapter implements DemuxaiRedemptionPort {
   }
 
   async create(input: CreateRedemptionCodesInput): Promise<AppResult<CreateRedemptionCodesResult>> {
-    const expiredSec = input.expiredAtUtc
-      ? Math.floor(Date.parse(input.expiredAtUtc) / 1000)
+    const expiredMs = input.expiredAtUtc
+      ? Date.parse(input.expiredAtUtc)
       : null;
     const result = await requestDemuxAi<CreateRedemptionsResponseRaw>(BASE, {
       method: 'POST',
@@ -178,7 +178,7 @@ export class DemuxaiRedemptionHttpAdapter implements DemuxaiRedemptionPort {
         quota: displayAmountToQuota(input.amount),
         count: input.count,
         max_redemptions: input.maxRedemptions,
-        expired_time: expiredSec && expiredSec > 0 ? expiredSec : -1,
+        expired_time: expiredMs && expiredMs > 0 ? expiredMs : -1,
       },
     });
     if (!result.success) return result;

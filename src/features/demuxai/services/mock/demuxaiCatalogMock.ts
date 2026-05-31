@@ -84,7 +84,7 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
         };
       })
       .sort((a, b) => a.queueGroup.localeCompare(b.queueGroup));
-    return ok({ groups, discoveredAtUtc: new Date().toISOString() });
+    return ok({ groups, discoveredAtUtc: Date.now() });
   }
 
   async importProviderGroup(
@@ -110,7 +110,7 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
       });
     }
     const knownIds = new Set(info.models);
-    const t = new Date().toISOString();
+    const t = Date.now();
 
     let group = this.store.providerGroups.find((g) => g.queueGroup === queueGroup);
     if (!group) {

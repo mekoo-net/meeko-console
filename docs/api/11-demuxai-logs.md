@@ -17,7 +17,7 @@
 > 设计要点（与 `src/features/demuxai/model/log.types.ts` 一致）：
 >
 > - `id`：本条日志主键（snowflake）。**`uid` 在本系统专指 userId**（见 `account.uid` / `account.iamUserUid`），不用于日志行主键。
-> - **`createAt`**：调用发生时间（UTC ISO8601）。类型注释中保留与 `occurredAtUtc` 的对应关系；BFF 序列化建议仍用 `*AtUtc` 命名时在适配层映射。
+> - **`createAt`**：调用发生时间（Unix 毫秒 UTC）。类型注释中保留与 `occurredAtUtc` 的对应关系。
 > - **`account: { uid, iamUserUid }`**：主账户 + IAM 子账户（扣费主体 vs 操作者）。
 > - **`providerId`**：Vendor **int 主键**（非 string UID）；展示名由前端 join `DemuxaiProviderPort.list`。
 > - **`modelName`**：用户请求体 `model`（通常 = 模型路由 `alias`）。
@@ -49,8 +49,8 @@
 | --- | --- | --- | --- |
 | `p` | int | 是 | 页码，从 1 起（BFF）；前端 Port 仍传 `page` / `pageSize` 由适配器映射 |
 | `pageSize` | int | 是 | ≤ 100 |
-| `fromUtc` | ISO8601 | **是** | UI 必传，最长 7 天 |
-| `toUtc` | ISO8601 | **是** | |
+| `fromUtc` | number | **是** | Unix 毫秒；UI 必传，最长 7 天 |
+| `toUtc` | number | **是** | Unix 毫秒 |
 | `accountUid` | string | 否 | = `account.uid`（主账户 userId） |
 | `tokenId` / `iamUserUid` | string | 否 | `tokenId` = sk- 令牌实体主键；`iamUserUid` = `account.iamUserUid`（IAM userId）。BFF 过渡期可能仍接受 `tokenUid` 查询参数名。 |
 | `modelName` | string | 否 | 模糊匹配 |
@@ -75,7 +75,7 @@
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | string | 日志主键 |
-| `createAt` | ISO8601 | 调用时间 |
+| `createAt` | number | 调用时间（Unix 毫秒 UTC） |
 | `account` | `{ uid, iamUserUid }` | 主账户 `uid` + IAM `iamUserUid`（均为 userId） |
 | `convId` | string | |
 | `modelName` | string | 对外模型名 |
@@ -116,7 +116,7 @@
 ```json
 {
   "id": "LG-1700000000001",
-  "createAt": "2025-09-12T11:00:01Z",
+  "createAt": 1757677201000,
   "account": { "uid": "100000001", "iamUserUid": "200000050" },
   "convId": "CV-050-a3",
   "modelName": "demux-gpt-4o",

@@ -15,7 +15,7 @@ let state: AuthSettingsAdmin = {
   captchaProvider: 'none',
   captchaSiteKey: '',
   captchaSecretConfigured: false,
-  updatedAtUtc: new Date().toISOString(),
+  updatedAtUtc: Date.now(),
 };
 
 function parseSettings(v: unknown): AppResult<AuthSettingsAdmin> {
@@ -24,7 +24,7 @@ function parseSettings(v: unknown): AppResult<AuthSettingsAdmin> {
 }
 
 function touch(): void {
-  state = { ...state, updatedAtUtc: new Date().toISOString() };
+  state = { ...state, updatedAtUtc: Date.now() };
 }
 
 export class AuthSettingsMock implements AuthSettingsPort {

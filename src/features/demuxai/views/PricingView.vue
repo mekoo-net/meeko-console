@@ -143,7 +143,7 @@ watch(
 );
 
 function modelFromAlias(alias: string): Model {
-  const t = new Date().toISOString();
+  const t = Date.now();
   return {
     uid: alias,
     modelId: alias,

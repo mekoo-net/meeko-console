@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { providerGroupStatusSchema } from './enums';
+import { epochMillisSchema } from '@/shared/lib/epoch';
 
 /**
  * 已入库的供应商组（QueueGroup）—— admin 通过「接入」流程从网关拉取后选择导入。
@@ -16,8 +17,8 @@ export const providerGroupSchema = z.object({
   status: providerGroupStatusSchema,
   upstreamModelCount: z.number().int().nonnegative(),
   notes: z.string().nullable().optional(),
-  importedAtUtc: z.string(),
-  updatedAtUtc: z.string(),
+  importedAtUtc: epochMillisSchema,
+  updatedAtUtc: epochMillisSchema,
 });
 
 export type ProviderGroup = z.infer<typeof providerGroupSchema>;
@@ -54,7 +55,7 @@ export interface DiscoveredProviderGroup {
 
 export interface DiscoverCatalogResult {
   groups: DiscoveredProviderGroup[];
-  discoveredAtUtc: string;
+  discoveredAtUtc: number;
 }
 
 export const discoveredUpstreamModelSchema = z.object({
@@ -72,7 +73,7 @@ export const discoveredProviderGroupSchema = z.object({
 
 export const discoverCatalogResultSchema = z.object({
   groups: z.array(discoveredProviderGroupSchema),
-  discoveredAtUtc: z.string(),
+  discoveredAtUtc: epochMillisSchema,
 });
 
 export interface ImportUpstreamModelInput {
@@ -90,11 +91,11 @@ export interface ImportProviderGroupInput {
 export interface ImportProviderGroupResult {
   queueGroup: string;
   importedModelCount: number;
-  importedAtUtc: string;
+  importedAtUtc: number;
 }
 
 export const importProviderGroupResultSchema = z.object({
   queueGroup: z.string(),
   importedModelCount: z.number().int().nonnegative(),
-  importedAtUtc: z.string(),
+  importedAtUtc: epochMillisSchema,
 });

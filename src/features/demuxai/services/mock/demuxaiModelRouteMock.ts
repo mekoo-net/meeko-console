@@ -72,7 +72,7 @@ export class DemuxaiModelRouteMock implements DemuxaiModelRoutePort {
     await delay();
     const alias = input.alias.trim();
     if (!alias) return fail({ code: 'validation', message: '请填写对外别名' });
-    const t = new Date().toISOString();
+    const t = Date.now();
     const row: ModelRoute = {
       uid: genModelRouteUid(),
       alias,
@@ -107,7 +107,7 @@ export class DemuxaiModelRouteMock implements DemuxaiModelRoutePort {
       ...(input.priority !== undefined ? { priority: input.priority } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
       ...(input.notes !== undefined ? { notes: input.notes?.trim() || null } : {}),
-      updatedAtUtc: new Date().toISOString(),
+      updatedAtUtc: Date.now(),
     };
     const p = parseRoute(next);
     if (!p.success) return p;

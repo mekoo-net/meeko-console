@@ -91,7 +91,7 @@ export class DemuxaiPricingMock implements DemuxaiPricingPort {
       });
     }
 
-    const t = new Date().toISOString();
+    const t = Date.now();
     const existingIdx = this.store.pricing.findIndex((p) => p.modelId === input.modelId);
     if (existingIdx >= 0) {
       const cur = this.store.pricing[existingIdx]!;

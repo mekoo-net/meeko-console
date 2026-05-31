@@ -34,11 +34,11 @@ function applyFilter(rows: LogEntry[], f: ListLogsFilter): LogEntry[] {
       if (r.success) return false;
       if (r.error?.code !== f.errorCode) return false;
     }
-    if (f.fromUtc) {
-      if (Date.parse(r.createAt) < Date.parse(f.fromUtc)) return false;
+    if (f.fromUtc != null) {
+      if (r.createAt < f.fromUtc) return false;
     }
-    if (f.toUtc) {
-      if (Date.parse(r.createAt) > Date.parse(f.toUtc)) return false;
+    if (f.toUtc != null) {
+      if (r.createAt > f.toUtc) return false;
     }
     return true;
   });
@@ -84,7 +84,7 @@ function buildBuckets(
   const buckets: LogStatsBucket[] = [];
   for (let i = 0; i < count; i += 1) {
     buckets.push({
-      tsUtc: new Date(fromMs + i * sizeMs).toISOString(),
+      tsUtc: fromMs + i * sizeMs,
       calls: 0,
       errors: 0,
       cost: 0,
@@ -92,8 +92,7 @@ function buildBuckets(
     });
   }
   for (const r of rows) {
-    const t = Date.parse(r.createAt);
-    if (!Number.isFinite(t)) continue;
+    const t = r.createAt;
     const idx = Math.min(count - 1, Math.max(0, Math.floor((t - fromMs) / sizeMs)));
     const b = buckets[idx];
     if (!b) continue;
@@ -131,6 +130,7 @@ function buildTopProviders(rows: LogEntry[], limit = 5): LogStatsTopProvider[] {
   type Agg = { calls: number; errors: number; ttftSum: number; ttftSamples: number };
   const m = new Map<number, Agg>();
   for (const r of rows) {
+    if (r.providerId == null) continue;
     const a = m.get(r.providerId) ?? { calls: 0, errors: 0, ttftSum: 0, ttftSamples: 0 };
     a.calls += 1;
     if (!r.success) a.errors += 1;
@@ -214,7 +214,7 @@ export class DemuxaiLogsMock implements DemuxaiLogsPort {
         message: '该账单已被驳回，请勿重复操作',
       });
     }
-    const reversedAtUtc = new Date().toISOString();
+    const reversedAtUtc = Date.now();
     target.bill = {
       ...target.bill,
       status: 'reversed',
@@ -239,8 +239,8 @@ export class DemuxaiLogsMock implements DemuxaiLogsPort {
 
     // 时间范围用于分桶 + RPM：filter 没传时回退到 logs 的覆盖区间或最近 24h
     const now = Date.now();
-    const fromMs = filter.fromUtc ? Date.parse(filter.fromUtc) : now - 24 * 60 * 60 * 1000;
-    const toMs = filter.toUtc ? Date.parse(filter.toUtc) : now;
+    const fromMs = filter.fromUtc ?? now - 24 * 60 * 60 * 1000;
+    const toMs = filter.toUtc ?? now;
     const spanMs = Math.max(toMs - fromMs, 60 * 1000);
     const bucketSizeSec = pickBucketSizeSec(spanMs);
 

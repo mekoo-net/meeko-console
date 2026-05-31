@@ -164,9 +164,9 @@ async function copyText(text: string): Promise<void> {
   }
 }
 
-function formatTs(sec: number | null): string {
-  if (!sec) return '—';
-  return formatDateTime(new Date(sec * 1000).toISOString());
+function formatTs(ms: number | null): string {
+  if (!ms) return '—';
+  return formatDateTime(ms);
 }
 
 function onCreated(payload: { keys: string[]; batchName: string }): void {

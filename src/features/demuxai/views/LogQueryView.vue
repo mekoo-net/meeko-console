@@ -4,8 +4,8 @@
  *
  * 注意事项：
  *  - **必须传时间范围**：UI 默认填最近 24h；用户清空 dateRange 时按钮置灰
- *  - 跨域 join：用 accountUid → 调 accountAdminPort 拉账户 directory，
- *    展示账户名 + LV（仅 view 层组合，不污染 demuxai/model）
+ *  - 账户列展示日志 API enrich 的邮箱 / 手机；昵称在详情抽屉
+ *  - 渠道筛选走 `modelName` 前缀，不在此页拉渠道组字典
  *  - 错误日志一键过滤 → 排障常用
  *  - KPI 汇总卡片已迁移至「概览」页（OverviewView）
  */
@@ -21,34 +21,24 @@ import EmptyState from '@/shared/ui/EmptyState.vue';
 import FilterBar from '@/shared/ui/FilterBar.vue';
 import { formatDateTime } from '@/shared/lib/date';
 import { formatMoney } from '@/shared/lib/money';
-import { getAccountAdminPort } from '@/features/accounts/services';
-import type { Account } from '@/features/accounts/model/account.types';
 
 import {
   BillingTypeLabel,
   BillReverseCodeLabel,
   LogErrorCodeLabel,
 } from '../model/enums';
+import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 import type {
   ListLogsFilter,
   LogEntry,
   ReverseLogInput,
 } from '../model/log.types';
-import type { ProviderGroup } from '../model/catalog.types';
-import type { Model } from '../model/model.types';
-import {
-  getDemuxaiCatalogPort,
-  getDemuxaiLogsPort,
-  getDemuxaiModelPort,
-} from '../services';
+import { getDemuxaiLogsPort } from '../services';
 import LogDetailDrawer from '../components/LogDetailDrawer.vue';
 import LogReverseDialog from '../components/LogReverseDialog.vue';
 
 const router = useRouter();
 const logsPort = getDemuxaiLogsPort();
-const modelPort = getDemuxaiModelPort();
-const catalogPort = getDemuxaiCatalogPort();
-const accountPort = getAccountAdminPort();
 
 const records = ref<LogEntry[]>([]);
 const total = ref(0);
@@ -63,7 +53,7 @@ interface PageFilter {
   dateRange: [string, string] | null;
   /** 模糊匹配 `LogEntry.modelName` */
   modelName: string;
-  /** 供应商 QueueGroup；空字符串 = 全部。 */
+  /** 渠道 QueueGroup；空字符串 = 全部。 */
   providerQueueGroup: string;
   /** 仅看失败调用（success === false） */
   errorOnly: boolean;
@@ -86,51 +76,12 @@ const defaultFilter = (): PageFilter => ({
 
 const filter = ref<PageFilter>(defaultFilter());
 
-const models = ref<Model[]>([]);
-const providerGroups = ref<ProviderGroup[]>([]);
-const accountMap = ref<Map<string, Account>>(new Map());
-
-const modelMap = computed(() => {
-  const m = new Map<string, Model>();
-  for (const it of models.value) m.set(it.modelId, it);
-  return m;
-});
-/** QueueGroup → 供应商组（/demuxai/providers 页入库的渠道）。 */
-const providerGroupMap = computed(() => {
-  const m = new Map<string, ProviderGroup>();
-  for (const g of providerGroups.value) m.set(g.queueGroup, g);
-  return m;
-});
-
 const detailOpen = ref(false);
 const detailLog = ref<LogEntry | null>(null);
 
 const reverseOpen = ref(false);
 const reverseLog = ref<LogEntry | null>(null);
 const reverseSubmitting = ref(false);
-
-async function loadDeps(): Promise<void> {
-  const [mr, gr, ar] = await Promise.all([
-    modelPort.list({
-      page: 1,
-      pageSize: 500,
-      filter: { keyword: '', family: 'all', capability: 'all' },
-    }),
-    catalogPort.listProviderGroups(),
-    accountPort.listAccounts({
-      page: 1,
-      pageSize: 200,
-      filter: { accountUid: '', contactKeyword: '', type: 'all', status: 'all' },
-    }),
-  ]);
-  if (mr.success) models.value = mr.data.items;
-  if (gr.success) providerGroups.value = gr.data;
-  if (ar.success) {
-    const m = new Map<string, Account>();
-    ar.data.items.forEach((a) => m.set(a.uid, a));
-    accountMap.value = m;
-  }
-}
 
 function buildPortFilter(): ListLogsFilter {
   const f: ListLogsFilter = {
@@ -144,8 +95,9 @@ function buildPortFilter(): ListLogsFilter {
     const kw = (f.modelName ?? '').trim();
     f.modelName = kw ? (kw.startsWith(prefix) ? kw : `${prefix}${kw}`) : prefix;
   }
-  if (filter.value.dateRange && filter.value.dateRange[0]) f.fromUtc = filter.value.dateRange[0];
-  if (filter.value.dateRange && filter.value.dateRange[1]) f.toUtc = filter.value.dateRange[1];
+  if (filter.value.dateRange?.[0] && filter.value.dateRange[1]) {
+    Object.assign(f, dateRangeToEpochMillis(filter.value.dateRange));
+  }
   return f;
 }
 
@@ -198,15 +150,15 @@ function resetFilter(): void {
   page.value = 1;
 }
 
+/** 邮箱 / 手机关键字：在当前页结果上过滤（数据来自日志 API 的 account enrich）。 */
 const displayRecords = computed(() => {
   const kw = filter.value.contactKeyword.trim().toLowerCase();
   if (!kw) return records.value;
   return records.value.filter((r) => {
-    const a = accountMap.value.get(r.account.uid);
-    if (!a) return false;
-    const email = (a.ownerEmail ?? '').toLowerCase();
-    const phone = a.ownerPhone ?? '';
-    return email.includes(kw) || phone.includes(kw);
+    const email = (r.account.email ?? '').toLowerCase();
+    const phone = r.account.phone ?? '';
+    const name = (r.account.displayName ?? '').toLowerCase();
+    return email.includes(kw) || phone.includes(kw) || name.includes(kw);
   });
 });
 
@@ -303,26 +255,10 @@ function usageSummary(row: LogEntry): { main: string; sub: string } {
   }
 }
 
-/** `group/model` 形态时取 group 作为 queueGroup（如 gemini/gemini-3.1-pro-preview → gemini）。 */
-function queueGroupFromModelName(modelName: string): string | null {
+/** `vendor/model` 形态时取 vendor 作为渠道（如 gemini/gemini-3.1-pro-preview → gemini）。 */
+function channelFromModelName(modelName: string): string {
   const i = modelName.indexOf('/');
-  return i > 0 ? modelName.slice(0, i) : null;
-}
-
-/** 供应商渠道：对齐 /demuxai/providers 入库的 ProviderGroup。 */
-function channelLabel(row: LogEntry): string {
-  const key = queueGroupFromModelName(row.modelName);
-  if (!key) return '—';
-  return providerGroupMap.value.get(key)?.displayName ?? key;
-}
-
-/** 模型列：displayName 与 modelName 相同时只显示一行。 */
-function modelCell(row: LogEntry): { title: string; subtitle: string | null; deleted: boolean } {
-  const display = modelDisplayName(row.modelName);
-  if (display && display !== row.modelName) {
-    return { title: display, subtitle: row.modelName, deleted: false };
-  }
-  return { title: row.modelName, subtitle: null, deleted: display == null };
+  return i > 0 ? modelName.slice(0, i) : '—';
 }
 
 /** 错误码 → 国际化文案；未识别码原样返回 */
@@ -330,20 +266,7 @@ function errorCodeText(code: string): string {
   return (LogErrorCodeLabel as Record<string, string>)[code] ?? code;
 }
 
-/** 查不到 = 模型已自动删除（无任何 mapping 引用） */
-function modelDisplayName(modelName: string): string | null {
-  return modelMap.value.get(modelName)?.displayName ?? null;
-}
-
-const detailChannelLabel = computed(() =>
-  detailLog.value ? channelLabel(detailLog.value) : '',
-);
-const detailModelDisplay = computed(() =>
-  detailLog.value ? modelDisplayName(detailLog.value.modelName) : null,
-);
-
 onMounted(() => {
-  void loadDeps();
   void fetchData();
 });
 </script>
@@ -369,15 +292,14 @@ onMounted(() => {
           style="width: 220px"
         />
       </el-form-item>
-      <el-form-item label="供应商">
-        <el-select v-model="filter.providerQueueGroup" clearable placeholder="全部" style="width: 220px">
-          <el-option
-            v-for="g in providerGroups"
-            :key="g.queueGroup"
-            :label="g.displayName"
-            :value="g.queueGroup"
-          />
-        </el-select>
+      <el-form-item label="渠道">
+        <el-input
+          v-model="filter.providerQueueGroup"
+          :prefix-icon="Search"
+          placeholder="如 gemini"
+          clearable
+          style="width: 220px"
+        />
       </el-form-item>
       <el-form-item>
         <el-checkbox v-model="filter.errorOnly">
@@ -426,21 +348,13 @@ onMounted(() => {
 
       <el-table-column label="模型" min-width="200">
         <template #default="{ row }: { row: LogEntry }">
-          <div class="cell-model">
-            <span
-              class="cell-model__primary"
-              :class="{ 'cell-model__primary--gone': modelCell(row).deleted }"
-            >
-              {{ modelCell(row).title }}
-            </span>
-            <span v-if="modelCell(row).subtitle" class="cell-model__sub mono">{{ modelCell(row).subtitle }}</span>
-          </div>
+          <span class="cell-model__primary mono">{{ row.modelName }}</span>
         </template>
       </el-table-column>
 
-      <el-table-column label="供应商" width="100">
+      <el-table-column label="渠道" width="100">
         <template #default="{ row }: { row: LogEntry }">
-          <span class="cell-channel">{{ channelLabel(row) }}</span>
+          <span class="cell-channel">{{ channelFromModelName(row.modelName) }}</span>
         </template>
       </el-table-column>
 
@@ -473,18 +387,14 @@ onMounted(() => {
 
       <el-table-column label="耗时" width="100" align="right">
         <template #default="{ row }: { row: LogEntry }">
-          <span
-            v-if="row.tokenLatency != null"
-            class="cell-latency num"
-            :class="{ 'num-slow': row.streamed && row.tokenLatency > 1500 }"
-          >
+          <span v-if="row.tokenLatency != null" class="cell-latency num">
             {{ row.tokenLatency.toLocaleString() }} ms
           </span>
           <span v-else class="cell-muted">—</span>
         </template>
       </el-table-column>
 
-      <el-table-column label="账户" min-width="120">
+      <el-table-column label="账户" min-width="168">
         <template #default="{ row }: { row: LogEntry }">
           <el-button
             link
@@ -492,7 +402,10 @@ onMounted(() => {
             class="cell-account-link"
             @click="router.push(`/accounts/${row.account.uid}`)"
           >
-            {{ accountMap.get(row.account.uid)?.name ?? row.account.uid }}
+            <span class="cell-account">
+              <span class="cell-account__line">{{ row.account.email || '—' }}</span>
+              <span class="cell-account__line cell-account__line--sub">{{ row.account.phone || '—' }}</span>
+            </span>
           </el-button>
         </template>
       </el-table-column>
@@ -532,8 +445,6 @@ onMounted(() => {
     <LogDetailDrawer
       v-model="detailOpen"
       :log="detailLog"
-      :channel-label="detailChannelLabel"
-      :model-display="detailModelDisplay"
       @reverse="onDrawerReverse"
     />
 
@@ -563,10 +474,6 @@ onMounted(() => {
 }
 .num {
   font-variant-numeric: tabular-nums;
-}
-.num-slow {
-  color: var(--el-color-warning);
-  font-weight: 500;
 }
 
 .cell-time {
@@ -647,6 +554,22 @@ onMounted(() => {
   height: auto;
   font-size: 12.5px;
   justify-content: flex-start;
+}
+.cell-account {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  line-height: 1.35;
+  text-align: left;
+}
+.cell-account__line {
+  font-size: 12.5px;
+  word-break: break-all;
+}
+.cell-account__line--sub {
+  font-size: 11.5px;
+  color: var(--el-text-color-secondary);
 }
 
 .pagination-bar {

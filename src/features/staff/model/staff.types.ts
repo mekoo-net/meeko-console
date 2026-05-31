@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+import {
+  epochMillisNullableSchema,
+  epochMillisSchema,
+} from '@/shared/lib/epoch';
+
 /** 与 Keystone StaffPermissions 对齐的权限码全集（mock SuperAdmin 用）。 */
 export const ALL_STAFF_PERMISSIONS = [
   'platform.read',
@@ -47,10 +52,10 @@ export const staffUserSchema = z.object({
   roleId: z.string(),
   roleName: z.string(),
   status: z.enum(['Active', 'Disabled']),
-  lastLoginAtUtc: z.string().nullable().optional(),
+  lastLoginAtUtc: epochMillisNullableSchema.optional(),
   lastLoginIp: z.string().nullable().optional(),
-  createdAtUtc: z.string(),
-  updatedAtUtc: z.string(),
+  createdAtUtc: epochMillisSchema,
+  updatedAtUtc: epochMillisSchema,
 });
 
 export type StaffUser = z.infer<typeof staffUserSchema>;
@@ -62,7 +67,7 @@ export const staffRoleSchema = z.object({
   isSystem: z.boolean(),
   permissionCodes: z.array(z.string()),
   memberCount: z.number(),
-  createdAtUtc: z.string(),
+  createdAtUtc: epochMillisSchema,
 });
 
 export type StaffRole = z.infer<typeof staffRoleSchema>;

@@ -11,6 +11,7 @@ import { Check, CircleCheck, Download, Refresh, Search } from '@element-plus/ico
 import { ElMessage } from 'element-plus';
 
 import EmptyState from '@/shared/ui/EmptyState.vue';
+import { formatDateTime } from '@/shared/lib/date';
 
 import { ProviderGroupLabel } from '../model/enums';
 import type {
@@ -43,7 +44,7 @@ const visible = computed({
 
 const discovering = ref(false);
 const importing = ref(false);
-const discoveredAtUtc = ref<string | null>(null);
+const discoveredAtUtc = ref<number | null>(null);
 
 const groups = ref<DiscoveredProviderGroup[]>([]);
 
@@ -261,7 +262,7 @@ watch(visible, (open) => {
 
     <div class="catalog-import-dialog__actions">
       <span v-if="discoveredAtUtc" class="catalog-import-dialog__meta">
-        上次拉取：{{ discoveredAtUtc }}
+        上次拉取：{{ formatDateTime(discoveredAtUtc) }}
       </span>
       <el-button
         type="primary"

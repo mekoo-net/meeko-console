@@ -1,6 +1,7 @@
 import type { AppResult } from '@/shared/api/httpTypes';
 import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
 import type { Uid } from '@/shared/lib/id';
+import { asEpochMillis } from '@/shared/lib/epoch';
 
 import type { ApiType, ProviderStatus } from '@/features/demuxai/model/enums';
 import type {
@@ -23,8 +24,8 @@ interface VendorDtoRaw {
   uid: number | string;
   name: string;
   status?: string | number;
-  created_at_utc?: string;
-  updated_at_utc?: string;
+  created_at_utc?: number | string;
+  updated_at_utc?: number | string;
 }
 
 interface UpsertVendorBody {
@@ -40,7 +41,7 @@ function mapVendorStatus(raw: VendorDtoRaw['status']): ProviderStatus {
 function vendorToProvider(raw: VendorDtoRaw, draft?: Partial<CreateProviderInput>): Provider {
   const uid = String(raw.uid);
   const numericUid = typeof raw.uid === 'number' ? raw.uid : Number.parseInt(uid, 10);
-  const now = raw.updated_at_utc ?? raw.created_at_utc ?? new Date().toISOString();
+  const now = Date.now();
   return {
     id: Number.isFinite(numericUid) ? (numericUid % 2_147_483_647) || 1 : 1,
     uid,
@@ -55,8 +56,8 @@ function vendorToProvider(raw: VendorDtoRaw, draft?: Partial<CreateProviderInput
     testSucceededAtUtc: null,
     providerModels: (draft?.providerModels ?? []) as Provider['providerModels'],
     modelMappings: (draft?.modelMappings ?? []) as Provider['modelMappings'],
-    createdAtUtc: raw.created_at_utc ?? now,
-    updatedAtUtc: raw.updated_at_utc ?? now,
+    createdAtUtc: asEpochMillis(raw.created_at_utc) ?? now,
+    updatedAtUtc: asEpochMillis(raw.updated_at_utc ?? raw.created_at_utc) ?? now,
   };
 }
 

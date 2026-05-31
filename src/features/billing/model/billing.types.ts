@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
 import {
+  epochMillisNullableSchema,
+  epochMillisSchema,
+} from '@/shared/lib/epoch';
+
+import {
   billingModeSchema,
   invoiceKindSchema,
   invoiceStatusSchema,
@@ -53,7 +58,7 @@ export const walletSnapshotSchema = z.object({
   available: z.number(),
   held: z.number(),
   currency: z.string(),
-  updatedAtUtc: z.string(),
+  updatedAtUtc: epochMillisSchema,
 });
 
 export type WalletSnapshot = z.infer<typeof walletSnapshotSchema>;
@@ -68,8 +73,8 @@ export const rechargeIntentSchema = z.object({
   qrCodeUrl: z.string().nullable().optional(),
   redirectUrl: z.string().nullable().optional(),
   jsApiPayloadJson: z.string().nullable().optional(),
-  createdAtUtc: z.string(),
-  expiresAtUtc: z.string().nullable().optional(),
+  createdAtUtc: epochMillisSchema,
+  expiresAtUtc: epochMillisNullableSchema.optional(),
 });
 
 export type RechargeIntent = z.infer<typeof rechargeIntentSchema>;
@@ -96,9 +101,9 @@ export const orderDtoSchema = z.object({
   status: orderStatusSchema,
   resourceId: idString.nullable().optional(),
   metadataJson: z.string().nullable().optional(),
-  createdAtUtc: z.string(),
-  activatedAtUtc: z.string().nullable().optional(),
-  terminatedAtUtc: z.string().nullable().optional(),
+  createdAtUtc: epochMillisSchema,
+  activatedAtUtc: epochMillisNullableSchema.optional(),
+  terminatedAtUtc: epochMillisNullableSchema.optional(),
 });
 
 export type OrderDto = z.infer<typeof orderDtoSchema>;
@@ -109,13 +114,13 @@ export const subscriptionDtoSchema = z.object({
   orderId: idString,
   productCode: z.string(),
   period: subscriptionPeriodSchema,
-  currentPeriodStartUtc: z.string(),
-  currentPeriodEndUtc: z.string(),
-  nextBillingAtUtc: z.string(),
+  currentPeriodStartUtc: epochMillisSchema,
+  currentPeriodEndUtc: epochMillisSchema,
+  nextBillingAtUtc: epochMillisSchema,
   status: subscriptionStatusSchema,
   autoRenew: z.boolean(),
   cancelAtPeriodEnd: z.boolean(),
-  createdAtUtc: z.string(),
+  createdAtUtc: epochMillisSchema,
 });
 
 export type SubscriptionDto = z.infer<typeof subscriptionDtoSchema>;
@@ -124,15 +129,15 @@ export const invoiceDtoSchema = z.object({
   id: idString,
   accountUid: idString,
   kind: invoiceKindSchema,
-  periodStartUtc: z.string().nullable().optional(),
-  periodEndUtc: z.string().nullable().optional(),
+  periodStartUtc: epochMillisNullableSchema.optional(),
+  periodEndUtc: epochMillisNullableSchema.optional(),
   subtotal: z.number(),
   tax: z.number(),
   total: z.number(),
   currency: z.string(),
   status: invoiceStatusSchema,
-  issuedAtUtc: z.string(),
-  paidAtUtc: z.string().nullable().optional(),
+  issuedAtUtc: epochMillisSchema,
+  paidAtUtc: epochMillisNullableSchema.optional(),
   subscriptionId: idString.nullable().optional(),
   orderId: idString.nullable().optional(),
 });
@@ -207,8 +212,8 @@ export const rechargeRecordSchema = z.object({
    * 用户自主第三方支付时为 null。
    */
   operatorIamId: idString.nullable().optional(),
-  createdAtUtc: z.string(),
-  paidAtUtc: z.string().nullable().optional(),
+  createdAtUtc: epochMillisSchema,
+  paidAtUtc: epochMillisNullableSchema.optional(),
 });
 
 export type RechargeRecord = z.infer<typeof rechargeRecordSchema>;
@@ -345,12 +350,12 @@ export const billingEntrySchema = z.object({
   refType: z.enum(billRefTypeValues).nullable().optional(),
   refId: idString.nullable().optional(),
   /** 驳回时间 */
-  reversedAtUtc: z.string().nullable().optional(),
+  reversedAtUtc: epochMillisNullableSchema.optional(),
   /** 驳回操作人 IAM userId */
   reversedByIamId: idString.nullable().optional(),
   /** 驳回原因码（枚举，仅当 status∈{reversed, partial_refunded} 时有值） */
   reversedCode: z.enum(billReversedCodeValues).nullable().optional(),
-  occurredAtUtc: z.string(),
+  occurredAtUtc: epochMillisSchema,
 });
 
 export type BillingEntry = z.infer<typeof billingEntrySchema>;
@@ -388,8 +393,8 @@ export interface ListOrdersFilter {
 
 export interface ListInvoicesFilter {
   kind: InvoiceKind | 'all';
-  fromUtc?: string | undefined;
-  toUtc?: string | undefined;
+  fromUtc?: number | undefined;
+  toUtc?: number | undefined;
 }
 
 export interface ListBillsFilter {
@@ -398,7 +403,6 @@ export interface ListBillsFilter {
   business: BusinessCode | 'all';
   subType: BillSubType | 'all';
   status: BillStatus | 'all';
-  fromUtc?: string | undefined;
-  toUtc?: string | undefined;
+  fromUtc?: number | undefined;
+  toUtc?: number | undefined;
 }
-

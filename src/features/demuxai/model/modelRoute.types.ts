@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { modelRouteStatusSchema, type ModelRouteStatus } from './enums';
+import { epochMillisSchema } from '@/shared/lib/epoch';
 
 const uidString = z.union([z.string(), z.number()]).transform((v) => String(v));
 
@@ -18,8 +19,8 @@ export const modelRouteSchema = z.object({
   priority: z.number().int().min(0).max(999),
   status: modelRouteStatusSchema,
   notes: z.string().nullable().optional(),
-  createdAtUtc: z.string(),
-  updatedAtUtc: z.string(),
+  createdAtUtc: epochMillisSchema,
+  updatedAtUtc: epochMillisSchema,
 });
 
 export type ModelRoute = z.infer<typeof modelRouteSchema>;

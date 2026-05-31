@@ -68,8 +68,8 @@ const PRODUCT_NAMES: Readonly<Record<string, string>> = {
 
 const store = new Map<Uid, AccountBilling>();
 
-function iso(d: Date): string {
-  return d.toISOString();
+function epochMs(d: Date): number {
+  return d.getTime();
 }
 
 function seedForAccount(accountUid: Uid): AccountBilling {
@@ -79,7 +79,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
     available: 12880.5,
     held: 200,
     currency: 'CNY',
-    updatedAtUtc: iso(now),
+    updatedAtUtc: epochMs(now),
   };
 
   const o1: OrderDto = {
@@ -92,8 +92,8 @@ function seedForAccount(accountUid: Uid): AccountBilling {
     status: 2,
     resourceUid: undefined,
     metadataJson: undefined,
-    createdAtUtc: iso(now),
-    activatedAtUtc: iso(now),
+    createdAtUtc: epochMs(now),
+    activatedAtUtc: epochMs(now),
     terminatedAtUtc: undefined,
   };
 
@@ -105,9 +105,9 @@ function seedForAccount(accountUid: Uid): AccountBilling {
     billingMode: 0,
     unitPriceSnapshot: 499,
     status: 3,
-    createdAtUtc: iso(new Date(now.getTime() - 86400000)),
-    activatedAtUtc: iso(new Date(now.getTime() - 86400000)),
-    terminatedAtUtc: iso(now),
+    createdAtUtc: epochMs(new Date(now.getTime() - 86400000)),
+    activatedAtUtc: epochMs(new Date(now.getTime() - 86400000)),
+    terminatedAtUtc: epochMs(now),
   };
 
   const sub: SubscriptionDto = {
@@ -116,13 +116,13 @@ function seedForAccount(accountUid: Uid): AccountBilling {
     orderId: o1.id,
     productCode: 'pro-seat',
     period: 0,
-    currentPeriodStartUtc: iso(new Date(now.getTime() - 7 * 86400000)),
-    currentPeriodEndUtc: iso(new Date(now.getTime() + 23 * 86400000)),
-    nextBillingAtUtc: iso(new Date(now.getTime() + 23 * 86400000)),
+    currentPeriodStartUtc: epochMs(new Date(now.getTime() - 7 * 86400000)),
+    currentPeriodEndUtc: epochMs(new Date(now.getTime() + 23 * 86400000)),
+    nextBillingAtUtc: epochMs(new Date(now.getTime() + 23 * 86400000)),
     status: 0,
     autoRenew: true,
     cancelAtPeriodEnd: false,
-    createdAtUtc: iso(now),
+    createdAtUtc: epochMs(now),
   };
 
   const inv1: InvoiceDto = {
@@ -136,8 +136,8 @@ function seedForAccount(accountUid: Uid): AccountBilling {
     total: 495,
     currency: 'CNY',
     status: 2,
-    issuedAtUtc: iso(now),
-    paidAtUtc: iso(now),
+    issuedAtUtc: epochMs(now),
+    paidAtUtc: epochMs(now),
     subscriptionId: sub.id,
     orderId: o1.id,
   };
@@ -153,8 +153,8 @@ function seedForAccount(accountUid: Uid): AccountBilling {
     total: 499,
     currency: 'CNY',
     status: 2,
-    issuedAtUtc: iso(new Date(now.getTime() - 86400000)),
-    paidAtUtc: iso(new Date(now.getTime() - 86400000)),
+    issuedAtUtc: epochMs(new Date(now.getTime() - 86400000)),
+    paidAtUtc: epochMs(new Date(now.getTime() - 86400000)),
     subscriptionId: undefined,
     orderId: o2.id,
   };
@@ -170,8 +170,8 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       currency: 'CNY',
       status: 'paid',
       operatorIamId: null,
-      createdAtUtc: iso(new Date(now.getTime() - 30 * 86400000)),
-      paidAtUtc: iso(new Date(now.getTime() - 30 * 86400000 + 60000)),
+      createdAtUtc: epochMs(new Date(now.getTime() - 30 * 86400000)),
+      paidAtUtc: epochMs(new Date(now.getTime() - 30 * 86400000 + 60000)),
     },
     {
       id: genSnowflakeUid(),
@@ -183,8 +183,8 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       currency: 'CNY',
       status: 'paid',
       operatorIamId: null,
-      createdAtUtc: iso(new Date(now.getTime() - 10 * 86400000)),
-      paidAtUtc: iso(new Date(now.getTime() - 10 * 86400000 + 30000)),
+      createdAtUtc: epochMs(new Date(now.getTime() - 10 * 86400000)),
+      paidAtUtc: epochMs(new Date(now.getTime() - 10 * 86400000 + 30000)),
     },
     {
       id: genSnowflakeUid(),
@@ -196,8 +196,8 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       currency: 'CNY',
       status: 'paid',
       operatorIamId: '900000001',
-      createdAtUtc: iso(new Date(now.getTime() - 3 * 3600000)),
-      paidAtUtc: iso(new Date(now.getTime() - 3 * 3600000)),
+      createdAtUtc: epochMs(new Date(now.getTime() - 3 * 3600000)),
+      paidAtUtc: epochMs(new Date(now.getTime() - 3 * 3600000)),
     },
     {
       id: genSnowflakeUid(),
@@ -209,8 +209,8 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       currency: 'CNY',
       status: 'paid',
       operatorIamId: '900000002',
-      createdAtUtc: iso(new Date(now.getTime() - 20 * 86400000)),
-      paidAtUtc: iso(new Date(now.getTime() - 20 * 86400000)),
+      createdAtUtc: epochMs(new Date(now.getTime() - 20 * 86400000)),
+      paidAtUtc: epochMs(new Date(now.getTime() - 20 * 86400000)),
     },
     {
       id: genSnowflakeUid(),
@@ -222,7 +222,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       currency: 'CNY',
       status: 'pending',
       operatorIamId: null,
-      createdAtUtc: iso(now),
+      createdAtUtc: epochMs(now),
       paidAtUtc: null,
     },
   ];
@@ -249,7 +249,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       reversedAtUtc: null,
       reversedByIamId: null,
       reversedCode: null,
-      occurredAtUtc: iso(new Date(now.getTime() - 7 * 86400000)),
+      occurredAtUtc: epochMs(new Date(now.getTime() - 7 * 86400000)),
     },
     {
       id: genSnowflakeUid(),
@@ -269,7 +269,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       reversedAtUtc: null,
       reversedByIamId: null,
       reversedCode: null,
-      occurredAtUtc: iso(new Date(now.getTime() - 86400000)),
+      occurredAtUtc: epochMs(new Date(now.getTime() - 86400000)),
     },
     {
       id: genSnowflakeUid(),
@@ -289,7 +289,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       reversedAtUtc: null,
       reversedByIamId: null,
       reversedCode: null,
-      occurredAtUtc: iso(new Date(now.getTime() - 2 * 86400000)),
+      occurredAtUtc: epochMs(new Date(now.getTime() - 2 * 86400000)),
     },
     {
       id: genSnowflakeUid(),
@@ -306,10 +306,10 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       balanceAfter: 12358.5,
       refType: null,
       refId: null,
-      reversedAtUtc: iso(new Date(now.getTime() - 5 * 86400000 + 3600000)),
+      reversedAtUtc: epochMs(new Date(now.getTime() - 5 * 86400000 + 3600000)),
       reversedByIamId: '900000001',
       reversedCode: 'duplicate_charge',
-      occurredAtUtc: iso(new Date(now.getTime() - 5 * 86400000)),
+      occurredAtUtc: epochMs(new Date(now.getTime() - 5 * 86400000)),
     },
     {
       id: genSnowflakeUid(),
@@ -326,10 +326,10 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       balanceAfter: null,
       refType: null,
       refId: null,
-      reversedAtUtc: iso(new Date(now.getTime() - 12 * 86400000)),
+      reversedAtUtc: epochMs(new Date(now.getTime() - 12 * 86400000)),
       reversedByIamId: '900000001',
       reversedCode: 'service_unavailable',
-      occurredAtUtc: iso(new Date(now.getTime() - 12 * 86400000 - 3600000)),
+      occurredAtUtc: epochMs(new Date(now.getTime() - 12 * 86400000 - 3600000)),
     },
     {
       id: genSnowflakeUid(),
@@ -349,7 +349,7 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       reversedAtUtc: null,
       reversedByIamId: null,
       reversedCode: null,
-      occurredAtUtc: iso(new Date(now.getTime() - 60 * 60 * 1000)),
+      occurredAtUtc: epochMs(new Date(now.getTime() - 60 * 60 * 1000)),
     },
   ];
 
@@ -360,8 +360,8 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       productCode: 'cdn-accel',
       productName: PRODUCT_NAMES['cdn-accel']!,
       status: 'opened',
-      openedAtUtc: iso(new Date(now.getTime() - 30 * 86400000)),
-      currentPeriodEndUtc: iso(new Date(now.getTime() + 30 * 86400000)),
+      openedAtUtc: epochMs(new Date(now.getTime() - 30 * 86400000)),
+      currentPeriodEndUtc: epochMs(new Date(now.getTime() + 30 * 86400000)),
     },
     {
       id: genBusinessUid(),
@@ -369,8 +369,8 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       productCode: 'obj-storage',
       productName: PRODUCT_NAMES['obj-storage']!,
       status: 'opened',
-      openedAtUtc: iso(new Date(now.getTime() - 90 * 86400000)),
-      currentPeriodEndUtc: iso(new Date(now.getTime() + 7 * 86400000)),
+      openedAtUtc: epochMs(new Date(now.getTime() - 90 * 86400000)),
+      currentPeriodEndUtc: epochMs(new Date(now.getTime() + 7 * 86400000)),
     },
     {
       id: genBusinessUid(),
@@ -378,9 +378,9 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       productCode: 'ai-inference',
       productName: PRODUCT_NAMES['ai-inference']!,
       status: 'paused',
-      openedAtUtc: iso(new Date(now.getTime() - 60 * 86400000)),
-      pausedAtUtc: iso(new Date(now.getTime() - 5 * 86400000)),
-      currentPeriodEndUtc: iso(new Date(now.getTime() + 15 * 86400000)),
+      openedAtUtc: epochMs(new Date(now.getTime() - 60 * 86400000)),
+      pausedAtUtc: epochMs(new Date(now.getTime() - 5 * 86400000)),
+      currentPeriodEndUtc: epochMs(new Date(now.getTime() + 15 * 86400000)),
     },
     {
       id: genBusinessUid(),
@@ -388,8 +388,8 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       productCode: 'api-pack',
       productName: PRODUCT_NAMES['api-pack']!,
       status: 'stopped',
-      openedAtUtc: iso(new Date(now.getTime() - 180 * 86400000)),
-      stoppedAtUtc: iso(new Date(now.getTime() - 20 * 86400000)),
+      openedAtUtc: epochMs(new Date(now.getTime() - 180 * 86400000)),
+      stoppedAtUtc: epochMs(new Date(now.getTime() - 20 * 86400000)),
       currentPeriodEndUtc: null,
     },
   ];
@@ -452,13 +452,13 @@ function filterInvoices(rows: InvoiceDto[], f: ListInvoicesFilter): InvoiceDto[]
   if (f.kind !== 'all') {
     out = out.filter((r) => r.kind === f.kind);
   }
-  if (f.fromUtc) {
-    const from = Date.parse(f.fromUtc);
-    out = out.filter((r) => Date.parse(r.issuedAtUtc) >= from);
+  if (f.fromUtc != null) {
+    const from = f.fromUtc;
+    out = out.filter((r) => r.issuedAtUtc >= from);
   }
-  if (f.toUtc) {
-    const to = Date.parse(f.toUtc);
-    out = out.filter((r) => Date.parse(r.issuedAtUtc) <= to);
+  if (f.toUtc != null) {
+    const to = f.toUtc;
+    out = out.filter((r) => r.issuedAtUtc <= to);
   }
   return out;
 }
@@ -470,7 +470,7 @@ export class BillingMock implements BillingPort {
       return fail({ code: 'validation', message: '充值金额必须大于 0' });
     }
     const b = ensure(accountUid);
-    const created = iso(new Date());
+    const created = epochMs(new Date());
     const provider = (input.provider ?? 'manual') as RechargeRecord['provider'];
     const intent: RechargeIntent = {
       rechargeId: genRechargeUid(),
@@ -521,7 +521,7 @@ export class BillingMock implements BillingPort {
     }
     const accountUid = input.ownerAccountUid.trim();
     const b = ensure(accountUid);
-    const created = iso(new Date());
+    const created = epochMs(new Date());
     b.wallet = {
       ...b.wallet,
       available: b.wallet.available + input.amount,
@@ -554,7 +554,7 @@ export class BillingMock implements BillingPort {
     const b = ensure(accountUid);
     const q = input.quantity <= 0 ? 1 : input.quantity;
     const orderId = genOrderUid();
-    const created = iso(new Date());
+    const created = epochMs(new Date());
     const order: OrderDto = {
       id: orderId,
       accountUid,
@@ -665,7 +665,7 @@ export class BillingMock implements BillingPort {
       for (const b of store.values()) {
         all.push(...b.recharges);
       }
-      all.sort((a, b) => b.createdAtUtc.localeCompare(a.createdAtUtc));
+      all.sort((a, b) => b.createdAtUtc - a.createdAtUtc);
     }
     if (input.filter.provider !== 'all') {
       all = all.filter((r) => r.provider === input.filter.provider);
@@ -673,13 +673,13 @@ export class BillingMock implements BillingPort {
     if (input.filter.status !== 'all') {
       all = all.filter((r) => r.status === input.filter.status);
     }
-    if (input.filter.fromUtc) {
-      const from = Date.parse(input.filter.fromUtc);
-      all = all.filter((r) => Date.parse(r.createdAtUtc) >= from);
+    if (input.filter.fromUtc != null) {
+      const from = input.filter.fromUtc;
+      all = all.filter((r) => r.createdAtUtc >= from);
     }
-    if (input.filter.toUtc) {
-      const to = Date.parse(input.filter.toUtc);
-      all = all.filter((r) => Date.parse(r.createdAtUtc) <= to);
+    if (input.filter.toUtc != null) {
+      const to = input.filter.toUtc;
+      all = all.filter((r) => r.createdAtUtc <= to);
     }
     const slice = clientPaginate(all, input.page, input.pageSize);
     const parsed: RechargeRecord[] = [];
@@ -701,7 +701,7 @@ export class BillingMock implements BillingPort {
     if (filter.status !== 'all') {
       rows = rows.filter((r) => r.status === filter.status);
     }
-    rows.sort((a, b) => b.openedAtUtc.localeCompare(a.openedAtUtc));
+    rows.sort((a, b) => b.openedAtUtc - a.openedAtUtc);
     const parsed: BusinessInstance[] = [];
     for (const it of rows) {
       const r = businessInstanceSchema.safeParse(it);
@@ -725,7 +725,7 @@ export class BillingMock implements BillingPort {
       for (const b of store.values()) {
         all.push(...b.bills);
       }
-      all.sort((a, b) => b.occurredAtUtc.localeCompare(a.occurredAtUtc));
+      all.sort((a, b) => b.occurredAtUtc - a.occurredAtUtc);
     }
     if (input.filter.business !== 'all') {
       all = all.filter((r) => r.business === input.filter.business);
@@ -736,13 +736,13 @@ export class BillingMock implements BillingPort {
     if (input.filter.status !== 'all') {
       all = all.filter((r) => r.status === input.filter.status);
     }
-    if (input.filter.fromUtc) {
-      const from = Date.parse(input.filter.fromUtc);
-      all = all.filter((r) => Date.parse(r.occurredAtUtc) >= from);
+    if (input.filter.fromUtc != null) {
+      const from = input.filter.fromUtc;
+      all = all.filter((r) => r.occurredAtUtc >= from);
     }
-    if (input.filter.toUtc) {
-      const to = Date.parse(input.filter.toUtc);
-      all = all.filter((r) => Date.parse(r.occurredAtUtc) <= to);
+    if (input.filter.toUtc != null) {
+      const to = input.filter.toUtc;
+      all = all.filter((r) => r.occurredAtUtc <= to);
     }
     const slice = clientPaginate(all, input.page, input.pageSize);
     const parsed: BillingEntry[] = [];

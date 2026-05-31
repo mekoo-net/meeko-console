@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { epochMillisNullableSchema, epochMillisSchema } from '@/shared/lib/epoch';
+
 import {
   apiTypeSchema,
   billingTypeSchema,
@@ -237,8 +239,8 @@ export type PerCharacterCost = z.infer<typeof perCharacterCostSchema>;
 
 const logEntryBaseShape = {
   id: uidString,
-  /** 调用发生时间（UTC ISO8601）。原名 `occurredAtUtc`，按"用户感知"语义简化为 `createAt`。 */
-  createAt: z.string(),
+  /** 调用发生时间（Unix 毫秒 UTC）。原名 `occurredAtUtc`，按"用户感知"语义简化为 `createAt`。 */
+  createAt: epochMillisSchema,
   /**
    * 租户身份聚合对象 —— 替代原先并列的 `accountUid` + `iamUserUid` 顶层字段。
    *
@@ -249,6 +251,12 @@ const logEntryBaseShape = {
     uid: uidString,
     /** IAM 子账户 userId；主账户直接调用时为 null。 */
     iamId: uidString.nullable().optional(),
+    /** 账户昵称 / 组织名（BFF enrich 自 Keystone）。 */
+    displayName: z.string().optional(),
+    /** 主账户联系邮箱。 */
+    email: z.string().optional(),
+    /** 主账户联系手机。 */
+    phone: z.string().nullish(),
   }),
   /** 多轮对话的会话 ID。同一对话的多次调用共享同一 convId；无会话上下文时为 null。 */
   convId: z.string().min(1).nullable().optional(),
@@ -322,8 +330,8 @@ const logEntryBaseShape = {
       id: z.string().min(1),
       /** 当前账单状态（demuxai 用量只用到 `completed` / `reversed` 两种） */
       status: billStatusSchema,
-      /** 已驳回时的操作时间（UTC ISO8601）；`completed` 状态为 null */
-      reversedAtUtc: z.string().nullable(),
+      /** 已驳回时的操作时间（Unix 毫秒 UTC）；`completed` 状态为 null */
+      reversedAtUtc: epochMillisNullableSchema,
       /** 已驳回时的操作人 IAM 主键；`completed` 状态为 null */
       reversedBy: z.string().nullable(),
       /** 已驳回时的原因码；`completed` 状态为 null */
@@ -393,8 +401,8 @@ export interface ListLogsFilter {
   /** 会话 ID 精确匹配（用于按对话维度排障） */
   convId?: string;
   /** 必传时间范围以防全表扫；UI 默认填最近 24h */
-  fromUtc?: string;
-  toUtc?: string;
+  fromUtc?: number;
+  toUtc?: number;
   /** 仅看失败调用（`success === false`）。等同于 `errorOnly` 的旧语义。 */
   errorOnly?: boolean;
   /**
@@ -408,8 +416,8 @@ export interface ListLogsFilter {
 
 /** 时间分桶聚合点（按 from-to 跨度自适应桶大小：1h / 1d / etc.） */
 export interface LogStatsBucket {
-  /** 桶起始时间（UTC ISO） */
-  tsUtc: string;
+  /** 桶起始时间（Unix 毫秒 UTC） */
+  tsUtc: number;
   calls: number;
   errors: number;
   /** 该桶总扣费（元，跨 billingType 累加） */
@@ -503,7 +511,7 @@ export interface ReverseLogInput {
 export interface ReverseLogResult {
   logId: string;
   billId: string;
-  reversedAtUtc: string;
+  reversedAtUtc: number;
   reversedBy: string;
   reversedCode: BillReverseCode;
 }

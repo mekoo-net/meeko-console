@@ -16,6 +16,7 @@ import StatusTag from '@/shared/ui/StatusTag.vue';
 import FilterBar from '@/shared/ui/FilterBar.vue';
 import { formatMoney } from '@/shared/lib/money';
 import { formatDateTime } from '@/shared/lib/date';
+import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 import { getAccountAdminPort } from '@/features/accounts/services';
 import type { Account } from '@/features/accounts/model/account.types';
 
@@ -91,11 +92,8 @@ function buildPortFilter(): ListBillsFilter {
   if (filter.value.accountUid.trim()) {
     f.accountUid = filter.value.accountUid.trim();
   }
-  if (filter.value.dateRange && filter.value.dateRange[0]) {
-    f.fromUtc = filter.value.dateRange[0];
-  }
-  if (filter.value.dateRange && filter.value.dateRange[1]) {
-    f.toUtc = filter.value.dateRange[1];
+  if (filter.value.dateRange?.[0] && filter.value.dateRange[1]) {
+    Object.assign(f, dateRangeToEpochMillis(filter.value.dateRange));
   }
   return f;
 }

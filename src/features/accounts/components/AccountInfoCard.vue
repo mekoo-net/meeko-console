@@ -57,7 +57,7 @@ defineProps<{ account: Account }>();
         :total-recharged-amount="account.totalRechargedAmount"
       />
       <AccountWalletCard :wallet="account.wallet" />
-      <AccountOAuthCard :bindings="account.oauthBindings" />
+      <AccountOAuthCard :bindings="account.oauthBindings ?? undefined" />
     </div>
   </section>
 </template>

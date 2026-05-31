@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { BillingType } from './enums';
+import { epochMillisSchema } from '@/shared/lib/epoch';
 
 const uidString = z.union([z.string(), z.number()]).transform((v) => String(v));
 
@@ -132,8 +133,8 @@ const pricingBaseShape = {
   /** key 是 LV 字符串，value 是该 LV 的倍率（如 `"5" → 0.7`）。 */
   tierMultipliers: z.record(z.string(), z.number().positive()),
   /** 生效时间（UTC）；未来时间 = 预生效。BFF 调度按"最近一条已生效"取数。 */
-  effectiveFromUtc: z.string(),
-  updatedAtUtc: z.string(),
+  effectiveFromUtc: epochMillisSchema,
+  updatedAtUtc: epochMillisSchema,
   /** 最近一次改动操作人（IAM userId） */
   updatedBy: z.object({ iamId: uidString }).nullable().optional(),
 };
@@ -182,7 +183,7 @@ const upsertBaseShape = {
   multiplier: z.number().positive(),
   currency: z.string(),
   tierMultipliers: z.record(z.string(), z.number().positive()),
-  effectiveFromUtc: z.string(),
+  effectiveFromUtc: epochMillisSchema,
 };
 
 export const upsertPricingInputSchema = z.discriminatedUnion('billingType', [

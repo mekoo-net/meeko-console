@@ -35,10 +35,10 @@ function randomKey(): string {
   return `CDK-${seg()}-${seg()}-${seg()}`;
 }
 
-function parseExpiredSec(iso: string | null): number | null {
+function parseExpiredMs(iso: string | null): number | null {
   if (!iso?.trim()) return null;
-  const sec = Math.floor(Date.parse(iso) / 1000);
-  return Number.isFinite(sec) ? sec : null;
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? ms : null;
 }
 
 let store: RedemptionCode[] | null = null;
@@ -89,9 +89,9 @@ export class DemuxaiRedemptionMock implements DemuxaiRedemptionPort {
         ? 1
         : Math.min(Math.max(Math.floor(input.count), 1), 100);
     const quota = displayAmountToQuota(input.amount);
-    const expiredTime = parseExpiredSec(input.expiredAtUtc);
+    const expiredTime = parseExpiredMs(input.expiredAtUtc);
     const keys: string[] = [];
-    const now = Math.floor(Date.now() / 1000);
+    const now = Date.now();
     for (let i = 0; i < count; i++) {
       const key = randomKey();
       keys.push(key);

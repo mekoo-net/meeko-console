@@ -28,6 +28,7 @@ function mapModel(raw: unknown): Model {
     ...r,
     modelId: r['modelId'] ?? r['modelName'] ?? '',
     uid: r['uid'] ?? (r['id'] != null ? String(r['id']) : ''),
+    vendorName: typeof r['vendorName'] === 'string' ? r['vendorName'] : undefined,
   } as unknown as Model;
 }
 

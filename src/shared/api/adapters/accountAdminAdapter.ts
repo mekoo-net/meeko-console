@@ -8,6 +8,7 @@ import type {
 import type { CreateIamUserPayload } from '@/features/accounts/model/validators';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { apiFetch } from '@/shared/api/httpClient';
+import { asEpochMillis, asEpochMillisNullable } from '@/shared/lib/epoch';
 
 interface AccountAdminListWire {
   items: unknown[];
@@ -37,7 +38,7 @@ function mapWalletSummary(raw: unknown): Record<string, unknown> | null | undefi
     available: w.available,
     held: w.held,
     currency: typeof w.currency === 'string' ? w.currency : 'CNY',
-    snapshotAtUtc: w.snapshotAtUtc ?? w.snapshot_at_utc,
+    snapshotAtUtc: asEpochMillis(w.snapshotAtUtc ?? w.snapshot_at_utc) ?? 0,
   };
 } 
 
@@ -50,7 +51,7 @@ function mapAccountWallet(raw: unknown): Record<string, unknown> | null | undefi
     available: w.available,
     held: w.held,
     currency: typeof w.currency === 'string' ? w.currency : 'CNY',
-    updatedAtUtc: w.updatedAtUtc ?? w.updated_at_utc,
+    updatedAtUtc: asEpochMillis(w.updatedAtUtc ?? w.updated_at_utc) ?? 0,
   };
 }
 
@@ -81,9 +82,9 @@ function mapListItem(raw: Record<string, unknown>): Record<string, unknown> {
           : undefined,
     ownerPhone: asOptionalString(owner?.phone ?? raw.ownerPhone ?? raw.owner_phone),
     iamUserCount: raw.iamUserCount ?? raw.iam_user_count ?? 0,
-    createdAtUtc: asOptionalString(raw.createdAtUtc ?? raw.created_at_utc),
-    updatedAtUtc: asOptionalString(raw.updatedAtUtc ?? raw.updated_at_utc),
-    lastActiveAtUtc: asOptionalString(raw.lastActiveAtUtc ?? raw.last_active_at_utc),
+    createdAtUtc: asEpochMillis(raw.createdAtUtc ?? raw.created_at_utc),
+    updatedAtUtc: asEpochMillis(raw.updatedAtUtc ?? raw.updated_at_utc),
+    lastActiveAtUtc: asEpochMillisNullable(raw.lastActiveAtUtc ?? raw.last_active_at_utc),
     tier: typeof raw.tier === 'number' ? raw.tier : 1,
     totalRechargedAmount:
       typeof raw.totalRechargedAmount === 'number'

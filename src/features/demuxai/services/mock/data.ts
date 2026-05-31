@@ -87,8 +87,8 @@ export const upstreamCatalog: Readonly<Record<ApiType, readonly string[]>> = {
   ],
 };
 
-function iso(d: Date): string {
-  return d.toISOString();
+function epochMs(d: Date): number {
+  return d.getTime();
 }
 
 const now = new Date('2026-05-12T10:00:00Z');
@@ -140,7 +140,7 @@ export function makeDefaultProviderModel(modelName: string): ProviderModel {
 }
 
 /** 把 displayName 包装成"平台层 Model"行（供 Models 页只读列表使用） */
-function buildGlobalModel(displayName: string, pm: ProviderModel, t: string): Model {
+function buildGlobalModel(displayName: string, pm: ProviderModel, at: number): Model {
   return {
     uid: genModelUid(),
     modelId: displayName,
@@ -153,8 +153,8 @@ function buildGlobalModel(displayName: string, pm: ProviderModel, t: string): Mo
     supportsStreaming: pm.family !== 'embedding' && pm.family !== 'image',
     supportsFunctionCall: pm.capabilities.includes('tool_use'),
     description: null,
-    createdAtUtc: t,
-    updatedAtUtc: t,
+    createdAtUtc: at,
+    updatedAtUtc: at,
   };
 }
 
@@ -297,7 +297,7 @@ function mp(
 }
 
 function seedProviders(): Provider[] {
-  const t = iso(now);
+  const t = epochMs(now);
 
   // —— Provider 1: OpenAI 直连（主）
   const o_gpt4o = pm('gpt-4o', TPL.gpt4o);
@@ -316,7 +316,7 @@ function seedProviders(): Provider[] {
     status: 'enabled',
     autoDisabledCode: null,
     testLatencyMs: 412,
-    testSucceededAtUtc: iso(new Date(now.getTime() - 30 * 60 * 1000)),
+    testSucceededAtUtc: epochMs(new Date(now.getTime() - 30 * 60 * 1000)),
     errorRate24h: 0.012,
     callCount24h: 18432,
     providerModels: [o_gpt4o, o_gpt4omini, o_gpt4turbo, o_o1mini, o_emb3],
@@ -330,7 +330,7 @@ function seedProviders(): Provider[] {
       mp(o_o1mini.uid, 'o1-mini'),
       mp(o_emb3.uid, 'Text-Embedding-3-Large'),
     ],
-    createdAtUtc: iso(new Date(now.getTime() - 60 * 86400000)),
+    createdAtUtc: epochMs(new Date(now.getTime() - 60 * 86400000)),
     updatedAtUtc: t,
   };
 
@@ -348,7 +348,7 @@ function seedProviders(): Provider[] {
     status: 'enabled',
     autoDisabledCode: null,
     testLatencyMs: 638,
-    testSucceededAtUtc: iso(new Date(now.getTime() - 60 * 60 * 1000)),
+    testSucceededAtUtc: epochMs(new Date(now.getTime() - 60 * 60 * 1000)),
     errorRate24h: 0.004,
     callCount24h: 9201,
     providerModels: [a_gpt4o, a_gpt4omini],
@@ -356,7 +356,7 @@ function seedProviders(): Provider[] {
       mp(a_gpt4o.uid, 'GPT-4o'),
       mp(a_gpt4omini.uid, 'GPT-4o mini'),
     ],
-    createdAtUtc: iso(new Date(now.getTime() - 90 * 86400000)),
+    createdAtUtc: epochMs(new Date(now.getTime() - 90 * 86400000)),
     updatedAtUtc: t,
   };
 
@@ -374,7 +374,7 @@ function seedProviders(): Provider[] {
     status: 'enabled',
     autoDisabledCode: null,
     testLatencyMs: 521,
-    testSucceededAtUtc: iso(new Date(now.getTime() - 10 * 60 * 1000)),
+    testSucceededAtUtc: epochMs(new Date(now.getTime() - 10 * 60 * 1000)),
     errorRate24h: 0.008,
     callCount24h: 6541,
     providerModels: [an_sonnet, an_haiku],
@@ -382,7 +382,7 @@ function seedProviders(): Provider[] {
       mp(an_sonnet.uid, 'Claude 3.5 Sonnet'),
       mp(an_haiku.uid, 'Claude 3.5 Haiku'),
     ],
-    createdAtUtc: iso(new Date(now.getTime() - 45 * 86400000)),
+    createdAtUtc: epochMs(new Date(now.getTime() - 45 * 86400000)),
     updatedAtUtc: t,
   };
 
@@ -400,7 +400,7 @@ function seedProviders(): Provider[] {
     status: 'enabled',
     autoDisabledCode: null,
     testLatencyMs: 198,
-    testSucceededAtUtc: iso(new Date(now.getTime() - 5 * 60 * 1000)),
+    testSucceededAtUtc: epochMs(new Date(now.getTime() - 5 * 60 * 1000)),
     errorRate24h: 0.021,
     callCount24h: 23104,
     providerModels: [ali_max, ali_plus],
@@ -408,7 +408,7 @@ function seedProviders(): Provider[] {
       mp(ali_max.uid, 'Qwen-Max'),
       mp(ali_plus.uid, 'Qwen-Plus'),
     ],
-    createdAtUtc: iso(new Date(now.getTime() - 120 * 86400000)),
+    createdAtUtc: epochMs(new Date(now.getTime() - 120 * 86400000)),
     updatedAtUtc: t,
   };
 
@@ -426,7 +426,7 @@ function seedProviders(): Provider[] {
     status: 'enabled',
     autoDisabledCode: null,
     testLatencyMs: 312,
-    testSucceededAtUtc: iso(new Date(now.getTime() - 8 * 60 * 1000)),
+    testSucceededAtUtc: epochMs(new Date(now.getTime() - 8 * 60 * 1000)),
     errorRate24h: 0.005,
     callCount24h: 41208,
     providerModels: [ds_chat, ds_reasoner],
@@ -434,7 +434,7 @@ function seedProviders(): Provider[] {
       mp(ds_chat.uid, 'DeepSeek-V3'),
       mp(ds_reasoner.uid, 'DeepSeek-R1 (推理)'),
     ],
-    createdAtUtc: iso(new Date(now.getTime() - 30 * 86400000)),
+    createdAtUtc: epochMs(new Date(now.getTime() - 30 * 86400000)),
     updatedAtUtc: t,
   };
 
@@ -451,12 +451,12 @@ function seedProviders(): Provider[] {
     status: 'enabled',
     autoDisabledCode: null,
     testLatencyMs: 89,
-    testSucceededAtUtc: iso(new Date(now.getTime() - 2 * 60 * 1000)),
+    testSucceededAtUtc: epochMs(new Date(now.getTime() - 2 * 60 * 1000)),
     errorRate24h: 0.002,
     callCount24h: 3782,
     providerModels: [sh_llama],
     modelMappings: [mp(sh_llama.uid, 'Llama 3.1 70B (自建)')],
-    createdAtUtc: iso(new Date(now.getTime() - 15 * 86400000)),
+    createdAtUtc: epochMs(new Date(now.getTime() - 15 * 86400000)),
     updatedAtUtc: t,
   };
 
@@ -473,13 +473,13 @@ function seedProviders(): Provider[] {
     status: 'auto_disabled',
     autoDisabledCode: 'upstream_5xx_burst',
     testLatencyMs: null,
-    testSucceededAtUtc: iso(new Date(now.getTime() - 6 * 60 * 60 * 1000)),
+    testSucceededAtUtc: epochMs(new Date(now.getTime() - 6 * 60 * 60 * 1000)),
     errorRate24h: 0.65,
     callCount24h: 412,
     providerModels: [ms_32k],
     modelMappings: [mp(ms_32k.uid, 'Moonshot 32K')],
-    createdAtUtc: iso(new Date(now.getTime() - 80 * 86400000)),
-    updatedAtUtc: iso(new Date(now.getTime() - 2 * 60 * 60 * 1000)),
+    createdAtUtc: epochMs(new Date(now.getTime() - 80 * 86400000)),
+    updatedAtUtc: epochMs(new Date(now.getTime() - 2 * 60 * 60 * 1000)),
   };
 
   // —— Provider 8: Gemini 实验
@@ -502,8 +502,8 @@ function seedProviders(): Provider[] {
     modelMappings: [
       mp(g_flash.uid, 'Gemini 1.5 Flash', { notes: '灰度' }),
     ],
-    createdAtUtc: iso(new Date(now.getTime() - 7 * 86400000)),
-    updatedAtUtc: iso(new Date(now.getTime() - 3 * 86400000)),
+    createdAtUtc: epochMs(new Date(now.getTime() - 7 * 86400000)),
+    updatedAtUtc: epochMs(new Date(now.getTime() - 3 * 86400000)),
   };
 
   return [openaiMain, azureNA, anthropic, aliyun, deepseek, selfHosted, moonshot, gemini];
@@ -520,7 +520,7 @@ function seedProviders(): Provider[] {
  * 当某 displayName 不再被任何 Provider 映射 → 自动 delete Model 行 + 级联 Pricing
  */
 function seedModels(providers: Provider[]): Model[] {
-  const t = iso(now);
+  const t = epochMs(now);
   const seen = new Map<string, Model>();
   for (const p of providers) {
     for (const mapping of p.modelMappings) {
@@ -542,8 +542,8 @@ function seedModels(providers: Provider[]): Model[] {
  *    GPT-4o / Claude 3.5 Sonnet 多带 cachedRead/cachedWrite 字段，作为缓存价示例
  */
 function seedPricing(models: Model[]): Pricing[] {
-  const t = iso(now);
-  type PricingBase = Omit<Pricing, 'id' | 'modelId' | 'updatedAtUtc' | 'effectiveFromUtc' | 'updatedBy'>;
+  const t = epochMs(now);
+  type PricingBase = Omit<Pricing, 'id' | 'modelId' | 'updatedAtUtc' | 'effectiveFromUtc'>;
   const map = new Map<string, PricingBase>([
     [
       'GPT-4o',
@@ -671,7 +671,7 @@ function seedPricing(models: Model[]): Pricing[] {
         ...base,
         id: genPricingUid(),
         modelId: m.modelId,
-        effectiveFromUtc: iso(new Date(now.getTime() - 7 * 86400000)),
+        effectiveFromUtc: epochMs(new Date(now.getTime() - 7 * 86400000)),
         updatedAtUtc: t,
       } as Pricing;
     })
@@ -679,6 +679,13 @@ function seedPricing(models: Model[]): Pricing[] {
 }
 
 const SEED_ACCOUNTS = ['100000001', '100000002', '100000003'] as const;
+const SEED_ACCOUNT_CONTACTS: Readonly<
+  Record<(typeof SEED_ACCOUNTS)[number], { displayName: string; email: string; phone: string }>
+> = {
+  '100000001': { displayName: '张三', email: 'zhangsan@example.com', phone: '13800138001' },
+  '100000002': { displayName: '李四', email: 'lisi@example.com', phone: '13800138002' },
+  '100000003': { displayName: '王五', email: 'wangwu@example.com', phone: '13800138003' },
+};
 const SEED_IAM_USERS = ['200000001', '700000001', '700000002'] as const;
 
 /**
@@ -786,12 +793,18 @@ function seedLogs(providers: Provider[]): LogEntry[] {
     const convSeq = Math.floor(i / 6);
     const convId = `CV-${(SEED_IAM_USERS[i % SEED_IAM_USERS.length]!).slice(-3)}-${convSeq.toString(36)}`;
 
+    const accountUid = SEED_ACCOUNTS[i % SEED_ACCOUNTS.length]!;
+    const accountContact = SEED_ACCOUNT_CONTACTS[accountUid];
+
     out.push({
       id: genLogUid(),
-      createAt: occurred.toISOString(),
+      createAt: occurred.getTime(),
       account: {
-        uid: SEED_ACCOUNTS[i % SEED_ACCOUNTS.length]!,
+        uid: accountUid,
         iamId: SEED_IAM_USERS[i % SEED_IAM_USERS.length]!,
+        displayName: accountContact.displayName,
+        email: accountContact.email,
+        phone: accountContact.phone,
       },
       convId,
       modelName: pair.displayName,
@@ -846,7 +859,7 @@ function seedLogs(providers: Provider[]): LogEntry[] {
           ? {
               id: `BL-${genBillUid()}`,
               status: 'reversed',
-              reversedAtUtc: iso(new Date(occurred.getTime() + 30 * 60 * 1000)),
+              reversedAtUtc: epochMs(new Date(occurred.getTime() + 30 * 60 * 1000)),
               reversedBy: '200000099',
               reversedCode: reverseReasons[i % reverseReasons.length]!,
               reversedRemark: null,
@@ -907,7 +920,7 @@ export const gatewayDiscoveryCatalog: Readonly<
 
 /** 演示用「已入库」初始集合（admin 之前已通过接入页导入的内容）。 */
 export function seedImportedProviderGroups(): ProviderGroup[] {
-  const t = iso(now);
+  const t = epochMs(now);
   return [
     { queueGroup: 'kiro', displayName: 'Kiro', status: 'active', upstreamModelCount: 3,
       notes: null, importedAtUtc: t, updatedAtUtc: t },
@@ -951,7 +964,7 @@ function toAlias(displayName: string): string {
 }
 
 function seedModelRoutes(providers: Provider[]): ModelRoute[] {
-  const t = iso(now);
+  const t = epochMs(now);
   const routes: ModelRoute[] = [];
   for (const p of providers) {
     const channelKey = apiTypeToChannelKey(p.apiType); // = queueGroup
@@ -995,7 +1008,7 @@ function seedModelRoutes(providers: Provider[]): ModelRoute[] {
 function seedCatalogModelRoutes(
   upstream: ProviderUpstreamModel[],
 ): ModelRoute[] {
-  const t = iso(now);
+  const t = epochMs(now);
   const has = (qg: string, id: string) =>
     upstream.some((m) => m.queueGroup === qg && m.upstreamModelId === id);
   const routes: ModelRoute[] = [];
@@ -1085,7 +1098,7 @@ function collectAliveModels(store: DemuxaiStore): Map<string, ProviderModel> {
 }
 
 export function reconcilePlatformModels(store: DemuxaiStore): ReconcileDiff {
-  const t = new Date().toISOString();
+  const t = new Date().getTime();
   const alive = collectAliveModels(store);
   const created: string[] = [];
   for (const [displayName, pmRef] of alive) {

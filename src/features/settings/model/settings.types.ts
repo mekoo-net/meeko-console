@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { epochMillisSchema } from '@/shared/lib/epoch';
+
 export const registrationChannelSchema = z.enum(['email', 'phone', 'both']);
 export type RegistrationChannel = z.infer<typeof registrationChannelSchema>;
 
@@ -21,7 +23,7 @@ export const authSettingsAdminSchema = z.object({
   captchaProvider: captchaProviderSchema,
   captchaSiteKey: z.string(),
   captchaSecretConfigured: z.boolean(),
-  updatedAtUtc: z.string(),
+  updatedAtUtc: epochMillisSchema,
 });
 
 export type AuthSettingsAdmin = z.infer<typeof authSettingsAdminSchema>;
@@ -44,7 +46,7 @@ export const emailSettingsAdminSchema = z.object({
   emailSuffixRestrictionEnabled: z.boolean(),
   allowedEmailSuffixes: z.array(z.string()),
   verificationCodeEnabled: z.boolean(),
-  updatedAtUtc: z.string(),
+  updatedAtUtc: epochMillisSchema,
 });
 
 export type EmailSettingsAdmin = z.infer<typeof emailSettingsAdminSchema>;
