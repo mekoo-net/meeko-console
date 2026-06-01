@@ -891,8 +891,8 @@ function seedLogs(providers: Provider[]): LogEntry[] {
   return out.sort((a, b) => b.id.localeCompare(a.id));
 }
 
-/** apiType → 网关 channel key（Mock 简化映射） */
-function apiTypeToChannelKey(apiType: ApiType): string {
+/** apiType → 网关 vendor key（Mock 简化映射） */
+function apiTypeToVendorKey(apiType: ApiType): string {
   const m: Partial<Record<ApiType, string>> = {
     openai: 'openai',
     anthropic: 'claude',
@@ -980,7 +980,7 @@ function seedModelRoutes(providers: Provider[]): ModelRoute[] {
   const t = epochMs(now);
   const routes: ModelRoute[] = [];
   for (const p of providers) {
-    const channelKey = apiTypeToChannelKey(p.apiType); // = queueGroup
+    const vendorKey = apiTypeToVendorKey(p.apiType); // = queueGroup
     for (const mapping of p.modelMappings) {
       if (!mapping.enabled) continue;
       const pmRef = p.providerModels.find((x) => x.uid === mapping.providerModelUid);
@@ -988,8 +988,8 @@ function seedModelRoutes(providers: Provider[]): ModelRoute[] {
       routes.push({
         uid: genModelRouteUid(),
         alias: toAlias(mapping.displayName),
-        channelKey,
-        upstreamModelId: pmRef.modelName,
+        vendorKey,
+        vendorModel: pmRef.modelName,
         weight: mapping.mappingWeight ?? 100,
         priority: 100,
         status: 'enabled',
@@ -1005,7 +1005,7 @@ function seedModelRoutes(providers: Provider[]): ModelRoute[] {
     routes.push({
       ...gpt4o,
       uid: genModelRouteUid(),
-      upstreamModelId: 'gpt-4-turbo',
+      vendorModel: 'gpt-4-turbo',
       weight: 20,
       priority: 90,
       notes: 'A/B 备线',
@@ -1036,8 +1036,8 @@ function seedCatalogModelRoutes(
     routes.push({
       uid: genModelRouteUid(),
       alias,
-      channelKey: queueGroup,
-      upstreamModelId,
+      vendorKey: queueGroup,
+      vendorModel: upstreamModelId,
       weight,
       priority: 100,
       status: 'enabled',

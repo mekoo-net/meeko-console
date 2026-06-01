@@ -22,13 +22,13 @@ function parseRoute(v: unknown): AppResult<ModelRoute> {
 function applyFilter(rows: ModelRoute[], f: ListModelRoutesFilter): ModelRoute[] {
   const kw = f.keyword.trim().toLowerCase();
   return rows.filter((r) => {
-    if (f.channelKey !== 'all' && r.channelKey !== f.channelKey) return false;
+    if (f.vendorKey !== 'all' && r.vendorKey !== f.vendorKey) return false;
     if (f.status !== 'all' && r.status !== f.status) return false;
     if (
       kw &&
       !r.alias.toLowerCase().includes(kw) &&
-      !r.upstreamModelId.toLowerCase().includes(kw) &&
-      !r.channelKey.toLowerCase().includes(kw)
+      !r.vendorModel.toLowerCase().includes(kw) &&
+      !r.vendorKey.toLowerCase().includes(kw)
     ) {
       return false;
     }
@@ -76,8 +76,8 @@ export class DemuxaiModelRouteMock implements DemuxaiModelRoutePort {
     const row: ModelRoute = {
       uid: genModelRouteUid(),
       alias,
-      channelKey: input.channelKey.trim(),
-      upstreamModelId: input.upstreamModelId.trim(),
+      vendorKey: input.vendorKey.trim(),
+      vendorModel: input.vendorModel.trim(),
       weight: input.weight ?? 100,
       priority: input.priority ?? 100,
       status: input.status ?? 'enabled',
@@ -99,9 +99,9 @@ export class DemuxaiModelRouteMock implements DemuxaiModelRoutePort {
     const next: ModelRoute = {
       ...cur,
       ...(input.alias !== undefined ? { alias: input.alias.trim() } : {}),
-      ...(input.channelKey !== undefined ? { channelKey: input.channelKey.trim() } : {}),
-      ...(input.upstreamModelId !== undefined
-        ? { upstreamModelId: input.upstreamModelId.trim() }
+      ...(input.vendorKey !== undefined ? { vendorKey: input.vendorKey.trim() } : {}),
+      ...(input.vendorModel !== undefined
+        ? { vendorModel: input.vendorModel.trim() }
         : {}),
       ...(input.weight !== undefined ? { weight: input.weight } : {}),
       ...(input.priority !== undefined ? { priority: input.priority } : {}),

@@ -175,7 +175,7 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
     }
     // Cascade: removing the group removes all of its outbound aliases too.
     for (let i = this.store.modelRoutes.length - 1; i >= 0; i -= 1) {
-      if (this.store.modelRoutes[i]!.channelKey === key) {
+      if (this.store.modelRoutes[i]!.vendorKey === key) {
         this.store.modelRoutes.splice(i, 1);
       }
     }
@@ -197,7 +197,7 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
     // Cascade: removing the upstream model removes the aliases pointing at it.
     for (let i = this.store.modelRoutes.length - 1; i >= 0; i -= 1) {
       const r = this.store.modelRoutes[i]!;
-      if (r.channelKey === key && r.upstreamModelId === id) {
+      if (r.vendorKey === key && r.vendorModel === id) {
         this.store.modelRoutes.splice(i, 1);
       }
     }

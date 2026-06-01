@@ -29,7 +29,7 @@ import {
 } from '../model/enums';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 import type {
-  ChannelConsumptionRow,
+  VendorConsumptionRow,
   ListLogsFilter,
   LogEntry,
   ReverseLogInput,
@@ -55,7 +55,7 @@ interface PageFilter {
   /** 模糊匹配 `LogEntry.modelName` */
   modelName: string;
   /** 渠道（供应商组 / queue_group）精确匹配；空字符串 = 全部。 */
-  channelKey: string;
+  vendorKey: string;
   /** 会话 ID 精确匹配（点击 Conv 列钻取） */
   convId: string;
   /** 仅看失败调用（success === false） */
@@ -73,7 +73,7 @@ const defaultFilter = (): PageFilter => ({
   contactKeyword: '',
   dateRange: last24h(),
   modelName: '',
-  channelKey: '',
+  vendorKey: '',
   convId: '',
   errorOnly: false,
 });
@@ -93,8 +93,8 @@ function buildPortFilter(): ListLogsFilter {
   };
   if (filter.value.accountUid.trim()) f.accountUid = filter.value.accountUid.trim();
   if (filter.value.modelName.trim()) f.modelName = filter.value.modelName.trim();
-  const qg = filter.value.channelKey.trim();
-  if (qg) f.channelKey = qg;
+  const qg = filter.value.vendorKey.trim();
+  if (qg) f.vendorKey = qg;
   if (filter.value.dateRange?.[0] && filter.value.dateRange[1]) {
     Object.assign(f, dateRangeToEpochMillis(filter.value.dateRange));
   }
@@ -137,38 +137,38 @@ watch(
       filter.value.accountUid,
       filter.value.dateRange,
       filter.value.modelName,
-      filter.value.channelKey,
+      filter.value.vendorKey,
       filter.value.convId,
       filter.value.errorOnly,
     ] as const,
   () => {
     page.value = 1;
     void fetchData();
-    if (channelPanel.value.length) void fetchChannelStats();
+    if (vendorPanel.value.length) void fetchVendorStats();
   },
   { deep: true },
 );
 
 // ---- 按渠道消费统计（折叠面板，展开时按需加载）----
-const channelPanel = ref<string[]>([]);
-const channelStats = ref<ChannelConsumptionRow[]>([]);
-const channelLoading = ref(false);
+const vendorPanel = ref<string[]>([]);
+const vendorStats = ref<VendorConsumptionRow[]>([]);
+const vendorLoading = ref(false);
 
-async function fetchChannelStats(): Promise<void> {
+async function fetchVendorStats(): Promise<void> {
   if (!filter.value.dateRange || !filter.value.dateRange[0]) return;
-  channelLoading.value = true;
+  vendorLoading.value = true;
   try {
-    const r = await logsPort.statByChannel(buildPortFilter());
-    if (r.success) channelStats.value = r.data;
+    const r = await logsPort.statByVendor(buildPortFilter());
+    if (r.success) vendorStats.value = r.data;
     else ElMessage.error(r.error.message);
   } finally {
-    channelLoading.value = false;
+    vendorLoading.value = false;
   }
 }
 
-function onChannelPanelChange(names: string | number | (string | number)[]): void {
+function onVendorPanelChange(names: string | number | (string | number)[]): void {
   const open = Array.isArray(names) ? names.length > 0 : names != null && names !== '';
-  if (open && channelStats.value.length === 0) void fetchChannelStats();
+  if (open && vendorStats.value.length === 0) void fetchVendorStats();
 }
 
 function resetFilter(): void {
@@ -284,18 +284,18 @@ function usageSummary(row: LogEntry): { main: string; sub: string } {
 }
 
 /** `vendor/model` 形态时取 vendor 作为渠道（如 gemini/gemini-3.1-pro-preview → gemini）。 */
-function channelFromModelName(modelName: string): string {
+function vendorFromModelName(modelName: string): string {
   const i = modelName.indexOf('/');
   return i > 0 ? modelName.slice(0, i) : '—';
 }
 
-/** 渠道展示：优先用定价快照钉死的 `channelKey`，否则退化为 modelName 前缀。 */
-function channelText(row: LogEntry): string {
-  return row.channelKey?.trim() || channelFromModelName(row.modelName);
+/** 渠道展示：优先用定价快照钉死的 `vendorKey`，否则退化为 modelName 前缀。 */
+function vendorText(row: LogEntry): string {
+  return row.vendorKey?.trim() || vendorFromModelName(row.modelName);
 }
 
-function setChannelFilter(channel: string): void {
-  filter.value.channelKey = channel;
+function setVendorFilter(vendor: string): void {
+  filter.value.vendorKey = vendor;
   page.value = 1;
 }
 
@@ -346,7 +346,7 @@ onMounted(() => {
       </el-form-item>
       <el-form-item label="渠道">
         <el-input
-          v-model="filter.channelKey"
+          v-model="filter.vendorKey"
           :prefix-icon="Search"
           placeholder="供应商组，如 gemini"
           clearable
@@ -368,44 +368,44 @@ onMounted(() => {
       </el-form-item>
     </FilterBar>
 
-    <el-collapse v-model="channelPanel" class="channel-panel" @change="onChannelPanelChange">
-      <el-collapse-item name="channel">
+    <el-collapse v-model="vendorPanel" class="vendor-panel" @change="onVendorPanelChange">
+      <el-collapse-item name="vendor">
         <template #title>
-          <span class="channel-panel__title">按渠道消费统计</span>
-          <span class="channel-panel__hint">当前过滤条件 / 时间范围内，按调用命中渠道归集（来自定价快照，删模型不丢数据）</span>
+          <span class="vendor-panel__title">按渠道消费统计</span>
+          <span class="vendor-panel__hint">当前过滤条件 / 时间范围内，按调用命中渠道归集（来自定价快照，删模型不丢数据）</span>
         </template>
         <el-table
-          v-loading="channelLoading"
-          :data="channelStats"
+          v-loading="vendorLoading"
+          :data="vendorStats"
           size="small"
           stripe
           :empty-text="'该范围内无渠道消费'"
         >
           <el-table-column label="渠道" min-width="160">
-            <template #default="{ row }: { row: ChannelConsumptionRow }">
-              <el-button link type="primary" class="mono" @click="setChannelFilter(row.channelKey)">
-                {{ row.channelKey }}
+            <template #default="{ row }: { row: VendorConsumptionRow }">
+              <el-button link type="primary" class="mono" @click="setVendorFilter(row.vendorKey)">
+                {{ row.vendorKey }}
               </el-button>
             </template>
           </el-table-column>
           <el-table-column label="调用数" width="110" align="right">
-            <template #default="{ row }: { row: ChannelConsumptionRow }">
+            <template #default="{ row }: { row: VendorConsumptionRow }">
               <span class="num">{{ row.requestCount.toLocaleString() }}</span>
             </template>
           </el-table-column>
           <el-table-column label="输入 / 输出 token" min-width="180" align="right">
-            <template #default="{ row }: { row: ChannelConsumptionRow }">
+            <template #default="{ row }: { row: VendorConsumptionRow }">
               <span class="num">{{ row.totalPromptTokens.toLocaleString() }} / {{ row.totalCompletionTokens.toLocaleString() }}</span>
             </template>
           </el-table-column>
           <el-table-column label="上游模型数" width="110" align="right">
-            <template #default="{ row }: { row: ChannelConsumptionRow }">
+            <template #default="{ row }: { row: VendorConsumptionRow }">
               <span class="num">{{ row.upstreamModelCount }}</span>
             </template>
           </el-table-column>
           <el-table-column label="消费（元）" width="130" align="right">
-            <template #default="{ row }: { row: ChannelConsumptionRow }">
-              <span class="num channel-panel__cost">{{ formatMoney(row.totalCost, { fractionDigits: 4 }) }}</span>
+            <template #default="{ row }: { row: VendorConsumptionRow }">
+              <span class="num vendor-panel__cost">{{ formatMoney(row.totalCost, { fractionDigits: 4 }) }}</span>
             </template>
           </el-table-column>
         </el-table>
@@ -474,7 +474,7 @@ onMounted(() => {
         <template #default="{ row }: { row: LogEntry }">
           <div class="cell-model">
             <span class="cell-model__primary mono">{{ row.modelName }}</span>
-            <span v-if="row.upstreamModelId" class="cell-model__sub mono">↳ {{ row.upstreamModelId }}</span>
+            <span v-if="row.vendorModel" class="cell-model__sub mono">↳ {{ row.vendorModel }}</span>
           </div>
         </template>
       </el-table-column>
@@ -482,14 +482,14 @@ onMounted(() => {
       <el-table-column label="渠道" width="120">
         <template #default="{ row }: { row: LogEntry }">
           <el-button
-            v-if="row.channelKey"
+            v-if="row.vendorKey"
             link
             type="primary"
-            class="cell-channel cell-channel--link"
+            class="cell-vendor cell-vendor--link"
             title="按此渠道过滤"
-            @click="setChannelFilter(row.channelKey!)"
-          >{{ channelText(row) }}</el-button>
-          <span v-else class="cell-channel">{{ channelText(row) }}</span>
+            @click="setVendorFilter(row.vendorKey!)"
+          >{{ vendorText(row) }}</el-button>
+          <span v-else class="cell-vendor">{{ vendorText(row) }}</span>
         </template>
       </el-table-column>
 
@@ -653,30 +653,30 @@ onMounted(() => {
   color: var(--el-text-color-secondary);
 }
 
-.cell-channel {
+.cell-vendor {
   font-size: 12.5px;
   color: var(--el-text-color-regular);
 }
-.cell-channel--link {
+.cell-vendor--link {
   padding: 0;
   height: auto;
   font-size: 12.5px;
 }
 
-.channel-panel {
+.vendor-panel {
   margin-top: 4px;
   margin-bottom: 8px;
   border-radius: 6px;
 }
-.channel-panel__title {
+.vendor-panel__title {
   font-weight: 600;
   margin-right: 12px;
 }
-.channel-panel__hint {
+.vendor-panel__hint {
   font-size: 12px;
   color: var(--el-text-color-secondary);
 }
-.channel-panel__cost {
+.vendor-panel__cost {
   color: var(--el-color-warning);
   font-weight: 500;
 }

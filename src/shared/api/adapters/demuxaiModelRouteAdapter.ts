@@ -42,7 +42,7 @@ export class DemuxaiModelRouteHttpAdapter implements DemuxaiModelRoutePort {
         page: input.page,
         pageSize: input.pageSize,
         keyword: input.filter.keyword || undefined,
-        channelKey: input.filter.channelKey === 'all' ? undefined : input.filter.channelKey,
+        vendorKey: input.filter.vendorKey === 'all' ? undefined : input.filter.vendorKey,
         status: input.filter.status === 'all' ? undefined : input.filter.status,
       },
     });
@@ -66,8 +66,8 @@ export class DemuxaiModelRouteHttpAdapter implements DemuxaiModelRoutePort {
       method: 'POST',
       body: {
         alias: input.alias.trim(),
-        channelKey: input.channelKey.trim(),
-        upstreamModelId: input.upstreamModelId.trim(),
+        vendorKey: input.vendorKey.trim(),
+        vendorModel: input.vendorModel.trim(),
         weight: input.weight ?? 100,
         priority: input.priority ?? 100,
         status: input.status ?? 'enabled',
@@ -83,9 +83,9 @@ export class DemuxaiModelRouteHttpAdapter implements DemuxaiModelRoutePort {
       method: 'PUT',
       body: {
         ...(input.alias !== undefined ? { alias: input.alias.trim() } : {}),
-        ...(input.channelKey !== undefined ? { channelKey: input.channelKey.trim() } : {}),
-        ...(input.upstreamModelId !== undefined
-          ? { upstreamModelId: input.upstreamModelId.trim() }
+        ...(input.vendorKey !== undefined ? { vendorKey: input.vendorKey.trim() } : {}),
+        ...(input.vendorModel !== undefined
+          ? { vendorModel: input.vendorModel.trim() }
           : {}),
         ...(input.weight !== undefined ? { weight: input.weight } : {}),
         ...(input.priority !== undefined ? { priority: input.priority } : {}),

@@ -69,13 +69,13 @@ async function loadRoutes(): Promise<void> {
       pageSize: 500,
       filter: {
         keyword: '',
-        channelKey: props.group.queueGroup,
+        vendorKey: props.group.queueGroup,
         status: 'all',
       },
     });
     if (r.success) {
       routes.value = r.data.items.filter(
-        (rt) => rt.upstreamModelId === props.model!.upstreamModelId,
+        (rt) => rt.vendorModel === props.model!.upstreamModelId,
       );
     } else {
       ElMessage.error(r.error.message);
@@ -245,7 +245,7 @@ watch(
       :route="editingRoute"
       :loading="aliasDrawerLoading"
       :provider-groups="providerGroups"
-      :fixed-channel-key="group?.queueGroup"
+      :fixed-vendor-key="group?.queueGroup"
       :fixed-upstream-model-id="model?.upstreamModelId"
       @submit="onAliasSubmit"
     />

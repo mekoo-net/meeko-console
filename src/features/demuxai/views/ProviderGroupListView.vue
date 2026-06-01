@@ -91,13 +91,13 @@ function groupLabel(queueGroup: string, displayName: string): string {
 
 function aliasCount(queueGroup: string, upstreamModelId: string): number {
   return (routesByGroup.value[queueGroup] ?? []).filter(
-    (rt) => rt.upstreamModelId === upstreamModelId,
+    (rt) => rt.vendorModel === upstreamModelId,
   ).length;
 }
 
 function routesForModel(queueGroup: string, upstreamModelId: string): ModelRoute[] {
   return (routesByGroup.value[queueGroup] ?? []).filter(
-    (rt) => rt.upstreamModelId === upstreamModelId,
+    (rt) => rt.vendorModel === upstreamModelId,
   );
 }
 
@@ -142,7 +142,7 @@ async function loadRoutesForGroup(queueGroup: string): Promise<void> {
   const r = await routePort.list({
     page: 1,
     pageSize: 500,
-    filter: { keyword: '', channelKey: queueGroup, status: 'all' },
+    filter: { keyword: '', vendorKey: queueGroup, status: 'all' },
   });
   if (r.success) {
     routesByGroup.value = { ...routesByGroup.value, [queueGroup]: r.data.items };

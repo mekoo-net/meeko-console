@@ -13,8 +13,8 @@ export const modelRouteSchema = z.object({
   uid: uidString,
   /** 用户请求体 model 字段 / 计费主键 */
   alias: z.string().min(1).max(128),
-  channelKey: z.string().min(1).max(64),
-  upstreamModelId: z.string().min(1).max(160),
+  vendorKey: z.string().min(1).max(64),
+  vendorModel: z.string().min(1).max(160),
   weight: z.number().int().positive(),
   priority: z.number().int().min(0).max(999),
   status: modelRouteStatusSchema,
@@ -27,8 +27,8 @@ export type ModelRoute = z.infer<typeof modelRouteSchema>;
 
 export interface CreateModelRouteInput {
   alias: string;
-  channelKey: string;
-  upstreamModelId: string;
+  vendorKey: string;
+  vendorModel: string;
   weight?: number;
   priority?: number;
   status?: ModelRouteStatus;
@@ -37,8 +37,8 @@ export interface CreateModelRouteInput {
 
 export interface UpdateModelRouteInput {
   alias?: string;
-  channelKey?: string;
-  upstreamModelId?: string;
+  vendorKey?: string;
+  vendorModel?: string;
   weight?: number;
   priority?: number;
   status?: ModelRouteStatus;
@@ -47,6 +47,6 @@ export interface UpdateModelRouteInput {
 
 export interface ListModelRoutesFilter {
   keyword: string;
-  channelKey: string | 'all';
+  vendorKey: string | 'all';
   status: ModelRouteStatus | 'all';
 }

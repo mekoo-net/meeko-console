@@ -47,13 +47,13 @@ const pageSize = ref(20);
 
 interface PageFilter {
   keyword: string;
-  channelKey: string | 'all';
+  vendorKey: string | 'all';
   status: ModelRouteStatus | 'all';
 }
 
 const defaultFilter = (): PageFilter => ({
   keyword: '',
-  channelKey: 'all',
+  vendorKey: 'all',
   status: 'all',
 });
 
@@ -75,7 +75,7 @@ const aliasGroupCount = computed(() => {
 function buildPortFilter(): ListModelRoutesFilter {
   return {
     keyword: filter.value.keyword.trim(),
-    channelKey: filter.value.channelKey,
+    vendorKey: filter.value.vendorKey,
     status: filter.value.status,
   };
 }
@@ -110,7 +110,7 @@ watch(
 );
 
 watch(
-  () => [filter.value.keyword, filter.value.channelKey, filter.value.status] as const,
+  () => [filter.value.keyword, filter.value.vendorKey, filter.value.status] as const,
   () => {
     page.value = 1;
     void fetchData();
@@ -122,7 +122,7 @@ function resetFilter(): void {
   page.value = 1;
 }
 
-function channelLabel(key: string): string {
+function vendorLabel(key: string): string {
   return ProviderGroupLabel[key] ?? key;
 }
 
@@ -174,7 +174,7 @@ async function onDelete(row: ModelRoute): Promise<void> {
     title: '删除模型路由',
     message:
       poolSize > 1
-        ? `确认删除别名「${row.alias}」的这条分流路由（上游 ${row.upstreamModelId}）？同别名仍有 ${poolSize - 1} 条路由。`
+        ? `确认删除别名「${row.alias}」的这条分流路由（上游 ${row.vendorModel}）？同别名仍有 ${poolSize - 1} 条路由。`
         : `确认删除别名「${row.alias}」？删除后该别名将不可用。`,
     confirmText: '确认删除',
     type: 'warning',
@@ -193,14 +193,14 @@ function jumpPricing(alias: string): void {
   void router.push({ name: 'demuxai-pricing', query: { keyword: alias } });
 }
 
-const initialChannelKey = computed(() => {
-  const q = route.query.channel;
+const initialVendorKey = computed(() => {
+  const q = route.query.vendor;
   return typeof q === 'string' ? q : undefined;
 });
 
 onMounted(async () => {
-  if (initialChannelKey.value) {
-    filter.value.channelKey = initialChannelKey.value;
+  if (initialVendorKey.value) {
+    filter.value.vendorKey = initialVendorKey.value;
   }
   await loadProviderGroups();
   await fetchData();
@@ -211,7 +211,7 @@ onMounted(async () => {
   <div class="page">
     <PageHeader
       title="模型路由"
-      description="配置对外别名与上游注册名的映射。用户请求 model=别名 时，网关解析为 channel + upstream 并可按权重分流。保存后将由 DemuxAi 快照下发网关（API 待接）。"
+      description="配置对外别名与上游注册名的映射。用户请求 model=别名 时，网关解析为 vendor + upstream 并可按权重分流。保存后将由 DemuxAi 快照下发网关（API 待接）。"
     >
       <template #actions>
         <el-button :icon="Plus" type="primary" @click="openCreate">新建路由</el-button>
@@ -230,12 +230,12 @@ onMounted(async () => {
           />
         </el-form-item>
         <el-form-item label="供应商组">
-          <el-select v-model="filter.channelKey" style="width: 160px">
+          <el-select v-model="filter.vendorKey" style="width: 160px">
             <el-option label="全部" value="all" />
             <el-option
               v-for="ch in providerGroups"
               :key="ch.queueGroup"
-              :label="channelLabel(ch.queueGroup)"
+              :label="vendorLabel(ch.queueGroup)"
               :value="ch.queueGroup"
             />
           </el-select>
@@ -284,13 +284,13 @@ onMounted(async () => {
 
       <el-table-column label="供应商组" width="120">
         <template #default="{ row }: { row: ModelRoute }">
-          <el-tag size="small" effect="plain">{{ channelLabel(row.channelKey) }}</el-tag>
+          <el-tag size="small" effect="plain">{{ vendorLabel(row.vendorKey) }}</el-tag>
         </template>
       </el-table-column>
 
       <el-table-column label="上游注册名" min-width="200">
         <template #default="{ row }: { row: ModelRoute }">
-          <span class="mono upstream">{{ row.upstreamModelId }}</span>
+          <span class="mono upstream">{{ row.vendorModel }}</span>
         </template>
       </el-table-column>
 
@@ -349,7 +349,7 @@ onMounted(async () => {
       :route="editingRoute"
       :loading="drawerLoading"
       :provider-groups="providerGroups"
-      :initial-channel-key="initialChannelKey"
+      :initial-vendor-key="initialVendorKey"
       @submit="onSubmit"
     />
   </div>

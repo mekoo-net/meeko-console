@@ -47,19 +47,19 @@ function errorCodeText(code: string): string {
   return (LogErrorCodeLabel as Record<string, string>)[code] ?? code;
 }
 
-function channelFromModelName(modelName: string): string {
+function vendorFromModelName(modelName: string): string {
   const i = modelName.indexOf('/');
   return i > 0 ? modelName.slice(0, i) : '—';
 }
 
-const channelText = computed(() => {
+const vendorText = computed(() => {
   const l = props.log;
   if (!l) return '—';
   // 优先用定价快照钉死的真实渠道；缺失时退化为 modelName 前缀。
-  return l.channelKey?.trim() || channelFromModelName(l.modelName);
+  return l.vendorKey?.trim() || vendorFromModelName(l.modelName);
 });
 
-const upstreamModelText = computed(() => props.log?.upstreamModelId?.trim() || '—');
+const upstreamModelText = computed(() => props.log?.vendorModel?.trim() || '—');
 
 const hasCharge = computed(() => {
   const l = props.log;
@@ -171,10 +171,10 @@ const outputDims = computed<DimRow[]>(() => {
         <el-descriptions-item label="模型" :span="2">
           <div class="model-cell">
             <span class="mono">{{ log.modelName }}</span>
-            <span v-if="log.upstreamModelId" class="model-cell__upstream mono">↳ 上游 {{ upstreamModelText }}</span>
+            <span v-if="log.vendorModel" class="model-cell__upstream mono">↳ 上游 {{ upstreamModelText }}</span>
           </div>
         </el-descriptions-item>
-        <el-descriptions-item label="渠道">{{ channelText }}</el-descriptions-item>
+        <el-descriptions-item label="渠道">{{ vendorText }}</el-descriptions-item>
         <el-descriptions-item label="账户">
           <div class="account-cell">
             <span v-if="log.account.displayName" class="account-cell__name">{{ log.account.displayName }}</span>

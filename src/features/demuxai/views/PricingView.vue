@@ -41,7 +41,7 @@ const catalogPort = getDemuxaiCatalogPort();
 
 const groups = ref<ProviderGroup[]>([]);
 const groupsLoading = ref(false);
-const selectedChannel = ref<string>('all');
+const selectedVendor = ref<string>('all');
 
 const allPricing = ref<Pricing[]>([]);
 const pricingLoading = ref(false);
@@ -71,11 +71,11 @@ const editingModel = ref<Model | null>(null);
 type TabName = 'priced' | 'unconfigured';
 const activeTab = ref<TabName>('priced');
 
-/** alias → channelKey（启用路由） */
-const aliasChannelMap = computed(() => {
+/** alias → vendorKey（启用路由） */
+const aliasVendorMap = computed(() => {
   const m = new Map<string, string>();
   for (const r of modelRoutes.value) {
-    if (r.status === 'enabled') m.set(r.alias, r.channelKey);
+    if (r.status === 'enabled') m.set(r.alias, r.vendorKey);
   }
   return m;
 });
@@ -94,21 +94,21 @@ function isBillableAlias(modelId: string): boolean {
 }
 
 const selectedGroup = computed(() => {
-  if (selectedChannel.value === 'all') return null;
-  return groups.value.find((g) => g.queueGroup === selectedChannel.value) ?? null;
+  if (selectedVendor.value === 'all') return null;
+  return groups.value.find((g) => g.queueGroup === selectedVendor.value) ?? null;
 });
 
-const channelTitle = computed(() => {
-  if (selectedChannel.value === 'all') return '全部渠道';
+const vendorTitle = computed(() => {
+  if (selectedVendor.value === 'all') return '全部渠道';
   const g = selectedGroup.value;
-  if (!g) return selectedChannel.value;
+  if (!g) return selectedVendor.value;
   return ProviderGroupLabel[g.queueGroup] ?? g.displayName;
 });
 
-function matchesChannel(modelId: string): boolean {
-  if (selectedChannel.value === 'all') return true;
-  const ch = aliasChannelMap.value.get(modelId);
-  if (ch) return ch === selectedChannel.value;
+function matchesVendor(modelId: string): boolean {
+  if (selectedVendor.value === 'all') return true;
+  const ch = aliasVendorMap.value.get(modelId);
+  if (ch) return ch === selectedVendor.value;
   return false;
 }
 
@@ -117,7 +117,7 @@ function applyListFilter(rows: Pricing[]): Pricing[] {
   const bt = filter.value.billingType;
   return rows.filter((p) => {
     if (!isBillableAlias(p.modelId)) return false;
-    if (!matchesChannel(p.modelId)) return false;
+    if (!matchesVendor(p.modelId)) return false;
     if (bt !== 'all' && p.billingType !== bt) return false;
     if (kw && !p.modelId.toLowerCase().includes(kw)) return false;
     return true;
@@ -170,7 +170,7 @@ const unconfiguredModels = computed<Model[]>(() => {
   const out: Model[] = [];
   for (const route of modelRoutes.value) {
     if (route.status !== 'enabled') continue;
-    if (selectedChannel.value !== 'all' && route.channelKey !== selectedChannel.value) {
+    if (selectedVendor.value !== 'all' && route.vendorKey !== selectedVendor.value) {
       continue;
     }
     if (configured.has(route.alias) || seen.has(route.alias)) continue;
@@ -211,7 +211,7 @@ async function loadModelRoutes(): Promise<void> {
   const routesR = await modelRoutePort.list({
     page: 1,
     pageSize: 500,
-    filter: { keyword: '', channelKey: 'all', status: 'enabled' },
+    filter: { keyword: '', vendorKey: 'all', status: 'enabled' },
   });
   if (routesR.success) modelRoutes.value = routesR.data.items;
 }
@@ -354,21 +354,21 @@ function tierBadgeLabel(level: number, mult: number): string {
   return `Lv${level} × ${mult}`;
 }
 
-function channelLabelFor(modelId: string): string {
-  const key = aliasChannelMap.value.get(modelId);
+function vendorLabelFor(modelId: string): string {
+  const key = aliasVendorMap.value.get(modelId);
   if (!key) return '—';
   return ProviderGroupLabel[key] ?? key;
 }
 
 watch(
-  () => [filter.value.keyword, filter.value.billingType, selectedChannel.value] as const,
+  () => [filter.value.keyword, filter.value.billingType, selectedVendor.value] as const,
   () => {
     pricedPagination.setPage(1);
     unconfiguredPagination.setPage(1);
   },
 );
 
-watch(selectedChannel, () => {
+watch(selectedVendor, () => {
   activeTab.value = 'priced';
 });
 
@@ -391,7 +391,7 @@ onMounted(async () => {
     </template>
 
     <ProviderGroupSidebar
-      v-model="selectedChannel"
+      v-model="selectedVendor"
       :groups="groups"
       :loading="groupsLoading"
       show-all-option
@@ -403,7 +403,7 @@ onMounted(async () => {
     <ProviderDetailPanel>
       <template #header>
         <div class="detail-header__main">
-          <h2 class="provider-detail__title">{{ channelTitle }}</h2>
+          <h2 class="provider-detail__title">{{ vendorTitle }}</h2>
           <p v-if="selectedGroup" class="provider-detail__sub">{{ selectedGroup.queueGroup }}</p>
           <p v-else class="provider-detail__sub">汇总所有 QueueGroup 下已启用别名的定价</p>
           <div class="provider-detail__stats">
@@ -490,9 +490,9 @@ onMounted(async () => {
               </div>
             </template>
           </el-table-column>
-          <el-table-column v-if="selectedChannel === 'all'" label="渠道" width="110">
+          <el-table-column v-if="selectedVendor === 'all'" label="渠道" width="110">
             <template #default="{ row }: { row: Pricing }">
-              <el-tag size="small" effect="plain">{{ channelLabelFor(row.modelId) }}</el-tag>
+              <el-tag size="small" effect="plain">{{ vendorLabelFor(row.modelId) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="计费类型" width="120">
@@ -543,7 +543,7 @@ onMounted(async () => {
             <EmptyState
               title="暂无定价"
               :description="
-                selectedChannel === 'all'
+                selectedVendor === 'all'
                   ? '切换到「未配置」为别名补齐定价。'
                   : '该渠道下尚无已定价别名；可切换「未配置」或先在供应商组创建别名。'
               "

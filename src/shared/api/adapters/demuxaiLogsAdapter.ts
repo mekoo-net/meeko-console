@@ -5,7 +5,7 @@ import { asEpochMillis } from '@/shared/lib/epoch';
 
 import { logEntrySchema } from '@/features/demuxai/model/log.types';
 import type {
-  ChannelConsumptionRow,
+  VendorConsumptionRow,
   ListLogsFilter,
   LogEntry,
   LogStats,
@@ -42,9 +42,9 @@ interface DailyRow {
   totalQuota: number;
 }
 
-/** 后端 AiChannelStatDto（按渠道聚合行）形状。 */
-interface ChannelRow {
-  channelKey: string;
+/** 后端 AiVendorStatDto（按渠道聚合行）形状。 */
+interface VendorRow {
+  vendorKey: string;
   requestCount: number;
   totalPromptTokens: number;
   totalCompletionTokens: number;
@@ -130,7 +130,7 @@ export class DemuxaiLogsHttpAdapter implements DemuxaiLogsPort {
         apiType:    filter.apiType    || undefined,
         convId:     filter.convId     || undefined,
         modelName:  filter.modelName  || undefined,
-        channelKey: filter.channelKey || undefined,
+        vendorKey: filter.vendorKey || undefined,
         errorOnly:  filter.errorOnly  || undefined,
         errorCode:  filter.errorCode  || undefined,
         fromUtc:    filter.fromUtc,
@@ -142,18 +142,18 @@ export class DemuxaiLogsHttpAdapter implements DemuxaiLogsPort {
     return { success: true, data: { items, total: result.data.total } };
   }
 
-  async statByChannel(filter: ListLogsFilter): Promise<AppResult<ChannelConsumptionRow[]>> {
-    const result = await requestDemuxAi<ItemsEnvelope<ChannelRow>>(`${BASE}/stats/by-channel`, {
+  async statByVendor(filter: ListLogsFilter): Promise<AppResult<VendorConsumptionRow[]>> {
+    const result = await requestDemuxAi<ItemsEnvelope<VendorRow>>(`${BASE}/stats/by-vendor`, {
       query: {
         fromUtc:    filter.fromUtc,
         toUtc:      filter.toUtc,
         accountUid: filter.accountUid || undefined,
-        channelKey: filter.channelKey || undefined,
+        vendorKey: filter.vendorKey || undefined,
       },
     });
     if (!result.success) return result;
-    const rows = result.data.items.map((r): ChannelConsumptionRow => ({
-      channelKey:            r.channelKey,
+    const rows = result.data.items.map((r): VendorConsumptionRow => ({
+      vendorKey:            r.vendorKey,
       requestCount:          r.requestCount,
       totalPromptTokens:     r.totalPromptTokens,
       totalCompletionTokens: r.totalCompletionTokens,

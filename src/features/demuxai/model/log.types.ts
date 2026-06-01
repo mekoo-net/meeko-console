@@ -271,10 +271,10 @@ const logEntryBaseShape = {
     .optional(),
   /** 对外暴露的模型名（= 用户请求体里的 `model` 字段，如 `'demux-gpt-4o'`）。 */
   modelName: z.string(),
-  /** 命中渠道（供应商组）。来自定价快照绑定，别名/供应商删除后历史仍可还原；未绑定时为 null。 */
-  channelKey: z.string().nullable().optional(),
-  /** 命中的上游真实模型名。来自定价快照绑定；未绑定时为 null。 */
-  upstreamModelId: z.string().nullable().optional(),
+  /** 命中渠道（供应商组）。来自别名快照绑定，别名/供应商删除后历史仍可还原；未绑定时为 null。 */
+  vendorKey: z.string().nullable().optional(),
+  /** 命中的上游真实模型名（vendor_model）。来自别名快照绑定；未绑定时为 null。 */
+  vendorModel: z.string().nullable().optional(),
   /**
    * 命中的模型渠道**数据库主键（int）**，非 string UID。
    *
@@ -410,8 +410,8 @@ export interface ListLogsFilter {
   iamId?: string;
   /** 模糊匹配 `modelName` */
   modelName?: string;
-  /** 按渠道（供应商组）精确过滤；匹配定价快照绑定的 `channelKey`。 */
-  channelKey?: string;
+  /** 按渠道（供应商组）精确过滤；匹配定价快照绑定的 `vendorKey`。 */
+  vendorKey?: string;
   /** 命中渠道的 int 主键（= `Provider.id`） */
   providerId?: number;
   apiType?: ApiType;
@@ -505,12 +505,12 @@ export interface LogStats {
 /**
  * 按渠道（供应商组）聚合的消费统计行。
  *
- * 数据来自定价快照绑定（`ModelPricing.channelKey`）—— 别名/供应商被删后历史仍可统计，
+ * 数据来自定价快照绑定（`ModelPricing.vendorKey`）—— 别名/供应商被删后历史仍可统计，
  * 故金额/调用量按"调用当时实际命中的渠道"归集，永不丢数据。
  */
-export interface ChannelConsumptionRow {
+export interface VendorConsumptionRow {
   /** 渠道（供应商组 / queue_group）。 */
-  channelKey: string;
+  vendorKey: string;
   /** 调用次数（仅成功调用）。 */
   requestCount: number;
   /** 累计输入 token。 */
