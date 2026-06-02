@@ -1,22 +1,22 @@
 <script setup lang="ts">
 /**
- * 扣费 & Tokens 趋势：双轴折线。
- *  - 左轴：扣费（元，索引色 indigo）
- *  - 右轴：Tokens（虚线，amber）
+ * 扣费 & Tokens 趋势：双轴分组柱状。
+ *  - 左轴：扣费（元，indigo）
+ *  - 右轴：Tokens（amber）
+ *  - 每个小时两根并排柱体；某小时为 0 即不画柱，柱体彼此独立不连线
  */
-import { computed } from 'vue';
+import { computed, useTemplateRef } from 'vue';
 
 import type { LogStatsBucket } from '../../model/log.types';
 import Panel from './Panel.vue';
+import { useChartWidth } from './useChartWidth';
 import {
-  buildLinePath,
+  barLayout,
   formatBucketLabel,
   niceCeil,
   pickXTicks,
   shortNumber,
-  xAt,
   type Padding,
-  type XY,
 } from './chartUtils';
 
 const props = defineProps<{
@@ -24,12 +24,24 @@ const props = defineProps<{
   bucketSizeSec: number;
 }>();
 
+const hostEl = useTemplateRef<HTMLElement>('hostEl');
+const hostWidth = useChartWidth(hostEl);
+
+interface Bar {
+  costX: number;
+  costY: number;
+  costH: number;
+  tokX: number;
+  tokY: number;
+  tokH: number;
+  subWidth: number;
+}
+
 interface ChartModel {
   pad: Padding;
   width: number;
   height: number;
-  costPath: string;
-  tokensPath: string;
+  bars: Bar[];
   xTicks: Array<{ x: number; label: string }>;
   yCostTicks: Array<{ y: number; label: string }>;
   yTokTicks: Array<{ y: number; label: string }>;
@@ -38,7 +50,7 @@ interface ChartModel {
 const chart = computed<ChartModel | null>(() => {
   if (props.buckets.length === 0) return null;
   const pad: Padding = { l: 50, r: 50, t: 16, b: 28 };
-  const width = 720;
+  const width = hostWidth.value;
   const height = 220;
   const innerW = width - pad.l - pad.r;
   const innerH = height - pad.t - pad.b;
@@ -55,20 +67,30 @@ const chart = computed<ChartModel | null>(() => {
 
   const yCost = (v: number): number => pad.t + innerH - (v / costMax) * innerH;
   const yTok = (v: number): number => pad.t + innerH - (v / tokensMax) * innerH;
+  const baseY = pad.t + innerH;
+  const layout = barLayout(n, pad.l, innerW);
+  const subWidth = Math.max(0.5, layout.width / 2);
 
-  const costPts: XY[] = props.buckets.map((b, i) => ({
-    x: xAt(i, n, pad.l, innerW),
-    y: yCost(b.cost),
-  }));
-  const tokPts: XY[] = props.buckets.map((b, i) => ({
-    x: xAt(i, n, pad.l, innerW),
-    y: yTok(b.tokens),
-  }));
+  const bars: Bar[] = props.buckets.map((b, i) => {
+    const left = layout.left(i);
+    const costY = yCost(b.cost);
+    const tokY = yTok(b.tokens);
+    return {
+      costX: left,
+      costY,
+      costH: baseY - costY,
+      tokX: left + subWidth,
+      tokY,
+      tokH: baseY - tokY,
+      subWidth,
+    };
+  });
 
+  const spanMs = n > 1 ? props.buckets[n - 1]!.tsUtc - props.buckets[0]!.tsUtc : 0;
   const xTickRaw = pickXTicks(n, pad.l, innerW);
   const xTicks = xTickRaw.map((t) => ({
-    x: t.x,
-    label: formatBucketLabel(props.buckets[t.idx]!.tsUtc, props.bucketSizeSec),
+    x: layout.center(t.idx),
+    label: formatBucketLabel(props.buckets[t.idx]!.tsUtc, props.bucketSizeSec, spanMs),
   }));
   const yCostTicks: ChartModel['yCostTicks'] = [];
   const yTokTicks: ChartModel['yTokTicks'] = [];
@@ -87,8 +109,7 @@ const chart = computed<ChartModel | null>(() => {
     pad,
     width,
     height,
-    costPath: buildLinePath(costPts),
-    tokensPath: buildLinePath(tokPts),
+    bars,
     xTicks,
     yCostTicks,
     yTokTicks,
@@ -105,13 +126,13 @@ const chart = computed<ChartModel | null>(() => {
       </span>
     </template>
 
-    <svg
-      v-if="chart"
-      class="chart"
-      :viewBox="`0 0 ${chart.width} ${chart.height}`"
-      preserveAspectRatio="none"
-    >
-      <g class="grid">
+    <div ref="hostEl" class="chart-host">
+      <svg
+        v-if="chart"
+        class="chart"
+        :viewBox="`0 0 ${chart.width} ${chart.height}`"
+      >
+        <g class="grid">
         <line
           v-for="t in chart.yCostTicks"
           :key="`dy-${t.label}`"
@@ -121,8 +142,26 @@ const chart = computed<ChartModel | null>(() => {
           :y2="t.y"
         />
       </g>
-      <path :d="chart.costPath" class="line line--cost" />
-      <path :d="chart.tokensPath" class="line line--tokens" />
+      <g class="bars">
+        <template v-for="(bar, i) in chart.bars" :key="`cb-${i}`">
+          <rect
+            v-if="bar.costH > 0"
+            class="bar bar--cost"
+            :x="bar.costX"
+            :y="bar.costY"
+            :width="bar.subWidth"
+            :height="bar.costH"
+          />
+          <rect
+            v-if="bar.tokH > 0"
+            class="bar bar--tokens"
+            :x="bar.tokX"
+            :y="bar.tokY"
+            :width="bar.subWidth"
+            :height="bar.tokH"
+          />
+        </template>
+      </g>
       <g class="tick-y">
         <text
           v-for="t in chart.yCostTicks"
@@ -156,8 +195,9 @@ const chart = computed<ChartModel | null>(() => {
           {{ t.label }}
         </text>
       </g>
-    </svg>
-    <div v-else class="empty">暂无数据</div>
+      </svg>
+      <div v-else class="empty">暂无数据</div>
+    </div>
   </Panel>
 </template>
 
@@ -180,6 +220,9 @@ const chart = computed<ChartModel | null>(() => {
 .legend-dot--tokens {
   background: #f59e0b;
 }
+.chart-host {
+  width: 100%;
+}
 .chart {
   width: 100%;
   height: 220px;
@@ -196,16 +239,14 @@ const chart = computed<ChartModel | null>(() => {
   fill: var(--el-text-color-secondary);
   font-variant-numeric: tabular-nums;
 }
-.line {
-  fill: none;
-  stroke-width: 2;
+.bar {
+  stroke: none;
 }
-.line--cost {
-  stroke: #6366f1;
+.bar--cost {
+  fill: #6366f1;
 }
-.line--tokens {
-  stroke: #f59e0b;
-  stroke-dasharray: 4 4;
+.bar--tokens {
+  fill: #f59e0b;
 }
 .empty {
   display: flex;

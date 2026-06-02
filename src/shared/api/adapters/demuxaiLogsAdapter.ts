@@ -33,13 +33,41 @@ function mapFailureCode(code: string | null | undefined): ErrorCode {
   }
 }
 
-/** 后端 AiLogStatDto（daily 聚合行）形状。 */
-interface DailyRow {
-  dateUtc: number;
-  requestCount: number;
-  totalPromptTokens: number;
-  totalCompletionTokens: number;
-  totalQuota: number;
+/**
+ * 后端 AiLogStatDto（时间序列分桶聚合行）形状。桶宽自适应：3600=按小时 / 86400=按天。
+ *
+ * 字段全部可选并保留旧字段 `dateUtc`：新后端发 `bucketStartUtc`/`errorCount`/`bucketSeconds`，
+ * 旧后端（未重启）只发 `dateUtc`/`requestCount`。适配层统一兜底，避免版本不一致时出 NaN / 空轴。
+ */
+interface BucketRow {
+  bucketStartUtc?: number;
+  /** 旧后端字段名（按天聚合）；新后端已改为 bucketStartUtc。 */
+  dateUtc?: number;
+  bucketSeconds?: number;
+  requestCount?: number;
+  errorCount?: number;
+  totalPromptTokens?: number;
+  totalCompletionTokens?: number;
+  totalQuota?: number;
+}
+
+/** 安全数值：非有限数（undefined / null / NaN）一律归 0，杜绝 NaN 透传到 UI。 */
+function num(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+}
+
+/** 桶起点（毫秒）；兼容新旧字段名。 */
+function bucketTs(d: BucketRow): number {
+  return num(d.bucketStartUtc ?? d.dateUtc);
+}
+
+/** 后端未给桶宽时，按相邻桶时间差推断；推不出则按天兜底。 */
+function inferBucketSizeSec(rows: BucketRow[]): number {
+  for (let i = 1; i < rows.length; i += 1) {
+    const diff = Math.round((bucketTs(rows[i]!) - bucketTs(rows[i - 1]!)) / 1000);
+    if (diff > 0) return diff;
+  }
+  return 86400;
 }
 
 /** 后端 AiVendorStatDto（按渠道聚合行）形状。 */
@@ -84,28 +112,30 @@ function mapRawItem(raw: unknown): LogEntry {
   return parsed.data;
 }
 
-/** 将 AiLogStatDto[] 聚合成前端 LogStats（stats API 暂未提供完整 KPI）。 */
-function aggregateDailyRows(rows: DailyRow[]): LogStats {
-  const totalCalls    = rows.reduce((s, d) => s + d.requestCount, 0);
-  const totalTokens   = rows.reduce((s, d) => s + d.totalPromptTokens + d.totalCompletionTokens, 0);
-  const totalCost     = rows.reduce((s, d) => s + d.totalQuota, 0);
+/** 将 AiLogStatDto[]（分桶序列）聚合成前端 LogStats（stats API 暂未提供完整 KPI）。 */
+function aggregateBucketRows(rows: BucketRow[]): LogStats {
+  const totalCalls    = rows.reduce((s, d) => s + num(d.requestCount), 0);
+  const errorCalls    = rows.reduce((s, d) => s + num(d.errorCount), 0);
+  const totalTokens   = rows.reduce((s, d) => s + num(d.totalPromptTokens) + num(d.totalCompletionTokens), 0);
+  const totalCost     = rows.reduce((s, d) => s + num(d.totalQuota), 0);
+  const bucketSizeSec = num(rows[0]?.bucketSeconds) || inferBucketSizeSec(rows);
 
   return {
     totalCalls,
-    successCalls:     totalCalls,   // stats 仅含 success 行
-    errorCalls:       0,
+    successCalls:     Math.max(0, totalCalls - errorCalls),
+    errorCalls,
     avgTokenLatency:  0,
     p95TokenLatency:  0,
     totalTokens,
     totalCost,
     rpm:              0,
-    bucketSizeSec:    86400,
+    bucketSizeSec,
     buckets: rows.map((d) => ({
-      tsUtc:   d.dateUtc,
-      calls:   d.requestCount,
-      errors:  0,
-      cost:    d.totalQuota,
-      tokens:  d.totalPromptTokens + d.totalCompletionTokens,
+      tsUtc:   bucketTs(d),
+      calls:   num(d.requestCount),
+      errors:  num(d.errorCount),
+      cost:    num(d.totalQuota),
+      tokens:  num(d.totalPromptTokens) + num(d.totalCompletionTokens),
     })),
     topModels:     [],
     topProviders:  [],
@@ -164,7 +194,7 @@ export class DemuxaiLogsHttpAdapter implements DemuxaiLogsPort {
   }
 
   async stats(filter: ListLogsFilter): Promise<AppResult<LogStats>> {
-    const result = await requestDemuxAi<ItemsEnvelope<DailyRow>>(`${BASE}/stats`, {
+    const result = await requestDemuxAi<ItemsEnvelope<BucketRow>>(`${BASE}/stats`, {
       query: {
         fromUtc:    filter.fromUtc,
         toUtc:      filter.toUtc,
@@ -174,7 +204,7 @@ export class DemuxaiLogsHttpAdapter implements DemuxaiLogsPort {
       },
     });
     if (!result.success) return result;
-    return { success: true, data: aggregateDailyRows(result.data.items) };
+    return { success: true, data: aggregateBucketRows(result.data.items) };
   }
 
   async reverse(input: ReverseLogInput): Promise<AppResult<ReverseLogResult>> {

@@ -74,22 +74,9 @@ function promptCompletionOf(row: LogEntry): { prompt: number; completion: number
   return { prompt: row.usage.input.tokens, completion: row.usage.output.tokens };
 }
 
-/**
- * 选 bucket 宽度：
- *  - span ≤ 2h  → 5 min
- *  - span ≤ 6h  → 15 min
- *  - span ≤ 24h → 1 h
- *  - span ≤ 3d  → 3 h
- *  - 其余        → 1 d
- */
-function pickBucketSizeSec(spanMs: number): number {
-  const hour = 60 * 60 * 1000;
-  if (spanMs <= 2 * hour) return 5 * 60;
-  if (spanMs <= 6 * hour) return 15 * 60;
-  if (spanMs <= 24 * hour) return 60 * 60;
-  if (spanMs <= 3 * 24 * hour) return 3 * 60 * 60;
-  return 24 * 60 * 60;
-}
+/** 概览趋势固定按小时分桶（与后端 StatDailyAsync 口径一致）。 */
+const HOUR_SEC = 60 * 60;
+const HOUR_MS = HOUR_SEC * 1000;
 
 function buildBuckets(
   rows: LogEntry[],
@@ -257,12 +244,14 @@ export class DemuxaiLogsMock implements DemuxaiLogsPort {
     const filtered = applyFilter(this.store.logs, filter);
     const totalCalls = filtered.length;
 
-    // 时间范围用于分桶 + RPM：filter 没传时回退到 logs 的覆盖区间或最近 24h
+    // 时间范围用于分桶 + RPM：filter 没传时回退到 logs 的覆盖区间或最近 24h。
+    // 固定小时桶：起点向下取整到整点，保证桶落在 HH:00 且横轴连续。
     const now = Date.now();
-    const fromMs = filter.fromUtc ?? now - 24 * 60 * 60 * 1000;
+    const rawFromMs = filter.fromUtc ?? now - 24 * HOUR_MS;
     const toMs = filter.toUtc ?? now;
+    const fromMs = Math.floor(rawFromMs / HOUR_MS) * HOUR_MS;
     const spanMs = Math.max(toMs - fromMs, 60 * 1000);
-    const bucketSizeSec = pickBucketSizeSec(spanMs);
+    const bucketSizeSec = HOUR_SEC;
 
     if (totalCalls === 0) {
       return ok({

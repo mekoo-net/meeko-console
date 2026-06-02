@@ -1,24 +1,21 @@
 <script setup lang="ts">
 /**
- * 调用量趋势：双层面积叠加（成功 + 失败）。
- *  - 底层面积 = total（成功 + 失败），渲染为浅红
- *  - 上层面积 = success（成功），渲染为浅绿
- *  - 视觉上失败部分 = 红色面积减去绿色面积
+ * 调用量趋势：按小时堆叠柱状（成功 + 失败）。
+ *  - 每个柱体 = 该小时调用量；绿色段 = 成功，红色段叠在其上 = 失败
+ *  - 柱体彼此独立：某小时为 0 即不画柱（高度 0），不会跨桶连成斜线
  */
-import { computed } from 'vue';
+import { computed, useTemplateRef } from 'vue';
 
 import type { LogStatsBucket } from '../../model/log.types';
 import Panel from './Panel.vue';
+import { useChartWidth } from './useChartWidth';
 import {
-  buildAreaPath,
-  buildLinePath,
+  barLayout,
   formatBucketLabel,
   niceCeil,
   pickXTicks,
   shortNumber,
-  xAt,
   type Padding,
-  type XY,
 } from './chartUtils';
 
 const props = defineProps<{
@@ -26,22 +23,32 @@ const props = defineProps<{
   bucketSizeSec: number;
 }>();
 
+const hostEl = useTemplateRef<HTMLElement>('hostEl');
+const hostWidth = useChartWidth(hostEl);
+
+interface Bar {
+  x: number;
+  width: number;
+  successY: number;
+  successH: number;
+  errorY: number;
+  errorH: number;
+}
+
 interface ChartModel {
   pad: Padding;
   width: number;
   height: number;
   yMax: number;
+  bars: Bar[];
   xTicks: Array<{ x: number; label: string }>;
   yTicks: Array<{ y: number; label: string }>;
-  successArea: string;
-  successLine: string;
-  totalArea: string;
 }
 
 const chart = computed<ChartModel | null>(() => {
   if (props.buckets.length === 0) return null;
   const pad: Padding = { l: 40, r: 16, t: 16, b: 28 };
-  const width = 720;
+  const width = hostWidth.value;
   const height = 220;
   const innerW = width - pad.l - pad.r;
   const innerH = height - pad.t - pad.b;
@@ -49,21 +56,29 @@ const chart = computed<ChartModel | null>(() => {
 
   const yMax = Math.max(1, niceCeil(props.buckets.reduce((m, b) => Math.max(m, b.calls), 0)));
   const yAt = (v: number): number => pad.t + innerH - (v / yMax) * innerH;
-
-  const totalPts: XY[] = props.buckets.map((b, i) => ({
-    x: xAt(i, n, pad.l, innerW),
-    y: yAt(b.calls),
-  }));
-  const successPts: XY[] = props.buckets.map((b, i) => ({
-    x: xAt(i, n, pad.l, innerW),
-    y: yAt(b.calls - b.errors),
-  }));
   const baseY = pad.t + innerH;
+  const layout = barLayout(n, pad.l, innerW);
 
+  const bars: Bar[] = props.buckets.map((b, i) => {
+    const success = Math.max(0, b.calls - b.errors);
+    const errors = Math.max(0, b.errors);
+    const successY = yAt(success);
+    const errorY = yAt(success + errors);
+    return {
+      x: layout.left(i),
+      width: layout.width,
+      successY,
+      successH: baseY - successY,
+      errorY,
+      errorH: successY - errorY,
+    };
+  });
+
+  const spanMs = n > 1 ? props.buckets[n - 1]!.tsUtc - props.buckets[0]!.tsUtc : 0;
   const xTickRaw = pickXTicks(n, pad.l, innerW);
   const xTicks = xTickRaw.map((t) => ({
-    x: t.x,
-    label: formatBucketLabel(props.buckets[t.idx]!.tsUtc, props.bucketSizeSec),
+    x: layout.center(t.idx),
+    label: formatBucketLabel(props.buckets[t.idx]!.tsUtc, props.bucketSizeSec, spanMs),
   }));
   const yTicks: ChartModel['yTicks'] = [];
   for (let i = 0; i <= 4; i += 1) {
@@ -76,11 +91,9 @@ const chart = computed<ChartModel | null>(() => {
     width,
     height,
     yMax,
+    bars,
     xTicks,
     yTicks,
-    successArea: buildAreaPath(successPts, baseY),
-    successLine: buildLinePath(successPts),
-    totalArea: buildAreaPath(totalPts, baseY),
   };
 });
 </script>
@@ -94,13 +107,13 @@ const chart = computed<ChartModel | null>(() => {
       </span>
     </template>
 
-    <svg
-      v-if="chart"
-      class="chart"
-      :viewBox="`0 0 ${chart.width} ${chart.height}`"
-      preserveAspectRatio="none"
-    >
-      <g class="grid">
+    <div ref="hostEl" class="chart-host">
+      <svg
+        v-if="chart"
+        class="chart"
+        :viewBox="`0 0 ${chart.width} ${chart.height}`"
+      >
+        <g class="grid">
         <line
           v-for="t in chart.yTicks"
           :key="`yg-${t.label}`"
@@ -110,9 +123,26 @@ const chart = computed<ChartModel | null>(() => {
           :y2="t.y"
         />
       </g>
-      <path :d="chart.totalArea" class="area area--danger" />
-      <path :d="chart.successArea" class="area area--success" />
-      <path :d="chart.successLine" class="line line--success" />
+      <g class="bars">
+        <template v-for="(bar, i) in chart.bars" :key="`bar-${i}`">
+          <rect
+            v-if="bar.successH > 0"
+            class="bar bar--success"
+            :x="bar.x"
+            :y="bar.successY"
+            :width="bar.width"
+            :height="bar.successH"
+          />
+          <rect
+            v-if="bar.errorH > 0"
+            class="bar bar--danger"
+            :x="bar.x"
+            :y="bar.errorY"
+            :width="bar.width"
+            :height="bar.errorH"
+          />
+        </template>
+      </g>
       <g class="tick-y">
         <text
           v-for="t in chart.yTicks"
@@ -135,8 +165,9 @@ const chart = computed<ChartModel | null>(() => {
           {{ t.label }}
         </text>
       </g>
-    </svg>
-    <div v-else class="empty">暂无数据</div>
+      </svg>
+      <div v-else class="empty">暂无数据</div>
+    </div>
   </Panel>
 </template>
 
@@ -159,6 +190,9 @@ const chart = computed<ChartModel | null>(() => {
 .legend-dot--danger {
   background: #ef4444;
 }
+.chart-host {
+  width: 100%;
+}
 .chart {
   width: 100%;
   height: 220px;
@@ -175,21 +209,14 @@ const chart = computed<ChartModel | null>(() => {
   fill: var(--el-text-color-secondary);
   font-variant-numeric: tabular-nums;
 }
-.area {
+.bar {
   stroke: none;
 }
-.area--success {
-  fill: rgba(16, 185, 129, 0.22);
+.bar--success {
+  fill: #10b981;
 }
-.area--danger {
-  fill: rgba(239, 68, 68, 0.18);
-}
-.line {
-  fill: none;
-  stroke-width: 1.5;
-}
-.line--success {
-  stroke: #10b981;
+.bar--danger {
+  fill: #ef4444;
 }
 .empty {
   display: flex;

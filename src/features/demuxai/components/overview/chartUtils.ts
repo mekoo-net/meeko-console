@@ -52,10 +52,20 @@ export function niceCeil(v: number): number {
   return pick * mag;
 }
 
-/** 按桶宽自适应时间轴标签格式 */
-export function formatBucketLabel(tsUtc: DateInput, bucketSizeSec: number): string {
+/**
+ * 按桶宽自适应时间轴标签格式。
+ *
+ * `spanMs`（首末桶跨度）用于小时桶跨多天时补上日期，避免横轴出现重复的 "HH:00"
+ * 而无法区分是哪一天。
+ */
+export function formatBucketLabel(
+  tsUtc: DateInput,
+  bucketSizeSec: number,
+  spanMs?: number,
+): string {
   if (bucketSizeSec >= 24 * 3600) return formatDateTime(tsUtc, 'MM-DD');
-  if (bucketSizeSec >= 3 * 3600) return formatDateTime(tsUtc, 'MM-DD HH:00');
+  const multiDay = spanMs != null && spanMs > 36 * 3600 * 1000;
+  if (bucketSizeSec >= 3 * 3600 || multiDay) return formatDateTime(tsUtc, 'MM-DD HH:00');
   return formatDateTime(tsUtc, 'HH:mm');
 }
 
@@ -104,4 +114,36 @@ export function xAt(
 ): number {
   if (n <= 1) return innerLeft + innerWidth / 2;
   return innerLeft + (i / (n - 1)) * innerWidth;
+}
+
+export interface BarLayout {
+  /** 每个桶占据的槽宽（含间隙） */
+  slot: number;
+  /** 柱体宽度（已扣除间隙，至少 0.5px） */
+  width: number;
+  /** 第 i 个桶柱体的左边缘 x */
+  left: (i: number) => number;
+  /** 第 i 个桶槽位中心 x（用于刻度对齐） */
+  center: (i: number) => number;
+}
+
+/**
+ * 柱状图布局：每个桶分到等宽槽位，柱体居中并按 `gapRatio` 留间隙。
+ * 与折线不同，柱体彼此独立——空桶天然画成 0 高（即不画），不会出现跨桶连线。
+ */
+export function barLayout(
+  n: number,
+  innerLeft: number,
+  innerWidth: number,
+  gapRatio = 0.2,
+): BarLayout {
+  const slot = n > 0 ? innerWidth / n : innerWidth;
+  const gap = slot * gapRatio;
+  const width = Math.max(0.5, slot - gap);
+  return {
+    slot,
+    width,
+    left: (i: number) => innerLeft + i * slot + gap / 2,
+    center: (i: number) => innerLeft + (i + 0.5) * slot,
+  };
 }
