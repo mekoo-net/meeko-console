@@ -6,10 +6,13 @@ import {
   RechargeProviderLabel,
   type RechargeProvider,
 } from '../model/billing.types';
-import { useAccountDirectory } from '../composables/useAccountDirectory';
 import { getBillingPort } from '../services';
 
-const props = defineProps<{ visible: boolean }>();
+const props = defineProps<{
+  visible: boolean;
+  accountUid: string;
+  accountLabel?: string;
+}>();
 const emit = defineEmits<{
   (e: 'update:visible', v: boolean): void;
   (e: 'success'): void;
@@ -17,11 +20,9 @@ const emit = defineEmits<{
 
 const internalSources: RechargeProvider[] = ['manual', 'cs_compensation', 'marketing_reward'];
 
-const dir = useAccountDirectory();
 const billingPort = getBillingPort();
 const submitting = ref(false);
 
-const ownerAccountUid = ref('');
 const amount = ref<number | null>(null);
 const source = ref<RechargeProvider>('manual');
 const note = ref('');
@@ -32,10 +33,9 @@ const dialogVisible = computed({
   set: (v) => emit('update:visible', v),
 });
 
-const accountOptions = computed(() => dir.data.value?.items ?? []);
+const targetLabel = computed(() => props.accountLabel?.trim() || props.accountUid);
 
 function resetForm(): void {
-  ownerAccountUid.value = '';
   amount.value = null;
   source.value = 'manual';
   note.value = '';
@@ -50,8 +50,8 @@ watch(
 );
 
 async function handleSubmit(): Promise<void> {
-  if (!ownerAccountUid.value.trim()) {
-    ElMessage.warning('请选择目标账户');
+  if (!props.accountUid) {
+    ElMessage.warning('缺少目标账户');
     return;
   }
   if (amount.value == null || amount.value <= 0) {
@@ -62,7 +62,7 @@ async function handleSubmit(): Promise<void> {
   submitting.value = true;
   try {
     const r = await billingPort.createInternalRecharge({
-      ownerAccountUid: ownerAccountUid.value.trim(),
+      ownerAccountUid: props.accountUid,
       amount: amount.value,
       source: source.value,
       note: note.value.trim() || undefined,
@@ -90,20 +90,8 @@ async function handleSubmit(): Promise<void> {
     :close-on-click-modal="false"
   >
     <el-form label-width="96px" label-position="right" @submit.prevent="handleSubmit">
-      <el-form-item label="目标账户" required>
-        <el-select
-          v-model="ownerAccountUid"
-          placeholder="选择账户"
-          filterable
-          style="width: 100%"
-        >
-          <el-option
-            v-for="a in accountOptions"
-            :key="a.uid"
-            :label="`${a.displayName} (${a.uid})`"
-            :value="a.uid"
-          />
-        </el-select>
+      <el-form-item label="目标账户">
+        <el-input :model-value="targetLabel" disabled />
       </el-form-item>
 
       <el-form-item label="入账金额" required>

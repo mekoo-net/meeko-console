@@ -15,6 +15,7 @@ import AccountInfoCard from '../components/AccountInfoCard.vue';
 import AccountAchievementsCard from '../components/AccountAchievementsCard.vue';
 import BillingTab from '@/features/billing/components/BillingTab.vue';
 import BusinessTab from '@/features/billing/components/BusinessTab.vue';
+import ManualRechargeDialog from '@/features/billing/components/ManualRechargeDialog.vue';
 import IamUsersTab from '../components/IamUsersTab.vue';
 
 const props = defineProps<{ uid: string }>();
@@ -25,6 +26,7 @@ const detail = useAccountDetail(uidRef);
 
 const port = getAccountAdminPort();
 const togglingStatus = ref(false);
+const manualDialogVisible = ref(false);
 
 const account = computed(() => detail.account.value);
 const isSuspended = computed(() => account.value?.status === 'suspended');
@@ -70,6 +72,13 @@ async function toggleSuspend(): Promise<void> {
         <el-button :icon="ArrowLeft" plain @click="router.push('/accounts')">返回</el-button>
         <el-button
           v-if="account"
+          type="primary"
+          @click="manualDialogVisible = true"
+        >
+          人工入账
+        </el-button>
+        <el-button
+          v-if="account"
           :loading="togglingStatus"
           :type="isSuspended ? 'success' : 'warning'"
           @click="toggleSuspend"
@@ -78,6 +87,14 @@ async function toggleSuspend(): Promise<void> {
         </el-button>
       </template>
     </PageHeader>
+
+    <ManualRechargeDialog
+      v-if="account"
+      v-model:visible="manualDialogVisible"
+      :account-uid="account.uid"
+      :account-label="accountLabel(account)"
+      @success="detail.refresh()"
+    />
 
     <el-alert
       v-if="detail.error.value"

@@ -23,7 +23,6 @@ import {
 } from '../model/billing.types';
 import { getBillingPort } from '../services';
 import type { ListRechargesFilter } from '../services/ports/billingPort';
-import ManualRechargeDialog from '../components/ManualRechargeDialog.vue';
 
 const router = useRouter();
 const billingPort = getBillingPort();
@@ -53,8 +52,6 @@ const defaultFilter = (): PageFilter => ({
 });
 
 const filter = ref<PageFilter>(defaultFilter());
-
-const manualDialogVisible = ref(false);
 
 const accountMap = ref<Map<string, Account>>(new Map());
 
@@ -160,16 +157,7 @@ onMounted(() => {
   <div class="page">
     <PageHeader
       title="充值记录"
-      description="账户钱包入账事件，含用户付费充值（支付宝 / 微信）与平台内部充值（客服补偿 / 营销奖励 / 手工充值）。仅主账户可发起。"
-    >
-      <template #actions>
-        <el-button type="primary" @click="manualDialogVisible = true">人工入账</el-button>
-      </template>
-    </PageHeader>
-
-    <ManualRechargeDialog
-      v-model:visible="manualDialogVisible"
-      @success="fetchData()"
+      description="账户钱包入账事件，含用户付费充值（支付宝 / 微信）与平台内部充值（客服补偿 / 营销奖励 / 手工充值）。人工入账请前往对应账户详情页发起。"
     />
 
     <FilterBar
