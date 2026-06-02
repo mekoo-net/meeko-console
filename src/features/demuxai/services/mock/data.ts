@@ -40,6 +40,8 @@ export const genModelUid = createUidSeq(13_000_000);
 export const genPricingUid = createUidSeq(14_000_000);
 export const genLogUid = createSnowflakeIdSeq();
 export const genModelRouteUid = createUidSeq(17_000_000);
+export const genVendorModelUid = createUidSeq(18_000_000);
+export const genProviderGroupUid = createUidSeq(19_000_000);
 /** 生成日期+序列风格账单流水号，如 BL20260531000001234 */
 const _billSerialSeq = createUidSeq(1);
 export function genBillSerial(at: Date = new Date()): string {
@@ -935,11 +937,11 @@ export const gatewayDiscoveryCatalog: Readonly<
 export function seedImportedProviderGroups(): ProviderGroup[] {
   const t = epochMs(now);
   return [
-    { queueGroup: 'kiro', displayName: 'Kiro', status: 'active', upstreamModelCount: 3,
+    { id: genProviderGroupUid(), queueGroup: 'kiro', displayName: 'Kiro', status: 'active', upstreamModelCount: 3,
       notes: null, importedAtUtc: t, updatedAtUtc: t },
-    { queueGroup: 'gemini', displayName: 'Gemini', status: 'active', upstreamModelCount: 3,
+    { id: genProviderGroupUid(), queueGroup: 'gemini', displayName: 'Gemini', status: 'active', upstreamModelCount: 3,
       notes: null, importedAtUtc: t, updatedAtUtc: t },
-    { queueGroup: 'codex', displayName: 'Codex', status: 'active', upstreamModelCount: 3,
+    { id: genProviderGroupUid(), queueGroup: 'codex', displayName: 'Codex', status: 'active', upstreamModelCount: 3,
       notes: null, importedAtUtc: t, updatedAtUtc: t },
   ];
 }
@@ -952,7 +954,7 @@ export function seedImportedUpstreamModels(
   for (const g of groups) {
     const ids = gatewayDiscoveryCatalog[g.queueGroup]?.models.slice(0, 3) ?? [];
     for (const id of ids) {
-      out.push({ queueGroup: g.queueGroup, vendorModel: id, label: id });
+      out.push({ id: genVendorModelUid(), queueGroup: g.queueGroup, vendorModel: id, label: id });
     }
   }
   return out;

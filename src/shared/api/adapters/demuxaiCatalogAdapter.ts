@@ -84,13 +84,13 @@ export class DemuxaiCatalogHttpAdapter implements DemuxaiCatalogPort {
     return parseImport(res.data);
   }
 
-  async deleteProviderGroup(queueGroup: string): Promise<AppResult<void>> {
-    return requestDemuxAi<void>(`${BASE}/${encodeURIComponent(queueGroup)}`, { method: 'DELETE' });
+  async deleteProviderGroup(id: string): Promise<AppResult<void>> {
+    return requestDemuxAi<void>(`${BASE}/${encodeURIComponent(id)}`, { method: 'DELETE' });
   }
 
-  async deleteUpstreamModel(queueGroup: string, vendorModel: string): Promise<AppResult<void>> {
+  async deleteUpstreamModel(queueGroup: string, modelId: string): Promise<AppResult<void>> {
     return requestDemuxAi<void>(
-      `${BASE}/${encodeURIComponent(queueGroup)}/models/${encodeURIComponent(vendorModel)}`,
+      `${BASE}/${encodeURIComponent(queueGroup)}/models/${encodeURIComponent(modelId)}`,
       { method: 'DELETE' },
     );
   }

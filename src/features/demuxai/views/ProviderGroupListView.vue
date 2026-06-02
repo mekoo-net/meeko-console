@@ -185,7 +185,7 @@ async function onRemoveModel(model: ProviderUpstreamModel): Promise<void> {
     type: 'warning',
   });
   if (!okp) return;
-  const r = await catalogPort.deleteUpstreamModel(group.queueGroup, model.vendorModel);
+  const r = await catalogPort.deleteUpstreamModel(group.queueGroup, model.id);
   if (r.success) {
     ElMessage.success('已删除');
     await fetchGroups({ silent: true });
@@ -211,7 +211,7 @@ async function onRemoveGroup(): Promise<void> {
     type: 'warning',
   });
   if (!okp) return;
-  const r = await catalogPort.deleteProviderGroup(group.queueGroup);
+  const r = await catalogPort.deleteProviderGroup(group.id);
   if (r.success) {
     ElMessage.success('已删除');
     await fetchGroups();
@@ -305,7 +305,7 @@ onMounted(async () => {
         <el-table
           v-loading="detailLoading"
           :data="pagedModels"
-          row-key="vendorModel"
+          row-key="id"
           size="small"
           class="compact-table"
           height="100%"

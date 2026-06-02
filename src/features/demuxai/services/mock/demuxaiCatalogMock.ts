@@ -16,6 +16,8 @@ import type { DemuxaiCatalogPort } from '../ports/demuxaiCatalogPort';
 
 import {
   gatewayDiscoveryCatalog,
+  genProviderGroupUid,
+  genVendorModelUid,
   getDemuxaiStore,
   recomputeGroupModelCounts,
 } from './data';
@@ -114,6 +116,7 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
     let group = this.store.providerGroups.find((g) => g.queueGroup === queueGroup);
     if (!group) {
       const row: ProviderGroup = {
+        id: genProviderGroupUid(),
         queueGroup,
         displayName,
         status: 'active',
@@ -147,6 +150,7 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
       );
       if (dup) continue;
       const row: ProviderUpstreamModel = {
+        id: genVendorModelUid(),
         queueGroup,
         vendorModel,
         label: vendorModel,
@@ -161,11 +165,11 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
     return ok({ queueGroup, importedModelCount: importedCount, importedAtUtc: t });
   }
 
-  async deleteProviderGroup(queueGroup: string): Promise<AppResult<void>> {
+  async deleteProviderGroup(id: string): Promise<AppResult<void>> {
     await delay();
-    const key = normalizeQueueGroup(queueGroup);
-    const idx = this.store.providerGroups.findIndex((g) => g.queueGroup === key);
+    const idx = this.store.providerGroups.findIndex((g) => g.id === id);
     if (idx < 0) return fail({ code: 'not_found', message: '供应商组不存在' });
+    const key = this.store.providerGroups[idx]!.queueGroup;
     this.store.providerGroups.splice(idx, 1);
     for (let i = this.store.upstreamModels.length - 1; i >= 0; i -= 1) {
       if (this.store.upstreamModels[i]!.queueGroup === key) {
@@ -182,21 +186,18 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
   }
 
   async deleteUpstreamModel(
-    queueGroup: string,
-    vendorModel: string,
+    _queueGroup: string,
+    modelId: string,
   ): Promise<AppResult<void>> {
     await delay();
-    const key = normalizeQueueGroup(queueGroup);
-    const id = vendorModel.trim();
-    const idx = this.store.upstreamModels.findIndex(
-      (m) => m.queueGroup === key && m.vendorModel === id,
-    );
+    const idx = this.store.upstreamModels.findIndex((m) => m.id === modelId);
     if (idx < 0) return fail({ code: 'not_found', message: '上游模型不存在' });
+    const target = this.store.upstreamModels[idx]!;
     this.store.upstreamModels.splice(idx, 1);
     // Cascade: removing the upstream model removes the aliases pointing at it.
     for (let i = this.store.modelRoutes.length - 1; i >= 0; i -= 1) {
       const r = this.store.modelRoutes[i]!;
-      if (r.vendorKey === key && r.vendorModel === id) {
+      if (r.vendorKey === target.queueGroup && r.vendorModel === target.vendorModel) {
         this.store.modelRoutes.splice(i, 1);
       }
     }
