@@ -289,6 +289,30 @@ const outputDims = computed<DimRow[]>(() => {
 
       <!-- ============ per_call ============ -->
       <template v-else-if="log.billingType === 'per_call'">
+        <!-- 按次计费仍会消耗 token，展示但不参与扣费 -->
+        <div class="snapshot-hint">Token 用量（仅观测，不计费）</div>
+        <div class="log-detail__row">
+          <span class="label">输入</span>
+          <span class="num">{{ log.usage.input.tokens.toLocaleString() }} tok</span>
+        </div>
+        <div v-if="log.usage.input.cachedReadTokens > 0" class="log-detail__row">
+          <span class="label">cached 读</span>
+          <span class="num">{{ log.usage.input.cachedReadTokens.toLocaleString() }} tok</span>
+        </div>
+        <div v-if="log.usage.input.audioTokens > 0" class="log-detail__row">
+          <span class="label">输入 audio</span>
+          <span class="num">{{ log.usage.input.audioTokens.toLocaleString() }} tok</span>
+        </div>
+        <div class="log-detail__row">
+          <span class="label">输出</span>
+          <span class="num">{{ log.usage.output.tokens.toLocaleString() }} tok</span>
+        </div>
+        <div v-if="log.usage.output.reasoningTokens > 0" class="log-detail__row">
+          <span class="label">reasoning</span>
+          <span class="num">{{ log.usage.output.reasoningTokens.toLocaleString() }} tok</span>
+        </div>
+
+        <el-divider class="sub-divider" />
         <div class="snapshot-hint">调用时单价快照</div>
         <div class="log-detail__row">
           <span class="label">单次价</span>

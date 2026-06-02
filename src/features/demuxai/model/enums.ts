@@ -201,12 +201,12 @@ export const billingTypeValues = [
 export type BillingType = (typeof billingTypeValues)[number];
 
 export const BillingTypeLabel: Readonly<Record<BillingType, string>> = {
-  per_token: '按 Token',
-  per_call: '按调用',
-  per_image: '按图片',
-  per_video: '按视频',
-  per_audio_minute: '按音频时长',
-  per_character: '按字符',
+  per_token: '按量计费',
+  per_call: '按次计费',
+  per_image: '图片计费',
+  per_video: '视频计费',
+  per_audio_minute: '音频计费',
+  per_character: '字符计费',
 };
 
 /**

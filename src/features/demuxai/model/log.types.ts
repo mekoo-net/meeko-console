@@ -87,8 +87,29 @@ export const perTokenUsageSchema = z.object({
 });
 export type PerTokenUsage = z.infer<typeof perTokenUsageSchema>;
 
+/**
+ * `per_call` 用量快照。
+ *
+ * 计费虽按"次"，但底层多半仍是 LLM 调用（function call / moderation 等），照样消耗 token。
+ * 故只记录上游回报的输入 / 输出 / 缓存 token 原始明细，仅供观测 / 对账，
+ * **不参与扣费**（扣费走 `pricePerCall`）。总数由前端按需相加。老数据未带明细时各项回退 0。
+ */
 export const perCallUsageSchema = z.object({
-  calls: z.number().int().positive(),
+  input: z
+    .object({
+      tokens: z.number().int().nonnegative(),
+      cachedReadTokens: z.number().int().nonnegative(),
+      cachedWriteTokens: z.number().int().nonnegative(),
+      audioTokens: z.number().int().nonnegative(),
+    })
+    .default({ tokens: 0, cachedReadTokens: 0, cachedWriteTokens: 0, audioTokens: 0 }),
+  output: z
+    .object({
+      tokens: z.number().int().nonnegative(),
+      reasoningTokens: z.number().int().nonnegative(),
+      audioTokens: z.number().int().nonnegative(),
+    })
+    .default({ tokens: 0, reasoningTokens: 0, audioTokens: 0 }),
 });
 export type PerCallUsage = z.infer<typeof perCallUsageSchema>;
 

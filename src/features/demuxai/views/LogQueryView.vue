@@ -261,11 +261,16 @@ function usageSummary(row: LogEntry): { main: string; sub: string } {
   switch (row.billingType) {
     case 'per_token':
       return {
-        main: row.usage.totalTokens.toLocaleString(),
-        sub: `${row.usage.input.tokens} / ${row.usage.output.tokens}`,
+        main: `${row.usage.totalTokens.toLocaleString()} tokens`,
+        sub: `入 ${row.usage.input.tokens.toLocaleString()} · 出 ${row.usage.output.tokens.toLocaleString()}`,
       };
-    case 'per_call':
-      return { main: '', sub: '' };
+    case 'per_call': {
+      const total = row.usage.input.tokens + row.usage.output.tokens;
+      return {
+        main: `${total.toLocaleString()} tokens`,
+        sub: `入 ${row.usage.input.tokens.toLocaleString()} · 出 ${row.usage.output.tokens.toLocaleString()}`,
+      };
+    }
     case 'per_image':
       return {
         main: `${row.usage.count} 张`,
@@ -335,20 +340,20 @@ onMounted(() => {
       @refresh="fetchData"
       @reset="resetFilter"
     >
-      <el-form-item label="模型名">
-        <el-input
-          v-model="filter.modelName"
-          :prefix-icon="Search"
-          placeholder="模糊匹配 modelName"
-          clearable
-          style="width: 220px"
-        />
-      </el-form-item>
       <el-form-item label="渠道">
         <el-input
           v-model="filter.vendorKey"
           :prefix-icon="Search"
           placeholder="供应商组，如 gemini"
+          clearable
+          style="width: 220px"
+        />
+      </el-form-item>
+      <el-form-item label="模型名">
+        <el-input
+          v-model="filter.modelName"
+          :prefix-icon="Search"
+          placeholder="模糊匹配 modelName"
           clearable
           style="width: 220px"
         />
@@ -470,15 +475,6 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="模型" min-width="200">
-        <template #default="{ row }: { row: LogEntry }">
-          <div class="cell-model">
-            <span class="cell-model__primary mono">{{ row.modelName }}</span>
-            <span v-if="row.vendorModel" class="cell-model__sub mono">↳ {{ row.vendorModel }}</span>
-          </div>
-        </template>
-      </el-table-column>
-
       <el-table-column label="渠道" width="120">
         <template #default="{ row }: { row: LogEntry }">
           <el-button
@@ -493,14 +489,30 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="计费" width="120" align="center">
+      <el-table-column label="模型" min-width="200">
         <template #default="{ row }: { row: LogEntry }">
-          <div class="cell-billing">
-            <el-tag size="small" type="info" effect="plain" round>
-              {{ BillingTypeLabel[row.billingType] }}
-            </el-tag>
-            <span v-if="usageSummary(row).main" class="cell-billing__usage num">{{ usageSummary(row).main }}</span>
+          <div class="cell-model">
+            <span class="cell-model__primary mono">{{ row.modelName }}</span>
+            <span v-if="row.vendorModel" class="cell-model__sub mono">↳ {{ row.vendorModel }}</span>
           </div>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="计费" width="96" align="center">
+        <template #default="{ row }: { row: LogEntry }">
+          <el-tag size="small" type="info" effect="plain" round>
+            {{ BillingTypeLabel[row.billingType] }}
+          </el-tag>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="用量" min-width="150">
+        <template #default="{ row }: { row: LogEntry }">
+          <div v-if="usageSummary(row).main" class="cell-usage">
+            <span class="cell-usage__main num">{{ usageSummary(row).main }}</span>
+            <span v-if="usageSummary(row).sub" class="cell-usage__sub num">{{ usageSummary(row).sub }}</span>
+          </div>
+          <span v-else class="cell-muted">—</span>
         </template>
       </el-table-column>
 
@@ -680,13 +692,17 @@ onMounted(() => {
   color: var(--el-color-warning);
   font-weight: 500;
 }
-.cell-billing {
+.cell-usage {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  gap: 2px;
+  line-height: 1.35;
 }
-.cell-billing__usage {
+.cell-usage__main {
+  font-size: 12.5px;
+  color: var(--el-text-color-primary);
+}
+.cell-usage__sub {
   font-size: 11.5px;
   color: var(--el-text-color-secondary);
 }
