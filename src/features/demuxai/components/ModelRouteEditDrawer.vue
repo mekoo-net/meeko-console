@@ -46,8 +46,10 @@ const isEdit = computed(() => props.route !== null);
 
 // 别名是对外名，创建后不可改；供应商组 / 上游模型即使在编辑态也允许改绑定
 // （后端走「软删旧别名快照 + 新建 + 迁移定价」的追加语义）。
-const vendorLocked = computed(() => Boolean(props.fixedVendorKey));
-const upstreamLocked = computed(() => Boolean(props.fixedUpstreamModelId));
+// fixedVendorKey / fixedUpstreamModelId 只用于「从某上游模型行新建别名」时预填并锁定作用域，
+// 编辑态下不应锁定，否则无法改绑上游模型。
+const vendorLocked = computed(() => !isEdit.value && Boolean(props.fixedVendorKey));
+const upstreamLocked = computed(() => !isEdit.value && Boolean(props.fixedUpstreamModelId));
 
 interface FormState {
   alias: string;
