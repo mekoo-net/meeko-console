@@ -26,7 +26,7 @@ export type ProviderGroup = z.infer<typeof providerGroupSchema>;
 /** 已入库的上游模型（供应商组内的一条技术注册名）。 */
 export const providerUpstreamModelSchema = z.object({
   queueGroup: z.string(),
-  upstreamModelId: z.string().min(1).max(160),
+  vendorModel: z.string().min(1).max(160),
   label: z.string().optional(),
 });
 
@@ -38,8 +38,7 @@ export type ProviderUpstreamModel = z.infer<typeof providerUpstreamModelSchema>;
 
 /** 网关报告的某个上游模型（用于「接入」页右栏勾选）。 */
 export interface DiscoveredUpstreamModel {
-  upstreamModelId: string;
-  label?: string;
+  vendorModel: string;
   /** 若该模型已在某次 import 中入库，UI 用于禁用勾选并打 tag。 */
   alreadyImported: boolean;
 }
@@ -59,8 +58,7 @@ export interface DiscoverCatalogResult {
 }
 
 export const discoveredUpstreamModelSchema = z.object({
-  upstreamModelId: z.string(),
-  label: z.string().optional(),
+  vendorModel: z.string(),
   alreadyImported: z.boolean(),
 });
 
@@ -77,8 +75,7 @@ export const discoverCatalogResultSchema = z.object({
 });
 
 export interface ImportUpstreamModelInput {
-  upstreamModelId: string;
-  label?: string;
+  vendorModel: string;
 }
 
 export interface ImportProviderGroupInput {

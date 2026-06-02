@@ -55,7 +55,7 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
     const key = normalizeQueueGroup(queueGroup);
     const items = this.store.upstreamModels
       .filter((m) => m.queueGroup === key)
-      .sort((a, b) => a.upstreamModelId.localeCompare(b.upstreamModelId));
+      .sort((a, b) => a.vendorModel.localeCompare(b.vendorModel));
     return ok(items);
   }
 
@@ -66,12 +66,11 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
         const importedModelIds = new Set(
           this.store.upstreamModels
             .filter((m) => m.queueGroup === queueGroup)
-            .map((m) => m.upstreamModelId),
+            .map((m) => m.vendorModel),
         );
-        const models: DiscoveredUpstreamModel[] = info.models.map((upstreamModelId) => ({
-          upstreamModelId,
-          label: upstreamModelId,
-          alreadyImported: importedModelIds.has(upstreamModelId),
+        const models: DiscoveredUpstreamModel[] = info.models.map((vendorModel) => ({
+          vendorModel,
+          alreadyImported: importedModelIds.has(vendorModel),
         }));
         const groupAlreadyImported = this.store.providerGroups.some(
           (g) => g.queueGroup === queueGroup,
@@ -135,22 +134,22 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
 
     let importedCount = 0;
     for (const m of input.models) {
-      const upstreamModelId = m.upstreamModelId.trim();
-      if (!upstreamModelId) continue;
-      if (!knownIds.has(upstreamModelId)) {
+      const vendorModel = m.vendorModel.trim();
+      if (!vendorModel) continue;
+      if (!knownIds.has(vendorModel)) {
         return fail({
           code: 'validation',
-          message: `网关未报告模型「${upstreamModelId}」，请刷新后重试`,
+          message: `网关未报告模型「${vendorModel}」，请刷新后重试`,
         });
       }
       const dup = this.store.upstreamModels.some(
-        (x) => x.queueGroup === queueGroup && x.upstreamModelId === upstreamModelId,
+        (x) => x.queueGroup === queueGroup && x.vendorModel === vendorModel,
       );
       if (dup) continue;
       const row: ProviderUpstreamModel = {
         queueGroup,
-        upstreamModelId,
-        label: m.label?.trim() || upstreamModelId,
+        vendorModel,
+        label: vendorModel,
       };
       const p = parseModel(row);
       if (!p.success) return p;
@@ -184,13 +183,13 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
 
   async deleteUpstreamModel(
     queueGroup: string,
-    upstreamModelId: string,
+    vendorModel: string,
   ): Promise<AppResult<void>> {
     await delay();
     const key = normalizeQueueGroup(queueGroup);
-    const id = upstreamModelId.trim();
+    const id = vendorModel.trim();
     const idx = this.store.upstreamModels.findIndex(
-      (m) => m.queueGroup === key && m.upstreamModelId === id,
+      (m) => m.queueGroup === key && m.vendorModel === id,
     );
     if (idx < 0) return fail({ code: 'not_found', message: '上游模型不存在' });
     this.store.upstreamModels.splice(idx, 1);

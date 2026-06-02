@@ -34,7 +34,7 @@ export interface DemuxaiCatalogPort {
   /**
    * 把网关报告的某 QueueGroup 及其指定的上游模型入库。
    * - 若 QueueGroup 已存在则视为「补充模型」（幂等）。
-   * - 已存在的 (queueGroup, upstreamModelId) 跳过，不计入 importedModelCount。
+   * - 已存在的 (queueGroup, vendorModel) 跳过，不计入 importedModelCount。
    */
   importProviderGroup(
     input: ImportProviderGroupInput,
@@ -50,5 +50,5 @@ export interface DemuxaiCatalogPort {
    * 删除单个已入库的上游模型，级联删除指向该模型的对外别名（ModelRoute）。
    * 前端在调用前需向用户确认将要级联移除的别名数量。
    */
-  deleteUpstreamModel(queueGroup: string, upstreamModelId: string): Promise<AppResult<void>>;
+  deleteUpstreamModel(queueGroup: string, vendorModel: string): Promise<AppResult<void>>;
 }

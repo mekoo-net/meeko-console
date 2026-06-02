@@ -75,7 +75,7 @@ async function loadRoutes(): Promise<void> {
     });
     if (r.success) {
       routes.value = r.data.items.filter(
-        (rt) => rt.vendorModel === props.model!.upstreamModelId,
+        (rt) => rt.vendorModel === props.model!.vendorModel,
       );
     } else {
       ElMessage.error(r.error.message);
@@ -157,7 +157,7 @@ async function onDeleteAlias(route: ModelRoute): Promise<void> {
 }
 
 watch(
-  () => [props.modelValue, props.group?.queueGroup, props.model?.upstreamModelId] as const,
+  () => [props.modelValue, props.group?.queueGroup, props.model?.vendorModel] as const,
   ([open]) => {
     if (open && props.group && props.model) void loadRoutes();
     else routes.value = [];
@@ -179,7 +179,7 @@ watch(
           <span class="mono meta__sub">{{ group.queueGroup }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="上游模型 ID">
-          <span class="mono">{{ model.upstreamModelId }}</span>
+          <span class="mono">{{ model.vendorModel }}</span>
         </el-descriptions-item>
         <el-descriptions-item v-if="model.label" label="显示名">
           {{ model.label }}
@@ -246,7 +246,7 @@ watch(
       :loading="aliasDrawerLoading"
       :provider-groups="providerGroups"
       :fixed-vendor-key="group?.queueGroup"
-      :fixed-upstream-model-id="model?.upstreamModelId"
+      :fixed-upstream-model-id="model?.vendorModel"
       @submit="onAliasSubmit"
     />
   </el-drawer>

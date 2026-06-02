@@ -52,18 +52,13 @@ const selectedQueueGroup = ref<string>('');
 const groupKeyword = ref('');
 const modelKeyword = ref('');
 
-const filterMode = ref<'pending' | 'all'>('pending');
-
-/** key = `${queueGroup}::${upstreamModelId}` */
+/** key = `${queueGroup}::${vendorModel}` */
 const checkedModels = reactive<Record<string, boolean>>({});
 /** 各组的展示名（可在右栏编辑） */
 const groupDisplayNames = reactive<Record<string, string>>({});
 
 const filteredGroups = computed(() => {
   let list = groups.value;
-  if (filterMode.value === 'pending') {
-    list = list.filter((g) => !g.alreadyImported || g.models.some((m) => !m.alreadyImported));
-  }
   const kw = groupKeyword.value.trim().toLowerCase();
   if (kw) {
     list = list.filter(
@@ -86,11 +81,7 @@ const visibleModels = computed<DiscoveredUpstreamModel[]>(() => {
   let list = g.models;
   const kw = modelKeyword.value.trim().toLowerCase();
   if (kw) {
-    list = list.filter(
-      (m) =>
-        m.upstreamModelId.toLowerCase().includes(kw) ||
-        (m.label ?? '').toLowerCase().includes(kw),
-    );
+    list = list.filter((m) => m.vendorModel.toLowerCase().includes(kw));
   }
   return list;
 });
@@ -98,7 +89,7 @@ const visibleModels = computed<DiscoveredUpstreamModel[]>(() => {
 const selectedModelCount = computed(() => {
   const g = selectedGroup.value;
   if (!g) return 0;
-  return g.models.reduce((acc, m) => acc + (isChecked(g.queueGroup, m.upstreamModelId) ? 1 : 0), 0);
+  return g.models.reduce((acc, m) => acc + (isChecked(g.queueGroup, m.vendorModel) ? 1 : 0), 0);
 });
 
 const pendingModelCount = computed(() => {
@@ -111,16 +102,16 @@ function groupLabel(queueGroup: string, displayName: string): string {
   return ProviderGroupLabel[queueGroup] ?? displayName;
 }
 
-function checkboxKey(queueGroup: string, upstreamModelId: string): string {
-  return `${queueGroup}::${upstreamModelId}`;
+function checkboxKey(queueGroup: string, vendorModel: string): string {
+  return `${queueGroup}::${vendorModel}`;
 }
 
-function isChecked(queueGroup: string, upstreamModelId: string): boolean {
-  return Boolean(checkedModels[checkboxKey(queueGroup, upstreamModelId)]);
+function isChecked(queueGroup: string, vendorModel: string): boolean {
+  return Boolean(checkedModels[checkboxKey(queueGroup, vendorModel)]);
 }
 
-function toggleChecked(queueGroup: string, upstreamModelId: string, v: boolean): void {
-  checkedModels[checkboxKey(queueGroup, upstreamModelId)] = v;
+function toggleChecked(queueGroup: string, vendorModel: string, v: boolean): void {
+  checkedModels[checkboxKey(queueGroup, vendorModel)] = v;
 }
 
 function selectAllPending(): void {
@@ -128,7 +119,7 @@ function selectAllPending(): void {
   if (!g) return;
   for (const m of g.models) {
     if (m.alreadyImported) continue;
-    checkedModels[checkboxKey(g.queueGroup, m.upstreamModelId)] = true;
+    checkedModels[checkboxKey(g.queueGroup, m.vendorModel)] = true;
   }
 }
 
@@ -136,7 +127,7 @@ function clearSelection(): void {
   const g = selectedGroup.value;
   if (!g) return;
   for (const m of g.models) {
-    delete checkedModels[checkboxKey(g.queueGroup, m.upstreamModelId)];
+    delete checkedModels[checkboxKey(g.queueGroup, m.vendorModel)];
   }
 }
 
@@ -182,7 +173,7 @@ function applyDiscovery(payload: DiscoverCatalogResult): void {
 async function onImport(): Promise<void> {
   const g = selectedGroup.value;
   if (!g) return;
-  const models = g.models.filter((m) => isChecked(g.queueGroup, m.upstreamModelId));
+  const models = g.models.filter((m) => isChecked(g.queueGroup, m.vendorModel));
   if (models.length === 0) {
     ElMessage.warning('请先勾选要入库的上游模型');
     return;
@@ -191,7 +182,7 @@ async function onImport(): Promise<void> {
   const payload: ImportProviderGroupInput = {
     queueGroup: g.queueGroup,
     displayName,
-    models: models.map((m) => ({ upstreamModelId: m.upstreamModelId, label: m.label })),
+    models: models.map((m) => ({ vendorModel: m.vendorModel })),
   };
   importing.value = true;
   try {
@@ -219,7 +210,6 @@ function resetLocalState(): void {
   selectedQueueGroup.value = '';
   groupKeyword.value = '';
   modelKeyword.value = '';
-  filterMode.value = 'pending';
   for (const key of Object.keys(checkedModels)) {
     delete checkedModels[key];
   }
@@ -287,10 +277,6 @@ watch(visible, (open) => {
             clearable
             size="small"
           />
-          <el-radio-group v-model="filterMode" size="small" class="filter-radio">
-            <el-radio-button label="pending">未入库</el-radio-button>
-            <el-radio-button label="all">全部</el-radio-button>
-          </el-radio-group>
         </div>
 
         <div v-if="filteredGroups.length > 0" class="provider-sidebar__list">
@@ -329,18 +315,8 @@ watch(visible, (open) => {
         </div>
         <EmptyState
           v-else-if="!discovering"
-          :title="
-            groupKeyword
-              ? '无匹配 QueueGroup'
-              : filterMode === 'pending'
-                ? '没有待入库的 QueueGroup'
-                : '尚未从网关拉取数据'
-          "
-          :description="
-            filterMode === 'pending'
-              ? '所有网关报告的供应商组都已入库；切换「全部」可查看。'
-              : '点击「重新拉取」从 LLM 网关获取清单。'
-          "
+          :title="groupKeyword ? '无匹配 QueueGroup' : '尚未从网关拉取数据'"
+          description="点击「重新拉取」从 LLM 网关获取清单。"
           class="provider-sidebar__empty"
         />
       </aside>
@@ -387,7 +363,7 @@ watch(visible, (open) => {
             <el-input
               v-model="modelKeyword"
               :prefix-icon="Search"
-              placeholder="搜索上游模型 ID / 显示名"
+              placeholder="搜索上游模型 ID"
               clearable
               style="max-width: 320px"
             />
@@ -397,7 +373,7 @@ watch(visible, (open) => {
         <div class="provider-detail__table-wrap">
           <el-table
             :data="visibleModels"
-            row-key="upstreamModelId"
+            row-key="vendorModel"
             size="small"
             class="compact-table"
             height="100%"
@@ -406,18 +382,15 @@ watch(visible, (open) => {
             <el-table-column label="" width="48" align="center">
               <template #default="{ row: m }: { row: DiscoveredUpstreamModel }">
                 <el-checkbox
-                  :model-value="isChecked(selectedQueueGroup, m.upstreamModelId)"
+                  :model-value="isChecked(selectedQueueGroup, m.vendorModel)"
                   :disabled="m.alreadyImported"
-                  @change="(v) => toggleChecked(selectedQueueGroup, m.upstreamModelId, Boolean(v))"
+                  @change="(v) => toggleChecked(selectedQueueGroup, m.vendorModel, Boolean(v))"
                 />
               </template>
             </el-table-column>
             <el-table-column label="上游模型" min-width="280">
               <template #default="{ row: m }: { row: DiscoveredUpstreamModel }">
-                <span class="mono model-id">{{ m.upstreamModelId }}</span>
-                <span v-if="m.label && m.label !== m.upstreamModelId" class="model-label">
-                  {{ m.label }}
-                </span>
+                <span class="mono model-id">{{ m.vendorModel }}</span>
               </template>
             </el-table-column>
             <el-table-column label="状态" width="120">

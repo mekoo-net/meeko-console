@@ -60,7 +60,7 @@ const currentModels = computed(() => {
   if (!kw) return list;
   return list.filter(
     (m) =>
-      m.upstreamModelId.toLowerCase().includes(kw) ||
+      m.vendorModel.toLowerCase().includes(kw) ||
       (m.label ?? '').toLowerCase().includes(kw),
   );
 });
@@ -89,15 +89,15 @@ function groupLabel(queueGroup: string, displayName: string): string {
   return ProviderGroupLabel[queueGroup] ?? displayName;
 }
 
-function aliasCount(queueGroup: string, upstreamModelId: string): number {
+function aliasCount(queueGroup: string, vendorModel: string): number {
   return (routesByGroup.value[queueGroup] ?? []).filter(
-    (rt) => rt.vendorModel === upstreamModelId,
+    (rt) => rt.vendorModel === vendorModel,
   ).length;
 }
 
-function routesForModel(queueGroup: string, upstreamModelId: string): ModelRoute[] {
+function routesForModel(queueGroup: string, vendorModel: string): ModelRoute[] {
   return (routesByGroup.value[queueGroup] ?? []).filter(
-    (rt) => rt.vendorModel === upstreamModelId,
+    (rt) => rt.vendorModel === vendorModel,
   );
 }
 
@@ -173,19 +173,19 @@ function openEditModel(model: ProviderUpstreamModel): void {
 async function onRemoveModel(model: ProviderUpstreamModel): Promise<void> {
   const group = selectedGroup.value;
   if (!group) return;
-  const aliasN = routesForModel(group.queueGroup, model.upstreamModelId).length;
+  const aliasN = routesForModel(group.queueGroup, model.vendorModel).length;
   const aliasNote =
     aliasN > 0
       ? `该模型下的 ${aliasN} 个对外别名将一并删除。`
       : '';
   const okp = await confirmDanger({
     title: '删除上游模型',
-    message: `确认从组「${group.displayName}」移除模型 ${model.upstreamModelId}？${aliasNote}删除后如需恢复，需通过「接入供应商」重新导入。`,
+    message: `确认从组「${group.displayName}」移除模型 ${model.vendorModel}？${aliasNote}删除后如需恢复，需通过「接入供应商」重新导入。`,
     confirmText: '确认删除',
     type: 'warning',
   });
   if (!okp) return;
-  const r = await catalogPort.deleteUpstreamModel(group.queueGroup, model.upstreamModelId);
+  const r = await catalogPort.deleteUpstreamModel(group.queueGroup, model.vendorModel);
   if (r.success) {
     ElMessage.success('已删除');
     await fetchGroups({ silent: true });
@@ -305,7 +305,7 @@ onMounted(async () => {
         <el-table
           v-loading="detailLoading"
           :data="pagedModels"
-          row-key="upstreamModelId"
+          row-key="vendorModel"
           size="small"
           class="compact-table"
           height="100%"
@@ -313,15 +313,15 @@ onMounted(async () => {
         >
           <el-table-column label="上游模型" min-width="260">
             <template #default="{ row: m }: { row: ProviderUpstreamModel }">
-              <span class="mono model-id">{{ m.upstreamModelId }}</span>
-              <span v-if="m.label && m.label !== m.upstreamModelId" class="model-label">
+              <span class="mono model-id">{{ m.vendorModel }}</span>
+              <span v-if="m.label && m.label !== m.vendorModel" class="model-label">
                 {{ m.label }}
               </span>
             </template>
           </el-table-column>
           <el-table-column label="别名数" width="100" align="center">
             <template #default="{ row: m }: { row: ProviderUpstreamModel }">
-              <span class="num">{{ aliasCount(selectedGroup.queueGroup, m.upstreamModelId) }}</span>
+              <span class="num">{{ aliasCount(selectedGroup.queueGroup, m.vendorModel) }}</span>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="160" align="right" fixed="right">

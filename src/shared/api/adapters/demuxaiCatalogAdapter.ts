@@ -76,8 +76,7 @@ export class DemuxaiCatalogHttpAdapter implements DemuxaiCatalogPort {
         displayName: input.displayName,
         notes: input.notes ?? null,
         models: input.models.map((m) => ({
-          upstreamModelId: m.upstreamModelId,
-          label: m.label,
+          vendorModel: m.vendorModel,
         })),
       },
     });
@@ -89,9 +88,9 @@ export class DemuxaiCatalogHttpAdapter implements DemuxaiCatalogPort {
     return requestDemuxAi<void>(`${BASE}/${encodeURIComponent(queueGroup)}`, { method: 'DELETE' });
   }
 
-  async deleteUpstreamModel(queueGroup: string, upstreamModelId: string): Promise<AppResult<void>> {
+  async deleteUpstreamModel(queueGroup: string, vendorModel: string): Promise<AppResult<void>> {
     return requestDemuxAi<void>(
-      `${BASE}/${encodeURIComponent(queueGroup)}/models/${encodeURIComponent(upstreamModelId)}`,
+      `${BASE}/${encodeURIComponent(queueGroup)}/models/${encodeURIComponent(vendorModel)}`,
       { method: 'DELETE' },
     );
   }

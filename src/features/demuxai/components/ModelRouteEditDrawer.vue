@@ -206,9 +206,9 @@ function onSubmit(): void {
         >
           <el-option
             v-for="m in upstreamOptions"
-            :key="m.upstreamModelId"
-            :label="m.label ?? m.upstreamModelId"
-            :value="m.upstreamModelId"
+            :key="m.vendorModel"
+            :label="m.label ?? m.vendorModel"
+            :value="m.vendorModel"
           />
         </el-select>
       </el-form-item>

@@ -952,7 +952,7 @@ export function seedImportedUpstreamModels(
   for (const g of groups) {
     const ids = gatewayDiscoveryCatalog[g.queueGroup]?.models.slice(0, 3) ?? [];
     for (const id of ids) {
-      out.push({ queueGroup: g.queueGroup, upstreamModelId: id, label: id });
+      out.push({ queueGroup: g.queueGroup, vendorModel: id, label: id });
     }
   }
   return out;
@@ -1023,21 +1023,21 @@ function seedCatalogModelRoutes(
 ): ModelRoute[] {
   const t = epochMs(now);
   const has = (qg: string, id: string) =>
-    upstream.some((m) => m.queueGroup === qg && m.upstreamModelId === id);
+    upstream.some((m) => m.queueGroup === qg && m.vendorModel === id);
   const routes: ModelRoute[] = [];
   const add = (
     queueGroup: string,
-    upstreamModelId: string,
+    vendorModel: string,
     alias: string,
     weight = 100,
     notes: string | null = null,
   ) => {
-    if (!has(queueGroup, upstreamModelId)) return;
+    if (!has(queueGroup, vendorModel)) return;
     routes.push({
       uid: genModelRouteUid(),
       alias,
       vendorKey: queueGroup,
-      vendorModel: upstreamModelId,
+      vendorModel,
       weight,
       priority: 100,
       status: 'enabled',
