@@ -12,7 +12,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
-import { RefreshLeft, Search, View, Warning } from '@element-plus/icons-vue';
+import { Right, RefreshLeft, Search, View, Warning } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
@@ -288,6 +288,84 @@ function usageSummary(row: LogEntry): { main: string; sub: string } {
   }
 }
 
+interface UsageTag {
+  key: string;
+  arrow: string;
+  value: string;
+  kind: 'in' | 'out' | 'cache' | 'reason';
+  title: string;
+}
+
+/** 紧凑 token 单位：1K / 20K / 200.1K / 1.2M（保留一位小数，去掉无意义的 .0）。 */
+function formatTokenShort(n: number): string {
+  if (n < 1000) return String(n);
+  const unit = n < 1_000_000 ? 'K' : 'M';
+  const scaled = n < 1_000_000 ? n / 1000 : n / 1_000_000;
+  const rounded = Math.round(scaled * 10) / 10;
+  const text = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  return `${text}${unit}`;
+}
+
+/**
+ * 两行用量标签（符号 + 紧凑单位 + Token 后缀）：
+ *   第一行 = 输入 ↑ + 缓存读 ⚡
+ *   第二行 = 输出 ↓ + 缓存写 ✎（+ 推理 ✦）
+ * 仅 token 计费（per_token / per_call）适用；其它计费类型返回空数组，回退到 usageSummary 文本。
+ */
+function usageTagRows(row: LogEntry): UsageTag[][] {
+  if (row.billingType !== 'per_token' && row.billingType !== 'per_call') return [];
+  const { input, output } = row.usage;
+
+  const inputRow: UsageTag[] = [
+    {
+      key: 'in',
+      arrow: '▲',
+      value: formatTokenShort(input.tokens),
+      kind: 'in',
+      title: `输入 ${input.tokens.toLocaleString()} tokens`,
+    },
+  ];
+  if (input.cachedReadTokens > 0) {
+    inputRow.push({
+      key: 'cache',
+      arrow: '⚡',
+      value: formatTokenShort(input.cachedReadTokens),
+      kind: 'cache',
+      title: `缓存命中（cache read）${input.cachedReadTokens.toLocaleString()} tokens`,
+    });
+  }
+
+  const outputRow: UsageTag[] = [
+    {
+      key: 'out',
+      arrow: '▼',
+      value: formatTokenShort(output.tokens),
+      kind: 'out',
+      title: `输出 ${output.tokens.toLocaleString()} tokens`,
+    },
+  ];
+  if (input.cachedWriteTokens > 0) {
+    outputRow.push({
+      key: 'cachew',
+      arrow: '✎',
+      value: formatTokenShort(input.cachedWriteTokens),
+      kind: 'cache',
+      title: `缓存写入（cache write）${input.cachedWriteTokens.toLocaleString()} tokens`,
+    });
+  }
+  if (output.reasoningTokens > 0) {
+    outputRow.push({
+      key: 'reason',
+      arrow: '✦',
+      value: formatTokenShort(output.reasoningTokens),
+      kind: 'reason',
+      title: `推理（reasoning）${output.reasoningTokens.toLocaleString()} tokens`,
+    });
+  }
+
+  return [inputRow, outputRow];
+}
+
 /** `vendor/model` 形态时取 vendor 作为渠道（如 gemini/gemini-3.1-pro-preview → gemini）。 */
 function vendorFromModelName(modelName: string): string {
   const i = modelName.indexOf('/');
@@ -302,6 +380,35 @@ function vendorText(row: LogEntry): string {
 function setVendorFilter(vendor: string): void {
   filter.value.vendorKey = vendor;
   page.value = 1;
+}
+
+function setModelFilter(model: string): void {
+  filter.value.modelName = model;
+  page.value = 1;
+}
+
+/**
+ * 模型彩色标签（newapi / sub2api 风格）：按模型名哈希到固定调色板，同名同色，便于扫读。
+ * 浅底 + 同色系文字，颜色取自一组温和的 tailwind 色阶。
+ */
+const MODEL_TAG_PALETTE: ReadonlyArray<{ bg: string; fg: string }> = [
+  { bg: '#eef2ff', fg: '#4f46e5' },
+  { bg: '#ecfdf5', fg: '#059669' },
+  { bg: '#eff6ff', fg: '#2563eb' },
+  { bg: '#fff1f2', fg: '#e11d48' },
+  { bg: '#fff7ed', fg: '#ea580c' },
+  { bg: '#fdf4ff', fg: '#c026d3' },
+  { bg: '#f0fdfa', fg: '#0d9488' },
+  { bg: '#fefce8', fg: '#ca8a04' },
+  { bg: '#f5f3ff', fg: '#7c3aed' },
+  { bg: '#f0f9ff', fg: '#0284c7' },
+];
+
+function modelTagStyle(name: string): { backgroundColor: string; color: string } {
+  let h = 0;
+  for (let i = 0; i < name.length; i += 1) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  const c = MODEL_TAG_PALETTE[h % MODEL_TAG_PALETTE.length]!;
+  return { backgroundColor: c.bg, color: c.fg };
 }
 
 /** 错误码 → 国际化文案；未识别码原样返回 */
@@ -489,11 +596,20 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="模型" min-width="200">
+      <el-table-column label="模型" min-width="220">
         <template #default="{ row }: { row: LogEntry }">
           <div class="cell-model">
-            <span class="cell-model__primary mono">{{ row.modelName }}</span>
-            <span v-if="row.vendorModel" class="cell-model__sub mono">↳ {{ row.vendorModel }}</span>
+            <span
+              class="model-pill mono"
+              :style="modelTagStyle(row.modelName)"
+              :title="`按模型「${row.modelName}」过滤`"
+              @click="setModelFilter(row.modelName)"
+            >{{ row.modelName }}</span>
+            <span
+              v-if="row.vendorModel && row.vendorModel !== row.modelName"
+              class="cell-model__sub mono"
+              :title="`上游真实模型：${row.vendorModel}`"
+            ><el-icon class="cell-model__branch"><Right /></el-icon>{{ row.vendorModel }}</span>
           </div>
         </template>
       </el-table-column>
@@ -506,9 +622,24 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="用量" min-width="150">
+      <el-table-column label="用量" min-width="208">
         <template #default="{ row }: { row: LogEntry }">
-          <div v-if="usageSummary(row).main" class="cell-usage">
+          <div v-if="usageTagRows(row).length" class="usage-tags">
+            <div v-for="(line, i) in usageTagRows(row)" :key="i" class="usage-tags__line">
+              <span
+                v-for="t in line"
+                :key="t.key"
+                class="usage-tag"
+                :class="`usage-tag--${t.kind}`"
+                :title="t.title"
+              >
+                <span class="usage-tag__arrow">{{ t.arrow }}</span
+                ><span class="usage-tag__value">{{ t.value }}</span
+                ><span class="usage-tag__unit">Token</span>
+              </span>
+            </div>
+          </div>
+          <div v-else-if="usageSummary(row).main" class="cell-usage">
             <span class="cell-usage__main num">{{ usageSummary(row).main }}</span>
             <span v-if="usageSummary(row).sub" class="cell-usage__sub num">{{ usageSummary(row).sub }}</span>
           </div>
@@ -649,20 +780,40 @@ onMounted(() => {
 .cell-model {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: flex-start;
+  gap: 3px;
   line-height: 1.35;
 }
-.cell-model__primary {
-  font-size: 12.5px;
-  color: var(--el-text-color-primary);
+.model-pill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 1px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: filter 0.15s ease;
 }
-.cell-model__primary--gone {
-  color: var(--el-text-color-secondary);
-  text-decoration: line-through;
+.model-pill:hover {
+  filter: brightness(0.95);
 }
 .cell-model__sub {
+  display: inline-flex;
+  align-items: center;
   font-size: 11.5px;
   color: var(--el-text-color-secondary);
+  padding-left: 2px;
+}
+.cell-model__branch {
+  margin-right: 3px;
+  font-size: 12px;
+  color: var(--el-color-primary);
+  opacity: 0.6;
 }
 
 .cell-vendor {
@@ -705,6 +856,64 @@ onMounted(() => {
 .cell-usage__sub {
   font-size: 11.5px;
   color: var(--el-text-color-secondary);
+}
+
+/* 两行 token 用量药丸标签：第一行 输入/缓存读，第二行 输出/缓存写 */
+.usage-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.usage-tags__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.usage-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.7;
+  white-space: nowrap;
+}
+.usage-tag__arrow {
+  font-size: 9px;
+  font-weight: 700;
+}
+.usage-tag__value {
+  font-weight: 600;
+}
+.usage-tag__unit {
+  font-size: 10px;
+  opacity: 0.6;
+}
+.usage-tag--in {
+  background: var(--el-color-success-light-9);
+  border-color: var(--el-color-success-light-7);
+  color: var(--el-color-success);
+}
+.usage-tag--out {
+  background: var(--el-color-primary-light-9);
+  border-color: var(--el-color-primary-light-7);
+  color: var(--el-color-primary);
+}
+.usage-tag--cache {
+  background: var(--el-color-warning-light-9);
+  border-color: var(--el-color-warning-light-7);
+  color: var(--el-color-warning);
+}
+.usage-tag--reason {
+  background: var(--el-color-info-light-9);
+  border-color: var(--el-color-info-light-7);
+  color: var(--el-color-info);
 }
 .cell-cost {
   display: flex;
