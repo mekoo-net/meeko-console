@@ -23,7 +23,7 @@ function applyFilter(rows: ModelRoute[], f: ListModelRoutesFilter): ModelRoute[]
   const kw = f.keyword.trim().toLowerCase();
   return rows.filter((r) => {
     if (f.vendorKey !== 'all' && r.vendorKey !== f.vendorKey) return false;
-    if (f.status !== 'all' && r.status !== f.status) return false;
+    if (f.isPublished !== 'all' && r.isPublished !== f.isPublished) return false;
     if (
       kw &&
       !r.alias.toLowerCase().includes(kw) &&
@@ -78,9 +78,7 @@ export class DemuxaiModelRouteMock implements DemuxaiModelRoutePort {
       alias,
       vendorKey: input.vendorKey.trim(),
       vendorModel: input.vendorModel.trim(),
-      weight: input.weight ?? 100,
-      priority: input.priority ?? 100,
-      status: input.status ?? 'enabled',
+      isPublished: input.isPublished ?? true,
       notes: input.notes?.trim() || null,
       createdAtUtc: t,
       updatedAtUtc: t,
@@ -103,9 +101,7 @@ export class DemuxaiModelRouteMock implements DemuxaiModelRoutePort {
       ...(input.vendorModel !== undefined
         ? { vendorModel: input.vendorModel.trim() }
         : {}),
-      ...(input.weight !== undefined ? { weight: input.weight } : {}),
-      ...(input.priority !== undefined ? { priority: input.priority } : {}),
-      ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(input.isPublished !== undefined ? { isPublished: input.isPublished } : {}),
       ...(input.notes !== undefined ? { notes: input.notes?.trim() || null } : {}),
       updatedAtUtc: Date.now(),
     };
@@ -123,7 +119,7 @@ export class DemuxaiModelRouteMock implements DemuxaiModelRoutePort {
     return ok(undefined);
   }
 
-  async setStatus(uid: Uid, status: ModelRoute['status']): Promise<AppResult<ModelRoute>> {
-    return this.update(uid, { status });
+  async setPublished(uid: Uid, isPublished: boolean): Promise<AppResult<ModelRoute>> {
+    return this.update(uid, { isPublished });
   }
 }

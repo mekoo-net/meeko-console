@@ -78,6 +78,19 @@
   font-size: 14px;
 }
 
+.provider-sidebar__item-title--unset {
+  font-weight: 500;
+  color: var(--el-text-color-secondary);
+  font-style: italic;
+}
+
+.provider-sidebar__item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .provider-sidebar__item-qg {
   display: block;
   font-size: 12px;

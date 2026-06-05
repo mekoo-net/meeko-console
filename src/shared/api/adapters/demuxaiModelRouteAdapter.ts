@@ -43,7 +43,8 @@ export class DemuxaiModelRouteHttpAdapter implements DemuxaiModelRoutePort {
         pageSize: input.pageSize,
         keyword: input.filter.keyword || undefined,
         vendorKey: input.filter.vendorKey === 'all' ? undefined : input.filter.vendorKey,
-        status: input.filter.status === 'all' ? undefined : input.filter.status,
+        isPublished:
+          input.filter.isPublished === 'all' ? undefined : input.filter.isPublished,
       },
     });
     if (!res.success) return res;
@@ -68,9 +69,7 @@ export class DemuxaiModelRouteHttpAdapter implements DemuxaiModelRoutePort {
         alias: input.alias.trim(),
         vendorKey: input.vendorKey.trim(),
         vendorModel: input.vendorModel.trim(),
-        weight: input.weight ?? 100,
-        priority: input.priority ?? 100,
-        status: input.status ?? 'enabled',
+        isPublished: input.isPublished ?? true,
         notes: input.notes ?? null,
       },
     });
@@ -87,9 +86,7 @@ export class DemuxaiModelRouteHttpAdapter implements DemuxaiModelRoutePort {
         ...(input.vendorModel !== undefined
           ? { vendorModel: input.vendorModel.trim() }
           : {}),
-        ...(input.weight !== undefined ? { weight: input.weight } : {}),
-        ...(input.priority !== undefined ? { priority: input.priority } : {}),
-        ...(input.status !== undefined ? { status: input.status } : {}),
+        ...(input.isPublished !== undefined ? { isPublished: input.isPublished } : {}),
         ...(input.notes !== undefined ? { notes: input.notes?.trim() || null } : {}),
       },
     });
@@ -101,10 +98,10 @@ export class DemuxaiModelRouteHttpAdapter implements DemuxaiModelRoutePort {
     return requestDemuxAi<void>(`${BASE}/${encodeURIComponent(uid)}`, { method: 'DELETE' });
   }
 
-  async setStatus(uid: Uid, status: ModelRoute['status']): Promise<AppResult<ModelRoute>> {
-    const res = await requestDemuxAi<unknown>(`${BASE}/${encodeURIComponent(uid)}/status`, {
+  async setPublished(uid: Uid, isPublished: boolean): Promise<AppResult<ModelRoute>> {
+    const res = await requestDemuxAi<unknown>(`${BASE}/${encodeURIComponent(uid)}/published`, {
       method: 'PATCH',
-      body: { status },
+      body: { isPublished },
     });
     if (!res.success) return res;
     return parseRoute(res.data);

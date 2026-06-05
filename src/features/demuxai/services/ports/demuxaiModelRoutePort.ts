@@ -23,5 +23,5 @@ export interface DemuxaiModelRoutePort {
   create(input: CreateModelRouteInput): Promise<AppResult<ModelRoute>>;
   update(uid: Uid, input: UpdateModelRouteInput): Promise<AppResult<ModelRoute>>;
   delete(uid: Uid): Promise<AppResult<void>>;
-  setStatus(uid: Uid, status: ModelRoute['status']): Promise<AppResult<ModelRoute>>;
+  setPublished(uid: Uid, isPublished: boolean): Promise<AppResult<ModelRoute>>;
 }

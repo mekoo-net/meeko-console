@@ -2,12 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
 
-import {
-  ProviderGroupLabel,
-  modelRouteStatusValues,
-  ModelRouteStatusLabel,
-  type ModelRouteStatus,
-} from '../model/enums';
+import { ProviderGroupLabel } from '../model/enums';
 import type {
   CreateModelRouteInput,
   ModelRoute,
@@ -55,9 +50,7 @@ interface FormState {
   alias: string;
   vendorKey: string;
   vendorModel: string;
-  weight: number;
-  priority: number;
-  status: ModelRouteStatus;
+  isPublished: boolean;
   notes: string;
 }
 
@@ -65,9 +58,7 @@ const emptyForm = (): FormState => ({
   alias: '',
   vendorKey: '',
   vendorModel: '',
-  weight: 100,
-  priority: 100,
-  status: 'enabled',
+  isPublished: true,
   notes: '',
 });
 
@@ -82,7 +73,6 @@ const rules: FormRules<FormState> = {
   alias: [{ required: true, message: '请填写对外别名', trigger: 'blur' }],
   vendorKey: [{ required: true, message: '请选择供应商组', trigger: 'change' }],
   vendorModel: [{ required: true, message: '请选择上游模型', trigger: 'change' }],
-  weight: [{ required: true, type: 'number', min: 1, message: '权重 ≥ 1', trigger: 'blur' }],
 };
 
 const vendorSelectOptions = computed(() =>
@@ -116,9 +106,7 @@ watch(
         alias: props.route.alias,
         vendorKey: props.route.vendorKey,
         vendorModel: props.route.vendorModel,
-        weight: props.route.weight,
-        priority: props.route.priority,
-        status: props.route.status,
+        isPublished: props.route.isPublished,
         notes: props.route.notes ?? '',
       };
       await loadUpstream(props.route.vendorKey);
@@ -153,9 +141,7 @@ function onSubmit(): void {
       alias: form.value.alias.trim(),
       vendorKey: form.value.vendorKey,
       vendorModel: form.value.vendorModel,
-      weight: form.value.weight,
-      priority: form.value.priority,
-      status: form.value.status,
+      isPublished: form.value.isPublished,
       notes: form.value.notes.trim() || null,
     };
     if (isEdit.value) emit('submit', { update: body });
@@ -167,7 +153,7 @@ function onSubmit(): void {
 <template>
   <el-drawer
     v-model="visible"
-    :title="isEdit ? '编辑别名路由' : '创建对外别名'"
+    :title="isEdit ? '编辑别名绑定' : '创建对外别名'"
     size="480px"
     destroy-on-close
   >
@@ -215,24 +201,8 @@ function onSubmit(): void {
         </el-select>
       </el-form-item>
 
-      <el-form-item label="权重" prop="weight">
-        <el-input-number v-model="form.weight" :min="1" :max="10000" />
-        <div class="field-hint">同一别名多条路由时按权重分流</div>
-      </el-form-item>
-
-      <el-form-item label="优先级" prop="priority">
-        <el-input-number v-model="form.priority" :min="0" :max="999" />
-      </el-form-item>
-
-      <el-form-item label="状态" prop="status">
-        <el-select v-model="form.status" style="width: 100%">
-          <el-option
-            v-for="s in modelRouteStatusValues"
-            :key="s"
-            :label="ModelRouteStatusLabel[s]"
-            :value="s"
-          />
-        </el-select>
+      <el-form-item label="上线">
+        <el-switch v-model="form.isPublished" active-text="已上线" inactive-text="已下线" />
       </el-form-item>
 
       <el-form-item label="备注">

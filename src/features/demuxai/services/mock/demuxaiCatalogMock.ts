@@ -21,6 +21,7 @@ import {
   getDemuxaiStore,
   recomputeGroupModelCounts,
 } from './data';
+import { isValidVendorSlug, normalizeVendorSlug } from '../../model/vendorSlug';
 
 function parseGroup(v: unknown): AppResult<ProviderGroup> {
   const r = providerGroupSchema.safeParse(v);
@@ -210,6 +211,29 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
       }
     }
     recomputeGroupModelCounts(this.store.providerGroups, this.store.upstreamModels);
+    return ok(undefined);
+  }
+
+  async updateVendorSlug(id: string, vendorSlug: string | null): Promise<AppResult<void>> {
+    await delay();
+    const group = this.store.providerGroups.find((g) => g.id === id);
+    if (!group) return fail({ code: 'not_found', message: '供应商组不存在' });
+
+    const slug = vendorSlug?.trim() ? normalizeVendorSlug(vendorSlug) : null;
+    if (slug && !isValidVendorSlug(slug)) {
+      return fail({ code: 'validation', message: '对外通道 slug 格式无效' });
+    }
+    if (slug) {
+      const taken = this.store.providerGroups.some(
+        (g) => g.id !== id && g.vendorSlug === slug,
+      );
+      if (taken) {
+        return fail({ code: 'conflict', message: `slug「${slug}」已被其它组占用` });
+      }
+    }
+
+    group.vendorSlug = slug;
+    group.updatedAtUtc = Date.now();
     return ok(undefined);
   }
 }

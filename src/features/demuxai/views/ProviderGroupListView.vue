@@ -9,7 +9,7 @@
  */
 import { computed, onMounted, ref, watch } from 'vue';
 
-import { Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue';
+import { Delete, Edit, Plus, Refresh, Search, Setting } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
@@ -26,6 +26,7 @@ import ProviderWorkspaceLayout from '../components/provider/ProviderWorkspaceLay
 import ProviderGroupSidebar from '../components/provider/ProviderGroupSidebar.vue';
 import ProviderDetailPanel from '../components/provider/ProviderDetailPanel.vue';
 import ProviderUpstreamModelEditDrawer from '../components/ProviderUpstreamModelEditDrawer.vue';
+import ProviderGroupEditDrawer from '../components/provider/ProviderGroupEditDrawer.vue';
 import CatalogImportDialog from '../components/CatalogImportDialog.vue';
 const catalogPort = getDemuxaiCatalogPort();
 const routePort = getDemuxaiModelRoutePort();
@@ -45,6 +46,9 @@ const importDialogOpen = ref(false);
 const modelDrawerOpen = ref(false);
 const modelDrawerGroup = ref<ProviderGroup | null>(null);
 const modelDrawerModel = ref<ProviderUpstreamModel | null>(null);
+
+const groupEditOpen = ref(false);
+const groupEditTarget = ref<ProviderGroup | null>(null);
 
 const modelPagination = usePagination({ initialPageSize: 20, pageSizes: [10, 20, 50, 100] });
 
@@ -144,7 +148,7 @@ async function loadRoutesForGroup(queueGroup: string): Promise<void> {
   const r = await routePort.list({
     page: 1,
     pageSize: 500,
-    filter: { keyword: '', vendorKey: queueGroup, status: 'all' },
+    filter: { keyword: '', vendorKey: queueGroup, isPublished: 'all' },
   });
   if (r.success) {
     routesByGroup.value = { ...routesByGroup.value, [queueGroup]: r.data.items };
@@ -170,6 +174,11 @@ function openEditModel(model: ProviderUpstreamModel): void {
   modelDrawerGroup.value = selectedGroup.value;
   modelDrawerModel.value = model;
   modelDrawerOpen.value = true;
+}
+
+function openEditGroup(group: ProviderGroup): void {
+  groupEditTarget.value = group;
+  groupEditOpen.value = true;
 }
 
 async function onRemoveModel(model: ProviderUpstreamModel): Promise<void> {
@@ -252,7 +261,7 @@ onMounted(async () => {
     <template #header>
       <PageHeader
         title="供应商组"
-        description="此处仅展示已接入的供应商组。新增 QueueGroup 或上游模型请去「接入供应商」从网关拉取。模型需在「模型定价」配价后方可被调用。"
+        description="此处仅展示已接入的供应商组。新增 QueueGroup 或上游模型请去「接入供应商」从网关拉取。模型需在「模型定价」配价后方可被调用。未设置对外 slug 的组不会出现在公开定价。"
       >
         <template #actions>
           <el-button :icon="Refresh" plain :loading="loading" @click="fetchGroups()">
@@ -268,8 +277,10 @@ onMounted(async () => {
     <ProviderGroupSidebar
       v-model="selectedQueueGroup"
       :groups="groups"
+      show-edit-button
       empty-title="尚未接入任何供应商组"
       empty-description="点击右上角「去接入」从 LLM 网关拉取并入库。"
+      @edit="openEditGroup"
     />
 
     <ProviderDetailPanel v-if="selectedGroup">
@@ -286,6 +297,9 @@ onMounted(async () => {
           </div>
         </div>
         <div class="detail-actions">
+          <el-button :icon="Setting" plain @click="openEditGroup(selectedGroup)">
+            编辑通道 slug
+          </el-button>
           <el-button :icon="Plus" plain @click="openImportDialog">补充模型</el-button>
           <el-button :icon="Delete" type="danger" plain @click="onRemoveGroup">
             删除供应商组
@@ -373,6 +387,12 @@ onMounted(async () => {
       :model="modelDrawerModel"
       :provider-groups="groups"
       @refresh="refreshSelectedDetail"
+    />
+
+    <ProviderGroupEditDrawer
+      v-model="groupEditOpen"
+      :group="groupEditTarget"
+      @refresh="fetchGroups({ silent: true })"
     />
 
     <CatalogImportDialog v-model="importDialogOpen" @imported="onCatalogImported" />

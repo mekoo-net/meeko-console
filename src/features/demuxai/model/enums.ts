@@ -66,24 +66,16 @@ export const ProviderStatusTone: Readonly<
   auto_disabled: 'danger',
 };
 
-/** 模型路由（对外别名）运营状态 */
-export const modelRouteStatusValues = ['enabled', 'disabled', 'hidden'] as const;
-export type ModelRouteStatus = (typeof modelRouteStatusValues)[number];
-export const modelRouteStatusSchema = z.enum(modelRouteStatusValues);
+/** 别名绑定上线/下线（与后端 isPublished 对齐） */
+export function publishedLabel(isPublished: boolean): string {
+  return isPublished ? '已上线' : '已下线';
+}
 
-export const ModelRouteStatusLabel: Readonly<Record<ModelRouteStatus, string>> = {
-  enabled: '已上架',
-  disabled: '已停用',
-  hidden: '隐藏',
-};
-
-export const ModelRouteStatusTone: Readonly<
-  Record<ModelRouteStatus, 'success' | 'warning' | 'danger' | 'info'>
-> = {
-  enabled: 'success',
-  disabled: 'info',
-  hidden: 'warning',
-};
+export function publishedTone(
+  isPublished: boolean,
+): 'success' | 'warning' | 'danger' | 'info' {
+  return isPublished ? 'success' : 'info';
+}
 
 /** 供应商组 QueueGroup → 展示名（与 demuxai-api Providers 对齐） */
 export const ProviderGroupLabel: Readonly<Record<string, string>> = {

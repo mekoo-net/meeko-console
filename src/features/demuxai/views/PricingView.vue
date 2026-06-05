@@ -75,7 +75,7 @@ const activeTab = ref<TabName>('priced');
 const aliasVendorMap = computed(() => {
   const m = new Map<string, string>();
   for (const r of modelRoutes.value) {
-    if (r.status === 'enabled') m.set(r.alias, r.vendorKey);
+    if (r.isPublished) m.set(r.alias, r.vendorKey);
   }
   return m;
 });
@@ -84,7 +84,7 @@ const aliasVendorMap = computed(() => {
 const knownAliasSet = computed(() => {
   const s = new Set<string>();
   for (const r of modelRoutes.value) {
-    if (r.status === 'enabled') s.add(r.alias);
+    if (r.isPublished) s.add(r.alias);
   }
   return s;
 });
@@ -171,7 +171,7 @@ const unconfiguredModels = computed<Model[]>(() => {
   const seen = new Set<string>();
   const out: Model[] = [];
   for (const route of modelRoutes.value) {
-    if (route.status !== 'enabled') continue;
+    if (!route.isPublished) continue;
     if (selectedVendor.value !== 'all' && route.vendorKey !== selectedVendor.value) {
       continue;
     }
@@ -213,7 +213,7 @@ async function loadModelRoutes(): Promise<void> {
   const routesR = await modelRoutePort.list({
     page: 1,
     pageSize: 500,
-    filter: { keyword: '', vendorKey: 'all', status: 'enabled' },
+    filter: { keyword: '', vendorKey: 'all', isPublished: true },
   });
   if (routesR.success) modelRoutes.value = routesR.data.items;
 }

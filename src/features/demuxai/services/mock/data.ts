@@ -992,29 +992,12 @@ function seedModelRoutes(providers: Provider[]): ModelRoute[] {
         alias: toAlias(mapping.displayName),
         vendorKey,
         vendorModel: pmRef.modelName,
-        weight: mapping.mappingWeight ?? 100,
-        priority: 100,
-        status: 'enabled',
+        isPublished: true,
         notes: mapping.notes ?? null,
         createdAtUtc: t,
         updatedAtUtc: t,
       });
     }
-  }
-  // 演示：同一 alias 双路由加权
-  const gpt4o = routes.find((r) => r.alias === 'demux-gpt-4o');
-  if (gpt4o) {
-    routes.push({
-      ...gpt4o,
-      uid: genModelRouteUid(),
-      vendorModel: 'gpt-4-turbo',
-      weight: 20,
-      priority: 90,
-      notes: 'A/B 备线',
-      createdAtUtc: t,
-      updatedAtUtc: t,
-    });
-    gpt4o.weight = 80;
   }
   return routes;
 }
@@ -1031,7 +1014,7 @@ function seedCatalogModelRoutes(
     queueGroup: string,
     vendorModel: string,
     alias: string,
-    weight = 100,
+    isPublished = true,
     notes: string | null = null,
   ) => {
     if (!has(queueGroup, vendorModel)) return;
@@ -1040,9 +1023,7 @@ function seedCatalogModelRoutes(
       alias,
       vendorKey: queueGroup,
       vendorModel,
-      weight,
-      priority: 100,
-      status: 'enabled',
+      isPublished,
       notes,
       createdAtUtc: t,
       updatedAtUtc: t,
@@ -1052,9 +1033,9 @@ function seedCatalogModelRoutes(
   add('kiro', 'claude-haiku-4-5', 'demux-claude-haiku');
   add('gemini', 'gemini-2.0-flash-exp', 'demux-gemini-flash');
   add('gemini', 'gemini-1.5-pro', 'demux-gemini-pro');
-  add('codex', 'gpt-4o', 'demux-gpt-4o', 80);
+  add('codex', 'gpt-4o', 'demux-gpt-4o');
   add('codex', 'gpt-4o-mini', 'demux-gpt-4o-mini');
-  add('codex', 'o1-mini', 'demux-gpt-4o', 20, '同别名分流备线');
+  add('codex', 'o1-mini', 'demux-o1-mini', false, '演示下线别名');
   return routes;
 }
 

@@ -51,4 +51,7 @@ export interface DemuxaiCatalogPort {
    * 前端在调用前需向用户确认将要级联移除的别名数量。
    */
   deleteUpstreamModel(queueGroup: string, modelId: string): Promise<AppResult<void>>;
+
+  /** 仅更新供应商组的对外通道 slug；null 表示清空（不参与公开定价）。 */
+  updateVendorSlug(id: string, vendorSlug: string | null): Promise<AppResult<void>>;
 }

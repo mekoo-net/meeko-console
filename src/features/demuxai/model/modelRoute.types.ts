@@ -1,13 +1,11 @@
 import { z } from 'zod';
 
-import { modelRouteStatusSchema, type ModelRouteStatus } from './enums';
 import { epochMillisSchema } from '@/shared/lib/epoch';
 
 const uidString = z.union([z.string(), z.number()]).transform((v) => String(v));
 
 /**
- * 模型路由：对外别名 → 渠道 + 上游注册名。
- * 同一 alias 可有多条 route（weight 加权分流）；下发网关由 DemuxAi 快照承担（后端待接）。
+ * 模型别名绑定：对外别名 → 渠道 + 上游注册名。
  */
 export const modelRouteSchema = z.object({
   uid: uidString,
@@ -15,9 +13,7 @@ export const modelRouteSchema = z.object({
   alias: z.string().min(1).max(128),
   vendorKey: z.string().min(1).max(64),
   vendorModel: z.string().min(1).max(160),
-  weight: z.number().int().positive(),
-  priority: z.number().int().min(0).max(999),
-  status: modelRouteStatusSchema,
+  isPublished: z.boolean(),
   notes: z.string().nullable().optional(),
   createdAtUtc: epochMillisSchema,
   updatedAtUtc: epochMillisSchema,
@@ -29,9 +25,7 @@ export interface CreateModelRouteInput {
   alias: string;
   vendorKey: string;
   vendorModel: string;
-  weight?: number;
-  priority?: number;
-  status?: ModelRouteStatus;
+  isPublished?: boolean;
   notes?: string | null;
 }
 
@@ -39,14 +33,12 @@ export interface UpdateModelRouteInput {
   alias?: string;
   vendorKey?: string;
   vendorModel?: string;
-  weight?: number;
-  priority?: number;
-  status?: ModelRouteStatus;
+  isPublished?: boolean;
   notes?: string | null;
 }
 
 export interface ListModelRoutesFilter {
   keyword: string;
   vendorKey: string | 'all';
-  status: ModelRouteStatus | 'all';
+  isPublished: boolean | 'all';
 }

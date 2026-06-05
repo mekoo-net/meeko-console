@@ -13,11 +13,7 @@ import EmptyState from '@/shared/ui/EmptyState.vue';
 import { formatDateTime } from '@/shared/lib/date';
 import { confirmDanger } from '@/shared/composables/useConfirm';
 
-import {
-  ProviderGroupLabel,
-  ModelRouteStatusLabel,
-  ModelRouteStatusTone,
-} from '../model/enums';
+import { ProviderGroupLabel, publishedLabel, publishedTone } from '../model/enums';
 import type { ProviderGroup, ProviderUpstreamModel } from '../model/catalog.types';
 import type {
   CreateModelRouteInput,
@@ -72,7 +68,7 @@ async function loadRoutes(): Promise<void> {
       filter: {
         keyword: '',
         vendorKey: props.group.queueGroup,
-        status: 'all',
+        isPublished: 'all',
       },
     });
     if (r.success) {
@@ -85,11 +81,6 @@ async function loadRoutes(): Promise<void> {
   } finally {
     routesLoading.value = false;
   }
-}
-
-function aliasPoolSize(alias: string): number {
-  if (!props.group) return 0;
-  return routes.value.filter((rt) => rt.alias === alias).length;
 }
 
 function openCreateAlias(): void {
@@ -137,13 +128,9 @@ async function onAliasSubmit(payload: {
 }
 
 async function onDeleteAlias(route: ModelRoute): Promise<void> {
-  const pool = aliasPoolSize(route.alias);
   const okp = await confirmDanger({
     title: '删除别名',
-    message:
-      pool > 1
-        ? `确认删除别名「${route.alias}」的这条分流（权重 ${route.weight}）？同别名仍有 ${pool - 1} 条路由。`
-        : `确认删除别名「${route.alias}」？删除后该别名将不可用。`,
+    message: `确认删除别名「${route.alias}」？删除后该别名将不可用。`,
     confirmText: '确认删除',
     type: 'warning',
   });
@@ -208,16 +195,11 @@ watch(
             <span class="mono alias-name">{{ row.alias }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="权重" width="72" align="center">
-          <template #default="{ row }: { row: ModelRoute }">
-            <span class="num">{{ row.weight }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="88">
+        <el-table-column label="上线状态" width="100">
           <template #default="{ row }: { row: ModelRoute }">
             <StatusTag
-              :label="ModelRouteStatusLabel[row.status]"
-              :tone="ModelRouteStatusTone[row.status]"
+              :label="publishedLabel(row.isPublished)"
+              :tone="publishedTone(row.isPublished)"
             />
           </template>
         </el-table-column>
@@ -282,9 +264,6 @@ watch(
 .alias-name {
   font-weight: 600;
   color: var(--el-color-primary);
-}
-.num {
-  font-variant-numeric: tabular-nums;
 }
 .cell-date {
   font-size: 12px;

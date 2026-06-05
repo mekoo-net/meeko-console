@@ -14,6 +14,7 @@ import EmptyState from '@/shared/ui/EmptyState.vue';
 import { formatDateTime } from '@/shared/lib/date';
 
 import { ProviderGroupLabel } from '../model/enums';
+import { isValidVendorSlug, normalizeVendorSlug } from '../model/vendorSlug';
 import type {
   DiscoverCatalogResult,
   DiscoveredProviderGroup,
@@ -56,6 +57,8 @@ const modelKeyword = ref('');
 const checkedModels = reactive<Record<string, boolean>>({});
 /** 各组的对外通道 slug（可在右栏编辑，如 nai / pa） */
 const groupVendorSlugs = reactive<Record<string, string>>({});
+/** 已入库组的 slug 快照，用于补充模型时预填、避免 re-import 抹掉 slug */
+const importedSlugsByQueueGroup = ref<Record<string, string | null>>({});
 
 const filteredGroups = computed(() => {
   let list = groups.value;
@@ -96,6 +99,27 @@ const pendingModelCount = computed(() => {
   const g = selectedGroup.value;
   if (!g) return 0;
   return g.models.filter((m) => !m.alreadyImported).length;
+});
+
+const currentSlugRaw = computed(() => {
+  const g = selectedGroup.value;
+  if (!g) return '';
+  return (groupVendorSlugs[g.queueGroup] ?? '').trim();
+});
+
+const currentSlugValid = computed(() => {
+  const raw = currentSlugRaw.value;
+  if (!raw) return false;
+  return isValidVendorSlug(raw);
+});
+
+/** 未入库组必须填合法 slug；已入库组补充模型时 slug 可选（会保留已有值） */
+const canImport = computed(() => {
+  const g = selectedGroup.value;
+  if (!g || selectedModelCount.value === 0) return false;
+  if (!g.alreadyImported) return currentSlugValid.value;
+  const raw = currentSlugRaw.value;
+  return !raw || isValidVendorSlug(raw);
 });
 
 function groupLabel(queueGroup: string, vendorSlug?: string | null): string {
@@ -161,12 +185,26 @@ async function runDiscover(opts?: { silent?: boolean }): Promise<void> {
   }
 }
 
+async function loadImportedSlugs(): Promise<void> {
+  const r = await catalogPort.listProviderGroups();
+  if (!r.success) return;
+  const map: Record<string, string | null> = {};
+  for (const g of r.data) {
+    map[g.queueGroup] = g.vendorSlug?.trim() || null;
+    if (g.vendorSlug?.trim()) {
+      groupVendorSlugs[g.queueGroup] = g.vendorSlug.trim();
+    }
+  }
+  importedSlugsByQueueGroup.value = map;
+}
+
 function applyDiscovery(payload: DiscoverCatalogResult): void {
   groups.value = payload.groups;
   discoveredAtUtc.value = payload.discoveredAtUtc;
   for (const g of payload.groups) {
     if (!(g.queueGroup in groupVendorSlugs)) {
-      groupVendorSlugs[g.queueGroup] = '';
+      const existing = importedSlugsByQueueGroup.value[g.queueGroup];
+      groupVendorSlugs[g.queueGroup] = existing ?? '';
     }
   }
   ensureSelection();
@@ -180,7 +218,31 @@ async function onImport(): Promise<void> {
     ElMessage.warning('请先勾选要入库的上游模型');
     return;
   }
-  const vendorSlug = (groupVendorSlugs[g.queueGroup] || '').trim() || null;
+
+  const rawSlug = (groupVendorSlugs[g.queueGroup] || '').trim();
+  if (!g.alreadyImported) {
+    if (!rawSlug) {
+      ElMessage.warning('首次入库须填写对外通道 slug（如 nai / pa）');
+      return;
+    }
+    if (!isValidVendorSlug(rawSlug)) {
+      ElMessage.warning('对外通道 slug 格式无效：须小写字母开头，仅含 a-z、0-9、_、-');
+      return;
+    }
+  } else if (rawSlug && !isValidVendorSlug(rawSlug)) {
+    ElMessage.warning('对外通道 slug 格式无效：须小写字母开头，仅含 a-z、0-9、_、-');
+    return;
+  }
+
+  let vendorSlug: string | null;
+  if (rawSlug) {
+    vendorSlug = normalizeVendorSlug(rawSlug);
+  } else if (g.alreadyImported) {
+    vendorSlug = importedSlugsByQueueGroup.value[g.queueGroup] ?? null;
+  } else {
+    vendorSlug = null;
+  }
+
   const payload: ImportProviderGroupInput = {
     queueGroup: g.queueGroup,
     vendorSlug,
@@ -199,6 +261,7 @@ async function onImport(): Promise<void> {
         : `供应商组「${r.data.queueGroup}」已是最新，无新增模型`,
     );
     clearSelection();
+    await loadImportedSlugs();
     await runDiscover({ silent: true });
     emit('imported');
   } finally {
@@ -218,6 +281,7 @@ function resetLocalState(): void {
   for (const key of Object.keys(groupVendorSlugs)) {
     delete groupVendorSlugs[key];
   }
+  importedSlugsByQueueGroup.value = {};
 }
 
 watch(filteredGroups, () => {
@@ -230,7 +294,10 @@ watch(selectedQueueGroup, () => {
 
 watch(visible, (open) => {
   if (open) {
-    void runDiscover({ silent: true });
+    void (async () => {
+      await loadImportedSlugs();
+      await runDiscover({ silent: true });
+    })();
   } else {
     resetLocalState();
   }
@@ -347,7 +414,7 @@ watch(visible, (open) => {
               type="primary"
               :icon="Download"
               :loading="importing"
-              :disabled="selectedModelCount === 0"
+              :disabled="!canImport"
               @click="onImport"
             >
               创建并继续 ({{ selectedModelCount }})
@@ -357,11 +424,28 @@ watch(visible, (open) => {
 
         <template #toolbar>
           <div class="import-detail-toolbar">
-            <el-input
-              v-model="groupVendorSlugs[selectedGroup.queueGroup]"
-              placeholder="对外通道 slug（如 nai / pa / rong）"
-              style="max-width: 280px"
-            />
+            <div class="import-slug-field">
+              <label class="import-slug-label">
+                对外通道 slug
+                <span v-if="selectedGroup && !selectedGroup.alreadyImported" class="required">*</span>
+              </label>
+              <el-input
+                v-model="groupVendorSlugs[selectedGroup.queueGroup]"
+                placeholder="如 nai / pa / rong（公开定价分组用）"
+                style="max-width: 320px"
+                clearable
+                maxlength="63"
+              />
+              <p
+                v-if="selectedGroup && !selectedGroup.alreadyImported && !currentSlugValid"
+                class="import-slug-hint import-slug-hint--warn"
+              >
+                首次入库须填写合法 slug，否则无法创建
+              </p>
+              <p v-else-if="selectedGroup?.alreadyImported" class="import-slug-hint">
+                已入库组补充模型时可留空，将保留现有 slug
+              </p>
+            </div>
             <el-input
               v-model="modelKeyword"
               :prefix-icon="Search"
@@ -484,8 +568,30 @@ watch(visible, (open) => {
 .import-detail-toolbar {
   display: flex;
   gap: 12px;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
+}
+.import-slug-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.import-slug-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--el-text-color-regular);
+}
+.import-slug-label .required {
+  color: var(--el-color-danger);
+  margin-left: 2px;
+}
+.import-slug-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.import-slug-hint--warn {
+  color: var(--el-color-warning);
 }
 .mono {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;

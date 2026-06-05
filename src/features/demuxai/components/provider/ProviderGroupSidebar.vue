@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { Search } from '@element-plus/icons-vue';
+import { Edit, Search } from '@element-plus/icons-vue';
 
 import StatusTag from '@/shared/ui/StatusTag.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
@@ -26,6 +26,8 @@ interface Props {
   searchPlaceholder?: string;
   emptyTitle?: string;
   emptyDescription?: string;
+  /** 是否展示编辑 slug 按钮（供应商组页开启） */
+  showEditButton?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -35,20 +37,16 @@ const props = withDefaults(defineProps<Props>(), {
   searchPlaceholder: '搜索组名 / QueueGroup',
   emptyTitle: '暂无供应商组',
   emptyDescription: '请从「接入供应商」拉取并入库。',
+  showEditButton: false,
 });
 
 const emit = defineEmits<{
   (e: 'update:modelValue', v: ProviderGroupSelection): void;
+  (e: 'edit', group: ProviderGroup): void;
 }>();
 
 const keyword = ref('');
 const pagination = usePagination({ initialPageSize: 15, pageSizes: [10, 15, 20, 50] });
-
-function groupLabel(queueGroup: string, vendorSlug?: string | null): string {
-  const slug = vendorSlug?.trim();
-  if (slug) return slug;
-  return ProviderGroupLabel[queueGroup] ?? queueGroup;
-}
 
 const filteredGroups = computed(() => {
   const kw = keyword.value.trim().toLowerCase();
@@ -83,6 +81,16 @@ watch(keyword, () => {
 
 function select(value: ProviderGroupSelection): void {
   emit('update:modelValue', value);
+}
+
+function onEdit(group: ProviderGroup, event: MouseEvent): void {
+  event.stopPropagation();
+  emit('edit', group);
+}
+
+function slugDisplay(vendorSlug?: string | null): string {
+  const slug = vendorSlug?.trim();
+  return slug || '（未设置 slug）';
 }
 </script>
 
@@ -119,13 +127,27 @@ function select(value: ProviderGroupSelection): void {
         @click="select(g.queueGroup)"
       >
         <div class="provider-sidebar__item-head">
-          <span class="provider-sidebar__item-title">
-            {{ groupLabel(g.queueGroup, g.vendorSlug) }}
+          <span
+            class="provider-sidebar__item-title"
+            :class="{ 'provider-sidebar__item-title--unset': !g.vendorSlug?.trim() }"
+          >
+            {{ slugDisplay(g.vendorSlug) }}
           </span>
-          <StatusTag
-            :label="ProviderGroupStatusLabel[g.status]"
-            :tone="ProviderGroupStatusTone[g.status]"
-          />
+          <div class="provider-sidebar__item-actions">
+            <StatusTag
+              :label="ProviderGroupStatusLabel[g.status]"
+              :tone="ProviderGroupStatusTone[g.status]"
+            />
+            <el-button
+              v-if="showEditButton"
+              :icon="Edit"
+              link
+              type="primary"
+              size="small"
+              title="编辑对外通道 slug"
+              @click="onEdit(g, $event)"
+            />
+          </div>
         </div>
         <span class="provider-sidebar__item-qg">{{ g.queueGroup }}</span>
         <div class="provider-sidebar__item-meta">
