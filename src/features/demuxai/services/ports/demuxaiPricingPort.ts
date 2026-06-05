@@ -1,6 +1,13 @@
 import type { AppResult } from '@/shared/api/httpTypes';
 
-import type { ListPricingFilter, Pricing, UpsertPricingInput } from '../../model/pricing.types';
+import type {
+  ListPricingFilter,
+  ListVendorModelGroupsFilter,
+  Pricing,
+  UpsertPricingInput,
+  VendorModelGroup,
+  VendorModelGroupedPage,
+} from '../../model/pricing.types';
 
 export interface ListPricingPage {
   items: Pricing[];
@@ -21,6 +28,12 @@ export interface DemuxaiPricingPort {
     pageSize: number;
     filter: ListPricingFilter;
   }): Promise<AppResult<ListPricingPage>>;
+
+  listVendorModelGroups(input: {
+    page: number;
+    pageSize: number;
+    filter: ListVendorModelGroupsFilter;
+  }): Promise<AppResult<VendorModelGroupedPage>>;
 
   get(modelId: string): Promise<AppResult<Pricing>>;
 

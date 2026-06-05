@@ -21,7 +21,7 @@ import {
   BillingTypeLabel,
   type BillingType,
 } from '../model/enums';
-import type { ListPricingFilter, Pricing, UpsertPricingInput } from '../model/pricing.types';
+import type { ListPricingFilter, Pricing, UpsertPricingInput, VendorModelGroup } from '../model/pricing.types';
 import type { Model } from '../model/model.types';
 import type { ModelRoute } from '../model/modelRoute.types';
 import type { ProviderGroup } from '../model/catalog.types';
@@ -44,7 +44,8 @@ const groupsLoading = ref(false);
 const selectedVendor = ref<string>('all');
 
 const allPricing = ref<Pricing[]>([]);
-const pricingLoading = ref(false);
+const pricedGroups = ref<VendorModelGroup[]>([]);
+const pricedGroupsLoading = ref(false);
 
 const modelRoutes = ref<ModelRoute[]>([]);
 
@@ -76,6 +77,15 @@ const aliasVendorMap = computed(() => {
   const m = new Map<string, string>();
   for (const r of modelRoutes.value) {
     if (r.isPublished) m.set(r.alias, r.vendorKey);
+  }
+  return m;
+});
+
+/** alias → vendorModel（上游原始名，未配置 tab 统计用） */
+const aliasModelMap = computed(() => {
+  const m = new Map<string, string>();
+  for (const r of modelRoutes.value) {
+    if (r.isPublished) m.set(r.alias, r.vendorModel);
   }
   return m;
 });
@@ -117,32 +127,32 @@ function matchesVendor(modelId: string): boolean {
 function applyListFilter(rows: Pricing[]): Pricing[] {
   const kw = filter.value.keyword.trim().toLowerCase();
   const bt = filter.value.billingType;
-  return rows.filter((p) => {
+  const baseFiltered = rows.filter((p) => {
     if (!isBillableAlias(p.modelId)) return false;
     if (!matchesVendor(p.modelId)) return false;
     if (bt !== 'all' && p.billingType !== bt) return false;
-    if (kw && !p.modelId.toLowerCase().includes(kw)) return false;
     return true;
+  });
+  if (!kw) return baseFiltered;
+
+  const matchingVendorModels = new Set<string>();
+  for (const p of baseFiltered) {
+    const vendorModel = aliasModelMap.value.get(p.modelId) ?? p.modelId;
+    if (vendorModel.toLowerCase().includes(kw)) matchingVendorModels.add(vendorModel);
+  }
+
+  return baseFiltered.filter((p) => {
+    const vendorModel = aliasModelMap.value.get(p.modelId) ?? p.modelId;
+    if (matchingVendorModels.has(vendorModel)) return true;
+    return p.modelId.toLowerCase().includes(kw);
   });
 }
 
 const filteredPriced = computed(() => applyListFilter(allPricing.value));
 
-const pagedPriced = computed(() =>
-  clientPaginate(
-    filteredPriced.value,
-    pricedPagination.state.page,
-    pricedPagination.state.pageSize,
-  ),
-);
-
-watch(
-  filteredPriced,
-  (list) => {
-    pricedPagination.setTotal(list.length);
-  },
-  { immediate: true },
-);
+function groupRowKey(row: VendorModelGroup): string {
+  return `${row.vendorKey}|${row.vendorModel}`;
+}
 
 function modelFromAlias(alias: string): Model {
   const t = Date.now();
@@ -219,24 +229,42 @@ async function loadModelRoutes(): Promise<void> {
 }
 
 async function fetchAllPricing(): Promise<void> {
-  pricingLoading.value = true;
+  const portFilter: ListPricingFilter = {
+    keyword: '',
+    billingType: 'all',
+  };
+  const r = await pricingPort.list({
+    page: 1,
+    pageSize: 500,
+    filter: portFilter,
+  });
+  if (r.success) {
+    allPricing.value = r.data.items;
+  } else {
+    ElMessage.error(r.error.message);
+  }
+}
+
+async function loadPricedGroups(): Promise<void> {
+  pricedGroupsLoading.value = true;
   try {
-    const portFilter: ListPricingFilter = {
-      keyword: '',
-      billingType: 'all',
-    };
-    const r = await pricingPort.list({
-      page: 1,
-      pageSize: 500,
-      filter: portFilter,
+    const r = await pricingPort.listVendorModelGroups({
+      page: pricedPagination.state.page,
+      pageSize: pricedPagination.state.pageSize,
+      filter: {
+        vendorKey: selectedVendor.value,
+        keyword: filter.value.keyword,
+        billingType: filter.value.billingType,
+      },
     });
     if (r.success) {
-      allPricing.value = r.data.items;
+      pricedGroups.value = r.data.groups;
+      pricedPagination.setTotal(r.data.total);
     } else {
       ElMessage.error(r.error.message);
     }
   } finally {
-    pricingLoading.value = false;
+    pricedGroupsLoading.value = false;
   }
 }
 
@@ -264,7 +292,7 @@ async function onSubmit(payload: UpsertPricingInput): Promise<void> {
     if (r.success) {
       ElMessage.success('定价已保存');
       dialogOpen.value = false;
-      await fetchAllPricing();
+      await Promise.all([fetchAllPricing(), loadPricedGroups()]);
     } else {
       ElMessage.error(r.error.message);
     }
@@ -284,7 +312,7 @@ async function onDelete(row: Pricing): Promise<void> {
   const r = await pricingPort.delete(row.modelId);
   if (r.success) {
     ElMessage.success('已删除');
-    await fetchAllPricing();
+    await Promise.all([fetchAllPricing(), loadPricedGroups()]);
   } else {
     ElMessage.error(r.error.message);
   }
@@ -356,10 +384,9 @@ function tierBadgeLabel(level: number, mult: number): string {
   return `Lv${level} × ${mult}`;
 }
 
-function vendorLabelFor(modelId: string): string {
-  const key = aliasVendorMap.value.get(modelId);
-  if (!key) return '—';
-  return ProviderGroupLabel[key] ?? key;
+function vendorLabelForKey(vendorKey: string): string {
+  if (!vendorKey) return '—';
+  return ProviderGroupLabel[vendorKey] ?? vendorKey;
 }
 
 watch(
@@ -367,6 +394,20 @@ watch(
   () => {
     pricedPagination.setPage(1);
     unconfiguredPagination.setPage(1);
+  },
+);
+
+watch(
+  () =>
+    [
+      pricedPagination.state.page,
+      pricedPagination.state.pageSize,
+      filter.value.keyword,
+      filter.value.billingType,
+      selectedVendor.value,
+    ] as const,
+  () => {
+    void loadPricedGroups();
   },
 );
 
@@ -379,7 +420,7 @@ watch(activeTab, (tab) => {
 });
 
 onMounted(async () => {
-  await Promise.all([loadGroups(), loadModelRoutes(), fetchAllPricing()]);
+  await Promise.all([loadGroups(), loadModelRoutes(), fetchAllPricing(), loadPricedGroups()]);
 });
 </script>
 
@@ -450,7 +491,7 @@ onMounted(async () => {
             <el-input
               v-model="filter.keyword"
               :prefix-icon="Search"
-              placeholder="对外别名 modelId"
+              placeholder="别名 / 原始模型名"
               style="width: 220px"
               clearable
             />
@@ -474,66 +515,102 @@ onMounted(async () => {
 
       <div v-show="activeTab === 'priced'" class="provider-detail__table-wrap">
         <el-table
-          v-loading="pricingLoading"
-          :data="pagedPriced"
-          row-key="modelId"
+          v-loading="pricedGroupsLoading"
+          :data="pricedGroups"
+          :row-key="groupRowKey"
           size="small"
           class="compact-table"
           height="100%"
           :empty-text="' '"
         >
-          <el-table-column label="对外别名" min-width="200">
-            <template #default="{ row }: { row: Pricing }">
+          <el-table-column type="expand">
+            <template #default="{ row }: { row: VendorModelGroup }">
+              <el-table
+                :data="row.aliases"
+                row-key="alias"
+                size="small"
+                class="inner-table"
+              >
+                <el-table-column label="对外别名" min-width="200">
+                  <template #default="{ row: aliasRow }">
+                    <div class="cell-model">
+                      <div class="cell-model__name">{{ aliasRow.alias }}</div>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="计费类型" width="120">
+                  <template #default="{ row: aliasRow }">
+                    <el-tag size="small" type="primary" effect="plain" round>
+                      {{ BillingTypeLabel[aliasRow.pricing.billingType] }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="基础单价" min-width="280">
+                  <template #default="{ row: aliasRow }">
+                    <span class="cell-price">{{ priceSummary(aliasRow.pricing) }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="LV 倍率" min-width="180">
+                  <template #default="{ row: aliasRow }">
+                    <div class="tier-badges">
+                      <el-tag
+                        v-for="[lv, mult] in Object.entries(aliasRow.pricing.tierMultipliers)"
+                        :key="lv"
+                        size="small"
+                        effect="plain"
+                        :type="Number(mult) < 1 ? 'success' : 'warning'"
+                      >
+                        {{ tierBadgeLabel(Number(lv), Number(mult)) }}
+                      </el-tag>
+                      <span
+                        v-if="Object.keys(aliasRow.pricing.tierMultipliers).length === 0"
+                        class="cell-muted"
+                      >
+                        —
+                      </span>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="生效" width="150">
+                  <template #default="{ row: aliasRow }">
+                    <span class="cell-date">{{
+                      formatDateTime(aliasRow.pricing.effectiveFromUtc)
+                    }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="140" align="right">
+                  <template #default="{ row: aliasRow }">
+                    <el-button :icon="Edit" link type="primary" @click="openEdit(aliasRow.pricing)">
+                      编辑
+                    </el-button>
+                    <el-button
+                      :icon="Delete"
+                      link
+                      type="danger"
+                      @click="onDelete(aliasRow.pricing)"
+                    >
+                      删除
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </template>
+          </el-table-column>
+          <el-table-column label="原始模型名" min-width="240">
+            <template #default="{ row }: { row: VendorModelGroup }">
               <div class="cell-model">
-                <div class="cell-model__name">
-                  {{ row.modelId }}
-                </div>
-                <div class="cell-model__id">{{ row.modelId }}</div>
+                <div class="cell-model__name">{{ row.vendorModel }}</div>
               </div>
             </template>
           </el-table-column>
-          <el-table-column v-if="selectedVendor === 'all'" label="渠道" width="110">
-            <template #default="{ row }: { row: Pricing }">
-              <el-tag size="small" effect="plain">{{ vendorLabelFor(row.modelId) }}</el-tag>
+          <el-table-column label="渠道" width="120">
+            <template #default="{ row }: { row: VendorModelGroup }">
+              <el-tag size="small" effect="plain">{{ vendorLabelForKey(row.vendorKey) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="计费类型" width="120">
-            <template #default="{ row }: { row: Pricing }">
-              <el-tag size="small" type="primary" effect="plain" round>
-                {{ BillingTypeLabel[row.billingType] }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="基础单价" min-width="280">
-            <template #default="{ row }: { row: Pricing }">
-              <span class="cell-price">{{ priceSummary(row) }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="LV 倍率" min-width="180">
-            <template #default="{ row }: { row: Pricing }">
-              <div class="tier-badges">
-                <el-tag
-                  v-for="[lv, mult] in Object.entries(row.tierMultipliers)"
-                  :key="lv"
-                  size="small"
-                  effect="plain"
-                  :type="Number(mult) < 1 ? 'success' : 'warning'"
-                >
-                  {{ tierBadgeLabel(Number(lv), Number(mult)) }}
-                </el-tag>
-                <span v-if="Object.keys(row.tierMultipliers).length === 0" class="cell-muted">—</span>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column label="生效" width="150">
-            <template #default="{ row }: { row: Pricing }">
-              <span class="cell-date">{{ formatDateTime(row.effectiveFromUtc) }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="140" align="right" fixed="right">
-            <template #default="{ row }: { row: Pricing }">
-              <el-button :icon="Edit" link type="primary" @click="openEdit(row)">编辑</el-button>
-              <el-button :icon="Delete" link type="danger" @click="onDelete(row)">删除</el-button>
+          <el-table-column label="别名数" width="100">
+            <template #default="{ row }: { row: VendorModelGroup }">
+              {{ row.aliases.length }} 个
             </template>
           </el-table-column>
           <template #empty>
@@ -674,5 +751,15 @@ onMounted(async () => {
 .cell-date {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+.inner-table {
+  margin: 4px 0 4px 48px;
+  width: calc(100% - 48px);
+}
+.inner-table :deep(.el-table__header th) {
+  background: var(--el-fill-color-light);
+}
+.inner-table :deep(.el-table__body tr:last-child td) {
+  border-bottom: none;
 }
 </style>

@@ -223,3 +223,27 @@ export interface ListPricingFilter {
   keyword: string;
   billingType: BillingType | 'all';
 }
+
+// ---------- 按 vendorKey / vendorModel 分组 ----------
+
+export interface AliasPricingEntry {
+  alias: string;
+  pricing: Pricing;
+}
+
+export interface VendorModelGroup {
+  vendorKey: string;
+  vendorModel: string;
+  aliases: AliasPricingEntry[];
+}
+
+export interface VendorModelGroupedPage {
+  groups: VendorModelGroup[];
+  total: number;
+}
+
+export interface ListVendorModelGroupsFilter {
+  vendorKey: string | 'all';
+  keyword: string;
+  billingType: BillingType | 'all';
+}

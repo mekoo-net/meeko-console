@@ -2,8 +2,11 @@ import {
   pricingSchema,
   upsertPricingInputSchema,
   type ListPricingFilter,
+  type ListVendorModelGroupsFilter,
   type Pricing,
   type UpsertPricingInput,
+  type VendorModelGroup,
+  type VendorModelGroupedPage,
 } from '@/features/demuxai/model/pricing.types';
 import type {
   DemuxaiPricingPort,
@@ -13,6 +16,7 @@ import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 
 const BASE = '/demuxai/api/admin/pricing';
+const VENDOR_MODEL_BASE = '/demuxai/api/admin/vendor/model';
 
 /** 新表 model_pricings 响应 */
 interface PricingWire {
@@ -55,6 +59,34 @@ function normalizeListRow(row: unknown): AppResult<Pricing> | null {
   return null;
 }
 
+type VendorModelGroupedWire = Record<
+  string,
+  Record<string, Array<{ alias: string; pricing: unknown }>>
+>;
+
+function flattenVendorModelGroups(items: VendorModelGroupedWire): AppResult<VendorModelGroup[]> {
+  const groups: VendorModelGroup[] = [];
+  const vendorKeys = Object.keys(items).sort();
+  for (const vendorKey of vendorKeys) {
+    const models = items[vendorKey];
+    if (!models) continue;
+    const vendorModels = Object.keys(models).sort();
+    for (const vendorModel of vendorModels) {
+      const entries = models[vendorModel] ?? [];
+      const aliases: VendorModelGroup['aliases'] = [];
+      for (const entry of entries) {
+        const parsed = wireToPricing(entry.pricing as PricingWire);
+        if (!parsed.success) return parsed;
+        aliases.push({ alias: entry.alias, pricing: parsed.data });
+      }
+      if (aliases.length > 0) {
+        groups.push({ vendorKey, vendorModel, aliases });
+      }
+    }
+  }
+  return ok(groups);
+}
+
 
 export class DemuxaiPricingHttpAdapter implements DemuxaiPricingPort {
   async list(input: {
@@ -81,6 +113,34 @@ export class DemuxaiPricingHttpAdapter implements DemuxaiPricingPort {
       parsed.push(p.data);
     }
     return ok({ items: parsed, total: result.data.total ?? parsed.length });
+  }
+
+  async listVendorModelGroups(input: {
+    page: number;
+    pageSize: number;
+    filter: ListVendorModelGroupsFilter;
+  }): Promise<AppResult<VendorModelGroupedPage>> {
+    const { page, pageSize, filter } = input;
+    const result = await requestDemuxAi<{
+      items?: VendorModelGroupedWire;
+      total?: number;
+    }>(VENDOR_MODEL_BASE, {
+      query: {
+        page,
+        pageSize,
+        vendorKey: filter.vendorKey === 'all' ? undefined : filter.vendorKey,
+        keyword: filter.keyword || undefined,
+        billingType: filter.billingType === 'all' ? undefined : filter.billingType,
+      },
+    });
+    if (!result.success) return result;
+
+    const flattened = flattenVendorModelGroups(result.data.items ?? {});
+    if (!flattened.success) return flattened;
+    return ok({
+      groups: flattened.data,
+      total: result.data.total ?? flattened.data.length,
+    });
   }
 
   async get(modelId: string): Promise<AppResult<Pricing>> {

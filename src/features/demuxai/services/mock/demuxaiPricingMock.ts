@@ -6,8 +6,11 @@ import {
   pricingSchema,
   upsertPricingInputSchema,
   type ListPricingFilter,
+  type ListVendorModelGroupsFilter,
   type Pricing,
   type UpsertPricingInput,
+  type VendorModelGroup,
+  type VendorModelGroupedPage,
 } from '../../model/pricing.types';
 import type { DemuxaiPricingPort, ListPricingPage } from '../ports/demuxaiPricingPort';
 
@@ -66,6 +69,81 @@ export class DemuxaiPricingMock implements DemuxaiPricingPort {
       parsed.push(r.data);
     }
     return ok({ items: parsed, total: filtered.length });
+  }
+
+  async listVendorModelGroups(input: {
+    page: number;
+    pageSize: number;
+    filter: ListVendorModelGroupsFilter;
+  }): Promise<AppResult<VendorModelGroupedPage>> {
+    await delay();
+
+    const routeMap = new Map<string, { vendorKey: string; vendorModel: string }>();
+    for (const route of this.store.modelRoutes) {
+      if (route.isPublished) {
+        routeMap.set(route.alias, { vendorKey: route.vendorKey, vendorModel: route.vendorModel });
+      }
+    }
+
+    const groupMap = new Map<string, VendorModelGroup>();
+    for (const row of this.store.pricing) {
+      const route = routeMap.get(row.modelId);
+      if (!route) continue;
+
+      const parsed = parsePricing(row);
+      if (!parsed.success) return parsed;
+
+      const groupKey = `${route.vendorKey}|${route.vendorModel}`;
+      let group = groupMap.get(groupKey);
+      if (!group) {
+        group = {
+          vendorKey: route.vendorKey,
+          vendorModel: route.vendorModel,
+          aliases: [],
+        };
+        groupMap.set(groupKey, group);
+      }
+      group.aliases.push({ alias: row.modelId, pricing: parsed.data });
+    }
+
+    let groups = [...groupMap.values()].map((g) => ({
+      ...g,
+      aliases: [...g.aliases].sort((a, b) => a.alias.localeCompare(b.alias)),
+    }));
+
+    const { vendorKey, keyword, billingType } = input.filter;
+    if (vendorKey !== 'all') {
+      groups = groups.filter((g) => g.vendorKey === vendorKey);
+    }
+    if (billingType !== 'all') {
+      groups = groups
+        .map((g) => ({
+          ...g,
+          aliases: g.aliases.filter((a) => a.pricing.billingType === billingType),
+        }))
+        .filter((g) => g.aliases.length > 0);
+    }
+
+    const kw = keyword.trim().toLowerCase();
+    if (kw) {
+      groups = groups
+        .map((g) => {
+          if (g.vendorModel.toLowerCase().includes(kw)) return g;
+          return {
+            ...g,
+            aliases: g.aliases.filter((a) => a.alias.toLowerCase().includes(kw)),
+          };
+        })
+        .filter((g) => g.aliases.length > 0);
+    }
+
+    groups.sort(
+      (a, b) =>
+        a.vendorKey.localeCompare(b.vendorKey) || a.vendorModel.localeCompare(b.vendorModel),
+    );
+
+    const slice = clientPaginate(groups, input.page, input.pageSize);
+    return ok({ groups: slice, total: groups.length });
   }
 
   async get(modelId: string): Promise<AppResult<Pricing>> {
