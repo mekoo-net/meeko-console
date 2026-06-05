@@ -72,6 +72,10 @@ export class DemuxaiModelRouteMock implements DemuxaiModelRoutePort {
     await delay();
     const alias = input.alias.trim();
     if (!alias) return fail({ code: 'validation', message: '请填写对外别名' });
+    const taken = this.store.modelRoutes.some((r) => r.alias === alias);
+    if (taken) {
+      return fail({ code: 'conflict', message: `别名「${alias}」已存在` });
+    }
     const t = Date.now();
     const row: ModelRoute = {
       uid: genModelRouteUid(),

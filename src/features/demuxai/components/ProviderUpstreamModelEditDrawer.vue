@@ -217,7 +217,7 @@ watch(
         <template #empty>
           <EmptyState
             title="暂无对外别名"
-            description="用户请求 model 字段需映射到此外部别名；点击上方「创建别名」添加。"
+            description="一个上游模型可创建多个对外别名（别名需全局唯一）；用户请求 model 字段需映射到此外部别名。点击上方「创建别名」添加。"
             class="alias-empty"
           />
         </template>
