@@ -93,7 +93,6 @@ interface FormState {
   perVideoMaxSeconds: number | null;
   perAudio: PerAudioMinuteForm;
   perCharacter: PerCharacterForm;
-  multiplier: number;
   currency: string;
   multiplierRows: MultiplierRow[];
   effectiveFromUtc: number;
@@ -124,7 +123,6 @@ const emptyForm = (modelId: string): FormState => ({
   perVideoMaxSeconds: null,
   perAudio: { pricePerMinute: 0 },
   perCharacter: { pricePerKChar: 0 },
-  multiplier: 1.0,
   currency: 'CNY',
   multiplierRows: [],
   effectiveFromUtc: Date.now(),
@@ -134,16 +132,12 @@ const form = ref<FormState>(emptyForm(''));
 const formRef = ref<FormInstance | null>(null);
 
 const rules: FormRules<FormState> = {
-  multiplier: [
-    { required: true, type: 'number', min: 0.0001, message: '倍率 > 0', trigger: 'blur' },
-  ],
   effectiveFromUtc: [{ required: true, message: '请选择生效时间', trigger: 'change' }],
 };
 
 function loadPricingIntoForm(p: Pricing): FormState {
   const base = emptyForm(p.modelId);
   base.billingType = p.billingType;
-  base.multiplier = p.multiplier;
   base.currency = p.currency;
   base.effectiveFromUtc = p.effectiveFromUtc;
   base.multiplierRows = Object.entries(p.tierMultipliers).map(([k, v]) => ({
@@ -290,7 +284,6 @@ async function onSubmit(): Promise<void> {
     modelId: f.modelId,
     billingType: f.billingType,
     pricing: buildPricingPayload(f),
-    multiplier: f.multiplier,
     currency: f.currency,
     tierMultipliers,
     effectiveFromUtc: f.effectiveFromUtc,
@@ -587,18 +580,6 @@ async function onSubmit(): Promise<void> {
         <span class="suffix">{{ form.currency }} / 1K 字符（TTS 文本长度）</span>
       </el-form-item>
 
-      <el-form-item label="全局倍率" prop="multiplier">
-        <el-input-number
-          v-model="form.multiplier"
-          :min="0.01"
-          :max="100"
-          :precision="2"
-          :step="0.05"
-          style="width: 180px"
-        />
-        <span class="suffix">所有 LV 之上的统一调价</span>
-      </el-form-item>
-
       <el-form-item label="LV 倍率">
         <div class="tier-rows">
           <div v-for="(row, idx) in form.multiplierRows" :key="idx" class="tier-row tier-row--lv">
@@ -632,7 +613,7 @@ async function onSubmit(): Promise<void> {
           </el-button>
         </div>
         <div class="form-hint">
-          未列出的 LV 走 1.0；最终扣费 = 基价 × 全局倍率 × LV 倍率。
+          未列出的 LV 走 1.0；最终扣费 = 基价 × LV 倍率。
         </div>
       </el-form-item>
 

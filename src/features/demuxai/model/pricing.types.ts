@@ -15,9 +15,6 @@ const uidString = z.union([z.string(), z.number()]).transform((v) => String(v));
  *
  * **金额单位**：与钱包同币种（默认元）；不同 `billingType` 用各自计量单位。
  *
- * **倍率层**：所有 `billingType` 的基础金额最后统一乘 `multiplier × tierMultiplier`，
- * 这两个量与 `billingType` 无关，放在外层。
- *
  * **`tierMultipliers`**：按用户 LV 单独覆盖的倍率（如 `"5" → 0.7`）。未列出的 LV 走 1.0。
  * key 是 LV 整数字符串。与 `pricing.tiers[]`（产品档位）**是两个概念**——前者是
  * "用户级折扣"，后者是"产品分辨率/质量档"。
@@ -34,7 +31,7 @@ const uidString = z.union([z.string(), z.number()]).transform((v) => String(v));
  *
  *   log.cost.input.cachedRead = {
  *     perMToken: pricing.input.cachedRead ?? 0,
- *     amount:    usage.input.cachedReadTokens / 1_000_000 × (pricing.input.cachedRead ?? 0) × multiplier
+ *     amount:    usage.input.cachedReadTokens / 1_000_000 × (pricing.input.cachedRead ?? 0)
  *   }
  *
  * 子维度直接用 `number?` 而不是 `{ perMToken }?` —— pricing 端每个维度本质上就是一个单价数字，
@@ -128,7 +125,6 @@ const pricingBaseShape = {
   id: uidString,
   /** 与 Model.modelId 强一致；删除 Model 必须级联删 Pricing */
   modelId: z.string().min(1),
-  multiplier: z.number().positive(),
   currency: z.string(),
   /** key 是 LV 字符串，value 是该 LV 的倍率（如 `"5" → 0.7`）。 */
   tierMultipliers: z.record(z.string(), z.number().positive()),
@@ -180,7 +176,6 @@ export type Pricing = z.infer<typeof pricingSchema>;
 
 const upsertBaseShape = {
   modelId: z.string().min(1),
-  multiplier: z.number().positive(),
   currency: z.string(),
   tierMultipliers: z.record(z.string(), z.number().positive()),
   effectiveFromUtc: epochMillisSchema,

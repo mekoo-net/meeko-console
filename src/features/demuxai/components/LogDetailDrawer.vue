@@ -205,10 +205,6 @@ const outputDims = computed<DimRow[]>(() => {
         <span class="mono">{{ log.account.iamId ?? '—' }}</span>
       </div>
       <div class="log-detail__row">
-        <span class="label">LV 快照</span>
-        <span>Lv{{ log.cost.tierSnapshot }}</span>
-      </div>
-      <div class="log-detail__row">
         <span class="label">请求 IP</span>
         <span class="mono">{{ clientIpText }}</span>
       </div>
@@ -412,10 +408,6 @@ const outputDims = computed<DimRow[]>(() => {
         >
           已驳回 · 实际扣费 ¥0
         </el-tag>
-      </div>
-      <div v-if="log.cost.multiplierSnapshot !== 1" class="log-detail__row">
-        <span class="label">倍率快照</span>
-        <span>× {{ log.cost.multiplierSnapshot }}</span>
       </div>
 
       <template v-if="log.bill">

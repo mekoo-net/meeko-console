@@ -146,13 +146,11 @@ export type PerCharacterUsage = z.infer<typeof perCharacterUsageSchema>;
  *    只需在 input/output 里塞一个新的 `DimensionCost` 字段，schema 结构稳定。
  * 3. **所有字段必填**：未触发的维度记 `{ perMToken: 0, amount: 0 }`，跟 usage 对称，下游不用写 `?? 0`。
  * 4. **单价单位：元 / 1M tokens**，与 OpenAI / Anthropic / Google 等厂家定价页对齐，减少对账换算。
- * 5. **`multiplierSnapshot` / `tierSnapshot` 内聚到 `cost`**：它们是**计费上下文快照**，
- *    跟 cost 强相关（费用 = 用量 × 单价 × multiplier × tier 折扣），放顶层是错位。
  *
  * 扣费公式（per 维度）：
  *
- *   cost.input.amount             = usage.input.tokens             / 1_000_000 × cost.input.perMToken             × multiplierSnapshot
- *   cost.input.cachedRead.amount  = usage.input.cachedReadTokens   / 1_000_000 × cost.input.cachedRead.perMToken  × multiplierSnapshot
+ *   cost.input.amount             = usage.input.tokens             / 1_000_000 × cost.input.perMToken
+ *   cost.input.cachedRead.amount  = usage.input.cachedReadTokens   / 1_000_000 × cost.input.cachedRead.perMToken
  *   …其它维度同理
  */
 
@@ -189,14 +187,6 @@ export const perTokenCostSchema = z.object({
     audio: dimensionCostSchema,
   }),
 
-  // ---- 计费上下文快照 ----
-  /** 调用时生效的全局倍率，事后改定价不影响历史 */
-  multiplierSnapshot: z.number().positive(),
-  /**
-   * 调用时账户 LV，事后升降不影响历史。
-   * 当前后端暂未解析 tier_multipliers_json，默认上报 0；前端允许 ≥ 0。
-   */
-  tierSnapshot: z.number().int().min(0),
   /** 总额（所有维度 amount 之和）。 */
   total: z.number().nonnegative(),
 });
@@ -210,11 +200,8 @@ export type PerTokenCost = z.infer<typeof perTokenCostSchema>;
  * 定位），所以单价快照只记**命中那条 tier 的单价**即可，不必把整个 `tiers[]` 数组复制进 log。
  */
 
-/** 计费上下文 + 总额；所有非 token cost 都包含。 */
+/** 总额；所有非 token cost 都包含。 */
 const costContextShape = {
-  multiplierSnapshot: z.number().positive(),
-  /** 当前后端暂未解析 tier，默认上报 0；前端允许 ≥ 0。 */
-  tierSnapshot: z.number().int().min(0),
   total: z.number().nonnegative(),
 };
 

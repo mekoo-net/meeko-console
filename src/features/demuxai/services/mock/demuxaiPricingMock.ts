@@ -31,7 +31,7 @@ function applyFilter(rows: Pricing[], f: ListPricingFilter): Pricing[] {
  * 校验 upsert 入参形状。
  *
  * 95% 的字段约束（含 discriminated union shape、tiers 唯一性、非负数等）已经在
- * `upsertPricingInputSchema` 里通过 zod 表达。这里只兜底做 multiplier 范围检查。
+ * `upsertPricingInputSchema` 里通过 zod 表达。
  */
 function validateUpsert(input: UpsertPricingInput): AppResult<void> {
   const r = upsertPricingInputSchema.safeParse(input);
@@ -41,9 +41,6 @@ function validateUpsert(input: UpsertPricingInput): AppResult<void> {
       message: r.error.issues[0]?.message ?? '入参不合法',
       details: { errors: r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) },
     });
-  }
-  if (input.multiplier <= 0) {
-    return fail({ code: 'validation', message: '倍率必须 > 0' });
   }
   return ok(undefined);
 }

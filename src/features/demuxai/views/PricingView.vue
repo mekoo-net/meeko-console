@@ -509,11 +509,6 @@ onMounted(async () => {
               <span class="cell-price">{{ priceSummary(row) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="倍率" width="88" align="center">
-            <template #default="{ row }: { row: Pricing }">
-              <span class="num">× {{ row.multiplier }}</span>
-            </template>
-          </el-table-column>
           <el-table-column label="LV 倍率" min-width="180">
             <template #default="{ row }: { row: Pricing }">
               <div class="tier-badges">
