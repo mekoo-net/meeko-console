@@ -44,8 +44,10 @@ const emit = defineEmits<{
 const keyword = ref('');
 const pagination = usePagination({ initialPageSize: 15, pageSizes: [10, 15, 20, 50] });
 
-function groupLabel(queueGroup: string, displayName: string): string {
-  return ProviderGroupLabel[queueGroup] ?? displayName;
+function groupLabel(queueGroup: string, vendorSlug?: string | null): string {
+  const slug = vendorSlug?.trim();
+  if (slug) return slug;
+  return ProviderGroupLabel[queueGroup] ?? queueGroup;
 }
 
 const filteredGroups = computed(() => {
@@ -54,7 +56,7 @@ const filteredGroups = computed(() => {
   return props.groups.filter(
     (g) =>
       g.queueGroup.toLowerCase().includes(kw) ||
-      g.displayName.toLowerCase().includes(kw) ||
+      (g.vendorSlug ?? '').toLowerCase().includes(kw) ||
       (ProviderGroupLabel[g.queueGroup] ?? '').toLowerCase().includes(kw),
   );
 });
@@ -118,7 +120,7 @@ function select(value: ProviderGroupSelection): void {
       >
         <div class="provider-sidebar__item-head">
           <span class="provider-sidebar__item-title">
-            {{ groupLabel(g.queueGroup, g.displayName) }}
+            {{ groupLabel(g.queueGroup, g.vendorSlug) }}
           </span>
           <StatusTag
             :label="ProviderGroupStatusLabel[g.status]"

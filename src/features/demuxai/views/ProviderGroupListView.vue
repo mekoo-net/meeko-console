@@ -85,8 +85,10 @@ watch(modelKeyword, () => {
   modelPagination.setPage(1);
 });
 
-function groupLabel(queueGroup: string, displayName: string): string {
-  return ProviderGroupLabel[queueGroup] ?? displayName;
+function groupLabel(queueGroup: string, vendorSlug?: string | null): string {
+  const slug = vendorSlug?.trim();
+  if (slug) return `${slug} · ${queueGroup}`;
+  return ProviderGroupLabel[queueGroup] ?? queueGroup;
 }
 
 function aliasCount(queueGroup: string, vendorModel: string): number {
@@ -180,7 +182,7 @@ async function onRemoveModel(model: ProviderUpstreamModel): Promise<void> {
       : '';
   const okp = await confirmDanger({
     title: '删除上游模型',
-    message: `确认从组「${group.displayName}」移除模型 ${model.vendorModel}？${aliasNote}删除后如需恢复，需通过「接入供应商」重新导入。`,
+    message: `确认从组「${groupLabel(group.queueGroup, group.vendorSlug)}」移除模型 ${model.vendorModel}？${aliasNote}删除后如需恢复，需通过「接入供应商」重新导入。`,
     confirmText: '确认删除',
     type: 'warning',
   });
@@ -206,7 +208,7 @@ async function onRemoveGroup(): Promise<void> {
   const cascadeNote = parts.length > 0 ? `将一并删除其下 ${parts.join(' 和 ')}。` : '';
   const okp = await confirmDanger({
     title: '删除供应商组',
-    message: `确认删除供应商组「${groupLabel(group.queueGroup, group.displayName)}」？${cascadeNote}此操作不可恢复，如需恢复请通过「接入供应商」重新导入。`,
+    message: `确认删除供应商组「${groupLabel(group.queueGroup, group.vendorSlug)}」？${cascadeNote}此操作不可恢复，如需恢复请通过「接入供应商」重新导入。`,
     confirmText: '全部移除',
     type: 'warning',
   });
@@ -274,7 +276,7 @@ onMounted(async () => {
       <template #header>
         <div class="detail-header__main">
           <h2 class="provider-detail__title">
-            {{ groupLabel(selectedGroup.queueGroup, selectedGroup.displayName) }}
+            {{ groupLabel(selectedGroup.queueGroup, selectedGroup.vendorSlug) }}
           </h2>
           <p class="provider-detail__sub">{{ selectedGroup.queueGroup }}</p>
           <div class="provider-detail__stats">

@@ -102,7 +102,9 @@ const vendorTitle = computed(() => {
   if (selectedVendor.value === 'all') return '全部渠道';
   const g = selectedGroup.value;
   if (!g) return selectedVendor.value;
-  return ProviderGroupLabel[g.queueGroup] ?? g.displayName;
+  const slug = g.vendorSlug?.trim();
+  if (slug) return slug;
+  return ProviderGroupLabel[g.queueGroup] ?? g.queueGroup;
 });
 
 function matchesVendor(modelId: string): boolean {

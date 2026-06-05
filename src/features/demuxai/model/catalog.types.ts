@@ -18,7 +18,8 @@ export const providerGroupSchema = z.object({
   id: uidString,
   /** QueueGroup，全局唯一，创建后不可改。 */
   queueGroup: z.string().min(1).max(64),
-  displayName: z.string().min(1).max(128),
+  /** 对外公开通道 slug（如 nai / pa）；未设置时不参与公开定价。 */
+  vendorSlug: z.string().min(1).max(64).nullable().optional(),
   status: providerGroupStatusSchema,
   upstreamModelCount: z.number().int().nonnegative(),
   notes: z.string().nullable().optional(),
@@ -87,7 +88,8 @@ export interface ImportUpstreamModelInput {
 
 export interface ImportProviderGroupInput {
   queueGroup: string;
-  displayName: string;
+  /** 对外公开通道 slug（如 nai / pa），与 QueueGroup 1:1 唯一绑定。 */
+  vendorSlug?: string | null;
   notes?: string | null;
   models: ImportUpstreamModelInput[];
 }

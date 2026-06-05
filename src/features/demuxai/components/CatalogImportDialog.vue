@@ -54,8 +54,8 @@ const modelKeyword = ref('');
 
 /** key = `${queueGroup}::${vendorModel}` */
 const checkedModels = reactive<Record<string, boolean>>({});
-/** 各组的展示名（可在右栏编辑） */
-const groupDisplayNames = reactive<Record<string, string>>({});
+/** 各组的对外通道 slug（可在右栏编辑，如 nai / pa） */
+const groupVendorSlugs = reactive<Record<string, string>>({});
 
 const filteredGroups = computed(() => {
   let list = groups.value;
@@ -98,8 +98,10 @@ const pendingModelCount = computed(() => {
   return g.models.filter((m) => !m.alreadyImported).length;
 });
 
-function groupLabel(queueGroup: string, displayName: string): string {
-  return ProviderGroupLabel[queueGroup] ?? displayName;
+function groupLabel(queueGroup: string, vendorSlug?: string | null): string {
+  const slug = vendorSlug?.trim();
+  if (slug) return slug;
+  return ProviderGroupLabel[queueGroup] ?? queueGroup;
 }
 
 function checkboxKey(queueGroup: string, vendorModel: string): string {
@@ -163,8 +165,8 @@ function applyDiscovery(payload: DiscoverCatalogResult): void {
   groups.value = payload.groups;
   discoveredAtUtc.value = payload.discoveredAtUtc;
   for (const g of payload.groups) {
-    if (!(g.queueGroup in groupDisplayNames)) {
-      groupDisplayNames[g.queueGroup] = g.displayName;
+    if (!(g.queueGroup in groupVendorSlugs)) {
+      groupVendorSlugs[g.queueGroup] = '';
     }
   }
   ensureSelection();
@@ -178,10 +180,10 @@ async function onImport(): Promise<void> {
     ElMessage.warning('请先勾选要入库的上游模型');
     return;
   }
-  const displayName = (groupDisplayNames[g.queueGroup] || g.displayName).trim();
+  const vendorSlug = (groupVendorSlugs[g.queueGroup] || '').trim() || null;
   const payload: ImportProviderGroupInput = {
     queueGroup: g.queueGroup,
-    displayName,
+    vendorSlug,
     models: models.map((m) => ({ vendorModel: m.vendorModel })),
   };
   importing.value = true;
@@ -213,8 +215,8 @@ function resetLocalState(): void {
   for (const key of Object.keys(checkedModels)) {
     delete checkedModels[key];
   }
-  for (const key of Object.keys(groupDisplayNames)) {
-    delete groupDisplayNames[key];
+  for (const key of Object.keys(groupVendorSlugs)) {
+    delete groupVendorSlugs[key];
   }
 }
 
@@ -290,7 +292,7 @@ watch(visible, (open) => {
           >
             <div class="provider-sidebar__item-head">
               <span class="provider-sidebar__item-title">
-                {{ groupLabel(g.queueGroup, g.displayName) }}
+                {{ groupLabel(g.queueGroup) }}
               </span>
               <el-tag
                 v-if="g.alreadyImported"
@@ -356,9 +358,9 @@ watch(visible, (open) => {
         <template #toolbar>
           <div class="import-detail-toolbar">
             <el-input
-              v-model="groupDisplayNames[selectedGroup.queueGroup]"
-              placeholder="展示名（用于控制台显示）"
-              style="max-width: 240px"
+              v-model="groupVendorSlugs[selectedGroup.queueGroup]"
+              placeholder="对外通道 slug（如 nai / pa / rong）"
+              style="max-width: 280px"
             />
             <el-input
               v-model="modelKeyword"

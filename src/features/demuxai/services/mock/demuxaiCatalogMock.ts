@@ -99,9 +99,17 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
         message: 'QueueGroup 须小写字母开头，仅含 a-z、0-9、_、-',
       });
     }
-    const displayName = input.displayName.trim();
-    if (!displayName) {
-      return fail({ code: 'validation', message: '请填写展示名' });
+    const vendorSlug = input.vendorSlug?.trim() || null;
+    if (vendorSlug && !/^[a-z][a-z0-9_-]{1,62}$/.test(vendorSlug)) {
+      return fail({ code: 'validation', message: '对外通道 slug 格式无效' });
+    }
+    if (vendorSlug) {
+      const taken = this.store.providerGroups.some(
+        (g) => g.vendorSlug === vendorSlug && g.queueGroup !== queueGroup,
+      );
+      if (taken) {
+        return fail({ code: 'conflict', message: `slug「${vendorSlug}」已被其它组占用` });
+      }
     }
     const info = gatewayDiscoveryCatalog[queueGroup];
     if (!info) {
@@ -118,7 +126,7 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
       const row: ProviderGroup = {
         id: genProviderGroupUid(),
         queueGroup,
-        displayName,
+        vendorSlug,
         status: 'active',
         upstreamModelCount: 0,
         notes: input.notes?.trim() || null,
@@ -130,7 +138,7 @@ export class DemuxaiCatalogMock implements DemuxaiCatalogPort {
       group = p.data;
       this.store.providerGroups.push(group);
     } else {
-      group.displayName = displayName;
+      if (vendorSlug !== null) group.vendorSlug = vendorSlug;
       if (input.notes !== undefined) group.notes = input.notes?.trim() || null;
       group.updatedAtUtc = t;
     }

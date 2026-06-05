@@ -49,7 +49,7 @@ function parseImport(value: unknown): AppResult<ImportProviderGroupResult> {
 
 export class DemuxaiCatalogHttpAdapter implements DemuxaiCatalogPort {
   async listProviderGroups(): Promise<AppResult<ProviderGroup[]>> {
-    const res = await requestDemuxAi<ItemsEnvelope<unknown>>(BASE);
+    const res = await requestDemuxAi<ItemsEnvelope<unknown>>(`${BASE}/catalog/groups`);
     if (!res.success) return res;
     return parseGroups(res.data);
   }
@@ -73,7 +73,7 @@ export class DemuxaiCatalogHttpAdapter implements DemuxaiCatalogPort {
       method: 'POST',
       body: {
         queueGroup: input.queueGroup,
-        displayName: input.displayName,
+        vendorSlug: input.vendorSlug ?? null,
         notes: input.notes ?? null,
         models: input.models.map((m) => ({
           vendorModel: m.vendorModel,

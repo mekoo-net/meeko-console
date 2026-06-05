@@ -57,7 +57,9 @@ const editingRoute = ref<ModelRoute | null>(null);
 
 const groupTitle = computed(() => {
   if (!props.group) return '';
-  return ProviderGroupLabel[props.group.queueGroup] ?? props.group.displayName;
+  const slug = props.group.vendorSlug?.trim();
+  if (slug) return slug;
+  return ProviderGroupLabel[props.group.queueGroup] ?? props.group.queueGroup;
 });
 
 async function loadRoutes(): Promise<void> {

@@ -88,7 +88,7 @@ const rules: FormRules<FormState> = {
 const vendorSelectOptions = computed(() =>
   props.providerGroups.map((c) => ({
     value: c.queueGroup,
-    label: ProviderGroupLabel[c.queueGroup] ?? c.displayName,
+    label: c.vendorSlug?.trim() || ProviderGroupLabel[c.queueGroup] || c.queueGroup,
   })),
 );
 

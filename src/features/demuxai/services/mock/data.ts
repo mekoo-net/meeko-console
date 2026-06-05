@@ -937,11 +937,11 @@ export const gatewayDiscoveryCatalog: Readonly<
 export function seedImportedProviderGroups(): ProviderGroup[] {
   const t = epochMs(now);
   return [
-    { id: genProviderGroupUid(), queueGroup: 'kiro', displayName: 'Kiro', status: 'active', upstreamModelCount: 3,
+    { id: genProviderGroupUid(), queueGroup: 'kiro', vendorSlug: 'nai', status: 'active', upstreamModelCount: 3,
       notes: null, importedAtUtc: t, updatedAtUtc: t },
-    { id: genProviderGroupUid(), queueGroup: 'gemini', displayName: 'Gemini', status: 'active', upstreamModelCount: 3,
+    { id: genProviderGroupUid(), queueGroup: 'gemini', vendorSlug: 'pa', status: 'active', upstreamModelCount: 3,
       notes: null, importedAtUtc: t, updatedAtUtc: t },
-    { id: genProviderGroupUid(), queueGroup: 'codex', displayName: 'Codex', status: 'active', upstreamModelCount: 3,
+    { id: genProviderGroupUid(), queueGroup: 'codex', vendorSlug: 'rong', status: 'active', upstreamModelCount: 3,
       notes: null, importedAtUtc: t, updatedAtUtc: t },
   ];
 }
