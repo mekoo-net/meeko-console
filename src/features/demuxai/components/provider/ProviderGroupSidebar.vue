@@ -201,7 +201,7 @@ function slugDisplay(vendorSlug?: string | null): string {
         :total="pagination.state.total"
         :page-sizes="pagination.pageSizes"
         layout="total, prev, pager, next"
-        small
+        size="small"
         background
       />
     </div>

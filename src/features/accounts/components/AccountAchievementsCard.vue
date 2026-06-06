@@ -137,7 +137,7 @@ async function revoke(a: Achievement): Promise<void> {
           :total="owned.length"
           layout="prev, pager, next, total"
           background
-          small
+          size="small"
         />
       </div>
     </div>
