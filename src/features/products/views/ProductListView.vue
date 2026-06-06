@@ -1,33 +1,29 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { ElMessage } from 'element-plus';
-import { Plus, Refresh } from '@element-plus/icons-vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { Refresh, Search } from '@element-plus/icons-vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import { formatDateTime } from '@/shared/lib/date';
 import ProductFormDialog from '../components/ProductFormDialog.vue';
-import type {
-  BillingProduct,
-  RegisterProductInput,
-  UpdateProductInput,
-} from '../model/product.types';
+import ProductDiscoveryDialog from '../components/ProductDiscoveryDialog.vue';
+import type { BillingProduct, UpdateProductInput } from '../model/product.types';
 import { getProductPort } from '../services';
 
 const port = getProductPort();
 const products = ref<BillingProduct[]>([]);
 const loading = ref(false);
-const includeInactive = ref(false);
-const togglingCode = ref<string | null>(null);
+const unregisteringCode = ref<string | null>(null);
 
-const dialogVisible = ref(false);
-const dialogMode = ref<'create' | 'edit'>('create');
+const editVisible = ref(false);
+const discoveryVisible = ref(false);
 const editing = ref<BillingProduct | null>(null);
 
 async function load(): Promise<void> {
   loading.value = true;
   try {
-    const r = await port.list(includeInactive.value);
+    const r = await port.list();
     if (r.success) products.value = r.data;
     else ElMessage.error(r.error.message);
   } finally {
@@ -35,54 +31,49 @@ async function load(): Promise<void> {
   }
 }
 
-function openCreate(): void {
-  dialogMode.value = 'create';
-  editing.value = null;
-  dialogVisible.value = true;
+function openDiscovery(): void {
+  discoveryVisible.value = true;
 }
 
 function openEdit(row: BillingProduct): void {
-  dialogMode.value = 'edit';
   editing.value = row;
-  dialogVisible.value = true;
+  editVisible.value = true;
 }
 
-async function onSubmit(payload: RegisterProductInput | UpdateProductInput): Promise<void> {
-  if (dialogMode.value === 'create') {
-    const r = await port.register(payload as RegisterProductInput);
-    if (r.success) {
-      ElMessage.success('产品已注册');
-      dialogVisible.value = false;
-      await load();
-    } else {
-      ElMessage.error(r.error.message);
-    }
-    return;
-  }
-
+async function onSubmit(payload: UpdateProductInput): Promise<void> {
   if (!editing.value) return;
-  const r = await port.update(editing.value.code, payload as UpdateProductInput);
+  const r = await port.update(editing.value.code, payload);
   if (r.success) {
     ElMessage.success('产品已更新');
-    dialogVisible.value = false;
+    editVisible.value = false;
     await load();
   } else {
     ElMessage.error(r.error.message);
   }
 }
 
-async function toggleActive(row: BillingProduct): Promise<void> {
-  togglingCode.value = row.code;
+async function unregister(row: BillingProduct): Promise<void> {
   try {
-    const r = await port.setActive(row.code, !row.active);
+    await ElMessageBox.confirm(
+      `确定从平台卸载产品「${row.displayName}」？卸载后该产品将不再参与计费校验。`,
+      '卸载产品',
+      { type: 'warning', confirmButtonText: '卸载', cancelButtonText: '取消' },
+    );
+  } catch {
+    return;
+  }
+
+  unregisteringCode.value = row.code;
+  try {
+    const r = await port.unregister(row.code);
     if (r.success) {
-      ElMessage.success(`产品「${row.displayName}」已${r.data.active ? '启用' : '停用'}`);
+      ElMessage.success(`产品「${row.displayName}」已卸载`);
       await load();
     } else {
       ElMessage.error(r.error.message);
     }
   } finally {
-    togglingCode.value = null;
+    unregisteringCode.value = null;
   }
 }
 
@@ -93,12 +84,11 @@ onMounted(() => load());
   <section v-loading="loading">
     <PageHeader
       title="计费产品"
-      description="维护 billing.products 注册表。ProductCode 贯穿下单/用量/冻结；Domain 作为充值返利归属轴。"
+      description="从 Consul 发现业务产品并注册到平台。ProductCode 贯穿下单/用量/冻结；Domain 作为充值返利归属轴。"
     >
       <template #actions>
-        <el-checkbox v-model="includeInactive" @change="load">显示已停用</el-checkbox>
         <el-button :icon="Refresh" plain @click="load">刷新</el-button>
-        <el-button type="primary" :icon="Plus" @click="openCreate">注册产品</el-button>
+        <el-button type="primary" :icon="Search" @click="openDiscovery">发现产品</el-button>
       </template>
     </PageHeader>
 
@@ -112,41 +102,35 @@ onMounted(() => load());
         </template>
       </el-table-column>
       <el-table-column prop="domain" label="业务域" width="120" />
-      <el-table-column label="状态" width="90" align="center">
-        <template #default="{ row }: { row: BillingProduct }">
-          <el-tag :type="row.active ? 'success' : 'info'" size="small">
-            {{ row.active ? '启用' : '停用' }}
-          </el-tag>
-        </template>
-      </el-table-column>
       <el-table-column label="更新时间" width="170">
         <template #default="{ row }: { row: BillingProduct }">
           {{ formatDateTime(row.updatedAtUtc) }}
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="180" fixed="right">
+      <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }: { row: BillingProduct }">
           <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
           <el-button
             link
-            :type="row.active ? 'warning' : 'success'"
-            :loading="togglingCode === row.code"
-            @click="toggleActive(row)"
+            type="danger"
+            :loading="unregisteringCode === row.code"
+            @click="unregister(row)"
           >
-            {{ row.active ? '停用' : '启用' }}
+            卸载
           </el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <EmptyState v-else title="暂无计费产品" description="请先注册业务产品，严格校验模式下未注册产品无法入账。" />
-
-    <ProductFormDialog
-      v-model="dialogVisible"
-      :mode="dialogMode"
-      :product="editing"
-      @submit="onSubmit"
+    <EmptyState
+      v-else
+      title="暂无已注册产品"
+      description="点击「发现产品」从 Consul 读取业务服务声明的产品并注册到平台。"
     />
+
+    <ProductDiscoveryDialog v-model="discoveryVisible" @registered="load" />
+
+    <ProductFormDialog v-model="editVisible" :product="editing" @submit="onSubmit" />
   </section>
 </template>
 

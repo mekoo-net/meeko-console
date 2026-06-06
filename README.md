@@ -32,7 +32,7 @@
 
 - `src/shared/`：布局、通用组件、工具（`lib`）、`composables`、联机类型 `api` / `api-types`、问题详情等；**不**依赖 `features/*`。
 - `src/features/accounts`：账户与 IAM 用户（Keystone 语义，Port + Mock）。
-- `src/features/billing`：计费工作台（BFF `/api/billing` 语义，Port + Mock）。
+- `src/features/billing`：计费管理（充值 / 账单流水，BFF `/api/billing` + `/api/admin/billing`，Port + Mock）。
 - `src/features/notices`：通知管理（Admin 模板/SMTP + 用户侧通知调试，Port + Mock）。
 - `src/stores/`：横切状态（`auth`、计费当前账户等）。
 - `src/router/`：懒加载路由、鉴权与 `meta`（`title` / `requiresAuth` / `roles`）。
@@ -65,7 +65,7 @@ pnpm type-check
 ## 未来接入 BFF 需实现的 Adapter（清单）
 
 - `HttpAccountAdminAdapter`：`/accounts`、`/iam/users` 等（与 `AccountAdminPort` 对齐；JSON camelCase，long uid 用 string）。
-- `HttpBillingAdapter`：`/api/billing` 下钱包、订单、订阅、发票、充值（与 `BillingPort` 对齐）。
+- `HttpBillingAdapter`：`/api/billing` 下钱包、充值；`/api/admin/billing/bills` 账单流水（与 `BillingPort` 对齐）。
 - `HttpNoticeAdminAdapter`：`/api/admin/notice/templates/email`、`/api/admin/notice/channels/smtp`（与 `NoticeAdminPort` 对齐）。
 - `HttpNotificationsAdapter`：`/api/notifications` 与 `/api/notifications/otp/*`（与 `NotificationsPort` 对齐）。
 
@@ -75,5 +75,5 @@ pnpm type-check
 
 1. `pnpm dev`，用 `admin/admin` 登录，确认侧栏含「通知」。
 2. 账户：列表筛选、详情、子账号创建（Mock 延迟可感受 loading）。
-3. 账单：切换「当前账户」各 Tab 数据是否随账户变化；充值大额触发二次确认；订阅「期末取消」需确认。
+3. 账单：充值记录与账单流水筛选；充值大额触发二次确认。
 4. 通知：模板列表/编辑/修订时间线；SMTP 列表/抽屉表单/测试/删除；调试页发送通知与 OTP（无真实网络）。

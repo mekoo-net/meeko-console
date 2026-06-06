@@ -21,7 +21,6 @@
 | 撤销勋章（成功响应即最新 `Account`） | `accountAdminPort.revokeAchievement(uid, code)` | DELETE | `/api/admin/accounts/{uid}/achievements/{code}` |
 | IAM 子账户列表 | `accountAdminPort.listIamUsers(uid)` | GET | `/api/admin/iam/users?accountUid={uid}` |
 | 新增 IAM 子账户 | `accountAdminPort.createIamUser(uid, payload)` | POST | `/api/admin/iam/users` |
-| 业务 Tab：业务实例 | `billingPort.listBusinesses(uid, filter)` | GET | `/api/billing/businesses?accountUid={uid}` |
 | 账单 Tab：充值记录 | `billingPort.listRecharges` | GET | `/api/billing/recharges` |
 | 账单 Tab：扣款流水 | `billingPort.listBills` | GET | `/api/billing/bills` |
 
@@ -216,7 +215,6 @@
 默认渲染：AccountInfoCard | AccountAchievementsCard   (并列两列，进页面即可见)
   ↓
 切 Tab → 按需懒加载子接口（重数据 / 分页类）：
-  - 业务      → listBusinesses
   - 账单      → listRecharges + listBills（双区块）
   - IAM       → listIamUsers / createIamUser
 操作"停用/恢复"   → confirmDanger → setAccountStatus → 成功后 refresh()

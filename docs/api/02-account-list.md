@@ -82,7 +82,7 @@
 | `totalRechargedAmount` | number | 必 | 累计充值（元）。 |
 | `owner` | object | 可选 | Owner 信息族：`{ displayName, email }`。详情接口再额外回 `iamUserUid` / `phone`。**字段聚合理由**：Owner 的几条信息天然同生同灭，封装后未来加 `owner.avatarUrl` / `owner.title` 不污染顶层。 |
 | `iamUserCount` | int | 可选 | IAM 子账户数。 |
-| `walletSummary` | `{ available, held, currency, snapshotAtUtc } \| null` | 可选 | 钱包概要快照（**服务端 JOIN + 短 TTL 缓存**）；未开户为 `null`。`available` = 可支配余额；`held` = 已冻结（分配给子账户、待结算订单等占用资金）；`snapshotAtUtc` 显式表示快照时间，提醒消费方"数据可能滞后 5–30 s"。**与详情里的完整 `wallet` 对象同源但字段不同**——名字带 Summary 后缀即语义自我说明。 |
+| `walletSummary` | `{ available, held, currency, snapshotAtUtc } \| null` | 可选 | 钱包概要快照（**服务端 JOIN + 短 TTL 缓存**）；未开户为 `null`。`available` = 可支配余额；`held` = 已冻结（Hold 预占等占用资金）；`snapshotAtUtc` 显式表示快照时间，提醒消费方"数据可能滞后 5–30 s"。**与详情里的完整 `wallet` 对象同源但字段不同**——名字带 Summary 后缀即语义自我说明。 |
 | `createdAtUtc` | string（ISO 8601） | 必 | 创建时间，用于排序与展示。 |
 | `lastActiveAtUtc` | string（ISO 8601） | 可选 | 最近活跃时间。 |
 

@@ -8,11 +8,17 @@ export interface BillingProduct {
   updatedAtUtc: number;
 }
 
-export interface RegisterProductInput {
+export interface DiscoveredProduct {
   code: string;
   domain: string;
-  displayName: string;
-  metadataJson?: string | null;
+  suggestedDisplayName: string;
+  alreadyRegistered: boolean;
+  serviceName: string;
+}
+
+export interface RegisterProductInput {
+  code: string;
+  displayName?: string;
 }
 
 export interface UpdateProductInput {

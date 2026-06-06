@@ -36,7 +36,7 @@
 | 业务域 | 前缀 | 说明 |
 | --- | --- | --- |
 | 账户 / IAM 后台 | `/api/admin/accounts`、`/api/admin/iam/users` | BFF 聚合，底层调 Keystone |
-| 计费工作台 | `/api/billing` | 钱包 / 订单 / 订阅 / 发票 / 充值 / 账单 |
+| 计费 | `/api/billing` | 钱包 / 充值；账单流水见 `/api/admin/billing/bills` |
 | 充值渠道（平台配置） | `/api/admin/billing/channels` | 仅 Admin |
 | DemuxAI 控制面 | `/demuxai/api/admin/*` | 供应商组目录、模型路由、Vendor、ModelMeta、Pricing |
 | DemuxAI 激活码 | `/demuxai/api/redemption` | CDK 批量生成 / 列表 / 删除 |

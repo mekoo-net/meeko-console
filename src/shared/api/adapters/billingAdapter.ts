@@ -1,5 +1,4 @@
 import type { AppResult } from '@/shared/api/httpTypes';
-import { fail } from '@/shared/api/httpTypes';
 import { request } from '@/shared/api/httpClient';
 import type { Uid } from '@/shared/lib/id';
 import { asEpochMillis, asEpochMillisNullable } from '@/shared/lib/epoch';
@@ -7,22 +6,11 @@ import { asEpochMillis, asEpochMillisNullable } from '@/shared/lib/epoch';
 import type {
   CreateInternalRechargeInput,
   CreateRechargeInput,
-  InvoiceDto,
-  ListInvoicesFilter,
-  ListOrdersFilter,
-  OrderDto,
-  PlaceOrderInput,
-  PlaceOrderResult,
   RechargeIntent,
   RechargeProvider,
   RechargeRecord,
   RechargeStatus,
-  SubscriptionDto,
 } from '@/features/billing/model/billing.types';
-import type {
-  BusinessInstance,
-  ListBusinessesFilter,
-} from '@/features/billing/model/business.types';
 import type {
   BillingEntry,
   BillFailureCode,
@@ -36,8 +24,6 @@ import type {
   BillingPort,
   ListBillsFilter,
   ListBillsPage,
-  ListInvoicesPage,
-  ListOrdersPage,
   ListRechargesFilter,
   ListRechargesPage,
 } from '@/features/billing/services/ports/billingPort';
@@ -104,124 +90,88 @@ function readParty(raw: Record<string, unknown> | null | undefined) {
   }
   return {
     accountUid: String(raw.accountUid ?? raw.AccountUid ?? ''),
-    displayName: raw.displayName != null || raw.DisplayName != null
-      ? String(raw.displayName ?? raw.DisplayName)
-      : null,
-    email: raw.email != null || raw.Email != null
-      ? String(raw.email ?? raw.Email)
-      : null,
-    phone: raw.phone != null || raw.Phone != null
-      ? String(raw.phone ?? raw.Phone)
-      : null,
+    displayName:
+      raw.displayName != null || raw.DisplayName != null
+        ? String(raw.displayName ?? raw.DisplayName)
+        : null,
+    email:
+      raw.email != null || raw.Email != null ? String(raw.email ?? raw.Email) : null,
+    phone:
+      raw.phone != null || raw.Phone != null ? String(raw.phone ?? raw.Phone) : null,
   };
 }
 
 function mapBillDto(raw: Record<string, unknown>): BillingEntry {
-  const owner    = readParty((raw.owner ?? raw.Owner) as Record<string, unknown> | null | undefined);
-  const operator = readParty((raw.operator ?? raw.Operator) as Record<string, unknown> | null | undefined);
+  const owner = readParty((raw.owner ?? raw.Owner) as Record<string, unknown> | null | undefined);
+  const operator = readParty(
+    (raw.operator ?? raw.Operator) as Record<string, unknown> | null | undefined,
+  );
   const business = (raw.business ?? raw.Business) as Record<string, unknown> | null | undefined;
-  const amount   = (raw.amount ?? raw.Amount) as Record<string, unknown> | null | undefined;
-  const ref      = (raw.ref ?? raw.Ref) as Record<string, unknown> | null | undefined;
-  const failure  = (raw.failure ?? raw.Failure) as Record<string, unknown> | null | undefined;
+  const amount = (raw.amount ?? raw.Amount) as Record<string, unknown> | null | undefined;
+  const ref = (raw.ref ?? raw.Ref) as Record<string, unknown> | null | undefined;
+  const failure = (raw.failure ?? raw.Failure) as Record<string, unknown> | null | undefined;
   const reversal = (raw.reversal ?? raw.Reversal) as Record<string, unknown> | null | undefined;
 
   const businessDomain = business?.domain ?? business?.Domain;
 
   return {
-    id:                  String(raw.id ?? raw.Id ?? ''),
-    ownerAccountUid:     owner.accountUid,
-    operatorAccountUid:  operator.accountUid || owner.accountUid,
-    ownerDisplayName:    owner.displayName,
-    ownerEmail:          owner.email,
-    ownerPhone:          owner.phone,
+    id: String(raw.id ?? raw.Id ?? ''),
+    ownerAccountUid: owner.accountUid,
+    operatorAccountUid: operator.accountUid || owner.accountUid,
+    ownerDisplayName: owner.displayName,
+    ownerEmail: owner.email,
+    ownerPhone: owner.phone,
     operatorDisplayName: operator.displayName,
-    operatorEmail:       operator.email,
-    operatorPhone:       operator.phone,
-    business:            businessDomain != null ? (String(businessDomain) as BusinessCode) : null,
-    productCode:         business?.productCode != null || business?.ProductCode != null
-      ? String(business.productCode ?? business.ProductCode)
-      : null,
-    subType:             raw.subType != null || raw.SubType != null
-      ? (String(raw.subType ?? raw.SubType) as BillSubType)
-      : null,
-    status:              String(raw.status ?? raw.Status ?? 'pending') as BillStatus,
-    failureCode:         failure?.code != null || failure?.Code != null
-      ? (String(failure.code ?? failure.Code) as BillFailureCode)
-      : null,
-    originalAmount:      Number(amount?.original ?? amount?.Original ?? 0),
-    actualAmount:        Number(amount?.actual ?? amount?.Actual ?? 0),
-    currency:            String(amount?.currency ?? amount?.Currency ?? 'CNY'),
-    balanceAfter:        amount?.balanceAfter != null || amount?.BalanceAfter != null
-      ? Number(amount.balanceAfter ?? amount.BalanceAfter)
-      : null,
-    refType:             ref?.type != null || ref?.Type != null
-      ? (String(ref.type ?? ref.Type) as BillRefType)
-      : null,
-    refId:               ref?.id != null || ref?.Id != null
-      ? String(ref.id ?? ref.Id)
-      : null,
-    reversedAtUtc:       asEpochMillisNullable(reversal?.atUtc ?? reversal?.AtUtc),
-    reversedByIamId:     reversal?.byIamUserUid != null || reversal?.ByIamUserUid != null
-      ? String(reversal.byIamUserUid ?? reversal.ByIamUserUid)
-      : null,
-    reversedCode:        reversal?.code != null || reversal?.Code != null
-      ? (String(reversal.code ?? reversal.Code) as BillReversedCode)
-      : null,
-    occurredAtUtc:       asEpochMillis(raw.occurredAtUtc ?? raw.OccurredAtUtc) ?? 0,
+    operatorEmail: operator.email,
+    operatorPhone: operator.phone,
+    business: businessDomain != null ? (String(businessDomain) as BusinessCode) : null,
+    productCode:
+      business?.productCode != null || business?.ProductCode != null
+        ? String(business.productCode ?? business.ProductCode)
+        : null,
+    subType:
+      raw.subType != null || raw.SubType != null
+        ? (String(raw.subType ?? raw.SubType) as BillSubType)
+        : null,
+    status: String(raw.status ?? raw.Status ?? 'pending') as BillStatus,
+    failureCode:
+      failure?.code != null || failure?.Code != null
+        ? (String(failure.code ?? failure.Code) as BillFailureCode)
+        : null,
+    originalAmount: Number(amount?.original ?? amount?.Original ?? 0),
+    actualAmount: Number(amount?.actual ?? amount?.Actual ?? 0),
+    currency: String(amount?.currency ?? amount?.Currency ?? 'CNY'),
+    balanceAfter:
+      amount?.balanceAfter != null || amount?.BalanceAfter != null
+        ? Number(amount.balanceAfter ?? amount.BalanceAfter)
+        : null,
+    refType:
+      ref?.type != null || ref?.Type != null
+        ? (String(ref.type ?? ref.Type) as BillRefType)
+        : null,
+    refId: ref?.id != null || ref?.Id != null ? String(ref.id ?? ref.Id) : null,
+    reversedAtUtc: asEpochMillisNullable(reversal?.atUtc ?? reversal?.AtUtc),
+    reversedByIamId:
+      reversal?.byIamUserUid != null || reversal?.ByIamUserUid != null
+        ? String(reversal.byIamUserUid ?? reversal.ByIamUserUid)
+        : null,
+    reversedCode:
+      reversal?.code != null || reversal?.Code != null
+        ? (String(reversal.code ?? reversal.Code) as BillReversedCode)
+        : null,
+    occurredAtUtc: asEpochMillis(raw.occurredAtUtc ?? raw.OccurredAtUtc) ?? 0,
   };
 }
 
 export class BillingHttpAdapter implements BillingPort {
-  async createRecharge(_accountUid: Uid, input: CreateRechargeInput): Promise<AppResult<RechargeIntent>> {
+  async createRecharge(
+    _accountUid: Uid,
+    input: CreateRechargeInput,
+  ): Promise<AppResult<RechargeIntent>> {
     return request<RechargeIntent>('/api/billing/wallet/recharge', {
       method: 'POST',
       body: input,
     });
-  }
-
-  async placeOrder(_accountUid: Uid, input: PlaceOrderInput): Promise<AppResult<PlaceOrderResult>> {
-    return request<PlaceOrderResult>('/api/billing/orders', {
-      method: 'POST',
-      body: input,
-    });
-  }
-
-  async getOrder(_accountUid: Uid, orderId: Uid): Promise<AppResult<OrderDto>> {
-    return request<OrderDto>(`/api/billing/orders/${orderId}`);
-  }
-
-  async listOrders(
-    _accountUid: Uid,
-    _input: { page: number; pageSize: number; filter: ListOrdersFilter },
-  ): Promise<AppResult<ListOrdersPage>> {
-    return fail({ code: 'unknown', message: 'listOrders: BFF 暂无此端点' });
-  }
-
-  async listSubscriptions(_accountUid: Uid): Promise<AppResult<SubscriptionDto[]>> {
-    return request<SubscriptionDto[]>('/api/billing/subscriptions');
-  }
-
-  async setSubscriptionCancelAtPeriodEnd(subscriptionId: Uid, flag: boolean): Promise<AppResult<void>> {
-    return request<void>(`/api/billing/subscriptions/${subscriptionId}/cancel/period-end`, {
-      method: 'POST',
-      query: { flag },
-    });
-  }
-
-  async listInvoices(
-    _accountUid: Uid,
-    input: { page: number; pageSize: number; filter: ListInvoicesFilter },
-  ): Promise<AppResult<ListInvoicesPage>> {
-    const { filter } = input;
-    const rows = await request<InvoiceDto[]>('/api/billing/invoices', {
-      query: {
-        kind: filter.kind === 'all' ? undefined : filter.kind,
-        fromUtc: filter.fromUtc,
-        toUtc: filter.toUtc,
-      },
-    });
-    if (!rows.success) return rows;
-    return { success: true, data: { items: rows.data, total: rows.data.length } };
   }
 
   async listRecharges(input: {
@@ -281,11 +231,11 @@ export class BillingHttpAdapter implements BillingPort {
           page,
           pageSize,
           accountUid: filter.accountUid,
-          business:  filter.business === 'all'  ? undefined : filter.business,
-          subType:   filter.subType === 'all'   ? undefined : filter.subType,
-          status:    filter.status === 'all'    ? undefined : filter.status,
-          fromUtc:   filter.fromUtc,
-          toUtc:     filter.toUtc,
+          business: filter.business === 'all' ? undefined : filter.business,
+          subType: filter.subType === 'all' ? undefined : filter.subType,
+          status: filter.status === 'all' ? undefined : filter.status,
+          fromUtc: filter.fromUtc,
+          toUtc: filter.toUtc,
         },
       },
     );
@@ -297,11 +247,5 @@ export class BillingHttpAdapter implements BillingPort {
         total: res.data.total,
       },
     };
-  }
-
-  async listBusinesses(accountUid: Uid, _filter: ListBusinessesFilter): Promise<AppResult<BusinessInstance[]>> {
-    return request<BusinessInstance[]>('/api/billing/businesses', {
-      query: { accountUid },
-    });
   }
 }

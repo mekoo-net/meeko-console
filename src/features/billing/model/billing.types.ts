@@ -5,15 +5,8 @@ import {
   epochMillisSchema,
 } from '@/shared/lib/epoch';
 
-import {
-  billingModeSchema,
-  invoiceKindSchema,
-  invoiceStatusSchema,
-  orderStatusSchema,
-  subscriptionPeriodSchema,
-  subscriptionStatusSchema,
-} from './billingEnums';
-import type { InvoiceKind, OrderStatus } from './billingEnums';
+import { paymentSceneSchema } from './billingEnums';
+export { paymentSceneSchema };
 
 export const rechargeStatusValues = ['pending', 'paid', 'expired', 'cancelled', 'failed'] as const;
 export type RechargeStatus = (typeof rechargeStatusValues)[number];
@@ -78,75 +71,6 @@ export const rechargeIntentSchema = z.object({
 });
 
 export type RechargeIntent = z.infer<typeof rechargeIntentSchema>;
-
-export const placeOrderResultSchema = z.object({
-  orderId: idString,
-  status: orderStatusSchema,
-  billingMode: billingModeSchema,
-  holdId: idString.nullable().optional(),
-  subscriptionId: idString.nullable().optional(),
-  invoiceId: idString.nullable().optional(),
-  amount: z.number(),
-});
-
-export type PlaceOrderResult = z.infer<typeof placeOrderResultSchema>;
-
-export const orderDtoSchema = z.object({
-  id: idString,
-  /** 对外流水号，如 OD20260531000001234 */
-  serialNo: idString.nullable().optional(),
-  accountUid: idString,
-  productCode: z.string(),
-  quantity: z.number().int(),
-  billingMode: billingModeSchema,
-  unitPriceSnapshot: z.number(),
-  status: orderStatusSchema,
-  resourceId: idString.nullable().optional(),
-  metadataJson: z.string().nullable().optional(),
-  createdAtUtc: epochMillisSchema,
-  activatedAtUtc: epochMillisNullableSchema.optional(),
-  terminatedAtUtc: epochMillisNullableSchema.optional(),
-});
-
-export type OrderDto = z.infer<typeof orderDtoSchema>;
-
-export const subscriptionDtoSchema = z.object({
-  id: idString,
-  /** 对外流水号，如 SB20260531000001234 */
-  serialNo: idString.nullable().optional(),
-  accountUid: idString,
-  orderId: idString,
-  productCode: z.string(),
-  period: subscriptionPeriodSchema,
-  currentPeriodStartUtc: epochMillisSchema,
-  currentPeriodEndUtc: epochMillisSchema,
-  nextBillingAtUtc: epochMillisSchema,
-  status: subscriptionStatusSchema,
-  autoRenew: z.boolean(),
-  cancelAtPeriodEnd: z.boolean(),
-  createdAtUtc: epochMillisSchema,
-});
-
-export type SubscriptionDto = z.infer<typeof subscriptionDtoSchema>;
-
-export const invoiceDtoSchema = z.object({
-  id: idString,
-  accountUid: idString,
-  kind: invoiceKindSchema,
-  periodStartUtc: epochMillisNullableSchema.optional(),
-  periodEndUtc: epochMillisNullableSchema.optional(),
-  subtotal: z.number(),
-  tax: z.number(),
-  total: z.number(),
-  currency: z.string(),
-  status: invoiceStatusSchema,
-  issuedAtUtc: epochMillisSchema,
-  paidAtUtc: epochMillisNullableSchema.optional(),
-  subscriptionId: idString.nullable().optional(),
-  orderId: idString.nullable().optional(),
-});
-
-export type InvoiceDto = z.infer<typeof invoiceDtoSchema>;
 
 /**
  * 充值记录。
@@ -228,8 +152,8 @@ export type RechargeRecord = z.infer<typeof rechargeRecordSchema>;
 /**
  * 账单条目（钱包扣款流水）。
  *
- * 业务语义：账户钱包"扣款"事件的完整审计流水。承载产品消费类的所有扣费，
- * 包括订阅扣款、用量扣费、一次性订单。**不**承载"加钱"事件（加钱走充值表）。
+ * 业务语义：账户钱包"扣款"事件的完整审计流水。承载产品消费扣费（Hold Commit 等）。
+ * **不**承载"加钱"事件（加钱走充值表）。
  *
  * 双账户字段：
  *  - `ownerAccountUid` 永远是主账户（钱归它扣）
@@ -244,11 +168,8 @@ export type RechargeRecord = z.infer<typeof rechargeRecordSchema>;
  */
 /**
  * 计费类型，按"扣款时机"分两种：
- *  - `prepaid`：预付费。用户先付钱再使用——订阅扣款、一次性订单都属于这类。
- *    具体是订阅还是单次购买，由 `refType` ('subscription' / 'order') 表达，不在此重复。
- *  - `usage`：用量扣费。后付费按实际用量结算。
- *
- * 不再细分订阅/一次性：它们在"扣款"这件事上没有差异，只是关联实体不同。
+ *  - `prepaid`：预付费扣款。
+ *  - `usage`：用量扣费（Hold Commit）。
  */
 export const billSubTypeValues = ['prepaid', 'usage'] as const;
 export type BillSubType = (typeof billSubTypeValues)[number];
@@ -285,7 +206,7 @@ export const BillStatusTone: Readonly<
   partial_refunded: 'warning',
 };
 
-export const billRefTypeValues = ['order', 'subscription', 'invoice', 'recharge', 'hold', 'manual'] as const;
+export const billRefTypeValues = ['recharge', 'hold', 'manual'] as const;
 export type BillRefType = (typeof billRefTypeValues)[number];
 
 /**
@@ -365,7 +286,7 @@ export const billingEntrySchema = z.object({
   currency: z.string(),
   /** 扣费后钱包余额快照，便于对账 */
   balanceAfter: z.number().nullable().optional(),
-  /** 关联业务实体类型（订阅 / 订单 / 发票），定位上下文用 */
+  /** 关联业务实体类型（充值 / 预占 / 手工），定位上下文用 */
   refType: z.enum(billRefTypeValues).nullable().optional(),
   refId: idString.nullable().optional(),
   /** 驳回时间 */
@@ -396,24 +317,6 @@ export interface CreateInternalRechargeInput {
   source: RechargeProvider;
   note?: string | undefined;
   idempotencyKey?: string | undefined;
-}
-
-export interface PlaceOrderInput {
-  productCode: string;
-  quantity: number;
-  currency?: string | undefined;
-  metadataJson?: string | undefined;
-  idempotencyKey?: string | undefined;
-}
-
-export interface ListOrdersFilter {
-  status: OrderStatus | 'all';
-}
-
-export interface ListInvoicesFilter {
-  kind: InvoiceKind | 'all';
-  fromUtc?: number | undefined;
-  toUtc?: number | undefined;
 }
 
 export interface ListBillsFilter {

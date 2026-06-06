@@ -11,7 +11,7 @@
 
 ## 业务定义
 
-> 账单 = 钱包**扣款事件**（与充值流水分表）。承载所有扣费场景：订阅扣款、用量扣费、一次性订单。
+> 账单 = 钱包**扣款事件**（与充值流水分表）。承载 Hold Commit 等计费扣费场景。
 >
 > **错扣回滚 / 部分退款不另起一条**，而是直接驳回原账单：
 > - `status='reversed'`：完全驳回，`amount.actual=0`，必含 `reversal` 子对象
@@ -68,7 +68,7 @@
         "currency": "CNY",
         "balanceAfter": 1279.265
       },
-      "ref": { "type": "order", "id": "OD202605310000000001" },
+      "ref": { "type": "hold", "id": "HD-5000001" },
       "failure": null,
       "reversal": null,
       "occurredAtUtc": "2025-09-12T11:00:01Z"
@@ -86,7 +86,7 @@
         "currency": "CNY",
         "balanceAfter": null
       },
-      "ref": { "type": "order", "id": "OD-100000002" },
+      "ref": { "type": "hold", "id": "HD-5000002" },
       "failure": null,
       "reversal": {
         "atUtc":          "2025-09-12T11:30:00Z",
@@ -112,7 +112,7 @@
 | `subType` | enum | `prepaid`（订阅 / 一次性订单）/ `usage`（按量）。 |
 | `status` | enum | 见下表。 |
 | `amount` | object | 金额族：`{ original, actual, currency, balanceAfter }`。`balanceAfter` 只在 `status ∈ {completed, partial_refunded}` 时非 null。 |
-| `ref` | object \| null | 关联业务实体：`{ type: 'order'/'subscription'/'invoice', id }`；`platform` 手工调账可为 `null`。 |
+| `ref` | object \| null | 关联业务实体：`{ type: 'recharge'/'hold'/'manual', id }`；`platform` 手工调账可为 `null`。 |
 | `failure` | object \| null | 仅 `status='failed'` 时非 null：`{ code }`，`code` 取值见下方"失败码"。 |
 | `reversal` | object \| null | 仅 `status ∈ {reversed, partial_refunded}` 时非 null：`{ atUtc, byIamUserUid, code, refundedAmount }`。`refundedAmount` = `amount.original − amount.actual`，前端不必再算。 |
 | `occurredAtUtc` | ISO8601 | 入账时间，前端排序基准。 |

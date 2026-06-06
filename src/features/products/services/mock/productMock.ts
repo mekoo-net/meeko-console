@@ -3,24 +3,36 @@ import { ok } from '@/shared/api/httpTypes';
 
 import type {
   BillingProduct,
+  DiscoveredProduct,
   RegisterProductInput,
   UpdateProductInput,
 } from '../../model/product.types';
 import type { ProductPort } from '../ports/productPort';
 
-const seed: BillingProduct[] = [
+const discoveredSeed: DiscoveredProduct[] = [
   {
-    code: 'demuxai.credit',
-    domain: 'demuxai',
-    displayName: 'DemuxAI',
-    active: true,
-    createdAtUtc: Date.now(),
-    updatedAtUtc: Date.now(),
+    code: 'demux',
+    domain: 'demux',
+    suggestedDisplayName: 'DemuxAI',
+    alreadyRegistered: false,
+    serviceName: 'demuxai',
   },
 ];
 
+const seed: BillingProduct[] = [];
+
 export class ProductMock implements ProductPort {
   private items = [...seed];
+
+  async discover(): Promise<AppResult<DiscoveredProduct[]>> {
+    const registered = new Set(this.items.map((p) => p.code));
+    return ok(
+      discoveredSeed.map((item) => ({
+        ...item,
+        alreadyRegistered: registered.has(item.code),
+      })),
+    );
+  }
 
   async list(includeInactive = false): Promise<AppResult<BillingProduct[]>> {
     const rows = includeInactive ? this.items : this.items.filter((p) => p.active);
@@ -35,11 +47,17 @@ export class ProductMock implements ProductPort {
 
   async register(input: RegisterProductInput): Promise<AppResult<BillingProduct>> {
     if (this.items.some((p) => p.code === input.code)) {
-      return { success: false, error: { code: 'conflict', message: '产品代码已存在' } };
+      return { success: false, error: { code: 'conflict', message: '产品已注册' } };
+    }
+    const discovered = discoveredSeed.find((p) => p.code === input.code);
+    if (!discovered) {
+      return { success: false, error: { code: 'validation', message: 'Consul 未发现该产品' } };
     }
     const now = Date.now();
     const item: BillingProduct = {
-      ...input,
+      code: input.code,
+      domain: discovered.domain,
+      displayName: input.displayName?.trim() || discovered.suggestedDisplayName,
       active: true,
       createdAtUtc: now,
       updatedAtUtc: now,
@@ -62,10 +80,10 @@ export class ProductMock implements ProductPort {
     return ok({ ...next });
   }
 
-  async setActive(code: string, active: boolean): Promise<AppResult<BillingProduct>> {
+  async unregister(code: string): Promise<AppResult<boolean>> {
     const idx = this.items.findIndex((p) => p.code === code);
     if (idx < 0) return { success: false, error: { code: 'not_found', message: '产品不存在' } };
-    this.items[idx] = { ...this.items[idx]!, active, updatedAtUtc: Date.now() };
-    return ok({ ...this.items[idx]! });
+    this.items.splice(idx, 1);
+    return ok(true);
   }
 }
