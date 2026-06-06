@@ -12,7 +12,6 @@ import type {
   RegisterProductInput,
   UpdateProductInput,
 } from '../model/product.types';
-import { billingModeOptions } from '../model/product.types';
 import { getProductPort } from '../services';
 
 const port = getProductPort();
@@ -24,10 +23,6 @@ const togglingCode = ref<string | null>(null);
 const dialogVisible = ref(false);
 const dialogMode = ref<'create' | 'edit'>('create');
 const editing = ref<BillingProduct | null>(null);
-
-function billingModeLabel(mode: BillingProduct['billingMode']): string {
-  return billingModeOptions.find((o) => o.value === mode)?.label ?? mode;
-}
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -117,16 +112,6 @@ onMounted(() => load());
         </template>
       </el-table-column>
       <el-table-column prop="domain" label="业务域" width="120" />
-      <el-table-column label="计费模式" width="160">
-        <template #default="{ row }: { row: BillingProduct }">
-          {{ billingModeLabel(row.billingMode) }}
-        </template>
-      </el-table-column>
-      <el-table-column label="单价" width="120" align="right">
-        <template #default="{ row }: { row: BillingProduct }">
-          {{ row.unitPrice }} / {{ row.unit }}
-        </template>
-      </el-table-column>
       <el-table-column label="状态" width="90" align="center">
         <template #default="{ row }: { row: BillingProduct }">
           <el-tag :type="row.active ? 'success' : 'info'" size="small">

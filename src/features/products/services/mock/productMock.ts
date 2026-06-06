@@ -13,9 +13,6 @@ const seed: BillingProduct[] = [
     code: 'demuxai.credit',
     domain: 'demuxai',
     displayName: 'DemuxAI',
-    billingMode: 'payg_call',
-    unitPrice: 0,
-    unit: 'credit',
     active: true,
     createdAtUtc: Date.now(),
     updatedAtUtc: Date.now(),
@@ -58,9 +55,6 @@ export class ProductMock implements ProductPort {
     const next: BillingProduct = {
       ...current,
       displayName: input.displayName ?? current.displayName,
-      unitPrice: input.unitPrice ?? current.unitPrice,
-      unit: input.unit ?? current.unit,
-      period: input.clearPeriod ? null : input.period ?? current.period,
       metadataJson: input.metadataJson ?? current.metadataJson,
       updatedAtUtc: Date.now(),
     };

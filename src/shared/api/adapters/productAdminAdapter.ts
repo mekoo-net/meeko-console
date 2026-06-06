@@ -1,8 +1,6 @@
 import type {
   BillingProduct,
-  BillingModeCode,
   RegisterProductInput,
-  SubscriptionPeriodCode,
   UpdateProductInput,
 } from '@/features/products/model/product.types';
 import type { ProductPort } from '@/features/products/services/ports/productPort';
@@ -12,30 +10,11 @@ import { asEpochMillis } from '@/shared/lib/epoch';
 
 const BASE = '/api/admin/billing/products';
 
-function parseBillingMode(value: unknown): BillingModeCode {
-  const raw = String(value ?? 'payg_call').toLowerCase();
-  if (raw === 'one_shot' || raw === 'oneshot') return 'one_shot';
-  if (raw === 'subscription') return 'subscription';
-  if (raw === 'payg_hour' || raw === 'payghour') return 'payg_hour';
-  return 'payg_call';
-}
-
-function parsePeriod(value: unknown): SubscriptionPeriodCode | null {
-  const raw = String(value ?? '').toLowerCase();
-  if (raw === 'monthly') return 'monthly';
-  if (raw === 'yearly') return 'yearly';
-  return null;
-}
-
 function mapProduct(raw: Record<string, unknown>): BillingProduct {
   return {
     code: String(raw.code ?? ''),
     domain: String(raw.domain ?? ''),
     displayName: String(raw.displayName ?? raw.display_name ?? ''),
-    billingMode: parseBillingMode(raw.billingMode ?? raw.billing_mode),
-    unitPrice: Number(raw.unitPrice ?? raw.unit_price ?? 0),
-    unit: String(raw.unit ?? ''),
-    period: parsePeriod(raw.period),
     metadataJson:
       typeof raw.metadataJson === 'string'
         ? raw.metadataJson
