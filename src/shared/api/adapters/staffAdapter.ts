@@ -122,7 +122,7 @@ export class StaffHttpAdapter implements StaffPort {
   }
 
   async resetStaffPassword(uid: string, newPassword: string): Promise<AppResult<StaffUser>> {
-    const res = await request<Record<string, unknown>>(`/api/admin/staff/${uid}/reset-password`, {
+    const res = await request<Record<string, unknown>>(`/api/admin/staff/${uid}/reset/password`, {
       method: 'POST',
       body: { newPassword },
     });

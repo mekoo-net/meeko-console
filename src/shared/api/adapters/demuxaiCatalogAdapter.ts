@@ -96,7 +96,7 @@ export class DemuxaiCatalogHttpAdapter implements DemuxaiCatalogPort {
   }
 
   async updateVendorSlug(id: string, vendorSlug: string | null): Promise<AppResult<void>> {
-    return requestDemuxAi<void>(`${BASE}/${encodeURIComponent(id)}/vendor-slug`, {
+    return requestDemuxAi<void>(`${BASE}/${encodeURIComponent(id)}/vendor/slug`, {
       method: 'PATCH',
       body: { vendorSlug },
     });

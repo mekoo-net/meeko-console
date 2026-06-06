@@ -268,7 +268,7 @@ export class AccountAdminHttpAdapter implements AccountAdminPort {
     rebateRatePercent: number | null,
   ): Promise<AppResult<Account>> {
     const res = await apiFetch<unknown>(
-      `${ADMIN_ACCOUNTS}/${encodeURIComponent(accountUid)}/referral_rate`,
+      `${ADMIN_ACCOUNTS}/${encodeURIComponent(accountUid)}/referral/rate`,
       {
         method: 'PATCH',
         body: JSON.stringify({ rebateRatePercent }),

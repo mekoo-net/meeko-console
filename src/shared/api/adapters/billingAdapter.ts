@@ -202,7 +202,7 @@ export class BillingHttpAdapter implements BillingPort {
   }
 
   async setSubscriptionCancelAtPeriodEnd(subscriptionId: Uid, flag: boolean): Promise<AppResult<void>> {
-    return request<void>(`/api/billing/subscriptions/${subscriptionId}/cancel-at-period-end`, {
+    return request<void>(`/api/billing/subscriptions/${subscriptionId}/cancel/period-end`, {
       method: 'POST',
       query: { flag },
     });

@@ -67,6 +67,12 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '充值渠道', requiresAuth: true, roles: ['Admin'] },
           },
           {
+            path: 'products',
+            name: 'billing-products',
+            component: () => import('@/features/products/views/ProductListView.vue'),
+            meta: { title: '计费产品', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
             path: 'redemption',
             redirect: { name: 'demuxai-redemption' },
           },

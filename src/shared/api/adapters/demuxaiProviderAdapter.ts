@@ -141,7 +141,7 @@ export class DemuxaiProviderHttpAdapter implements DemuxaiProviderPort {
     apiKey?: string;
     providerUid?: Uid;
   }): Promise<AppResult<FetchUpstreamModelsResult>> {
-    return requestDemuxAi<FetchUpstreamModelsResult>(`${BASE}/upstream-models`, {
+    return requestDemuxAi<FetchUpstreamModelsResult>(`${BASE}/upstream/models`, {
       method: 'POST',
       body: input,
     });

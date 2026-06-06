@@ -66,6 +66,7 @@ const tree: readonly MenuNode[] = [
       { type: 'leaf', index: '/billing/bills', title: '账单流水', icon: Money },
       { type: 'leaf', index: '/billing/withdrawals', title: '提现审核', icon: Coin },
       { type: 'leaf', index: '/billing/channels', title: '充值渠道', icon: Link, roles: ['Admin'] },
+      { type: 'leaf', index: '/billing/products', title: '计费产品', icon: PriceTag, roles: ['Admin'] },
     ],
   },
   {

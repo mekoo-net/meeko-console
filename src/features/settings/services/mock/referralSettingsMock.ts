@@ -18,22 +18,6 @@ let state: ReferralSettingsAdmin = {
       minWithdrawAmount: 10,
       withdrawReviewRequired: true,
     },
-    {
-      productCode: 'meeko',
-      productName: 'Meeko 平台',
-      enabled: true,
-      rebateRatePercent: 3,
-      minWithdrawAmount: 10,
-      withdrawReviewRequired: true,
-    },
-    {
-      productCode: 'meeko_voice',
-      productName: 'Meeko Voice',
-      enabled: false,
-      rebateRatePercent: 0,
-      minWithdrawAmount: 0,
-      withdrawReviewRequired: false,
-    },
   ],
   updatedAtUtc: Date.now(),
 };

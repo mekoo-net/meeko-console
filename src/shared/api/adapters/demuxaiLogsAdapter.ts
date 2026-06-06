@@ -287,7 +287,7 @@ export class DemuxaiLogsHttpAdapter implements DemuxaiLogsPort {
   }
 
   async statByVendor(filter: ListLogsFilter): Promise<AppResult<VendorConsumptionRow[]>> {
-    const result = await requestDemuxAi<ItemsEnvelope<VendorRow>>(`${BASE}/stats/by-vendor`, {
+    const result = await requestDemuxAi<ItemsEnvelope<VendorRow>>(`${BASE}/stats/by/vendor`, {
       query: {
         fromUtc:    filter.fromUtc,
         toUtc:      filter.toUtc,
@@ -318,8 +318,8 @@ export class DemuxaiLogsHttpAdapter implements DemuxaiLogsPort {
 
     const [bucketResult, modelResult, providerResult] = await Promise.all([
       requestDemuxAi<ItemsEnvelope<BucketRow>>(`${BASE}/stats`, { query }),
-      requestDemuxAi<ItemsEnvelope<ModelRankRow>>(`${BASE}/stats/by-model`, { query }),
-      requestDemuxAi<ItemsEnvelope<ProviderRankRow>>(`${BASE}/stats/by-provider`, { query }),
+      requestDemuxAi<ItemsEnvelope<ModelRankRow>>(`${BASE}/stats/by/model`, { query }),
+      requestDemuxAi<ItemsEnvelope<ProviderRankRow>>(`${BASE}/stats/by/provider`, { query }),
     ]);
 
     if (!bucketResult.success) return bucketResult;
