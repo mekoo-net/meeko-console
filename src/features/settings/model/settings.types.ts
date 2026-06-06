@@ -58,3 +58,39 @@ export const updateEmailSettingsSchema = z.object({
 });
 
 export type UpdateEmailSettingsInput = z.infer<typeof updateEmailSettingsSchema>;
+
+/** 单个注册产品 / 渠道的返利率配置。 */
+export const referralProductRateSchema = z.object({
+  /** 产品 / 渠道唯一标识（如 demuxai）。 */
+  productCode: z.string().min(1),
+  /** 展示名（如 DemuxAI）。 */
+  productName: z.string().min(1),
+  /** 是否对该产品启用返利。 */
+  enabled: z.boolean(),
+  /** 该产品的返利率（%）。 */
+  rebateRatePercent: z.number().min(0).max(100),
+});
+
+export type ReferralProductRate = z.infer<typeof referralProductRateSchema>;
+
+export const referralSettingsAdminSchema = z.object({
+  enabled: z.boolean(),
+  defaultRebateRatePercent: z.number().min(0).max(100),
+  minWithdrawAmount: z.number().nonnegative(),
+  withdrawReviewRequired: z.boolean(),
+  /** 按注册产品 / 渠道细分的返利率；未列出的产品使用默认返利率。 */
+  productRates: z.array(referralProductRateSchema).default([]),
+  updatedAtUtc: epochMillisSchema,
+});
+
+export type ReferralSettingsAdmin = z.infer<typeof referralSettingsAdminSchema>;
+
+export const updateReferralSettingsSchema = z.object({
+  enabled: z.boolean().optional(),
+  defaultRebateRatePercent: z.number().min(0).max(100).optional(),
+  minWithdrawAmount: z.number().nonnegative().optional(),
+  withdrawReviewRequired: z.boolean().optional(),
+  productRates: z.array(referralProductRateSchema).optional(),
+});
+
+export type UpdateReferralSettingsInput = z.infer<typeof updateReferralSettingsSchema>;

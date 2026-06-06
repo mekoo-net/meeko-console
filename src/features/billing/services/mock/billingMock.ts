@@ -30,6 +30,8 @@ import {
   type BusinessInstance,
   type ListBusinessesFilter,
 } from '../../model/business.types';
+import { referralRechargesForAccount } from '@/features/accounts/services/mock/referralData';
+
 import type {
   BillingPort,
   ListBillsPage,
@@ -413,6 +415,12 @@ function seedForAccount(accountUid: Uid): AccountBilling {
       currentPeriodEndUtc: null,
     },
   ];
+
+  const referralRecharges = referralRechargesForAccount(accountUid);
+  if (referralRecharges.length > 0) {
+    recharges.push(...referralRecharges);
+    recharges.sort((a, b) => b.createdAtUtc - a.createdAtUtc);
+  }
 
   return {
     wallet,

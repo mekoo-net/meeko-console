@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
+import { TopRight } from '@element-plus/icons-vue';
 
 import StatusTag from '@/shared/ui/StatusTag.vue';
 import { formatDateTime } from '@/shared/lib/date';
@@ -19,7 +20,8 @@ defineProps<{
 const router = useRouter();
 
 function openDetail(uid: string): void {
-  void router.push(`/accounts/${uid}`);
+  const href = router.resolve(`/accounts/${uid}/overview`).href;
+  window.open(href, '_blank', 'noopener');
 }
 </script>
 
@@ -32,7 +34,9 @@ function openDetail(uid: string): void {
   >
     <el-table-column label="UID" width="130" prop="uid">
       <template #default="{ row }: { row: Account }">
-        <span class="cell-uid">{{ row.uid }}</span>
+        <button type="button" class="cell-uid cell-uid--link" @click="openDetail(row.uid)">
+          {{ row.uid }}
+        </button>
       </template>
     </el-table-column>
 
@@ -59,6 +63,15 @@ function openDetail(uid: string): void {
         >
           {{ accountTypeLabel[row.type] }}
         </el-tag>
+      </template>
+    </el-table-column>
+
+    <el-table-column label="邀请人" min-width="160">
+      <template #default="{ row }: { row: Account }">
+        <template v-if="row.inviter">
+          <span class="cell-inviter">{{ row.inviter.displayName || row.inviter.email || row.inviter.uid }}</span>
+        </template>
+        <span v-else class="cell-muted">—</span>
       </template>
     </el-table-column>
 
@@ -98,9 +111,12 @@ function openDetail(uid: string): void {
       </template>
     </el-table-column>
 
-    <el-table-column label="操作" width="80" fixed="right" align="right">
+    <el-table-column label="操作" width="90" fixed="right" align="right">
       <template #default="{ row }: { row: Account }">
-        <el-button link type="primary" size="small" @click="openDetail(row.uid)">详情</el-button>
+        <el-button link type="primary" size="small" @click="openDetail(row.uid)">
+          详情
+          <el-icon class="cell-action__icon"><TopRight /></el-icon>
+        </el-button>
       </template>
     </el-table-column>
   </el-table>
@@ -118,6 +134,27 @@ function openDetail(uid: string): void {
   font-weight: 500;
   color: var(--el-text-color-primary);
   font-variant-numeric: tabular-nums;
+}
+.cell-uid--link {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--el-color-primary);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+.cell-action__icon {
+  margin-left: 2px;
+  font-size: 12px;
+  vertical-align: -1px;
+}
+.cell-inviter {
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+}
+.cell-muted {
+  color: var(--el-text-color-placeholder);
 }
 .cell-contact__email {
   min-height: 18px;

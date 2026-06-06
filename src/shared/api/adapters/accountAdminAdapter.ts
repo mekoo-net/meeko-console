@@ -98,6 +98,34 @@ function mapListItem(raw: Record<string, unknown>): Record<string, unknown> {
     oauthBindings: Array.isArray(raw.oauthBindings ?? raw.oauth_bindings)
       ? (raw.oauthBindings ?? raw.oauth_bindings)
       : undefined,
+    inviter: mapInviter(raw.inviter),
+    rebateRatePercent:
+      typeof raw.rebateRatePercent === 'number'
+        ? raw.rebateRatePercent
+        : typeof raw.rebate_rate_percent === 'number'
+          ? raw.rebate_rate_percent
+          : raw.rebateRatePercent === null || raw.rebate_rate_percent === null
+            ? null
+            : undefined,
+    inviteCount:
+      typeof raw.inviteCount === 'number'
+        ? raw.inviteCount
+        : typeof raw.invite_count === 'number'
+          ? raw.invite_count
+          : 0,
+  });
+}
+
+function mapInviter(raw: unknown): Record<string, unknown> | null | undefined {
+  if (raw === null) return null;
+  if (!raw || typeof raw !== 'object') return undefined;
+  const inv = raw as Record<string, unknown>;
+  const uid = inv.uid;
+  if (uid === undefined || uid === null) return undefined;
+  return omitNullish({
+    uid: String(uid),
+    displayName: asOptionalString(inv.displayName ?? inv.display_name),
+    email: asOptionalString(inv.email),
   });
 }
 
@@ -224,5 +252,29 @@ export class AccountAdminHttpAdapter implements AccountAdminPort {
     );
     if (!res.success) return res;
     return parseAccount(res.data);
+  }
+
+  async unlinkInviter(accountUid: string): Promise<AppResult<Account>> {
+    const res = await apiFetch<unknown>(
+      `${ADMIN_ACCOUNTS}/${encodeURIComponent(accountUid)}/inviter`,
+      { method: 'DELETE' },
+    );
+    if (!res.success) return res;
+    return this.getAccount(accountUid);
+  }
+
+  async setReferralRate(
+    accountUid: string,
+    rebateRatePercent: number | null,
+  ): Promise<AppResult<Account>> {
+    const res = await apiFetch<unknown>(
+      `${ADMIN_ACCOUNTS}/${encodeURIComponent(accountUid)}/referral-rate`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ rebateRatePercent }),
+      },
+    );
+    if (!res.success) return res;
+    return this.getAccount(accountUid);
   }
 }

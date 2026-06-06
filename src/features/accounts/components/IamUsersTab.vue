@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, toRef } from 'vue';
+import { computed, ref, toRef, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Plus, RefreshLeft, Search } from '@element-plus/icons-vue';
 
 import StatusTag from '@/shared/ui/StatusTag.vue';
+import { clientPaginate } from '@/shared/composables/usePagination';
 
 import {
   iamUserRoleValues,
@@ -22,10 +23,27 @@ const accountUidRef = toRef(props, 'accountUid');
 const list = useIamUserList(accountUidRef);
 
 const createOpen = ref(false);
+const page = ref(1);
+const pageSize = ref(20);
 
 function resetFilter(): void {
   list.filter.value = { keyword: '', role: 'all', status: 'all' };
+  page.value = 1;
 }
+
+watch(
+  () => [list.filter.value.keyword, list.filter.value.role, list.filter.value.status] as const,
+  () => {
+    page.value = 1;
+  },
+);
+
+watch(() => props.accountUid, () => {
+  page.value = 1;
+});
+
+const total = computed(() => list.items.value.length);
+const pagedItems = computed(() => clientPaginate(list.items.value, page.value, pageSize.value));
 
 async function onSubmit(payload: CreateIamUserPayload): Promise<void> {
   const result = await list.createIamUser(payload);
@@ -39,7 +57,14 @@ async function onSubmit(payload: CreateIamUserPayload): Promise<void> {
 </script>
 
 <template>
-  <div class="iam-tab">
+  <div class="acc-page">
+    <div class="acc-page__head">
+      <h4 class="acc-page__title">
+        IAM 子账号
+        <span class="acc-page__count">共 {{ total }} 条</span>
+      </h4>
+    </div>
+
     <div class="tab-filter">
       <el-form :inline="true" @submit.prevent>
         <el-form-item label="关键字">
@@ -75,40 +100,54 @@ async function onSubmit(payload: CreateIamUserPayload): Promise<void> {
       </div>
     </div>
 
-    <el-table
-      v-loading="list.loading.value"
-      :data="list.items.value"
-      row-key="uid"
-      size="small"
-      class="compact-table"
-      empty-text="该账户暂无子账号"
-    >
-      <el-table-column label="用户名" min-width="180">
-        <template #default="{ row }: { row: IamUser }">
-          <div class="cell-user">
-            <span class="cell-user__name">{{ row.username }}</span>
-            <span v-if="row.isAccountOwner" class="cell-user__owner">Owner</span>
-          </div>
-          <div class="cell-user__display">{{ row.displayName }}</div>
-        </template>
-      </el-table-column>
-      <el-table-column label="邮箱" min-width="200">
-        <template #default="{ row }: { row: IamUser }">
-          <span v-if="row.email">{{ row.email }}</span>
-          <span v-else class="cell-muted">—</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="角色" width="120">
-        <template #default="{ row }: { row: IamUser }">
-          <el-tag effect="plain" size="small">{{ row.role }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" width="100">
-        <template #default="{ row }: { row: IamUser }">
-          <StatusTag :label="iamUserStatusLabel[row.status]" :tone="iamUserStatusTone[row.status]" />
-        </template>
-      </el-table-column>
-    </el-table>
+    <div class="acc-table-wrap">
+      <el-table
+        v-loading="list.loading.value"
+        :data="pagedItems"
+        row-key="uid"
+        size="small"
+        height="100%"
+        class="compact-table"
+        empty-text="该账户暂无子账号"
+      >
+        <el-table-column label="用户名" min-width="180">
+          <template #default="{ row }: { row: IamUser }">
+            <div class="cell-user">
+              <span class="cell-user__name">{{ row.username }}</span>
+              <span v-if="row.isAccountOwner" class="cell-user__owner">Owner</span>
+            </div>
+            <div class="cell-user__display">{{ row.displayName }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="邮箱" min-width="200">
+          <template #default="{ row }: { row: IamUser }">
+            <span v-if="row.email">{{ row.email }}</span>
+            <span v-else class="cell-muted">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="角色" width="120">
+          <template #default="{ row }: { row: IamUser }">
+            <el-tag effect="plain" size="small">{{ row.role }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }: { row: IamUser }">
+            <StatusTag :label="iamUserStatusLabel[row.status]" :tone="iamUserStatusTone[row.status]" />
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+
+    <div class="pagination-bar">
+      <el-pagination
+        v-model:current-page="page"
+        v-model:page-size="pageSize"
+        :total="total"
+        :page-sizes="[20, 50, 100]"
+        layout="total, sizes, prev, pager, next"
+        background
+      />
+    </div>
 
     <el-dialog v-model="createOpen" title="创建子账号" width="520px" destroy-on-close>
       <IamUserForm :submitting="list.creating.value" @submit="onSubmit" @cancel="createOpen = false" />
@@ -117,14 +156,10 @@ async function onSubmit(payload: CreateIamUserPayload): Promise<void> {
 </template>
 
 <style scoped>
-.iam-tab {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
 .tab-filter {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   background: #fff;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 8px;

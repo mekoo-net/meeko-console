@@ -5,6 +5,7 @@ import {
   Bell,
   ChatLineRound,
   CreditCard,
+  Coin,
   DataAnalysis,
   DataLine,
   Document,
@@ -58,11 +59,12 @@ const tree: readonly MenuNode[] = [
   {
     type: 'group',
     index: '/billing',
-    title: '账单管理',
+    title: '财务管理',
     icon: CreditCard,
     children: [
       { type: 'leaf', index: '/billing/recharges', title: '充值记录', icon: Document },
       { type: 'leaf', index: '/billing/bills', title: '账单流水', icon: Money },
+      { type: 'leaf', index: '/billing/withdrawals', title: '提现审核', icon: Coin },
       { type: 'leaf', index: '/billing/channels', title: '充值渠道', icon: Link, roles: ['Admin'] },
     ],
   },
@@ -86,10 +88,35 @@ const tree: readonly MenuNode[] = [
     title: '系统设置',
     icon: Setting,
     children: [
-      { type: 'leaf', index: '/settings/auth', title: '注册与登录', icon: Setting, perm: 'platform.settings.read' },
-      { type: 'leaf', index: '/settings/email', title: '邮箱策略', icon: Message, perm: 'platform.settings.read' },
-      { type: 'leaf', index: '/settings/staff', title: '管理员', icon: User, perm: 'platform.staff.read' },
-      { type: 'leaf', index: '/settings/roles', title: '角色权限', icon: Lock, perm: 'platform.role.read' },
+      {
+        type: 'group',
+        index: '/settings/account',
+        title: '账户设置',
+        icon: User,
+        children: [
+          { type: 'leaf', index: '/settings/auth', title: '注册与登录', icon: Setting, perm: 'platform.settings.read' },
+          { type: 'leaf', index: '/settings/email', title: '邮箱策略', icon: Message, perm: 'platform.settings.read' },
+        ],
+      },
+      {
+        type: 'group',
+        index: '/settings/finance',
+        title: '财务设置',
+        icon: CreditCard,
+        children: [
+          { type: 'leaf', index: '/settings/referral', title: '返利设置', icon: Coin, perm: 'platform.settings.read' },
+        ],
+      },
+      {
+        type: 'group',
+        index: '/settings/platform',
+        title: '平台设置',
+        icon: Operation,
+        children: [
+          { type: 'leaf', index: '/settings/staff', title: '管理账户', icon: User, perm: 'platform.staff.read' },
+          { type: 'leaf', index: '/settings/roles', title: '角色权限', icon: Lock, perm: 'platform.role.read' },
+        ],
+      },
     ],
   },
   {

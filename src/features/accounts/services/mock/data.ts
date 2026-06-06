@@ -134,8 +134,11 @@ function buildSeed(): AccountStore {
   const dayMs = 24 * 60 * 60 * 1000;
   const hourMs = 60 * 60 * 1000;
 
+  const builtUids: string[] = [];
+
   for (const seed of seeds) {
     const uid = accountUid();
+    builtUids.push(uid);
     const users: IamUser[] = seed.iamUsers.map((u) => ({
       uid: iamUid(),
       accountUid: uid,
@@ -203,6 +206,7 @@ function buildSeed(): AccountStore {
       lastActiveAtUtc: lastActiveAt.getTime(),
       tier: computeTier(seed.totalRechargedAmount),
       totalRechargedAmount: seed.totalRechargedAmount,
+      inviteCount: 0,
       oauthBindings: oauthBindings.length > 0 ? oauthBindings : undefined,
       achievements: achievements.length > 0 ? achievements : undefined,
       walletSummary,
@@ -210,6 +214,31 @@ function buildSeed(): AccountStore {
     });
     iamUsers.set(uid, users);
   }
+
+  const inviterUid = builtUids[0];
+  const inviteeUid1 = builtUids[1];
+  const inviteeUid2 = builtUids[2];
+  if (inviterUid && inviteeUid1 && inviteeUid2) {
+    const inviter = accounts.get(inviterUid);
+    if (inviter) {
+      accounts.set(inviterUid, { ...inviter, inviteCount: 2 });
+    }
+    for (const inviteeUid of [inviteeUid1, inviteeUid2]) {
+      const invitee = accounts.get(inviteeUid);
+      if (!invitee || !inviter) continue;
+      accounts.set(inviteeUid, {
+        ...invitee,
+        inviter: {
+          uid: inviterUid,
+          displayName: inviter.displayName,
+          email: inviter.ownerEmail,
+        },
+        rebateRatePercent: inviteeUid === inviteeUid2 ? 15 : null,
+        inviteCount: inviteeUid === inviteeUid1 ? 1 : 0,
+      });
+    }
+  }
+
   return { accounts, iamUsers };
 }
 

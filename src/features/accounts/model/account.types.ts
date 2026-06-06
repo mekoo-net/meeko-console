@@ -74,6 +74,14 @@ export const accountWalletSchema = z.object({
 
 export type AccountWallet = z.infer<typeof accountWalletSchema>;
 
+export const referralInviterSchema = z.object({
+  uid: z.string().min(1),
+  displayName: z.string().optional(),
+  email: z.string().optional(),
+});
+
+export type ReferralInviter = z.infer<typeof referralInviterSchema>;
+
 export const accountSchema = z.object({
   uid: z.string().min(1),
   type: z.enum(accountTypeValues),
@@ -104,6 +112,12 @@ export const accountSchema = z.object({
   walletSummary: walletSummarySchema.nullable().optional(),
   /** 详情投影：完整钱包（`GET /api/admin/accounts/{uid}`）。 */
   wallet: accountWalletSchema.nullable().optional(),
+  /** 邀请人（返利关系）。 */
+  inviter: referralInviterSchema.nullable().optional(),
+  /** 账户级返利率覆盖（%）；未设置则使用全局默认。 */
+  rebateRatePercent: z.number().min(0).max(100).nullable().optional(),
+  /** 该账户邀请注册的人数。 */
+  inviteCount: z.number().int().nonnegative().default(0),
 });
 
 export type Account = z.infer<typeof accountSchema>;

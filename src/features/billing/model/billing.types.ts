@@ -174,6 +174,7 @@ export const rechargeProviderValues = [
   'manual',
   'cs_compensation',
   'marketing_reward',
+  'referral_rebate',
 ] as const;
 export type RechargeProvider = (typeof rechargeProviderValues)[number];
 
@@ -183,6 +184,7 @@ export const RechargeProviderLabel: Readonly<Record<RechargeProvider, string>> =
   manual: '手工充值',
   cs_compensation: '客服补偿',
   marketing_reward: '营销奖励',
+  referral_rebate: '邀请返利',
 };
 
 /** UI 标签：业务单号在不同 provider 下的展示名 */
@@ -192,6 +194,7 @@ export const RechargeRefNoLabel: Readonly<Record<RechargeProvider, string>> = {
   manual: '审批单号',
   cs_compensation: '工单号',
   marketing_reward: '活动号',
+  referral_rebate: '返利单号',
 };
 
 export const rechargeRecordSchema = z.object({

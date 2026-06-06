@@ -190,4 +190,36 @@ export class AccountAdminMock implements AccountAdminPort {
     store.accounts.set(accountUid, next);
     return parseAccount(next);
   }
+
+  async unlinkInviter(accountUid: string): Promise<AppResult<Account>> {
+    await delay();
+    const store = getStore();
+    const a = store.accounts.get(accountUid);
+    if (!a) return fail({ code: 'not_found', message: `账户 ${accountUid} 不存在` });
+    if (a.inviter) {
+      const inviter = store.accounts.get(a.inviter.uid);
+      if (inviter) {
+        store.accounts.set(inviter.uid, {
+          ...inviter,
+          inviteCount: Math.max(0, (inviter.inviteCount ?? 0) - 1),
+        });
+      }
+    }
+    const next: Account = { ...a, inviter: null, updatedAtUtc: Date.now() };
+    store.accounts.set(accountUid, next);
+    return parseAccount(next);
+  }
+
+  async setReferralRate(
+    accountUid: string,
+    rebateRatePercent: number | null,
+  ): Promise<AppResult<Account>> {
+    await delay();
+    const store = getStore();
+    const a = store.accounts.get(accountUid);
+    if (!a) return fail({ code: 'not_found', message: `账户 ${accountUid} 不存在` });
+    const next: Account = { ...a, rebateRatePercent, updatedAtUtc: Date.now() };
+    store.accounts.set(accountUid, next);
+    return parseAccount(next);
+  }
 }

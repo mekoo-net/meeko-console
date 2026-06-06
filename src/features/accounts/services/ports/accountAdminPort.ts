@@ -45,4 +45,7 @@ export interface AccountAdminPort {
    * 返回更新后的 Account。
    */
   revokeAchievement(accountUid: string, code: string): Promise<AppResult<Account>>;
+
+  unlinkInviter(accountUid: string): Promise<AppResult<Account>>;
+  setReferralRate(accountUid: string, rebateRatePercent: number | null): Promise<AppResult<Account>>;
 }
