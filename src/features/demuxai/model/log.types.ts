@@ -464,6 +464,8 @@ export interface LogStatsTopModel {
 export interface LogStatsTopProvider {
   /** 渠道 int 主键（= `Provider.id`） */
   providerId: number;
+  /** 渠道展示名（服务端 join Vendor 解析） */
+  providerName?: string;
   calls: number;
   errors: number;
   /** 平均首字延迟（TTFT），仅 `streamed && success` 样本入聚合；纯图像 / 视频渠道为 0。单位 ms。 */

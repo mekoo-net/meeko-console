@@ -4,9 +4,11 @@ import {
   type ListPricingFilter,
   type ListVendorModelGroupsFilter,
   type Pricing,
+  type UnconfiguredAliasPage,
   type UpsertPricingInput,
   type VendorModelGroup,
   type VendorModelGroupedPage,
+  type VendorPricingStatsMap,
 } from '@/features/demuxai/model/pricing.types';
 import type {
   DemuxaiPricingPort,
@@ -180,6 +182,48 @@ export class DemuxaiPricingHttpAdapter implements DemuxaiPricingPort {
     return requestDemuxAi<void>(BASE, {
       method: 'DELETE',
       query: { modelId },
+    });
+  }
+
+  async vendorPricingStats(): Promise<AppResult<VendorPricingStatsMap>> {
+    const result = await requestDemuxAi<Record<string, { configured?: number; unconfigured?: number }>>(
+      `${VENDOR_MODEL_BASE}/stats`,
+    );
+    if (!result.success) return result;
+    const map: VendorPricingStatsMap = {};
+    for (const [key, entry] of Object.entries(result.data ?? {})) {
+      map[key] = {
+        configured: entry.configured ?? 0,
+        unconfigured: entry.unconfigured ?? 0,
+      };
+    }
+    return ok(map);
+  }
+
+  async listUnconfiguredAliases(input: {
+    page: number;
+    pageSize: number;
+    vendorKey: string;
+  }): Promise<AppResult<UnconfiguredAliasPage>> {
+    const result = await requestDemuxAi<ItemsEnvelope<{
+      alias?: string;
+      vendorKey?: string;
+      vendorModel?: string;
+    }>>(`${VENDOR_MODEL_BASE}/unconfigured`, {
+      query: {
+        page: input.page,
+        pageSize: input.pageSize,
+        vendorKey: input.vendorKey,
+      },
+    });
+    if (!result.success) return result;
+    return ok({
+      items: (result.data.items ?? []).map((row) => ({
+        alias: row.alias ?? '',
+        vendorKey: row.vendorKey ?? '',
+        vendorModel: row.vendorModel ?? '',
+      })),
+      total: result.data.total ?? 0,
     });
   }
 }

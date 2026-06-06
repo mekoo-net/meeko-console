@@ -3,6 +3,7 @@ import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
 import { toUid } from '@/shared/lib/id';
 import { displayAmountToQuota, quotaToDisplayAmount } from '@/shared/lib/quota';
 
+import type { RedemptionStats } from '@/features/demuxai/model/redemptionDisplay';
 import type {
   CreateRedemptionCodesInput,
   CreateRedemptionCodesResult,
@@ -187,6 +188,27 @@ export class DemuxaiRedemptionHttpAdapter implements DemuxaiRedemptionPort {
 
   async remove(id: number): Promise<AppResult<void>> {
     return requestDemuxAi<void>(`${BASE}/${id}`, { method: 'DELETE' });
+  }
+
+  async stats(): Promise<AppResult<RedemptionStats>> {
+    const result = await requestDemuxAi<{
+      total?: number;
+      claimable?: number;
+      inProgress?: number;
+      exhausted?: number;
+      expired?: number;
+    }>(`${BASE}/stats`);
+    if (!result.success) return result;
+    return {
+      success: true,
+      data: {
+        total: result.data.total ?? 0,
+        claimable: result.data.claimable ?? 0,
+        inProgress: result.data.inProgress ?? 0,
+        exhausted: result.data.exhausted ?? 0,
+        expired: result.data.expired ?? 0,
+      },
+    };
   }
 }
 

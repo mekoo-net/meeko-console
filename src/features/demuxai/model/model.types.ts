@@ -49,6 +49,16 @@ export const modelSchema = z.object({
 
 export type Model = z.infer<typeof modelSchema>;
 
+export interface ModelCarrierEntry {
+  providerUid: string;
+  providerName: string;
+  modelName: string;
+  mappingWeight: number;
+  enabled: boolean;
+}
+
+export type ModelCarriersMap = Record<string, ModelCarrierEntry[]>;
+
 export interface UpdateModelInput {
   displayName?: string;
   family?: ModelFamily;

@@ -5,6 +5,8 @@ import type { Uid } from '@/shared/lib/id';
 import type {
   ListModelsFilter,
   Model,
+  ModelCarriersMap,
+  ModelCarrierEntry,
   UpdateModelInput,
 } from '@/features/demuxai/model/model.types';
 import type {
@@ -63,5 +65,14 @@ export class DemuxaiModelHttpAdapter implements DemuxaiModelPort {
       method: 'PUT',
       body: { id: uid, ...input },
     });
+  }
+
+  async carriers(modelIds: string[]): Promise<AppResult<ModelCarriersMap>> {
+    if (modelIds.length === 0) return { success: true, data: {} };
+    const result = await requestDemuxAi<Record<string, ModelCarrierEntry[]>>(`${BASE}/carriers`, {
+      query: { modelIds: modelIds.join(',') },
+    });
+    if (!result.success) return result;
+    return { success: true, data: result.data ?? {} };
   }
 }

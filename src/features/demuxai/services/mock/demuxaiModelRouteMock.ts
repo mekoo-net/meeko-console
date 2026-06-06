@@ -8,6 +8,7 @@ import {
   type CreateModelRouteInput,
   type ListModelRoutesFilter,
   type ModelRoute,
+  type ModelRouteStats,
   type UpdateModelRouteInput,
 } from '../../model/modelRoute.types';
 import type { DemuxaiModelRoutePort, ListModelRoutesPage } from '../ports/demuxaiModelRoutePort';
@@ -125,5 +126,18 @@ export class DemuxaiModelRouteMock implements DemuxaiModelRoutePort {
 
   async setPublished(uid: Uid, isPublished: boolean): Promise<AppResult<ModelRoute>> {
     return this.update(uid, { isPublished });
+  }
+
+  async stats(vendorKey: string): Promise<AppResult<ModelRouteStats>> {
+    await delay();
+    const ck = vendorKey.trim();
+    const byVendorModel: Record<string, number> = {};
+    let total = 0;
+    for (const route of this.store.modelRoutes) {
+      if (route.vendorKey !== ck) continue;
+      byVendorModel[route.vendorModel] = (byVendorModel[route.vendorModel] ?? 0) + 1;
+      total += 1;
+    }
+    return ok({ vendorKey: ck, total, byVendorModel });
   }
 }

@@ -3,6 +3,7 @@ import {
   type CreateModelRouteInput,
   type ListModelRoutesFilter,
   type ModelRoute,
+  type ModelRouteStats,
   type UpdateModelRouteInput,
 } from '@/features/demuxai/model/modelRoute.types';
 import type {
@@ -105,5 +106,19 @@ export class DemuxaiModelRouteHttpAdapter implements DemuxaiModelRoutePort {
     });
     if (!res.success) return res;
     return parseRoute(res.data);
+  }
+
+  async stats(vendorKey: string): Promise<AppResult<ModelRouteStats>> {
+    const res = await requestDemuxAi<{
+      vendorKey?: string;
+      total?: number;
+      byVendorModel?: Record<string, number>;
+    }>(`${BASE}/stats`, { query: { vendorKey } });
+    if (!res.success) return res;
+    return ok({
+      vendorKey: res.data.vendorKey ?? vendorKey,
+      total: res.data.total ?? 0,
+      byVendorModel: res.data.byVendorModel ?? {},
+    });
   }
 }

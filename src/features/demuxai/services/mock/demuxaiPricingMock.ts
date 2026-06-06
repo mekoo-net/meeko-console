@@ -8,9 +8,11 @@ import {
   type ListPricingFilter,
   type ListVendorModelGroupsFilter,
   type Pricing,
+  type UnconfiguredAliasPage,
   type UpsertPricingInput,
   type VendorModelGroup,
   type VendorModelGroupedPage,
+  type VendorPricingStatsMap,
 } from '../../model/pricing.types';
 import type { DemuxaiPricingPort, ListPricingPage } from '../ports/demuxaiPricingPort';
 
@@ -200,5 +202,42 @@ export class DemuxaiPricingMock implements DemuxaiPricingPort {
     if (idx < 0) return fail({ code: 'not_found', message: `定价 ${modelId} 不存在` });
     this.store.pricing.splice(idx, 1);
     return ok(undefined);
+  }
+
+  async vendorPricingStats(): Promise<AppResult<VendorPricingStatsMap>> {
+    await delay();
+    const configured = new Set(this.store.pricing.map((p) => p.modelId));
+    const map: VendorPricingStatsMap = {};
+    for (const route of this.store.modelRoutes) {
+      if (!route.isPublished) continue;
+      const entry = (map[route.vendorKey] ??= { configured: 0, unconfigured: 0 });
+      if (configured.has(route.alias)) entry.configured += 1;
+      else entry.unconfigured += 1;
+    }
+    return ok(map);
+  }
+
+  async listUnconfiguredAliases(input: {
+    page: number;
+    pageSize: number;
+    vendorKey: string;
+  }): Promise<AppResult<UnconfiguredAliasPage>> {
+    await delay();
+    const configured = new Set(this.store.pricing.map((p) => p.modelId));
+    const rows = this.store.modelRoutes
+      .filter(
+        (r) =>
+          r.isPublished &&
+          r.vendorKey === input.vendorKey &&
+          !configured.has(r.alias),
+      )
+      .map((r) => ({
+        alias: r.alias,
+        vendorKey: r.vendorKey,
+        vendorModel: r.vendorModel,
+      }))
+      .sort((a, b) => a.alias.localeCompare(b.alias));
+    const items = clientPaginate(rows, input.page, input.pageSize);
+    return ok({ items, total: rows.length });
   }
 }

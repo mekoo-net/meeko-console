@@ -91,6 +91,7 @@ interface ModelRankRow {
 
 interface ProviderRankRow {
   providerId?: number;
+  providerName?: string;
   requestCount?: number;
   errorCount?: number;
   avgTokenLatencyMs?: number;
@@ -144,6 +145,7 @@ function mapTopModels(rows: ModelRankRow[]): LogStatsTopModel[] {
 function mapTopProviders(rows: ProviderRankRow[]): LogStatsTopProvider[] {
   return rows.map((r) => ({
     providerId: num(r.providerId),
+    providerName: typeof r.providerName === 'string' ? r.providerName : undefined,
     calls: num(r.requestCount),
     errors: num(r.errorCount),
     avgTokenLatency: num(r.avgTokenLatencyMs),

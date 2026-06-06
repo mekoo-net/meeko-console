@@ -5,6 +5,7 @@ import type {
   CreateModelRouteInput,
   ListModelRoutesFilter,
   ModelRoute,
+  ModelRouteStats,
   UpdateModelRouteInput,
 } from '../../model/modelRoute.types';
 
@@ -24,4 +25,5 @@ export interface DemuxaiModelRoutePort {
   update(uid: Uid, input: UpdateModelRouteInput): Promise<AppResult<ModelRoute>>;
   delete(uid: Uid): Promise<AppResult<void>>;
   setPublished(uid: Uid, isPublished: boolean): Promise<AppResult<ModelRoute>>;
+  stats(vendorKey: string): Promise<AppResult<ModelRouteStats>>;
 }

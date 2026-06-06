@@ -4,9 +4,10 @@ import type {
   ListPricingFilter,
   ListVendorModelGroupsFilter,
   Pricing,
+  UnconfiguredAliasPage,
   UpsertPricingInput,
-  VendorModelGroup,
   VendorModelGroupedPage,
+  VendorPricingStatsMap,
 } from '../../model/pricing.types';
 
 export interface ListPricingPage {
@@ -40,4 +41,12 @@ export interface DemuxaiPricingPort {
   upsert(input: UpsertPricingInput): Promise<AppResult<Pricing>>;
 
   delete(modelId: string): Promise<AppResult<void>>;
+
+  vendorPricingStats(): Promise<AppResult<VendorPricingStatsMap>>;
+
+  listUnconfiguredAliases(input: {
+    page: number;
+    pageSize: number;
+    vendorKey: string;
+  }): Promise<AppResult<UnconfiguredAliasPage>>;
 }

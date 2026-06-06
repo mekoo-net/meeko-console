@@ -1,5 +1,6 @@
 import type { AppResult } from '@/shared/api/httpTypes';
 
+import type { RedemptionStats } from '../../model/redemptionDisplay';
 import type {
   CreateRedemptionCodesInput,
   CreateRedemptionCodesResult,
@@ -22,4 +23,6 @@ export interface DemuxaiRedemptionPort {
   create(input: CreateRedemptionCodesInput): Promise<AppResult<CreateRedemptionCodesResult>>;
 
   remove(id: number): Promise<AppResult<void>>;
+
+  stats(): Promise<AppResult<RedemptionStats>>;
 }

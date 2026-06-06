@@ -68,6 +68,9 @@ export interface RedemptionListStats {
   expired: number;
 }
 
+/** 服务端 `/redemption/stats` 响应形状（与 RedemptionListStats 一致）。 */
+export type RedemptionStats = RedemptionListStats;
+
 export function computeRedemptionStats(rows: RedemptionCode[]): RedemptionListStats {
   const stats: RedemptionListStats = {
     total: rows.length,

@@ -247,3 +247,21 @@ export interface ListVendorModelGroupsFilter {
   keyword: string;
   billingType: BillingType | 'all';
 }
+
+export interface VendorPricingStatsEntry {
+  configured: number;
+  unconfigured: number;
+}
+
+export type VendorPricingStatsMap = Record<string, VendorPricingStatsEntry>;
+
+export interface UnconfiguredAlias {
+  alias: string;
+  vendorKey: string;
+  vendorModel: string;
+}
+
+export interface UnconfiguredAliasPage {
+  items: UnconfiguredAlias[];
+  total: number;
+}

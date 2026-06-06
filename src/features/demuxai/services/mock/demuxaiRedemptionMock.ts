@@ -4,6 +4,7 @@ import { delay } from '@/shared/lib/delay';
 import { displayAmountToQuota } from '@/shared/lib/quota';
 import { useAuthStore } from '@/stores/auth';
 
+import { computeRedemptionStats } from '../../model/redemptionDisplay';
 import { isSharedRedemptionCode } from '../../model/redemption.types';
 import type {
   CreateRedemptionCodesInput,
@@ -124,5 +125,10 @@ export class DemuxaiRedemptionMock implements DemuxaiRedemptionPort {
     }
     store = data.filter((r) => r.id !== id);
     return ok(undefined);
+  }
+
+  async stats(): Promise<AppResult<import('../../model/redemptionDisplay').RedemptionStats>> {
+    await delay();
+    return ok(computeRedemptionStats(ensureStore()));
   }
 }

@@ -147,13 +147,17 @@ function buildTopProviders(rows: LogEntry[], limit = 5): LogStatsTopProvider[] {
     m.set(r.providerId, a);
   }
   return [...m.entries()]
-    .map<LogStatsTopProvider>(([providerId, a]) => ({
-      providerId,
-      calls: a.calls,
-      errors: a.errors,
-      avgTokenLatency:
-        a.ttftSamples === 0 ? 0 : Math.round(a.ttftSum / a.ttftSamples),
-    }))
+    .map<LogStatsTopProvider>(([providerId, a]) => {
+      const provider = getDemuxaiStore().providers.find((p) => p.id === providerId);
+      return {
+        providerId,
+        providerName: provider?.name,
+        calls: a.calls,
+        errors: a.errors,
+        avgTokenLatency:
+          a.ttftSamples === 0 ? 0 : Math.round(a.ttftSum / a.ttftSamples),
+      };
+    })
     .sort((x, y) => y.calls - x.calls)
     .slice(0, limit);
 }

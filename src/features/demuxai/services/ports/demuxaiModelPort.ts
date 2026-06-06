@@ -4,6 +4,7 @@ import type { Uid } from '@/shared/lib/id';
 import type {
   ListModelsFilter,
   Model,
+  ModelCarriersMap,
   UpdateModelInput,
 } from '../../model/model.types';
 
@@ -36,4 +37,6 @@ export interface DemuxaiModelPort {
   get(uid: Uid): Promise<AppResult<Model>>;
 
   update(uid: Uid, input: UpdateModelInput): Promise<AppResult<Model>>;
+
+  carriers(modelIds: string[]): Promise<AppResult<ModelCarriersMap>>;
 }

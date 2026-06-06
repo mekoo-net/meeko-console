@@ -7,6 +7,8 @@ import {
   modelSchema,
   type ListModelsFilter,
   type Model,
+  type ModelCarriersMap,
+  type ModelCarrierEntry,
   type UpdateModelInput,
 } from '../../model/model.types';
 import type { DemuxaiModelPort, ListModelsPage } from '../ports/demuxaiModelPort';
@@ -90,5 +92,31 @@ export class DemuxaiModelMock implements DemuxaiModelPort {
     if (!p.success) return p;
     this.store.models[idx] = p.data;
     return ok(p.data);
+  }
+
+  async carriers(modelIds: string[]): Promise<AppResult<ModelCarriersMap>> {
+    await delay();
+    if (modelIds.length === 0) return ok({});
+    const idSet = new Set(modelIds);
+    const map: ModelCarriersMap = {};
+    for (const p of this.store.providers) {
+      const pmIndex = new Map(p.providerModels.map((x) => [x.uid, x]));
+      for (const mp of p.modelMappings) {
+        if (!idSet.has(mp.displayName)) continue;
+        const pmRef = pmIndex.get(mp.providerModelUid);
+        if (!pmRef) continue;
+        const entry: ModelCarrierEntry = {
+          providerUid: p.uid,
+          providerName: p.name,
+          modelName: pmRef.modelName,
+          mappingWeight: mp.mappingWeight ?? 100,
+          enabled: mp.enabled,
+        };
+        const list = map[mp.displayName] ?? [];
+        list.push(entry);
+        map[mp.displayName] = list;
+      }
+    }
+    return ok(map);
   }
 }

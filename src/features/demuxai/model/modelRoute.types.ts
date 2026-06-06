@@ -42,3 +42,10 @@ export interface ListModelRoutesFilter {
   vendorKey: string | 'all';
   isPublished: boolean | 'all';
 }
+
+/** 按渠道 + 上游模型聚合的别名计数（不含明细行）。 */
+export interface ModelRouteStats {
+  vendorKey: string;
+  total: number;
+  byVendorModel: Record<string, number>;
+}
