@@ -9,14 +9,31 @@ import {
 import type { ReferralSettingsPort } from '../ports/referralSettingsPort';
 
 let state: ReferralSettingsAdmin = {
-  enabled: true,
-  defaultRebateRatePercent: 5,
-  minWithdrawAmount: 10,
-  withdrawReviewRequired: true,
   productRates: [
-    { productCode: 'demuxai', productName: 'DemuxAI', enabled: true, rebateRatePercent: 5 },
-    { productCode: 'meeko', productName: 'Meeko 平台', enabled: true, rebateRatePercent: 3 },
-    { productCode: 'meeko_voice', productName: 'Meeko Voice', enabled: false, rebateRatePercent: 0 },
+    {
+      productCode: 'demuxai',
+      productName: 'DemuxAI',
+      enabled: true,
+      rebateRatePercent: 5,
+      minWithdrawAmount: 10,
+      withdrawReviewRequired: true,
+    },
+    {
+      productCode: 'meeko',
+      productName: 'Meeko 平台',
+      enabled: true,
+      rebateRatePercent: 3,
+      minWithdrawAmount: 10,
+      withdrawReviewRequired: true,
+    },
+    {
+      productCode: 'meeko_voice',
+      productName: 'Meeko Voice',
+      enabled: false,
+      rebateRatePercent: 0,
+      minWithdrawAmount: 0,
+      withdrawReviewRequired: false,
+    },
   ],
   updatedAtUtc: Date.now(),
 };

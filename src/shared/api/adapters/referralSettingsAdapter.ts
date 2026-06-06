@@ -11,6 +11,12 @@ import { asEpochMillis } from '@/shared/lib/epoch';
 
 const BASE = '/api/admin/platform/referral/setting';
 
+function numberOr(a: unknown, b: unknown, fallback: number): number {
+  if (typeof a === 'number') return a;
+  if (typeof b === 'number') return b;
+  return fallback;
+}
+
 function mapProductRates(value: unknown): ReferralProductRate[] {
   const rows = Array.isArray(value) ? value : [];
   const result: ReferralProductRate[] = [];
@@ -23,12 +29,14 @@ function mapProductRates(value: unknown): ReferralProductRate[] {
       productCode: code,
       productName: String(raw.productName ?? raw.product_name ?? code),
       enabled: Boolean(raw.enabled ?? true),
-      rebateRatePercent:
-        typeof raw.rebateRatePercent === 'number'
-          ? raw.rebateRatePercent
-          : typeof raw.rebate_rate_percent === 'number'
-            ? raw.rebate_rate_percent
-            : 0,
+      rebateRatePercent: numberOr(raw.rebateRatePercent, raw.rebate_rate_percent, 0),
+      minWithdrawAmount: numberOr(raw.minWithdrawAmount, raw.min_withdraw_amount, 0),
+      withdrawReviewRequired:
+        typeof raw.withdrawReviewRequired === 'boolean'
+          ? raw.withdrawReviewRequired
+          : typeof raw.withdraw_review_required === 'boolean'
+            ? raw.withdraw_review_required
+            : false,
     });
   }
   return result;
@@ -40,25 +48,6 @@ function parseSettings(value: unknown): AppResult<ReferralSettingsAdmin> {
   }
   const raw = value as Record<string, unknown>;
   const mapped = {
-    enabled: Boolean(raw.enabled ?? true),
-    defaultRebateRatePercent:
-      typeof raw.defaultRebateRatePercent === 'number'
-        ? raw.defaultRebateRatePercent
-        : typeof raw.default_rebate_rate_percent === 'number'
-          ? raw.default_rebate_rate_percent
-          : 5,
-    minWithdrawAmount:
-      typeof raw.minWithdrawAmount === 'number'
-        ? raw.minWithdrawAmount
-        : typeof raw.min_withdraw_amount === 'number'
-          ? raw.min_withdraw_amount
-          : 10,
-    withdrawReviewRequired:
-      typeof raw.withdrawReviewRequired === 'boolean'
-        ? raw.withdrawReviewRequired
-        : typeof raw.withdraw_review_required === 'boolean'
-          ? raw.withdraw_review_required
-          : true,
     productRates: mapProductRates(raw.productRates ?? raw.product_rates),
     updatedAtUtc: asEpochMillis(raw.updatedAtUtc ?? raw.updated_at_utc) ?? Date.now(),
   };

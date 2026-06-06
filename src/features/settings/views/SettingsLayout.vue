@@ -18,14 +18,24 @@
 
 <style scoped>
 .settings-layout {
-  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
 }
 
 .settings-layout__card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 8px;
   overflow: hidden;
   background: var(--el-bg-color);
-  min-height: 520px;
+}
+
+.settings-layout__card > :deep(*) {
+  flex: 1;
+  min-height: 0;
 }
 </style>

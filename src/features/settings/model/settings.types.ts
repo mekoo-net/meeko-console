@@ -59,7 +59,7 @@ export const updateEmailSettingsSchema = z.object({
 
 export type UpdateEmailSettingsInput = z.infer<typeof updateEmailSettingsSchema>;
 
-/** 单个注册产品 / 渠道的返利率配置。 */
+/** 单个注册产品 / 渠道的返利与提现配置。 */
 export const referralProductRateSchema = z.object({
   /** 产品 / 渠道唯一标识（如 demuxai）。 */
   productCode: z.string().min(1),
@@ -67,18 +67,18 @@ export const referralProductRateSchema = z.object({
   productName: z.string().min(1),
   /** 是否对该产品启用返利。 */
   enabled: z.boolean(),
-  /** 该产品的返利率（%）。 */
-  rebateRatePercent: z.number().min(0).max(100),
+  /** 该产品的返利率（%），默认 0。 */
+  rebateRatePercent: z.number().min(0).max(100).default(0),
+  /** 该产品的最低提现金额（元）。 */
+  minWithdrawAmount: z.number().nonnegative().default(0),
+  /** 该产品提现是否需人工审核。 */
+  withdrawReviewRequired: z.boolean().default(false),
 });
 
 export type ReferralProductRate = z.infer<typeof referralProductRateSchema>;
 
 export const referralSettingsAdminSchema = z.object({
-  enabled: z.boolean(),
-  defaultRebateRatePercent: z.number().min(0).max(100),
-  minWithdrawAmount: z.number().nonnegative(),
-  withdrawReviewRequired: z.boolean(),
-  /** 按注册产品 / 渠道细分的返利率；未列出的产品使用默认返利率。 */
+  /** 按注册产品 / 渠道细分的返利与提现配置；列表与配置由后端返回。 */
   productRates: z.array(referralProductRateSchema).default([]),
   updatedAtUtc: epochMillisSchema,
 });
@@ -86,10 +86,6 @@ export const referralSettingsAdminSchema = z.object({
 export type ReferralSettingsAdmin = z.infer<typeof referralSettingsAdminSchema>;
 
 export const updateReferralSettingsSchema = z.object({
-  enabled: z.boolean().optional(),
-  defaultRebateRatePercent: z.number().min(0).max(100).optional(),
-  minWithdrawAmount: z.number().nonnegative().optional(),
-  withdrawReviewRequired: z.boolean().optional(),
   productRates: z.array(referralProductRateSchema).optional(),
 });
 

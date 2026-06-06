@@ -102,6 +102,12 @@ const pageTitle = computed(() => {
   background: #f3f4f6;
 }
 
+/* 让路由页根节点至少撑满 main，内容过少时也不会露出灰底 */
+.app-main > :deep(*) {
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.12s ease;

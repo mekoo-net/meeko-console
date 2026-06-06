@@ -91,7 +91,7 @@ export class ReferralWithdrawalHttpAdapter implements ReferralWithdrawalPort {
   }
 
   async markPaid(id: string): Promise<AppResult<ReferralWithdrawal>> {
-    const res = await apiFetch<unknown>(`${BASE}/${encodeURIComponent(id)}/mark-paid`, {
+    const res = await apiFetch<unknown>(`${BASE}/${encodeURIComponent(id)}/mark_paid`, {
       method: 'POST',
     });
     if (!res.success) return res;
