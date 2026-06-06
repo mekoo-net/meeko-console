@@ -20,7 +20,7 @@ import { clientPaginate, usePagination } from '@/shared/composables/usePaginatio
 
 import { ProviderGroupLabel } from '../model/enums';
 import type { ProviderGroup, ProviderUpstreamModel } from '../model/catalog.types';
-import type { ModelRoute } from '../model/modelRoute.types';
+import type { ModelRouteStats } from '../model/modelRoute.types';
 import { getDemuxaiCatalogPort, getDemuxaiModelRoutePort } from '../services';
 import ProviderWorkspaceLayout from '../components/provider/ProviderWorkspaceLayout.vue';
 import ProviderGroupSidebar from '../components/provider/ProviderGroupSidebar.vue';
@@ -33,7 +33,7 @@ const routePort = getDemuxaiModelRoutePort();
 
 const groups = ref<ProviderGroup[]>([]);
 const modelsByGroup = ref<Record<string, ProviderUpstreamModel[]>>({});
-const routesByGroup = ref<Record<string, ModelRoute[]>>({});
+const routeStatsByGroup = ref<Record<string, ModelRouteStats>>({});
 
 const loading = ref(false);
 const detailLoading = ref(false);
@@ -96,19 +96,11 @@ function groupLabel(queueGroup: string, vendorSlug?: string | null): string {
 }
 
 function aliasCount(queueGroup: string, vendorModel: string): number {
-  return (routesByGroup.value[queueGroup] ?? []).filter(
-    (rt) => rt.vendorModel === vendorModel,
-  ).length;
-}
-
-function routesForModel(queueGroup: string, vendorModel: string): ModelRoute[] {
-  return (routesByGroup.value[queueGroup] ?? []).filter(
-    (rt) => rt.vendorModel === vendorModel,
-  );
+  return routeStatsByGroup.value[queueGroup]?.byVendorModel[vendorModel] ?? 0;
 }
 
 function totalAliasCount(queueGroup: string): number {
-  return (routesByGroup.value[queueGroup] ?? []).length;
+  return routeStatsByGroup.value[queueGroup]?.total ?? 0;
 }
 
 async function fetchGroups(opts?: { silent?: boolean }): Promise<void> {
@@ -144,21 +136,17 @@ async function loadModelsForGroup(queueGroup: string): Promise<void> {
   }
 }
 
-async function loadRoutesForGroup(queueGroup: string): Promise<void> {
-  const r = await routePort.list({
-    page: 1,
-    pageSize: 500,
-    filter: { keyword: '', vendorKey: queueGroup, isPublished: 'all' },
-  });
+async function loadRouteStatsForGroup(queueGroup: string): Promise<void> {
+  const r = await routePort.stats(queueGroup);
   if (r.success) {
-    routesByGroup.value = { ...routesByGroup.value, [queueGroup]: r.data.items };
+    routeStatsByGroup.value = { ...routeStatsByGroup.value, [queueGroup]: r.data };
   }
 }
 
 async function refreshGroupDetail(queueGroup: string): Promise<void> {
   detailLoading.value = true;
   try {
-    await Promise.all([loadModelsForGroup(queueGroup), loadRoutesForGroup(queueGroup)]);
+    await Promise.all([loadModelsForGroup(queueGroup), loadRouteStatsForGroup(queueGroup)]);
   } finally {
     detailLoading.value = false;
   }
@@ -184,7 +172,7 @@ function openEditGroup(group: ProviderGroup): void {
 async function onRemoveModel(model: ProviderUpstreamModel): Promise<void> {
   const group = selectedGroup.value;
   if (!group) return;
-  const aliasN = routesForModel(group.queueGroup, model.vendorModel).length;
+  const aliasN = aliasCount(group.queueGroup, model.vendorModel);
   const aliasNote =
     aliasN > 0
       ? `该模型下的 ${aliasN} 个对外别名将一并删除。`
@@ -252,7 +240,6 @@ watch(selectedQueueGroup, (qg, prev) => {
 
 onMounted(async () => {
   await fetchGroups();
-  await refreshSelectedDetail();
 });
 </script>
 

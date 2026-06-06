@@ -16,10 +16,17 @@ import type { ProviderGroup } from '../../model/catalog.types';
 /** 选中值：`all` 表示全部渠道；否则为 queueGroup */
 export type ProviderGroupSelection = string;
 
+export interface VendorPricingCounts {
+  configured: number;
+  unconfigured: number;
+}
+
 interface Props {
   groups: ProviderGroup[];
   modelValue: ProviderGroupSelection;
   loading?: boolean;
+  /** 定价页：每渠道已配 / 未配别名数量 */
+  counts?: Record<string, VendorPricingCounts>;
   /** 定价页等场景展示「全部渠道」 */
   showAllOption?: boolean;
   allLabel?: string;
@@ -152,6 +159,26 @@ function slugDisplay(vendorSlug?: string | null): string {
         <span class="provider-sidebar__item-qg">{{ g.queueGroup }}</span>
         <div class="provider-sidebar__item-meta">
           <span>{{ g.upstreamModelCount }} 个上游模型</span>
+          <span v-if="counts" class="provider-sidebar__badges">
+            <el-tag
+              v-if="counts[g.queueGroup]?.configured"
+              size="small"
+              type="success"
+              effect="plain"
+              round
+            >
+              已配 {{ counts[g.queueGroup]?.configured }}
+            </el-tag>
+            <el-tag
+              v-if="counts[g.queueGroup]?.unconfigured"
+              size="small"
+              type="danger"
+              effect="plain"
+              round
+            >
+              未配 {{ counts[g.queueGroup]?.unconfigured }}
+            </el-tag>
+          </span>
         </div>
       </button>
     </div>

@@ -7,7 +7,7 @@
  *  - 时间范围变化即触发 `fetchStats`，所有下游组件随 `stats` 重渲染
  *  - 子组件均位于 `components/overview/*`
  */
-import { computed, onMounted, ref, watch } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 
 import { ElMessage } from 'element-plus';
 
@@ -15,8 +15,7 @@ import PageHeader from '@/shared/ui/PageHeader.vue';
 
 import type { ListLogsFilter, LogStats } from '../model/log.types';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
-import type { Provider } from '../model/provider.types';
-import { getDemuxaiLogsPort, getDemuxaiProviderPort } from '../services';
+import { getDemuxaiLogsPort } from '../services';
 
 import DateRangeBar from '../components/overview/DateRangeBar.vue';
 import OverviewKpi from '../components/overview/OverviewKpi.vue';
@@ -28,10 +27,8 @@ import OverviewTopModels from '../components/overview/OverviewTopModels.vue';
 import OverviewTopProviders from '../components/overview/OverviewTopProviders.vue';
 
 const logsPort = getDemuxaiLogsPort();
-const providerPort = getDemuxaiProviderPort();
 
 const stats = ref<LogStats | null>(null);
-const providers = ref<Provider[]>([]);
 const loading = ref(false);
 
 const last24h = (): [string, string] => {
@@ -65,25 +62,6 @@ async function fetchStats(): Promise<void> {
   }
 }
 
-async function loadProviders(): Promise<void> {
-  const r = await providerPort.list({
-    page: 1,
-    pageSize: 200,
-    filter: { keyword: '', apiType: 'all', status: 'all' },
-  });
-  if (r.success) providers.value = r.data.items;
-}
-
-const providerNameMap = computed(() => {
-  const m = new Map<number, string>();
-  for (const p of providers.value) m.set(p.id, p.name);
-  return m;
-});
-
-function resolveProviderName(providerId: number): string {
-  return providerNameMap.value.get(providerId) ?? `#${providerId}`;
-}
-
 watch(dateRange, () => void fetchStats(), { deep: true });
 
 function onReset(): void {
@@ -91,7 +69,6 @@ function onReset(): void {
 }
 
 onMounted(() => {
-  void loadProviders();
   void fetchStats();
 });
 </script>
@@ -132,10 +109,7 @@ onMounted(() => {
 
       <div class="row row--1to1">
         <OverviewTopModels :items="stats?.topModels ?? []" />
-        <OverviewTopProviders
-          :items="stats?.topProviders ?? []"
-          :resolve-name="resolveProviderName"
-        />
+        <OverviewTopProviders :items="stats?.topProviders ?? []" />
       </div>
     </div>
   </div>

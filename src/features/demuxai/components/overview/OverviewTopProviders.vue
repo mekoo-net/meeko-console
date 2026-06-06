@@ -2,7 +2,7 @@
 /**
  * Top 模型渠道排行：调用量条形 + 失败次数 + 平均首字延迟（TTFT，单位 ms）。
  *
- * 渠道 uid → name 的解析交给父组件（依赖 providerPort），通过 `resolveName` 注入。
+ * 渠道名由服务端 `providerName` 字段提供，缺失时回退为 `#providerId`。
  *
  * **延迟列含义**：仅基于有 TTFT 样本（流式 + 成功）求均值；纯图像 / 视频渠道无 TTFT，
  * 显示为 `—`，符合 `LogStatsTopProvider.avgTokenLatency` 的语义。
@@ -14,9 +14,12 @@ import Panel from './Panel.vue';
 
 const props = defineProps<{
   items: LogStatsTopProvider[];
-  /** 传入渠道 int 主键 → 名字；父组件用 Provider.id 建反查表 */
-  resolveName: (providerId: number) => string;
 }>();
+
+function displayName(p: LogStatsTopProvider): string {
+  const name = p.providerName?.trim();
+  return name || `#${p.providerId}`;
+}
 
 const maxCalls = computed(() => props.items.reduce((m, x) => Math.max(m, x.calls), 0));
 </script>
@@ -38,7 +41,7 @@ const maxCalls = computed(() => props.items.reduce((m, x) => Math.max(m, x.calls
       </thead>
       <tbody>
         <tr v-for="p in items" :key="p.providerId">
-          <td class="rank-table__name">{{ resolveName(p.providerId) }}</td>
+          <td class="rank-table__name">{{ displayName(p) }}</td>
           <td class="rank-table__bar">
             <div class="bar-inline">
               <div

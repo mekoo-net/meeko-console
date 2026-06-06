@@ -12,7 +12,7 @@ import EmptyState from '@/shared/ui/EmptyState.vue';
 import { formatDateTime } from '@/shared/lib/date';
 import { formatMoney } from '@/shared/lib/money';
 import { confirmDanger } from '@/shared/composables/useConfirm';
-import { clientPaginate, usePagination } from '@/shared/composables/usePagination';
+import { usePagination } from '@/shared/composables/usePagination';
 
 import {
   ModelFamilyLabel,
@@ -21,33 +21,28 @@ import {
   BillingTypeLabel,
   type BillingType,
 } from '../model/enums';
-import type { ListPricingFilter, Pricing, UpsertPricingInput, VendorModelGroup } from '../model/pricing.types';
+import type { Pricing, UpsertPricingInput, VendorModelGroup } from '../model/pricing.types';
 import type { Model } from '../model/model.types';
-import type { ModelRoute } from '../model/modelRoute.types';
+import type { UnconfiguredAlias, VendorPricingStatsMap } from '../model/pricing.types';
 import type { ProviderGroup } from '../model/catalog.types';
-import {
-  getDemuxaiCatalogPort,
-  getDemuxaiModelRoutePort,
-  getDemuxaiPricingPort,
-} from '../services';
+import { getDemuxaiCatalogPort, getDemuxaiPricingPort } from '../services';
 import ProviderWorkspaceLayout from '../components/provider/ProviderWorkspaceLayout.vue';
 import ProviderGroupSidebar from '../components/provider/ProviderGroupSidebar.vue';
 import ProviderDetailPanel from '../components/provider/ProviderDetailPanel.vue';
 import PricingEditDialog from '../components/PricingEditDialog.vue';
 
 const pricingPort = getDemuxaiPricingPort();
-const modelRoutePort = getDemuxaiModelRoutePort();
 const catalogPort = getDemuxaiCatalogPort();
 
 const groups = ref<ProviderGroup[]>([]);
 const groupsLoading = ref(false);
-const selectedVendor = ref<string>('all');
+const selectedVendor = ref<string>('');
 
-const allPricing = ref<Pricing[]>([]);
 const pricedGroups = ref<VendorModelGroup[]>([]);
 const pricedGroupsLoading = ref(false);
-
-const modelRoutes = ref<ModelRoute[]>([]);
+const vendorPricingCounts = ref<VendorPricingStatsMap>({});
+const unconfiguredItems = ref<UnconfiguredAlias[]>([]);
+const unconfiguredLoading = ref(false);
 
 const pricedPagination = usePagination({ initialPageSize: 20, pageSizes: [10, 20, 50, 100] });
 const unconfiguredPagination = usePagination({ initialPageSize: 15, pageSizes: [10, 15, 30, 50] });
@@ -72,83 +67,27 @@ const editingModel = ref<Model | null>(null);
 type TabName = 'priced' | 'unconfigured';
 const activeTab = ref<TabName>('priced');
 
-/** alias → vendorKey（启用路由） */
-const aliasVendorMap = computed(() => {
-  const m = new Map<string, string>();
-  for (const r of modelRoutes.value) {
-    if (r.isPublished) m.set(r.alias, r.vendorKey);
-  }
-  return m;
-});
-
-/** alias → vendorModel（上游原始名，未配置 tab 统计用） */
-const aliasModelMap = computed(() => {
-  const m = new Map<string, string>();
-  for (const r of modelRoutes.value) {
-    if (r.isPublished) m.set(r.alias, r.vendorModel);
-  }
-  return m;
-});
-
-/** 已启用路由的对外别名；定价主键应对齐 alias，排除遗留上游 modelName 行 */
-const knownAliasSet = computed(() => {
-  const s = new Set<string>();
-  for (const r of modelRoutes.value) {
-    if (r.isPublished) s.add(r.alias);
-  }
-  return s;
-});
-
-function isBillableAlias(modelId: string): boolean {
-  return knownAliasSet.value.has(modelId);
-}
-
 const selectedGroup = computed(() => {
-  if (selectedVendor.value === 'all') return null;
   return groups.value.find((g) => g.queueGroup === selectedVendor.value) ?? null;
 });
 
 const vendorTitle = computed(() => {
-  if (selectedVendor.value === 'all') return '全部渠道';
   const g = selectedGroup.value;
-  if (!g) return selectedVendor.value;
+  if (!g) return '—';
   const slug = g.vendorSlug?.trim();
   if (slug) return slug;
   return ProviderGroupLabel[g.queueGroup] ?? g.queueGroup;
 });
 
-function matchesVendor(modelId: string): boolean {
-  if (selectedVendor.value === 'all') return true;
-  const ch = aliasVendorMap.value.get(modelId);
-  if (ch) return ch === selectedVendor.value;
-  return false;
+function ensureVendorSelected(): void {
+  if (groups.value.length === 0) return;
+  if (groups.value.some((g) => g.queueGroup === selectedVendor.value)) return;
+  selectedVendor.value = groups.value[0]!.queueGroup;
 }
 
-function applyListFilter(rows: Pricing[]): Pricing[] {
-  const kw = filter.value.keyword.trim().toLowerCase();
-  const bt = filter.value.billingType;
-  const baseFiltered = rows.filter((p) => {
-    if (!isBillableAlias(p.modelId)) return false;
-    if (!matchesVendor(p.modelId)) return false;
-    if (bt !== 'all' && p.billingType !== bt) return false;
-    return true;
-  });
-  if (!kw) return baseFiltered;
-
-  const matchingVendorModels = new Set<string>();
-  for (const p of baseFiltered) {
-    const vendorModel = aliasModelMap.value.get(p.modelId) ?? p.modelId;
-    if (vendorModel.toLowerCase().includes(kw)) matchingVendorModels.add(vendorModel);
-  }
-
-  return baseFiltered.filter((p) => {
-    const vendorModel = aliasModelMap.value.get(p.modelId) ?? p.modelId;
-    if (matchingVendorModels.has(vendorModel)) return true;
-    return p.modelId.toLowerCase().includes(kw);
-  });
-}
-
-const filteredPriced = computed(() => applyListFilter(allPricing.value));
+const selectedVendorUnconfiguredCount = computed(
+  () => vendorPricingCounts.value[selectedVendor.value]?.unconfigured ?? 0,
+);
 
 function groupRowKey(row: VendorModelGroup): string {
   return `${row.vendorKey}|${row.vendorModel}`;
@@ -173,79 +112,51 @@ function modelFromAlias(alias: string): Model {
   };
 }
 
-/** 仅：已启用别名且尚未定价；上游模型无 alias 不可定价，不出现在此列表 */
-const unconfiguredModels = computed<Model[]>(() => {
-  const configured = new Set(
-    allPricing.value.filter((p) => isBillableAlias(p.modelId)).map((r) => r.modelId),
-  );
-  const seen = new Set<string>();
-  const out: Model[] = [];
-  for (const route of modelRoutes.value) {
-    if (!route.isPublished) continue;
-    if (selectedVendor.value !== 'all' && route.vendorKey !== selectedVendor.value) {
-      continue;
-    }
-    if (configured.has(route.alias) || seen.has(route.alias)) continue;
-    seen.add(route.alias);
-    out.push(modelFromAlias(route.alias));
-  }
-  return out;
-});
-
-const pagedUnconfigured = computed(() =>
-  clientPaginate(
-    unconfiguredModels.value,
-    unconfiguredPagination.state.page,
-    unconfiguredPagination.state.pageSize,
-  ),
-);
-
-watch(
-  unconfiguredModels,
-  (list) => {
-    unconfiguredPagination.setTotal(list.length);
-  },
-  { immediate: true },
+const pagedUnconfigured = computed<Model[]>(() =>
+  unconfiguredItems.value.map((row) => modelFromAlias(row.alias)),
 );
 
 async function loadGroups(): Promise<void> {
   groupsLoading.value = true;
   try {
     const r = await catalogPort.listProviderGroups();
-    if (r.success) groups.value = r.data;
-    else ElMessage.error(r.error.message);
+    if (r.success) {
+      groups.value = r.data;
+      ensureVendorSelected();
+    } else ElMessage.error(r.error.message);
   } finally {
     groupsLoading.value = false;
   }
 }
 
-async function loadModelRoutes(): Promise<void> {
-  const routesR = await modelRoutePort.list({
-    page: 1,
-    pageSize: 500,
-    filter: { keyword: '', vendorKey: 'all', isPublished: true },
-  });
-  if (routesR.success) modelRoutes.value = routesR.data.items;
+async function loadVendorPricingStats(): Promise<void> {
+  const r = await pricingPort.vendorPricingStats();
+  if (r.success) vendorPricingCounts.value = r.data;
+  else ElMessage.error(r.error.message);
 }
 
-async function fetchAllPricing(): Promise<void> {
-  const portFilter: ListPricingFilter = {
-    keyword: '',
-    billingType: 'all',
-  };
-  const r = await pricingPort.list({
-    page: 1,
-    pageSize: 500,
-    filter: portFilter,
-  });
-  if (r.success) {
-    allPricing.value = r.data.items;
-  } else {
-    ElMessage.error(r.error.message);
+async function loadUnconfiguredAliases(): Promise<void> {
+  if (!selectedVendor.value) return;
+  unconfiguredLoading.value = true;
+  try {
+    const r = await pricingPort.listUnconfiguredAliases({
+      page: unconfiguredPagination.state.page,
+      pageSize: unconfiguredPagination.state.pageSize,
+      vendorKey: selectedVendor.value,
+    });
+    if (r.success) {
+      unconfiguredItems.value = r.data.items;
+      unconfiguredPagination.setTotal(r.data.total);
+    } else {
+      ElMessage.error(r.error.message);
+    }
+  } finally {
+    unconfiguredLoading.value = false;
   }
 }
 
 async function loadPricedGroups(): Promise<void> {
+  if (!selectedVendor.value) return;
   pricedGroupsLoading.value = true;
   try {
     const r = await pricingPort.listVendorModelGroups({
@@ -292,7 +203,8 @@ async function onSubmit(payload: UpsertPricingInput): Promise<void> {
     if (r.success) {
       ElMessage.success('定价已保存');
       dialogOpen.value = false;
-      await Promise.all([fetchAllPricing(), loadPricedGroups()]);
+      await Promise.all([loadPricedGroups(), loadVendorPricingStats()]);
+      if (activeTab.value === 'unconfigured') await loadUnconfiguredAliases();
     } else {
       ElMessage.error(r.error.message);
     }
@@ -312,7 +224,8 @@ async function onDelete(row: Pricing): Promise<void> {
   const r = await pricingPort.delete(row.modelId);
   if (r.success) {
     ElMessage.success('已删除');
-    await Promise.all([fetchAllPricing(), loadPricedGroups()]);
+    await Promise.all([loadPricedGroups(), loadVendorPricingStats()]);
+    if (activeTab.value === 'unconfigured') await loadUnconfiguredAliases();
   } else {
     ElMessage.error(r.error.message);
   }
@@ -415,12 +328,28 @@ watch(selectedVendor, () => {
   activeTab.value = 'priced';
 });
 
+watch(
+  () =>
+    [
+      unconfiguredPagination.state.page,
+      unconfiguredPagination.state.pageSize,
+      selectedVendor.value,
+      activeTab.value,
+    ] as const,
+  () => {
+    if (activeTab.value === 'unconfigured') void loadUnconfiguredAliases();
+  },
+);
+
 watch(activeTab, (tab) => {
-  if (tab === 'unconfigured') unconfiguredPagination.setPage(1);
+  if (tab === 'unconfigured') {
+    unconfiguredPagination.setPage(1);
+  }
 });
 
 onMounted(async () => {
-  await Promise.all([loadGroups(), loadModelRoutes(), fetchAllPricing(), loadPricedGroups()]);
+  await loadGroups();
+  await loadVendorPricingStats();
 });
 </script>
 
@@ -437,8 +366,7 @@ onMounted(async () => {
       v-model="selectedVendor"
       :groups="groups"
       :loading="groupsLoading"
-      show-all-option
-      all-label="全部渠道"
+      :counts="vendorPricingCounts"
       search-placeholder="搜索渠道 / QueueGroup"
       empty-description="请先在「供应商组」页从网关同步 Provider。"
     />
@@ -448,10 +376,9 @@ onMounted(async () => {
         <div class="detail-header__main">
           <h2 class="provider-detail__title">{{ vendorTitle }}</h2>
           <p v-if="selectedGroup" class="provider-detail__sub">{{ selectedGroup.queueGroup }}</p>
-          <p v-else class="provider-detail__sub">汇总所有 QueueGroup 下已启用别名的定价</p>
           <div class="provider-detail__stats">
-            <span>已定价 {{ filteredPriced.length }} 个别名</span>
-            <span>未配置 {{ unconfiguredModels.length }} 个</span>
+            <span>已定价 {{ pricedPagination.state.total }} 个模型</span>
+            <span>未配置 {{ selectedVendorUnconfiguredCount }} 个</span>
           </div>
         </div>
       </template>
@@ -462,8 +389,14 @@ onMounted(async () => {
             <template #label>
               <span class="tab-label">
                 已配置
-                <el-tag v-if="filteredPriced.length > 0" size="small" type="info" effect="plain" round>
-                  {{ filteredPriced.length }}
+                <el-tag
+                  v-if="pricedPagination.state.total > 0"
+                  size="small"
+                  type="info"
+                  effect="plain"
+                  round
+                >
+                  {{ pricedPagination.state.total }}
                 </el-tag>
               </span>
             </template>
@@ -473,13 +406,13 @@ onMounted(async () => {
               <span class="tab-label">
                 未配置
                 <el-tag
-                  v-if="unconfiguredModels.length > 0"
+                  v-if="selectedVendorUnconfiguredCount > 0"
                   size="small"
                   type="danger"
                   effect="plain"
                   round
                 >
-                  {{ unconfiguredModels.length }}
+                  {{ selectedVendorUnconfiguredCount }}
                 </el-tag>
               </span>
             </template>
@@ -541,7 +474,7 @@ onMounted(async () => {
                 <el-table-column label="计费类型" width="120">
                   <template #default="{ row: aliasRow }">
                     <el-tag size="small" type="primary" effect="plain" round>
-                      {{ BillingTypeLabel[aliasRow.pricing.billingType] }}
+                      {{ BillingTypeLabel[aliasRow.pricing.billingType as BillingType] }}
                     </el-tag>
                   </template>
                 </el-table-column>
@@ -616,11 +549,7 @@ onMounted(async () => {
           <template #empty>
             <EmptyState
               title="暂无定价"
-              :description="
-                selectedVendor === 'all'
-                  ? '切换到「未配置」为别名补齐定价。'
-                  : '该渠道下尚无已定价别名；可切换「未配置」或先在供应商组创建别名。'
-              "
+              description="该渠道下尚无已定价别名；可切换「未配置」或先在供应商组创建别名。"
             />
           </template>
         </el-table>
@@ -639,6 +568,7 @@ onMounted(async () => {
 
       <div v-show="activeTab === 'unconfigured'" class="provider-detail__table-wrap">
         <el-table
+          v-loading="unconfiguredLoading"
           :data="pagedUnconfigured"
           row-key="modelId"
           size="small"

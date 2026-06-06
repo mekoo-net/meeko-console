@@ -31,13 +31,12 @@ import {
   type ModelFamily,
 } from '../model/enums';
 import type { ListModelsFilter, Model, UpdateModelInput } from '../model/model.types';
-import type { Provider } from '../model/provider.types';
-import { getDemuxaiModelPort, getDemuxaiProviderPort } from '../services';
+import type { ModelCarrierEntry } from '../model/model.types';
+import { getDemuxaiModelPort } from '../services';
 import ModelEditDrawer from '../components/ModelEditDrawer.vue';
 
 const router = useRouter();
 const modelPort = getDemuxaiModelPort();
-const providerPort = getDemuxaiProviderPort();
 
 const records = ref<Model[]>([]);
 const total = ref(0);
@@ -64,42 +63,10 @@ const drawerOpen = ref(false);
 const drawerLoading = ref(false);
 const editingModel = ref<Model | null>(null);
 
-const providers = ref<Provider[]>([]);
+const carriedByMap = ref<Record<string, ModelCarrierEntry[]>>({});
 
-interface CarriedByEntry {
-  providerUid: string;
-  providerName: string;
-  /** 上游 model 技术名（= provider_model.model_name） */
-  modelName: string;
-  /** 与同 displayName 多路映射时的加权；缺失视为 100 */
-  mappingWeight: number;
-  enabled: boolean;
-}
-
-/** displayName → 承载列表（反向派生于 provider.modelMappings + providerModels） */
-const carriedByMap = computed(() => {
-  const m = new Map<string, CarriedByEntry[]>();
-  for (const p of providers.value) {
-    const pmIndex = new Map(p.providerModels.map((x) => [x.uid, x]));
-    for (const mp of p.modelMappings) {
-      const pmRef = pmIndex.get(mp.providerModelUid);
-      if (!pmRef) continue;
-      const list = m.get(mp.displayName) ?? [];
-      list.push({
-        providerUid: p.uid,
-        providerName: p.name,
-        modelName: pmRef.modelName,
-        mappingWeight: mp.mappingWeight ?? 100,
-        enabled: mp.enabled,
-      });
-      m.set(mp.displayName, list);
-    }
-  }
-  return m;
-});
-
-const editingCarriedBy = computed<CarriedByEntry[]>(() =>
-  editingModel.value ? carriedByMap.value.get(editingModel.value.modelId) ?? [] : [],
+const editingCarriedBy = computed<ModelCarrierEntry[]>(() =>
+  editingModel.value ? carriedByMap.value[editingModel.value.modelId] ?? [] : [],
 );
 
 function buildPortFilter(): ListModelsFilter {
@@ -110,13 +77,10 @@ function buildPortFilter(): ListModelsFilter {
   };
 }
 
-async function loadProviders(): Promise<void> {
-  const r = await providerPort.list({
-    page: 1,
-    pageSize: 200,
-    filter: { keyword: '', apiType: 'all', status: 'all' },
-  });
-  if (r.success) providers.value = r.data.items;
+async function loadCarriersForPage(items: Model[]): Promise<void> {
+  const modelIds = items.map((m) => m.modelId);
+  const r = await modelPort.carriers(modelIds);
+  if (r.success) carriedByMap.value = r.data;
 }
 
 async function fetchData(): Promise<void> {
@@ -130,6 +94,7 @@ async function fetchData(): Promise<void> {
     if (r.success) {
       records.value = r.data.items;
       total.value = r.data.total;
+      await loadCarriersForPage(r.data.items);
     } else {
       ElMessage.error(r.error.message);
     }
@@ -187,7 +152,6 @@ function jumpToProvider(providerUid: string): void {
 }
 
 onMounted(() => {
-  void loadProviders();
   void fetchData();
 });
 </script>
@@ -299,7 +263,7 @@ onMounted(() => {
             <template #content>
               <div style="max-width: 420px">
                 <div
-                  v-for="entry in carriedByMap.get(row.modelId) ?? []"
+                  v-for="entry in carriedByMap[row.modelId] ?? []"
                   :key="`${entry.providerUid}|${entry.modelName}`"
                 >
                   {{ entry.providerName }} ← {{ entry.modelName }}
@@ -308,14 +272,14 @@ onMounted(() => {
                     · w{{ entry.mappingWeight }}
                   </span>
                 </div>
-                <div v-if="(carriedByMap.get(row.modelId) ?? []).length === 0">—</div>
+                <div v-if="(carriedByMap[row.modelId] ?? []).length === 0">—</div>
               </div>
             </template>
             <span
               class="cell-count"
-              :class="{ 'cell-count--zero': (carriedByMap.get(row.modelId) ?? []).length === 0 }"
+              :class="{ 'cell-count--zero': (carriedByMap[row.modelId] ?? []).length === 0 }"
             >
-              {{ (carriedByMap.get(row.modelId) ?? []).length }} 个
+              {{ (carriedByMap[row.modelId] ?? []).length }} 个
             </span>
           </el-tooltip>
         </template>

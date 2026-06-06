@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { CopyDocument, Delete, Plus, Refresh, View } from '@element-plus/icons-vue';
 
@@ -21,8 +21,8 @@ import {
   type RedemptionCodeKind,
   type RedemptionStatus,
 } from '../model/redemption.types';
+import type { RedemptionListStats } from '../model/redemptionDisplay';
 import {
-  computeRedemptionStats,
   isRedemptionExhausted,
   maskRedemptionKey,
   redemptionDisplayStatus,
@@ -36,7 +36,13 @@ const port = getDemuxaiRedemptionPort();
 
 const items = ref<RedemptionCode[]>([]);
 const total = ref(0);
-const statsSource = ref<RedemptionCode[]>([]);
+const listStats = ref<RedemptionListStats>({
+  total: 0,
+  claimable: 0,
+  inProgress: 0,
+  exhausted: 0,
+  expired: 0,
+});
 const loading = ref(false);
 const statsLoading = ref(false);
 const error = ref<AppError | undefined>();
@@ -57,8 +63,6 @@ const detailVisible = ref(false);
 const detailSnapshot = ref<RedemptionCode | null>(null);
 const refreshAfterDetailClose = ref(false);
 
-const listStats = computed(() => computeRedemptionStats(statsSource.value));
-
 const defaultFilter = () => ({
   keyword: '',
   status: 'all' as RedemptionStatus | 'all',
@@ -76,8 +80,8 @@ function listFilter() {
 async function fetchStats(): Promise<void> {
   statsLoading.value = true;
   try {
-    const r = await port.list({ page: 1, pageSize: 500, filter: {} });
-    if (r.success) statsSource.value = r.data.items;
+    const r = await port.stats();
+    if (r.success) listStats.value = r.data;
   } finally {
     statsLoading.value = false;
   }

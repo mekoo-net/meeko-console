@@ -109,6 +109,13 @@
   color: var(--el-text-color-secondary);
 }
 
+.provider-sidebar__badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
 .provider-sidebar__empty,
 .provider-sidebar__no-match {
   padding: 24px 12px;
