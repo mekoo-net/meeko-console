@@ -63,125 +63,153 @@ onMounted(() => load());
 </script>
 
 <template>
-  <section v-loading="loading" class="settings-panel">
+  <div v-loading="loading" class="settings-panel">
     <header class="settings-panel__head">
       <div>
-        <h2 class="settings-panel__title">返利设置</h2>
+        <h3 class="settings-panel__title">返利设置</h3>
         <p class="settings-panel__desc">
           按注册产品 / 渠道分别配置返利率与提现规则，产品列表与配置由后端返回
         </p>
       </div>
-      <el-button :icon="Refresh" plain @click="load">刷新</el-button>
+      <div class="settings-panel__head-actions">
+        <span v-if="updatedAtUtc" class="settings-panel__meta">
+          最近更新 {{ formatDateTime(updatedAtUtc) }}
+        </span>
+        <el-button :icon="Refresh" text @click="load">刷新</el-button>
+      </div>
     </header>
 
-    <el-table :data="rows" size="small" class="compact-table" empty-text="暂无产品配置">
-      <el-table-column label="产品 / 渠道" min-width="200">
-        <template #default="{ row }: { row: ReferralProductRate }">
-          <div class="cell-product">
-            <span class="cell-product__name">{{ row.productName }}</span>
-            <span class="cell-product__code">{{ row.productCode }}</span>
-          </div>
-        </template>
-      </el-table-column>
-      <el-table-column label="启用返利" width="100">
-        <template #default="{ row }: { row: ReferralProductRate }">
-          <el-switch v-model="row.enabled" />
-        </template>
-      </el-table-column>
-      <el-table-column label="返利率（%）" width="170">
-        <template #default="{ row }: { row: ReferralProductRate }">
-          <el-input-number
-            v-model="row.rebateRatePercent"
-            :min="0"
-            :max="100"
-            :precision="1"
-            :step="0.5"
-            :disabled="!row.enabled"
-            size="small"
-            controls-position="right"
-            style="width: 140px"
-          />
-        </template>
-      </el-table-column>
-      <el-table-column label="最低提现金额（元）" width="190">
-        <template #default="{ row }: { row: ReferralProductRate }">
-          <el-input-number
-            v-model="row.minWithdrawAmount"
-            :min="0"
-            :precision="2"
-            :step="10"
-            :disabled="!row.enabled"
-            size="small"
-            controls-position="right"
-            style="width: 150px"
-          />
-        </template>
-      </el-table-column>
-      <el-table-column label="提现需人工审核" width="140" align="center">
-        <template #default="{ row }: { row: ReferralProductRate }">
-          <el-switch v-model="row.withdrawReviewRequired" :disabled="!row.enabled" />
-        </template>
-      </el-table-column>
-    </el-table>
+    <div class="settings-panel__body">
+      <el-table :data="rows" size="small" class="compact-table" empty-text="暂无产品配置">
+        <el-table-column label="产品 / 渠道" min-width="200">
+          <template #default="{ row }: { row: ReferralProductRate }">
+            <div class="cell-product">
+              <span class="cell-product__name">{{ row.productName }}</span>
+              <span class="cell-product__code">{{ row.productCode }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="启用返利" width="100">
+          <template #default="{ row }: { row: ReferralProductRate }">
+            <el-switch v-model="row.enabled" />
+          </template>
+        </el-table-column>
+        <el-table-column label="返利率（%）" width="170">
+          <template #default="{ row }: { row: ReferralProductRate }">
+            <el-input-number
+              v-model="row.rebateRatePercent"
+              :min="0"
+              :max="100"
+              :precision="1"
+              :step="0.5"
+              :disabled="!row.enabled"
+              size="small"
+              controls-position="right"
+              style="width: 140px"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column label="最低提现金额（元）" width="190">
+          <template #default="{ row }: { row: ReferralProductRate }">
+            <el-input-number
+              v-model="row.minWithdrawAmount"
+              :min="0"
+              :precision="2"
+              :step="10"
+              :disabled="!row.enabled"
+              size="small"
+              controls-position="right"
+              style="width: 150px"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column label="提现需人工审核" width="140" align="center">
+          <template #default="{ row }: { row: ReferralProductRate }">
+            <el-switch v-model="row.withdrawReviewRequired" :disabled="!row.enabled" />
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
 
     <footer class="settings-panel__footer">
-      <span v-if="updatedAtUtc" class="settings-panel__meta">
-        最近更新：{{ formatDateTime(updatedAtUtc) }}
-      </span>
       <el-button type="primary" :disabled="!isDirty" :loading="saving" @click="save">
         保存设置
       </el-button>
     </footer>
-  </section>
+  </div>
 </template>
 
 <style scoped>
 .settings-panel {
-  max-width: 880px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
 }
+
 .settings-panel__head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 16px;
+  padding: 20px 24px 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
+
 .settings-panel__title {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
 }
+
 .settings-panel__desc {
   margin: 6px 0 0;
   font-size: 13px;
   color: var(--el-text-color-secondary);
 }
+
+.settings-panel__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.settings-panel__meta {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.settings-panel__body {
+  flex: 1;
+  padding: 16px 24px 24px;
+}
+
 .cell-product {
   display: flex;
   flex-direction: column;
   line-height: 1.35;
 }
+
 .cell-product__name {
   font-weight: 500;
   color: var(--el-text-color-primary);
 }
+
 .cell-product__code {
   font-size: 11px;
   color: var(--el-text-color-secondary);
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   margin-top: 2px;
 }
+
 .settings-panel__footer {
+  position: sticky;
+  bottom: 0;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 24px;
-  padding-top: 16px;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 24px;
   border-top: 1px solid var(--el-border-color-lighter);
-}
-.settings-panel__meta {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
+  background: var(--el-bg-color);
 }
 </style>
