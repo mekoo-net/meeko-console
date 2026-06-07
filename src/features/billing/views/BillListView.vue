@@ -21,17 +21,14 @@ import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 import {
   billStatusValues,
   billSubTypeValues,
-  businessCodeValues,
   BillFailureCodeLabel,
   BillReversedCodeLabel,
   BillStatusLabel,
   BillStatusTone,
   BillSubTypeLabel,
-  BusinessCodeLabel,
   type BillingEntry,
   type BillStatus,
   type BillSubType,
-  type BusinessCode,
 } from '../model/billing.types';
 import { getBillingPort } from '../services';
 import type { ListBillsFilter } from '../services/ports/billingPort';
@@ -50,7 +47,7 @@ interface PageFilter {
   accountUid: string;
   contactKeyword: string;
   dateRange: [string, string] | null;
-  business: BusinessCode | 'all';
+  productCode: string;
   subType: BillSubType | 'all';
   status: BillStatus | 'all';
 }
@@ -59,7 +56,7 @@ const defaultFilter = (): PageFilter => ({
   accountUid: '',
   contactKeyword: '',
   dateRange: null,
-  business: 'all',
+  productCode: '',
   subType: 'all',
   status: 'all',
 });
@@ -68,7 +65,7 @@ const filter = ref<PageFilter>(defaultFilter());
 
 function buildPortFilter(): ListBillsFilter {
   const f: ListBillsFilter = {
-    business: filter.value.business,
+    productCode: filter.value.productCode.trim() || 'all',
     subType: filter.value.subType,
     status: filter.value.status,
   };
@@ -112,7 +109,7 @@ watch(
   () => ({
     page: page.value,
     pageSize: pageSize.value,
-    business: filter.value.business,
+    productCode: filter.value.productCode.trim() || 'all',
     subType: filter.value.subType,
     status: filter.value.status,
     accountUid: filter.value.accountUid,
@@ -125,7 +122,7 @@ watch(
 watch(
   () =>
     [
-      filter.value.business,
+      filter.value.productCode,
       filter.value.subType,
       filter.value.status,
       filter.value.accountUid,
@@ -182,16 +179,12 @@ onMounted(() => {
       @refresh="fetchData()"
       @reset="resetFilter()"
     >
-      <el-form-item label="业务">
-        <el-select v-model="filter.business">
-          <el-option label="全部业务" value="all" />
-          <el-option
-            v-for="b in businessCodeValues"
-            :key="b"
-            :label="BusinessCodeLabel[b]"
-            :value="b"
-          />
-        </el-select>
+      <el-form-item label="产品">
+        <el-input
+          v-model="filter.productCode"
+          placeholder="产品代码，如 demux"
+          clearable
+        />
       </el-form-item>
       <el-form-item label="类型">
         <el-select v-model="filter.subType">
@@ -251,21 +244,6 @@ onMounted(() => {
               {{ operatorLabel(row) }}
             </div>
           </div>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="业务" width="120">
-        <template #default="{ row }: { row: BillingEntry }">
-          <el-tag
-            v-if="row.business != null"
-            size="small"
-            :type="row.business === 'demux' ? 'primary' : 'info'"
-            effect="plain"
-            round
-          >
-            {{ BusinessCodeLabel[row.business] }}
-          </el-tag>
-          <span v-else class="cell-muted">—</span>
         </template>
       </el-table-column>
 

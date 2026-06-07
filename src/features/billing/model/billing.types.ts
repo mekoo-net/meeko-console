@@ -27,22 +27,6 @@ export const RechargeStatusTone: Readonly<Record<RechargeStatus, 'success' | 'wa
   failed: 'danger',
 };
 
-/**
- * 业务（一级业务条线）。一个业务下可承载多个产品 (productCode)。
- *
- * - `demux`：DemuxAI 业务系列（推理 / 训练 / API 等）
- * - `platform`：平台/账户级（不归属任何具体业务的钱包变动，如手工调账）
- *
- * 未来新增业务（如 storage、cdn）时在此扩展，无需改表结构。
- */
-export const businessCodeValues = ['demux', 'platform'] as const;
-export type BusinessCode = (typeof businessCodeValues)[number];
-
-export const BusinessCodeLabel: Readonly<Record<BusinessCode, string>> = {
-  demux: 'DemuxAI',
-  platform: '平台',
-};
-
 /** long / 雪花 ID → string；用于 `id` 与 `*AccountUid` / `*IamId` 字段 */
 const idString = z.union([z.string(), z.number()]).transform((v) => String(v));
 
@@ -272,8 +256,7 @@ export const billingEntrySchema = z.object({
   operatorEmail: z.string().nullable().optional(),
   /** BFF enrich：操作账户联系手机 */
   operatorPhone: z.string().nullish(),
-  business: z.enum(businessCodeValues).nullable().optional(),
-  /** 产品代码，扣款类必有 */
+  /** 产品代码；扣款/充值归属产品时有值 */
   productCode: z.string().nullable().optional(),
   subType: z.enum(billSubTypeValues).nullable().optional(),
   status: z.enum(billStatusValues),
@@ -308,6 +291,7 @@ export interface CreateRechargeInput {
   clientIp?: string | undefined;
   returnUrl?: string | undefined;
   openId?: string | undefined;
+  productCode?: string | undefined;
 }
 
 /** Admin 后台人工入账（不经第三方支付）。 */
@@ -317,12 +301,13 @@ export interface CreateInternalRechargeInput {
   source: RechargeProvider;
   note?: string | undefined;
   idempotencyKey?: string | undefined;
+  productCode?: string | undefined;
 }
 
 export interface ListBillsFilter {
   /** 主账户 UID（精确匹配） */
   accountUid?: string | undefined;
-  business: BusinessCode | 'all';
+  productCode: string | 'all';
   subType: BillSubType | 'all';
   status: BillStatus | 'all';
   fromUtc?: number | undefined;

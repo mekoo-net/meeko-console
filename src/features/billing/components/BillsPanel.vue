@@ -12,7 +12,6 @@ import {
   BillStatusLabel,
   BillStatusTone,
   BillSubTypeLabel,
-  BusinessCodeLabel,
   type BillingEntry,
   type BillStatus,
   type BillSubType,
@@ -39,7 +38,7 @@ async function fetchBills(): Promise<void> {
       pageSize: pageSize.value,
       filter: {
         accountUid: props.accountUid,
-        business: 'all',
+        productCode: 'all',
         subType: billSubType.value,
         status: billStatus.value,
       },
@@ -127,20 +126,6 @@ onMounted(() => void fetchBills());
         <el-table-column label="流水号" min-width="180" prop="id">
           <template #default="{ row }: { row: BillingEntry }">
             <span class="cell-uid">{{ row.id }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="业务" width="100">
-          <template #default="{ row }: { row: BillingEntry }">
-            <el-tag
-              v-if="row.business != null"
-              size="small"
-              :type="row.business === 'demux' ? 'primary' : 'info'"
-              effect="plain"
-              round
-            >
-              {{ BusinessCodeLabel[row.business] }}
-            </el-tag>
-            <span v-else class="cell-muted">—</span>
           </template>
         </el-table-column>
         <el-table-column label="产品" min-width="160">

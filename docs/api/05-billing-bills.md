@@ -45,7 +45,7 @@
 | `page` | int | 是 | 起始 1。 |
 | `pageSize` | int | 是 | 默认 20。 |
 | `accountUid` | string | 否 | 主账户 UID 精确匹配。 |
-| `business` | enum/`'all'` | 否 | `demux` / `platform`。 |
+| `productCode` | string | 否 | 产品代码精确匹配（如 `demux`）。 |
 | `subType` | enum/`'all'` | 否 | `prepaid` / `usage`。 |
 | `status` | enum/`'all'` | 否 | `pending` / `completed` / `failed` / `reversed` / `partial_refunded`。 |
 | `fromUtc` | ISO8601 | 否 | 入账时间起点（`occurredAtUtc`）。 |
@@ -59,7 +59,7 @@
       "id": "BL20260531000001234",
       "owner":    { "accountUid": "100000001" },
       "operator": { "accountUid": "100000001" },
-      "business": { "domain": "demux", "productCode": "demux-gpt-4o" },
+      "business": { "productCode": "demux" },
       "subType": "usage",
       "status": "completed",
       "amount": {
@@ -77,7 +77,7 @@
       "id": "BL20260531000001235",
       "owner":    { "accountUid": "100000001" },
       "operator": { "accountUid": "200000050" },
-      "business": { "domain": "demux", "productCode": "demux-gpt-4o" },
+      "business": { "productCode": "demux" },
       "subType": "usage",
       "status": "reversed",
       "amount": {
@@ -108,7 +108,7 @@
 | `id` | string | 账单主键（PG identity 自增，JSON 为 string）。 |
 | `owner.accountUid` | string | 主账户 userId（**钱归它扣**，计费主体）。 |
 | `operator.accountUid` | string | 实操账户 userId（主账户 / IAM 子账户）。**与 owner 拆成两个对象**：一是双账户语义独立，二是未来要扩 `operator.iamUserUid` 区分席位级时无侵入。 |
-| `business` | object | `{ domain, productCode }`；`domain` ∈ `demux`/`platform`，`productCode` 在 `platform` 手工调账时可为 `null`。 |
+| `business` | object | `{ productCode }`；`productCode` 为入账时快照（关联 `/api/admin/billing/products` 的 `code`）；充值/手工调账无产品归属时 `productCode` 为 `null`。 |
 | `subType` | enum | `prepaid`（订阅 / 一次性订单）/ `usage`（按量）。 |
 | `status` | enum | 见下表。 |
 | `amount` | object | 金额族：`{ original, actual, currency, balanceAfter }`。`balanceAfter` 只在 `status ∈ {completed, partial_refunded}` 时非 null。 |

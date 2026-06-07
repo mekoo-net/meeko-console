@@ -31,7 +31,7 @@ export interface ListBillsPage {
 
 export interface ListBillsFilter {
   accountUid?: string;
-  business: import('../../model/billing.types').BusinessCode | 'all';
+  productCode: string | 'all';
   subType: import('../../model/billing.types').BillSubType | 'all';
   status: import('../../model/billing.types').BillStatus | 'all';
   fromUtc?: number;

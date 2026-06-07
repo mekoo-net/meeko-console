@@ -67,7 +67,6 @@ function seedAccount(uid: string): AccountBilling {
     id: genBillSerial(),
     ownerAccountUid: uid,
     operatorAccountUid: uid,
-    business: 'demux',
     productCode: 'demux',
     subType: 'usage',
     status: 'completed',
@@ -179,8 +178,8 @@ export class BillingMock implements BillingPort {
       for (const b of store.values()) all.push(...b.bills);
       all.sort((a, b) => b.occurredAtUtc - a.occurredAtUtc);
     }
-    if (input.filter.business !== 'all') {
-      all = all.filter((r) => r.business === input.filter.business);
+    if (input.filter.productCode !== 'all') {
+      all = all.filter((r) => r.productCode === input.filter.productCode);
     }
     if (input.filter.subType !== 'all') {
       all = all.filter((r) => r.subType === input.filter.subType);

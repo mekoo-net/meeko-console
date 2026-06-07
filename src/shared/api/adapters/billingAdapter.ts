@@ -18,7 +18,6 @@ import type {
   BillReversedCode,
   BillStatus,
   BillSubType,
-  BusinessCode,
 } from '@/features/billing/model/billing.types';
 import type {
   BillingPort,
@@ -112,8 +111,6 @@ function mapBillDto(raw: Record<string, unknown>): BillingEntry {
   const failure = (raw.failure ?? raw.Failure) as Record<string, unknown> | null | undefined;
   const reversal = (raw.reversal ?? raw.Reversal) as Record<string, unknown> | null | undefined;
 
-  const businessDomain = business?.domain ?? business?.Domain;
-
   return {
     id: String(raw.id ?? raw.Id ?? ''),
     ownerAccountUid: owner.accountUid,
@@ -124,7 +121,6 @@ function mapBillDto(raw: Record<string, unknown>): BillingEntry {
     operatorDisplayName: operator.displayName,
     operatorEmail: operator.email,
     operatorPhone: operator.phone,
-    business: businessDomain != null ? (String(businessDomain) as BusinessCode) : null,
     productCode:
       business?.productCode != null || business?.ProductCode != null
         ? String(business.productCode ?? business.ProductCode)
@@ -231,7 +227,7 @@ export class BillingHttpAdapter implements BillingPort {
           page,
           pageSize,
           accountUid: filter.accountUid,
-          business: filter.business === 'all' ? undefined : filter.business,
+          productCode: filter.productCode === 'all' ? undefined : filter.productCode,
           subType: filter.subType === 'all' ? undefined : filter.subType,
           status: filter.status === 'all' ? undefined : filter.status,
           fromUtc: filter.fromUtc,
