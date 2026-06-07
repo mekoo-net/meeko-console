@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-ssr
+coverage
+.vite
+.git
+.github
+.env.local
+.env.*.local
+*.log
+.DS_Store
+docs
