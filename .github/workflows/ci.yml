@@ -85,7 +85,7 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             VITE_USE_MOCK=false
-            VITE_API_BASE=${{ vars.VITE_API_BASE || 'https://platform.meeyo.org' }}
+            VITE_API_BASE=${{ vars.VITE_API_BASE || 'https://api.platform.meeyo.org' }}
 
       - name: Summary
         run: |
