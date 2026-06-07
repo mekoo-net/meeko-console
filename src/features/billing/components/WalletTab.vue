@@ -38,14 +38,14 @@ async function submitRecharge(): Promise<void> {
   if (n >= 5000) {
     const ok = await confirmDanger({
       title: '大额充值确认',
-      message: `将为当前账户发起 ¥${n.toFixed(2)} 的充值（Mock）。是否继续？`,
+      message: `将为当前账户发起 ¥${n.toFixed(2)} 的充值。是否继续？`,
       type: 'warning',
     });
     if (!ok) return;
   }
   const r = await rechargeState.create({ amount: n });
   if (r.success) {
-    ElMessage.success('充值意图已创建（Mock）');
+    ElMessage.success('充值意图已创建');
     dialogVisible.value = false;
     void walletState.run();
   } else {
@@ -62,7 +62,7 @@ async function submitRecharge(): Promise<void> {
     empty-title="未选择账户或暂无钱包数据"
   >
     <template #toolbar>
-      <el-button type="primary" :disabled="!accountUid" @click="openRecharge">充值（Mock）</el-button>
+      <el-button type="primary" :disabled="!accountUid" @click="openRecharge">充值</el-button>
       <el-button :disabled="!accountUid" @click="walletState.run()">刷新</el-button>
     </template>
 

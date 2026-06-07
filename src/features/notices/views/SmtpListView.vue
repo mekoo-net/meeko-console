@@ -96,7 +96,7 @@ async function onTest(id: string): Promise<void> {
 
 <template>
   <div>
-    <PageHeader title="SMTP 渠道" description="管理发信 SMTP（口令不落日志；Mock 仅存占位）">
+    <PageHeader title="SMTP 渠道" description="管理发信 SMTP（口令不落日志）">
       <template #actions>
         <el-button type="primary" @click="openCreate">新建</el-button>
         <el-button @click="list.run()">刷新</el-button>

@@ -43,7 +43,7 @@ async function sendNotification(): Promise<void> {
       locale: sendNotify.locale,
     });
     if (r.success) {
-      ElMessage.success(`已投递（Mock）：${r.data.messageId} / ${r.data.status}`);
+      ElMessage.success(`已投递：${r.data.messageId} / ${r.data.status}`);
     } else {
       ElMessage.error(r.error.message);
     }
@@ -63,7 +63,7 @@ async function sendOtp(): Promise<void> {
       locale: 'zh-CN',
     });
     if (r.success) {
-      ElMessage.success(`OTP 已发送（Mock），audit=${r.data.auditUid}`);
+      ElMessage.success(`OTP 已发送，audit=${r.data.auditUid}`);
     } else {
       ElMessage.error(r.error.message);
     }
@@ -94,7 +94,7 @@ async function verifyOtp(): Promise<void> {
 
 <template>
   <div class="debug">
-    <PageHeader title="通知调试" description="调用 /api/notifications 与 OTP 端点的 Mock，不上真实网。" />
+    <PageHeader title="通知调试" description="调用 /api/notifications 与 OTP 端点进行联调。" />
 
     <div class="debug__grid">
       <el-card shadow="never">
