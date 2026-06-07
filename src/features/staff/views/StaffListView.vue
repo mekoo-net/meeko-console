@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Plus } from '@element-plus/icons-vue';
+import { Plus, Refresh } from '@element-plus/icons-vue';
 import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 
 import { confirmDanger } from '@/shared/composables/useConfirm';
 import { formatDateTime } from '@/shared/lib/date';
-import DataTableShell from '@/shared/ui/DataTableShell.vue';
 import { useAuthStore } from '@/stores/auth';
 
 import { useStaffList } from '../composables/useStaffList';
@@ -174,102 +173,118 @@ async function confirmChangeRole(): Promise<void> {
 </script>
 
 <template>
-  <div class="staff-list page">
-    <div class="staff-list__header">
+  <div class="settings-panel">
+    <header class="settings-panel__head">
       <div>
-        <h3 class="staff-list__title">管理员账号</h3>
-        <p class="staff-list__desc">管理平台 Staff 登录账号、角色与启停状态。</p>
+        <h3 class="settings-panel__title">管理账户</h3>
+        <p class="settings-panel__desc">管理平台 Staff 登录账号、角色与启停状态</p>
       </div>
-      <el-button v-if="canWrite" type="primary" @click="openCreate">
-        <el-icon class="mr-1"><Plus /></el-icon>
-        新建管理员
-      </el-button>
-    </div>
+      <div class="settings-panel__head-actions">
+        <el-button :icon="Refresh" text :loading="list.loading.value" @click="list.refresh()">
+          刷新
+        </el-button>
+        <el-button v-if="canWrite" type="primary" @click="openCreate">
+          <el-icon class="mr-1"><Plus /></el-icon>
+          新建管理员
+        </el-button>
+      </div>
+    </header>
 
-    <el-form label-width="72px" class="staff-filter" @submit.prevent="list.refresh()">
-      <div class="staff-filter__row">
-        <el-form-item label="关键词">
-          <el-input
-            v-model="list.filter.value.keyword"
-            clearable
-            placeholder="用户名 / 姓名 / 邮箱"
-            style="width: 220px"
-          />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="list.filter.value.status" style="width: 120px">
-            <el-option label="全部" value="all" />
-            <el-option label="正常" value="Active" />
-            <el-option label="已停用" value="Disabled" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="角色">
-          <el-select v-model="list.filter.value.roleId" clearable placeholder="全部角色" style="width: 160px">
-            <el-option v-for="r in roleOptions" :key="r.id" :label="r.name" :value="r.id" />
-          </el-select>
-        </el-form-item>
-        <div class="staff-filter__actions">
-          <el-button type="primary" :loading="list.loading.value" @click="list.refresh()">查询</el-button>
-          <el-button @click="list.resetFilter()">重置</el-button>
+    <div class="settings-panel__body">
+      <el-form label-width="72px" class="settings-panel__filter" @submit.prevent="list.refresh()">
+        <div class="settings-panel__filter-row">
+          <el-form-item label="关键词">
+            <el-input
+              v-model="list.filter.value.keyword"
+              clearable
+              placeholder="用户名 / 姓名 / 邮箱"
+              style="width: 220px"
+            />
+          </el-form-item>
+          <el-form-item label="状态">
+            <el-select v-model="list.filter.value.status" style="width: 120px">
+              <el-option label="全部" value="all" />
+              <el-option label="正常" value="Active" />
+              <el-option label="已停用" value="Disabled" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="角色">
+            <el-select v-model="list.filter.value.roleId" clearable placeholder="全部角色" style="width: 160px">
+              <el-option v-for="r in roleOptions" :key="r.id" :label="r.name" :value="r.id" />
+            </el-select>
+          </el-form-item>
+          <div class="settings-panel__filter-actions">
+            <el-button type="primary" :loading="list.loading.value" @click="list.refresh()">查询</el-button>
+            <el-button @click="list.resetFilter()">重置</el-button>
+          </div>
         </div>
-      </div>
-    </el-form>
+      </el-form>
 
-    <DataTableShell
-      :loading="list.loading.value"
-      :error="list.error.value"
-      :items="list.items.value"
-      empty-title="暂无管理员"
-      empty-description="调整筛选条件或新建管理员。"
-    >
-      <template #toolbar>
-        <div class="toolbar__hint">共 {{ list.total.value }} 个管理员</div>
-      </template>
-
-      <el-table :data="list.items.value" row-key="uid" stripe>
-        <el-table-column prop="username" label="用户名" min-width="120" />
-        <el-table-column prop="displayName" label="显示名" min-width="120" />
-        <el-table-column prop="email" label="邮箱" min-width="180" />
-        <el-table-column prop="roleName" label="角色" width="120" />
-        <el-table-column label="状态" width="90">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 'Active' ? 'success' : 'info'" size="small">
-              {{ staffStatusLabel(row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="最近登录" min-width="160">
-          <template #default="{ row }">
-            {{ row.lastLoginAtUtc ? formatDateTime(row.lastLoginAtUtc) : '—' }}
-          </template>
-        </el-table-column>
-        <el-table-column v-if="canWrite" label="操作" width="260" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button link type="primary" @click="changeRole(row)">改角色</el-button>
-            <el-button link type="warning" @click="resetPassword(row)">重置密码</el-button>
-            <el-button
-              link
-              :type="row.status === 'Active' ? 'danger' : 'success'"
-              @click="toggleStatus(row)"
-            >
-              {{ row.status === 'Active' ? '停用' : '启用' }}
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <template #pagination>
-        <el-pagination
-          v-model:current-page="list.pagination.state.page"
-          v-model:page-size="list.pagination.state.pageSize"
-          :total="list.pagination.state.total"
-          :page-sizes="list.pagination.pageSizes"
-          layout="total, sizes, prev, pager, next"
-          background
+      <div v-loading="list.loading.value" class="settings-panel__table">
+        <el-alert
+          v-if="list.error.value"
+          :title="`加载失败：${list.error.value.code}`"
+          :description="list.error.value.message"
+          type="error"
+          show-icon
+          :closable="false"
+          class="settings-panel__alert"
         />
-      </template>
-    </DataTableShell>
+        <el-empty
+          v-else-if="!list.loading.value && list.items.value.length === 0"
+          description="暂无管理员"
+        >
+          <template #description>
+            <p>调整筛选条件或新建管理员。</p>
+          </template>
+        </el-empty>
+        <template v-else>
+          <div class="settings-panel__toolbar">共 {{ list.total.value }} 个管理员</div>
+          <el-table :data="list.items.value" row-key="uid" stripe>
+            <el-table-column prop="username" label="用户名" min-width="120" />
+            <el-table-column prop="displayName" label="显示名" min-width="120" />
+            <el-table-column prop="email" label="邮箱" min-width="180" />
+            <el-table-column prop="roleName" label="角色" width="120" />
+            <el-table-column label="状态" width="90">
+              <template #default="{ row }">
+                <el-tag :type="row.status === 'Active' ? 'success' : 'info'" size="small">
+                  {{ staffStatusLabel(row.status) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="最近登录" min-width="160">
+              <template #default="{ row }">
+                {{ row.lastLoginAtUtc ? formatDateTime(row.lastLoginAtUtc) : '—' }}
+              </template>
+            </el-table-column>
+            <el-table-column v-if="canWrite" label="操作" width="260" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
+                <el-button link type="primary" @click="changeRole(row)">改角色</el-button>
+                <el-button link type="warning" @click="resetPassword(row)">重置密码</el-button>
+                <el-button
+                  link
+                  :type="row.status === 'Active' ? 'danger' : 'success'"
+                  @click="toggleStatus(row)"
+                >
+                  {{ row.status === 'Active' ? '停用' : '启用' }}
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div class="settings-panel__pagination">
+            <el-pagination
+              v-model:current-page="list.pagination.state.page"
+              v-model:page-size="list.pagination.state.pageSize"
+              :total="list.pagination.state.total"
+              :page-sizes="list.pagination.pageSizes"
+              layout="total, sizes, prev, pager, next"
+              background
+            />
+          </div>
+        </template>
+      </div>
+    </div>
 
     <el-drawer
       v-model="drawer"
@@ -325,53 +340,86 @@ async function confirmChangeRole(): Promise<void> {
 </template>
 
 <style scoped>
-.staff-filter {
-  background: #fff;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  padding: 16px 20px;
-  margin-bottom: 14px;
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
 }
 
-.staff-filter__row {
+.settings-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.settings-panel__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.settings-panel__desc {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.settings-panel__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.settings-panel__body {
+  flex: 1;
+  padding: 16px 24px 24px;
+}
+
+.settings-panel__filter {
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.settings-panel__filter-row {
   display: flex;
   align-items: center;
   gap: 20px;
   flex-wrap: wrap;
 }
 
-.staff-filter :deep(.el-form-item) {
+.settings-panel__filter :deep(.el-form-item) {
   margin-bottom: 0;
 }
 
-.staff-filter__actions {
+.settings-panel__filter-actions {
   margin-left: auto;
   display: flex;
   gap: 8px;
 }
-.staff-list__header {
+
+.settings-panel__alert {
+  margin-bottom: 12px;
+}
+
+.settings-panel__toolbar {
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.settings-panel__table {
+  min-height: 220px;
+}
+
+.settings-panel__pagination {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.staff-list__title {
-  margin: 0 0 4px;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.staff-list__desc {
-  margin: 0;
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-}
-
-.toolbar__hint {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 
 .mr-1 {

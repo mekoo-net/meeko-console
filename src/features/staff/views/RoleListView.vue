@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus';
-import { Plus } from '@element-plus/icons-vue';
+import { Plus, Refresh } from '@element-plus/icons-vue';
 import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 
 import { confirmDanger } from '@/shared/composables/useConfirm';
@@ -145,53 +145,57 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="role-list page">
-    <div class="role-list__header">
+  <div class="settings-panel">
+    <header class="settings-panel__head">
       <div>
-        <h3 class="role-list__title">角色与权限</h3>
-        <p class="role-list__desc">配置 Staff 角色及其权限；系统内置角色不可删除或修改权限集合。</p>
+        <h3 class="settings-panel__title">角色权限</h3>
+        <p class="settings-panel__desc">配置 Staff 角色及其权限；系统内置角色不可删除或修改权限集合</p>
       </div>
-      <div class="role-list__actions">
-        <el-button @click="rolesState.refresh()">刷新</el-button>
+      <div class="settings-panel__head-actions">
+        <el-button :icon="Refresh" text :loading="loading" @click="rolesState.refresh()">
+          刷新
+        </el-button>
         <el-button v-if="canWrite" type="primary" @click="openCreate">
           <el-icon class="mr-1"><Plus /></el-icon>
           新建角色
         </el-button>
       </div>
-    </div>
+    </header>
 
-    <el-table v-loading="loading" :data="rows" row-key="id" stripe>
-      <el-table-column prop="name" label="角色名" min-width="140">
-        <template #default="{ row }">
-          <span>{{ row.name }}</span>
-          <el-tag v-if="row.isSystem" size="small" type="info" class="ml-2">内置</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
-      <el-table-column label="权限数" width="90">
-        <template #default="{ row }">{{ row.permissionCodes.length }}</template>
-      </el-table-column>
-      <el-table-column prop="memberCount" label="成员数" width="90" />
-      <el-table-column label="创建时间" min-width="160">
-        <template #default="{ row }">{{ formatDateTime(row.createdAtUtc) }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="160" fixed="right">
-        <template #default="{ row }">
-          <el-button link type="primary" @click="openEdit(row)">
-            {{ canWrite ? '编辑' : '查看' }}
-          </el-button>
-          <el-button
-            v-if="canWrite && !row.isSystem"
-            link
-            type="danger"
-            :disabled="row.memberCount > 0"
-            @click="onDelete(row)"
-          >
-            删除
-          </el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <div v-loading="loading" class="settings-panel__body">
+      <el-table :data="rows" row-key="id" stripe>
+        <el-table-column prop="name" label="角色名" min-width="140">
+          <template #default="{ row }">
+            <span>{{ row.name }}</span>
+            <el-tag v-if="row.isSystem" size="small" type="info" class="ml-2">内置</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
+        <el-table-column label="权限数" width="90">
+          <template #default="{ row }">{{ row.permissionCodes.length }}</template>
+        </el-table-column>
+        <el-table-column prop="memberCount" label="成员数" width="90" />
+        <el-table-column label="创建时间" min-width="160">
+          <template #default="{ row }">{{ formatDateTime(row.createdAtUtc) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="160" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openEdit(row)">
+              {{ canWrite ? '编辑' : '查看' }}
+            </el-button>
+            <el-button
+              v-if="canWrite && !row.isSystem"
+              link
+              type="danger"
+              :disabled="row.memberCount > 0"
+              @click="onDelete(row)"
+            >
+              删除
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
 
     <el-drawer
       v-model="drawer"
@@ -246,29 +250,44 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.role-list__header {
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.settings-panel__head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
+  padding: 20px 24px 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
-.role-list__title {
-  margin: 0 0 4px;
-  font-size: 18px;
+.settings-panel__title {
+  margin: 0;
+  font-size: 16px;
   font-weight: 600;
 }
 
-.role-list__desc {
-  margin: 0;
+.settings-panel__desc {
+  margin: 6px 0 0;
   font-size: 13px;
   color: var(--el-text-color-secondary);
 }
 
-.role-list__actions {
+.settings-panel__head-actions {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.settings-panel__body {
+  flex: 1;
+  padding: 16px 24px 24px;
+  min-height: 220px;
 }
 
 .perm-groups {
