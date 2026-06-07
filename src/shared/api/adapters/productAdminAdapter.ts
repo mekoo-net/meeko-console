@@ -14,7 +14,6 @@ const BASE = '/api/admin/billing/products';
 function mapProduct(raw: Record<string, unknown>): BillingProduct {
   return {
     code: String(raw.code ?? ''),
-    domain: String(raw.domain ?? ''),
     displayName: String(raw.displayName ?? raw.display_name ?? ''),
     metadataJson:
       typeof raw.metadataJson === 'string'
@@ -31,7 +30,6 @@ function mapProduct(raw: Record<string, unknown>): BillingProduct {
 function mapDiscovered(raw: Record<string, unknown>): DiscoveredProduct {
   return {
     code: String(raw.code ?? ''),
-    domain: String(raw.domain ?? ''),
     suggestedDisplayName: String(
       raw.suggestedDisplayName ?? raw.suggested_display_name ?? raw.displayName ?? '',
     ),

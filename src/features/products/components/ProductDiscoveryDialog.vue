@@ -88,7 +88,6 @@ async function register(row: DiscoveredProduct): Promise<void> {
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="domain" label="业务域" width="120" />
       <el-table-column prop="serviceName" label="来源服务" width="120" />
       <el-table-column label="展示名称" min-width="180">
         <template #default="{ row }: { row: DiscoveredProduct }">

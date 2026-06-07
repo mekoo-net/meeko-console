@@ -12,7 +12,6 @@ import type { ProductPort } from '../ports/productPort';
 const discoveredSeed: DiscoveredProduct[] = [
   {
     code: 'demux',
-    domain: 'demux',
     suggestedDisplayName: 'DemuxAI',
     alreadyRegistered: false,
     serviceName: 'demuxai',
@@ -56,7 +55,6 @@ export class ProductMock implements ProductPort {
     const now = Date.now();
     const item: BillingProduct = {
       code: input.code,
-      domain: discovered.domain,
       displayName: input.displayName?.trim() || discovered.suggestedDisplayName,
       active: true,
       createdAtUtc: now,

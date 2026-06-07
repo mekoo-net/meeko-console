@@ -17,7 +17,6 @@ const emit = defineEmits<{
 const formRef = ref<FormInstance>();
 const form = reactive({
   code: '',
-  domain: '',
   displayName: '',
   metadataJson: '',
 });
@@ -36,7 +35,6 @@ watch(
   ([open, product]) => {
     if (!open || !product) return;
     form.code = product.code;
-    form.domain = product.domain;
     form.displayName = product.displayName;
     form.metadataJson = product.metadataJson ?? '';
   },
@@ -59,9 +57,6 @@ async function onSubmit(): Promise<void> {
     <el-form ref="formRef" :model="form" :rules="rules" label-width="108px">
       <el-form-item label="产品代码">
         <el-input v-model="form.code" disabled />
-      </el-form-item>
-      <el-form-item label="业务域">
-        <el-input v-model="form.domain" disabled />
       </el-form-item>
       <el-form-item label="展示名称" prop="displayName">
         <el-input v-model="form.displayName" placeholder="平台展示名称" />

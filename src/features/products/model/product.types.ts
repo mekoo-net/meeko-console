@@ -1,6 +1,5 @@
 export interface BillingProduct {
   code: string;
-  domain: string;
   displayName: string;
   metadataJson?: string | null;
   active: boolean;
@@ -10,7 +9,6 @@ export interface BillingProduct {
 
 export interface DiscoveredProduct {
   code: string;
-  domain: string;
   suggestedDisplayName: string;
   alreadyRegistered: boolean;
   serviceName: string;

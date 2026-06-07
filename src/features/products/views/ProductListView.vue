@@ -84,7 +84,7 @@ onMounted(() => load());
   <section v-loading="loading">
     <PageHeader
       title="计费产品"
-      description="从 Consul 发现业务产品并注册到平台。ProductCode 贯穿下单/用量/冻结；Domain 作为充值返利归属轴。"
+      description="从 Consul 发现业务产品并注册到平台。ProductCode 贯穿下单/用量/冻结。"
     >
       <template #actions>
         <el-button :icon="Refresh" plain @click="load">刷新</el-button>
@@ -101,7 +101,6 @@ onMounted(() => load());
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="domain" label="业务域" width="120" />
       <el-table-column label="更新时间" width="170">
         <template #default="{ row }: { row: BillingProduct }">
           {{ formatDateTime(row.updatedAtUtc) }}
