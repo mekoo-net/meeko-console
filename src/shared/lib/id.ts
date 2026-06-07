@@ -8,10 +8,15 @@ export type Uid = string;
 
 const isDigit = (ch: string): boolean => ch >= '0' && ch <= '9';
 
-/** 严格判断字符串是不是合法 Account UID（10–12 位纯数字，无前导 0）。 */
+/**
+ * 判断字符串是不是合法 Uid：非空纯数字、无前导 0（即正整数字符串）。
+ *
+ * 同时覆盖 Account UID（10–12 位）与 Snowflake long（最长 19 位）等形态，
+ * 以及 Mock 序列号等较短取值；后端 long 统一以 string 承载。
+ */
 export function isUid(value: unknown): value is Uid {
-  if (typeof value !== 'string' || value.length < 10 || value.length > 12) return false;
-  if (value.length > 1 && value[0] === '0') return false;
+  if (typeof value !== 'string' || value.length === 0) return false;
+  if (value[0] === '0') return false; // 无前导 0，同时排除 '0' 本身
   for (const ch of value) {
     if (!isDigit(ch)) return false;
   }
