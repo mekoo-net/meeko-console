@@ -196,10 +196,10 @@ export class DemuxaiPricingMock implements DemuxaiPricingPort {
     return ok(p.data);
   }
 
-  async delete(modelId: string): Promise<AppResult<void>> {
+  async delete(id: string): Promise<AppResult<void>> {
     await delay();
-    const idx = this.store.pricing.findIndex((p) => p.modelId === modelId);
-    if (idx < 0) return fail({ code: 'not_found', message: `定价 ${modelId} 不存在` });
+    const idx = this.store.pricing.findIndex((p) => String(p.id) === String(id));
+    if (idx < 0) return fail({ code: 'not_found', message: `定价 ${id} 不存在` });
     this.store.pricing.splice(idx, 1);
     return ok(undefined);
   }

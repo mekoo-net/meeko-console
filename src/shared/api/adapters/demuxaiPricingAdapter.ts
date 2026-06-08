@@ -178,10 +178,9 @@ export class DemuxaiPricingHttpAdapter implements DemuxaiPricingPort {
     return normalized;
   }
 
-  async delete(modelId: string): Promise<AppResult<void>> {
-    return requestDemuxAi<void>(BASE, {
+  async delete(id: string): Promise<AppResult<void>> {
+    return requestDemuxAi<void>(`${BASE}/${encodeURIComponent(id)}`, {
       method: 'DELETE',
-      query: { modelId },
     });
   }
 

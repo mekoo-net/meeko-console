@@ -16,22 +16,49 @@ import type {
 
 const BASE = '/demuxai/api/admin/models';
 
+/** 后端 ModelMetaWireDto（camelCase）。 */
+interface ModelMetaWireRaw {
+  id: string | number;
+  modelName: string;
+  description?: string | null;
+  tags?: string | null;
+  icon?: string | null;
+  vendorId?: string | number | null;
+  status?: number | null;
+}
+
 /**
- * 后端 ModelMetaAdminDto 字段名与前端 Model schema 存在差异：
- *  - `modelName`  → `modelId`（后端用 modelName，前端 log 查找用 modelId 作 map key）
- *  - `id`         → `uid`（后端返回数值 id，前端统一用 uid string）
- *
- * 若后端已对齐字段名（直接返回 modelId/uid），此映射为无害的 identity。
+ * 后端 wire 与前端 Model schema 字段不完全对齐：
+ * wire 仅含 modelName / description / vendorId / status 等元数据，
+ * 前端 UI 所需的 family / capabilities 等字段在此补默认值。
  */
 function mapModel(raw: unknown): Model {
   if (!raw || typeof raw !== 'object') return raw as Model;
   const r = raw as Record<string, unknown>;
+  const modelId = String(r['modelId'] ?? r['modelName'] ?? '');
+  const uid = String(r['uid'] ?? r['id'] ?? '');
+  const now = Date.now();
   return {
-    ...r,
-    modelId: r['modelId'] ?? r['modelName'] ?? '',
-    uid: r['uid'] ?? (r['id'] != null ? String(r['id']) : ''),
+    uid,
+    modelId,
+    displayName: String(r['displayName'] ?? modelId),
+    family: 'gpt',
+    capabilities: ['chat'],
+    visibleMinTier: 1,
+    maxContextTokens: 8192,
+    maxOutputTokens: null,
+    supportsStreaming: true,
+    supportsFunctionCall: false,
+    description: typeof r['description'] === 'string' ? r['description'] : null,
     vendorName: typeof r['vendorName'] === 'string' ? r['vendorName'] : undefined,
-  } as unknown as Model;
+    createdAtUtc: now,
+    updatedAtUtc: now,
+  };
+}
+
+function toNumericId(value: string | number): number {
+  if (typeof value === 'number') return value;
+  return Number.parseInt(String(value), 10);
 }
 
 export class DemuxaiModelHttpAdapter implements DemuxaiModelPort {
@@ -61,10 +88,26 @@ export class DemuxaiModelHttpAdapter implements DemuxaiModelPort {
   }
 
   async update(uid: Uid, input: UpdateModelInput): Promise<AppResult<Model>> {
-    return requestDemuxAi<Model>(BASE, {
+    const existing = await requestDemuxAi<ModelMetaWireRaw>(`${BASE}/${uid}`);
+    if (!existing.success) return existing;
+
+    const row = existing.data;
+    const vendorId = row.vendorId != null ? toNumericId(row.vendorId) : 0;
+    const result = await requestDemuxAi<unknown>(BASE, {
       method: 'PUT',
-      body: { id: uid, ...input },
+      body: {
+        id: toNumericId(row.id),
+        modelName: input.displayName?.trim() ?? row.modelName,
+        description:
+          input.description !== undefined ? input.description : (row.description ?? null),
+        tags: row.tags ?? null,
+        icon: row.icon ?? null,
+        vendorId,
+        status: row.status ?? 1,
+      },
     });
+    if (!result.success) return result;
+    return { success: true, data: mapModel(result.data) };
   }
 
   async carriers(modelIds: string[]): Promise<AppResult<ModelCarriersMap>> {

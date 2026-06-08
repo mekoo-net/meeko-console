@@ -221,7 +221,7 @@ async function onDelete(row: Pricing): Promise<void> {
     type: 'warning',
   });
   if (!okp) return;
-  const r = await pricingPort.delete(row.modelId);
+  const r = await pricingPort.delete(String(row.id));
   if (r.success) {
     ElMessage.success('已删除');
     await Promise.all([loadPricedGroups(), loadVendorPricingStats()]);

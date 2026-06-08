@@ -1,4 +1,5 @@
 import type { AppResult } from '@/shared/api/httpTypes';
+import { fail } from '@/shared/api/httpTypes';
 import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
 import type { Uid } from '@/shared/lib/id';
 import { asEpochMillis } from '@/shared/lib/epoch';
@@ -19,13 +20,16 @@ import type {
 
 const BASE = '/demuxai/api/admin/providers';
 
-/** DemuxAi Vendor 契约：name + status（snake_case JSON）。 */
+/** DemuxAi VendorWireDto（camelCase JSON）。 */
 interface VendorDtoRaw {
-  uid: number | string;
-  name: string;
+  id: number | string;
+  uid?: number | string;
+  queueGroup?: string;
+  name?: string;
+  vendorSlug?: string | null;
   status?: string | number;
-  created_at_utc?: number | string;
-  updated_at_utc?: number | string;
+  createdTime?: number | string;
+  updatedTime?: number | string;
 }
 
 interface UpsertVendorBody {
@@ -38,14 +42,20 @@ function mapVendorStatus(raw: VendorDtoRaw['status']): ProviderStatus {
   return 'enabled';
 }
 
+function wireEpochToMillis(value: unknown): number | undefined {
+  const ms = asEpochMillis(value);
+  if (ms === undefined) return undefined;
+  return ms > 0 && ms < 1_000_000_000_000 ? ms * 1000 : ms;
+}
+
 function vendorToProvider(raw: VendorDtoRaw, draft?: Partial<CreateProviderInput>): Provider {
-  const uid = String(raw.uid);
-  const numericUid = typeof raw.uid === 'number' ? raw.uid : Number.parseInt(uid, 10);
+  const uid = String(raw.id ?? raw.uid);
+  const numericUid = typeof raw.id === 'number' ? raw.id : Number.parseInt(uid, 10);
   const now = Date.now();
   return {
     id: Number.isFinite(numericUid) ? (numericUid % 2_147_483_647) || 1 : 1,
     uid,
-    name: raw.name,
+    name: raw.queueGroup ?? raw.name ?? '',
     apiType: draft?.apiType ?? 'openai',
     baseUrl: draft?.baseUrl ?? '',
     apiKeyMasked: '***',
@@ -56,13 +66,17 @@ function vendorToProvider(raw: VendorDtoRaw, draft?: Partial<CreateProviderInput
     testSucceededAtUtc: null,
     providerModels: (draft?.providerModels ?? []) as Provider['providerModels'],
     modelMappings: (draft?.modelMappings ?? []) as Provider['modelMappings'],
-    createdAtUtc: asEpochMillis(raw.created_at_utc) ?? now,
-    updatedAtUtc: asEpochMillis(raw.updated_at_utc ?? raw.created_at_utc) ?? now,
+    createdAtUtc: wireEpochToMillis(raw.createdTime) ?? now,
+    updatedAtUtc: wireEpochToMillis(raw.updatedTime ?? raw.createdTime) ?? now,
   };
 }
 
 function upsertBody(input: { name: string }, status: string = 'active'): UpsertVendorBody {
   return { name: input.name.trim(), status };
+}
+
+function vendorWireName(raw: VendorDtoRaw): string {
+  return raw.queueGroup ?? raw.name ?? '';
 }
 
 export class DemuxaiProviderHttpAdapter implements DemuxaiProviderPort {
@@ -98,13 +112,13 @@ export class DemuxaiProviderHttpAdapter implements DemuxaiProviderPort {
 
     const result = await requestDemuxAi<VendorDtoRaw>(`${BASE}/${uid}`, {
       method: 'PUT',
-      body: upsertBody({ name: input.name?.trim() ?? existing.data.name }),
+      body: upsertBody({ name: input.name?.trim() ?? vendorWireName(existing.data) }),
     });
     if (!result.success) return result;
     return {
       success: true,
       data: vendorToProvider(result.data, {
-        name: input.name ?? existing.data.name,
+        name: input.name ?? vendorWireName(existing.data),
         apiType: 'openai',
         baseUrl: input.baseUrl ?? '',
         notes: input.notes,
@@ -125,7 +139,7 @@ export class DemuxaiProviderHttpAdapter implements DemuxaiProviderPort {
     const wireStatus = status === 'enabled' ? 'active' : 'disabled';
     const result = await requestDemuxAi<VendorDtoRaw>(`${BASE}/${uid}`, {
       method: 'PUT',
-      body: upsertBody({ name: existing.data.name }, wireStatus),
+      body: upsertBody({ name: vendorWireName(existing.data) }, wireStatus),
     });
     if (!result.success) return result;
     return { success: true, data: vendorToProvider(result.data) };
@@ -141,9 +155,20 @@ export class DemuxaiProviderHttpAdapter implements DemuxaiProviderPort {
     apiKey?: string;
     providerUid?: Uid;
   }): Promise<AppResult<FetchUpstreamModelsResult>> {
-    return requestDemuxAi<FetchUpstreamModelsResult>(`${BASE}/upstream/models`, {
+    const result = await requestDemuxAi<FetchUpstreamModelsResult>(`${BASE}/upstream/models`, {
       method: 'POST',
       body: input,
     });
+    if (!result.success) {
+      const msg = result.error.message.toLowerCase();
+      if (msg.includes('not implemented') || msg.includes('scaffolded')) {
+        return fail({
+          code: 'upstream',
+          message:
+            '上游模型拉取接口尚未实现。请改用「供应商目录 → 从网关发现」导入模型，或在 Mock 模式下调试。',
+        });
+      }
+    }
+    return result;
   }
 }

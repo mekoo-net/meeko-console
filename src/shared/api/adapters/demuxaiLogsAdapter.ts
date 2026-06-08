@@ -129,8 +129,10 @@ function mapRawItem(raw: unknown): LogEntry {
   return parsed.data;
 }
 
+const TOP_RANK_LIMIT = 5;
+
 function mapTopModels(rows: ModelRankRow[]): LogStatsTopModel[] {
-  return rows.map((r) => {
+  return rows.slice(0, TOP_RANK_LIMIT).map((r) => {
     const calls = num(r.requestCount);
     const errors = num(r.errorCount);
     return {
@@ -143,69 +145,13 @@ function mapTopModels(rows: ModelRankRow[]): LogStatsTopModel[] {
 }
 
 function mapTopProviders(rows: ProviderRankRow[]): LogStatsTopProvider[] {
-  return rows.map((r) => ({
+  return rows.slice(0, TOP_RANK_LIMIT).map((r) => ({
     providerId: num(r.providerId),
     providerName: typeof r.providerName === 'string' ? r.providerName : undefined,
     calls: num(r.requestCount),
     errors: num(r.errorCount),
     avgTokenLatency: num(r.avgTokenLatencyMs),
   }));
-}
-
-const TOP_RANK_LIMIT = 5;
-const STATS_LIST_PAGE_SIZE = 500;
-const STATS_LIST_MAX_PAGES = 20;
-
-function isNotFound(result: AppResult<unknown>): boolean {
-  return !result.success && result.error.code === 'not_found';
-}
-
-/** 旧版 DemuxAi 无 Top 排行接口时，从日志列表抽样聚合（与 mock 口径一致）。 */
-function buildTopModelsFromLogs(rows: LogEntry[]): LogStatsTopModel[] {
-  type Agg = { calls: number; cost: number; errors: number };
-  const m = new Map<string, Agg>();
-  for (const r of rows) {
-    const a = m.get(r.modelName) ?? { calls: 0, cost: 0, errors: 0 };
-    a.calls += 1;
-    a.cost += r.cost.total;
-    if (!r.success) a.errors += 1;
-    m.set(r.modelName, a);
-  }
-  return [...m.entries()]
-    .map<LogStatsTopModel>(([modelName, a]) => ({
-      modelName,
-      calls: a.calls,
-      cost: Math.round(a.cost * 10000) / 10000,
-      errorRate: a.calls === 0 ? 0 : a.errors / a.calls,
-    }))
-    .sort((x, y) => y.calls - x.calls)
-    .slice(0, TOP_RANK_LIMIT);
-}
-
-function buildTopProvidersFromLogs(rows: LogEntry[]): LogStatsTopProvider[] {
-  type Agg = { calls: number; errors: number; ttftSum: number; ttftSamples: number };
-  const m = new Map<number, Agg>();
-  for (const r of rows) {
-    if (r.providerId == null) continue;
-    const a = m.get(r.providerId) ?? { calls: 0, errors: 0, ttftSum: 0, ttftSamples: 0 };
-    a.calls += 1;
-    if (!r.success) a.errors += 1;
-    if (r.success && r.streamed && r.tokenLatency != null) {
-      a.ttftSum += r.tokenLatency;
-      a.ttftSamples += 1;
-    }
-    m.set(r.providerId, a);
-  }
-  return [...m.entries()]
-    .map<LogStatsTopProvider>(([providerId, a]) => ({
-      providerId,
-      calls: a.calls,
-      errors: a.errors,
-      avgTokenLatency:
-        a.ttftSamples === 0 ? 0 : Math.round(a.ttftSum / a.ttftSamples),
-    }))
-    .sort((x, y) => y.calls - x.calls)
-    .slice(0, TOP_RANK_LIMIT);
 }
 
 /** 将 AiLogStatDto[]（分桶序列）聚合成前端 LogStats（KPI / Top 排行由并行接口补齐）。 */
@@ -244,20 +190,6 @@ function aggregateBucketRows(
 }
 
 export class DemuxaiLogsHttpAdapter implements DemuxaiLogsPort {
-  /** 分页拉取时间范围内的日志，供旧后端 Top 排行回退聚合。 */
-  private async fetchLogsForStats(filter: ListLogsFilter): Promise<LogEntry[]> {
-    const all: LogEntry[] = [];
-    let total = Number.POSITIVE_INFINITY;
-    for (let page = 1; page <= STATS_LIST_MAX_PAGES && all.length < total; page += 1) {
-      const r = await this.list({ page, pageSize: STATS_LIST_PAGE_SIZE, filter });
-      if (!r.success) return all;
-      all.push(...r.data.items);
-      total = r.data.total;
-      if (r.data.items.length === 0) break;
-    }
-    return all;
-  }
-
   async list(input: {
     page: number;
     pageSize: number;
@@ -323,31 +255,16 @@ export class DemuxaiLogsHttpAdapter implements DemuxaiLogsPort {
     ]);
 
     if (!bucketResult.success) return bucketResult;
-
-    const needLogFallback = isNotFound(modelResult) || isNotFound(providerResult);
-    const logRows = needLogFallback ? await this.fetchLogsForStats(filter) : null;
-
-    let topModels: LogStatsTopModel[] = [];
-    if (modelResult.success) {
-      topModels = mapTopModels(modelResult.data.items);
-    } else if (isNotFound(modelResult)) {
-      topModels = buildTopModelsFromLogs(logRows ?? []);
-    } else {
-      return modelResult;
-    }
-
-    let topProviders: LogStatsTopProvider[] = [];
-    if (providerResult.success) {
-      topProviders = mapTopProviders(providerResult.data.items);
-    } else if (isNotFound(providerResult)) {
-      topProviders = buildTopProvidersFromLogs(logRows ?? []);
-    } else {
-      return providerResult;
-    }
+    if (!modelResult.success) return modelResult;
+    if (!providerResult.success) return providerResult;
 
     return {
       success: true,
-      data: aggregateBucketRows(bucketResult.data.items, topModels, topProviders),
+      data: aggregateBucketRows(
+        bucketResult.data.items,
+        mapTopModels(modelResult.data.items),
+        mapTopProviders(providerResult.data.items),
+      ),
     };
   }
 

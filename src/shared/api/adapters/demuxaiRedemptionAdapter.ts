@@ -25,7 +25,6 @@ interface RedemptionAccountRaw {
   uid: string | number;
   owner?: {
     email?: string;
-    display_name?: string;
     displayName?: string;
   };
   email?: string;
@@ -33,37 +32,41 @@ interface RedemptionAccountRaw {
 
 interface RedemptionStaffRaw {
   uid: string | number;
-  display_name?: string;
   displayName?: string;
   username?: string;
 }
 
 interface RedemptionClaimRaw {
   account: RedemptionAccountRaw;
-  redeemed_time: number;
+  redeemedTime: number;
 }
 
+/** 后端 RedemptionDto wire（camelCase）。 */
 interface RedemptionDtoRaw {
   id: number;
-  user_id?: number;
   key: string;
   status: number;
   name: string;
   quota: number;
-  max_redemptions?: number;
-  redeemed_count?: number;
-  created_time: number;
-  redeemed_time?: number | null;
+  maxRedemptions?: number;
+  redeemedCount?: number;
+  createdTime: number;
+  redeemedTime?: number | null;
   count?: number;
   account?: RedemptionAccountRaw | null;
   claims?: RedemptionClaimRaw[];
-  created_by?: RedemptionStaffRaw;
-  used_user_id?: number | string | null;
-  expired_time?: number | null;
+  createdBy?: RedemptionStaffRaw;
+  expiredTime?: number | null;
 }
 
 interface CreateRedemptionsResponseRaw {
   keys: string[];
+}
+
+/** 后端 unix 秒 → 前端毫秒；已是毫秒则原样返回。 */
+function wireEpochToMillis(value: number | null | undefined): number | null {
+  if (value == null || value <= 0) return null;
+  return value < 1_000_000_000_000 ? value * 1000 : value;
 }
 
 function mapStatus(raw: number): RedemptionStatus {
@@ -77,15 +80,13 @@ function mapAccount(raw: RedemptionDtoRaw): RedemptionAccount | null {
     if (!uid) return null;
     const owner = raw.account.owner;
     const email = owner?.email ?? raw.account.email;
-    const displayName = owner?.display_name ?? owner?.displayName;
+    const displayName = owner?.displayName;
     return {
       uid,
       owner: email || displayName ? { email, displayName } : undefined,
     };
   }
-  const legacyUid = toUid(raw.used_user_id);
-  if (!legacyUid) return null;
-  return { uid: legacyUid };
+  return null;
 }
 
 function mapAccountFromRaw(raw: RedemptionAccountRaw): RedemptionAccount | null {
@@ -93,7 +94,7 @@ function mapAccountFromRaw(raw: RedemptionAccountRaw): RedemptionAccount | null 
   if (!uid) return null;
   const owner = raw.owner;
   const email = owner?.email ?? raw.email;
-  const displayName = owner?.display_name ?? owner?.displayName;
+  const displayName = owner?.displayName;
   return {
     uid,
     owner: email || displayName ? { email, displayName } : undefined,
@@ -105,27 +106,31 @@ function mapClaims(raw: RedemptionDtoRaw): RedemptionClaim[] {
   const out: RedemptionClaim[] = [];
   for (const c of raw.claims) {
     const account = mapAccountFromRaw(c.account);
-    if (!account || !c.redeemed_time) continue;
-    out.push({ account, redeemedTime: c.redeemed_time });
+    const redeemedTime = wireEpochToMillis(c.redeemedTime);
+    if (!account || !redeemedTime) continue;
+    out.push({ account, redeemedTime });
   }
   return out;
 }
 
 function mapCreatedBy(raw: RedemptionDtoRaw): RedemptionStaff {
-  const s = raw.created_by;
+  const s = raw.createdBy;
   const uid = s ? toUid(s.uid) : null;
   return {
     uid: uid ?? '0',
-    displayName: s?.display_name ?? s?.displayName ?? '—',
+    displayName: s?.displayName ?? '—',
     username: s?.username,
   };
 }
 
 function mapRow(raw: RedemptionDtoRaw): RedemptionCode {
-  const maxRedemptions = raw.max_redemptions ?? raw.count ?? 1;
-  const redeemedCount = raw.redeemed_count ?? (raw.status === 2 && maxRedemptions <= 1 ? 1 : 0);
+  const maxRedemptions = raw.maxRedemptions ?? raw.count ?? 1;
+  const redeemedCount = raw.redeemedCount ?? (raw.status === 2 && maxRedemptions <= 1 ? 1 : 0);
   const claims = mapClaims(raw);
   const account = mapAccount(raw);
+  const redeemedTime = wireEpochToMillis(raw.redeemedTime ?? null);
+  const createdTime = wireEpochToMillis(raw.createdTime) ?? 0;
+  const expiredTime = wireEpochToMillis(raw.expiredTime ?? null);
   return {
     id: raw.id,
     name: raw.name,
@@ -134,12 +139,17 @@ function mapRow(raw: RedemptionDtoRaw): RedemptionCode {
     quota: raw.quota,
     maxRedemptions: Math.max(1, maxRedemptions),
     redeemedCount: Math.max(0, redeemedCount),
-    createdTime: raw.created_time,
-    redeemedTime: raw.redeemed_time ?? null,
+    createdTime,
+    redeemedTime,
     account,
-    claims: claims.length > 0 ? claims : account && raw.redeemed_time ? [{ account, redeemedTime: raw.redeemed_time }] : [],
+    claims:
+      claims.length > 0
+        ? claims
+        : account && redeemedTime
+          ? [{ account, redeemedTime }]
+          : [],
     createdBy: mapCreatedBy(raw),
-    expiredTime: raw.expired_time && raw.expired_time > 0 ? raw.expired_time : null,
+    expiredTime,
   };
 }
 
@@ -169,17 +179,15 @@ export class DemuxaiRedemptionHttpAdapter implements DemuxaiRedemptionPort {
   }
 
   async create(input: CreateRedemptionCodesInput): Promise<AppResult<CreateRedemptionCodesResult>> {
-    const expiredMs = input.expiredAtUtc
-      ? Date.parse(input.expiredAtUtc)
-      : null;
+    const expiredMs = input.expiredAtUtc ? Date.parse(input.expiredAtUtc) : null;
     const result = await requestDemuxAi<CreateRedemptionsResponseRaw>(BASE, {
       method: 'POST',
       body: {
         name: input.name.trim(),
         quota: displayAmountToQuota(input.amount),
         count: input.count,
-        max_redemptions: input.maxRedemptions,
-        expired_time: expiredMs && expiredMs > 0 ? expiredMs : -1,
+        maxRedemptions: input.maxRedemptions,
+        expiredTime: expiredMs && expiredMs > 0 ? expiredMs : -1,
       },
     });
     if (!result.success) return result;

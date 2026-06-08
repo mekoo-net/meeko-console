@@ -40,7 +40,7 @@ export interface DemuxaiPricingPort {
 
   upsert(input: UpsertPricingInput): Promise<AppResult<Pricing>>;
 
-  delete(modelId: string): Promise<AppResult<void>>;
+  delete(id: string): Promise<AppResult<void>>;
 
   vendorPricingStats(): Promise<AppResult<VendorPricingStatsMap>>;
 
