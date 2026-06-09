@@ -311,6 +311,16 @@ const logEntryBaseShape = {
    */
   success: z.boolean(),
   /**
+   * 结算状态（比 `success` 二元值表达力更强）：
+   *  - `pending` → "调用中"：上游已调用但 Billing 结算尚未成功，待重试结算
+   *  - `success` → 成功扣费
+   *  - `failure` → 调用失败（未扣费）
+   *  - `cancelled` → 主动取消
+   *
+   * 旧后端不下发此字段时为 undefined，UI 回退按 `success` 推断（true→success / false→failure）。
+   */
+  status: z.enum(['pending', 'success', 'failure', 'cancelled', 'unknown']).optional(),
+  /**
    * `success === true` 时为 null，否则 `{ code, message, httpStatus }`。
    *
    * `httpStatus` 是上游 / 网关返回的 HTTP 状态码（无上游响应时为 0）；

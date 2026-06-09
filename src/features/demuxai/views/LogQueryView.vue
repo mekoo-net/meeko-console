@@ -573,7 +573,8 @@ onMounted(() => {
 
       <el-table-column label="状态" width="88" align="center">
         <template #default="{ row }: { row: LogEntry }">
-          <StatusTag v-if="row.success" label="成功" tone="success" />
+          <StatusTag v-if="row.status === 'pending'" label="调用中" tone="warning" />
+          <StatusTag v-else-if="row.success" label="成功" tone="success" />
           <StatusTag
             v-else
             :label="row.error ? errorCodeText(row.error.code) : '失败'"
