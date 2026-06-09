@@ -4,7 +4,7 @@
  */
 import { computed } from 'vue';
 
-import { formatMoney } from '@/shared/lib/money';
+import { BILLING_FRACTION_DIGITS, formatMoney } from '@/shared/lib/money';
 
 import type { LogStatsTopModel } from '../../model/log.types';
 import Panel from './Panel.vue';
@@ -46,7 +46,7 @@ const maxCalls = computed(() => props.items.reduce((m, x) => Math.max(m, x.calls
               <span class="bar-inline__value num">{{ m.calls.toLocaleString() }}</span>
             </div>
           </td>
-          <td class="rank-table__num cell-money">{{ formatMoney(m.cost) }}</td>
+          <td class="rank-table__num cell-money">{{ formatMoney(m.cost, { fractionDigits: BILLING_FRACTION_DIGITS }) }}</td>
           <td
             class="rank-table__num num"
             :class="{ 'num--danger': m.errorRate > 0.05 }"

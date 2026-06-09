@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatMoney, normalizeMoneyInput } from '../lib/money';
+import { BILLING_FRACTION_DIGITS, formatMoney, normalizeMoneyInput } from '../lib/money';
 
 describe('formatMoney', () => {
   it('显示 CNY 与符号', () => {
@@ -34,6 +34,10 @@ describe('formatMoney', () => {
 
   it('自定义货币与小数位', () => {
     expect(formatMoney(99, { currency: 'USD', fractionDigits: 0 })).toMatch(/US\$99|\$99/);
+  });
+
+  it('token 级微扣费保留 6 位小数', () => {
+    expect(formatMoney(0.0022038, { fractionDigits: BILLING_FRACTION_DIGITS })).toBe('¥0.002204');
   });
 });
 

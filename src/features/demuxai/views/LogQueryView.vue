@@ -20,7 +20,7 @@ import StatusTag from '@/shared/ui/StatusTag.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import FilterBar from '@/shared/ui/FilterBar.vue';
 import { formatDateTime } from '@/shared/lib/date';
-import { formatMoney } from '@/shared/lib/money';
+import { BILLING_FRACTION_DIGITS, formatMoney } from '@/shared/lib/money';
 
 import {
   BillingTypeLabel,
@@ -517,7 +517,7 @@ onMounted(() => {
           </el-table-column>
           <el-table-column label="消费（元）" width="130" align="right">
             <template #default="{ row }: { row: VendorConsumptionRow }">
-              <span class="num vendor-panel__cost">{{ formatMoney(row.totalCost, { fractionDigits: 4 }) }}</span>
+              <span class="num vendor-panel__cost">{{ formatMoney(row.totalCost, { fractionDigits: BILLING_FRACTION_DIGITS }) }}</span>
             </template>
           </el-table-column>
         </el-table>
@@ -655,7 +655,7 @@ onMounted(() => {
               class="cell-cost__amount"
               :class="{ 'cell-cost__amount--reversed': row.bill?.status === 'reversed' }"
             >
-              {{ formatMoney(row.cost.total, { fractionDigits: 4 }) }}
+              {{ formatMoney(row.cost.total, { fractionDigits: BILLING_FRACTION_DIGITS }) }}
             </span>
             <el-tag v-if="row.bill?.status === 'reversed'" size="small" type="info" effect="plain" class="cell-cost__tag">
               已驳回

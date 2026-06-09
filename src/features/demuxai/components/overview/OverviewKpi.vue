@@ -9,7 +9,7 @@
  */
 import { computed } from 'vue';
 
-import { formatMoney } from '@/shared/lib/money';
+import { BILLING_FRACTION_DIGITS, formatMoney } from '@/shared/lib/money';
 
 import type { LogStats } from '../../model/log.types';
 import { shortNumber } from './chartUtils';
@@ -64,7 +64,7 @@ const successRateClass = computed(() => {
     </div>
     <div class="kpi-card">
       <div class="kpi-card__label">总扣费</div>
-      <div class="kpi-card__value">{{ formatMoney(stats?.totalCost ?? 0) }}</div>
+      <div class="kpi-card__value">{{ formatMoney(stats?.totalCost ?? 0, { fractionDigits: BILLING_FRACTION_DIGITS }) }}</div>
       <div class="kpi-card__sub">范围内累计</div>
     </div>
     <div class="kpi-card">

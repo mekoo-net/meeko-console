@@ -17,7 +17,7 @@ import { computed, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
 
-import { formatMoney } from '@/shared/lib/money';
+import { BILLING_FRACTION_DIGITS, formatMoney } from '@/shared/lib/money';
 import { formatDateTime } from '@/shared/lib/date';
 
 import {
@@ -138,7 +138,7 @@ function onCancel(): void {
         </div>
         <div class="meta-row">
           <span class="meta-label">原扣费金额</span>
-          <span class="cost-amount">{{ formatMoney(log.cost.total, { fractionDigits: 4 }) }}</span>
+          <span class="cost-amount">{{ formatMoney(log.cost.total, { fractionDigits: BILLING_FRACTION_DIGITS }) }}</span>
         </div>
       </div>
 

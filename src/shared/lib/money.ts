@@ -1,11 +1,17 @@
 /**
  * 钱包/订单金额格式化。
  *
- * 后端：decimal（C#），Json 序列化默认是 number；保留两位小数，**禁止**用 toFixed 直接
- * 处理，因为浮点会丢精度（0.1 + 0.2）。这里用 `Intl.NumberFormat` 走标准 banker rounding。
+ * 后端：decimal（C#），Json 序列化默认是 number；**禁止**用 toFixed 直接处理，因为浮点会
+ * 丢精度（0.1 + 0.2）。这里用 `Intl.NumberFormat` 走标准 banker rounding。
+ *
+ * - 钱包余额 / 充值订单：默认 2 位小数（用户可读）。
+ * - Token 级扣费明细：与 `Meeko.Billing.Domain.Common.MoneyGuard.Scale` 一致，6 位小数。
  *
  * 货币代码与 Meeko.Contracts.Billing.WalletSnapshot.Currency 一致，默认 CNY。
  */
+/** 与 Meeko.Billing MoneyGuard.Scale 一致；token 级微扣费展示精度。 */
+export const BILLING_FRACTION_DIGITS = 6;
+
 export interface MoneyOptions {
   currency?: string;
   /** 是否显示符号（¥ 12.34），false 则只显示 "12.34"。 */

@@ -15,7 +15,7 @@ import { RefreshLeft } from '@element-plus/icons-vue';
 
 import { formatDateTime } from '@/shared/lib/date';
 import { formatIpv4 } from '@/shared/lib/ipv4';
-import { formatMoney } from '@/shared/lib/money';
+import { BILLING_FRACTION_DIGITS, formatMoney } from '@/shared/lib/money';
 import StatusTag from '@/shared/ui/StatusTag.vue';
 
 import {
@@ -186,7 +186,7 @@ const outputDims = computed<DimRow[]>(() => {
           {{ BillingTypeLabel[log.billingType] }}
         </el-descriptions-item>
         <el-descriptions-item label="扣费">
-          <span class="cost-total">{{ formatMoney(log.cost.total) }}</span>
+          <span class="cost-total">{{ formatMoney(log.cost.total, { fractionDigits: BILLING_FRACTION_DIGITS }) }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="账户">
           <span class="mono">{{ log.account.uid }}</span>
@@ -242,7 +242,7 @@ const outputDims = computed<DimRow[]>(() => {
           <span class="dim-group-name">Input</span>
           <span class="dim-group-totals">
             {{ log.usage.input.tokens.toLocaleString() }} tokens ·
-            {{ formatMoney(log.cost.input.amount) }}
+            {{ formatMoney(log.cost.input.amount, { fractionDigits: BILLING_FRACTION_DIGITS }) }}
           </span>
         </div>
         <div
@@ -256,7 +256,7 @@ const outputDims = computed<DimRow[]>(() => {
           <span class="dim-sep">×</span>
           <span class="dim-price">{{ formatMoney(d.perMToken, { fractionDigits: 2 }) }}/1M</span>
           <span class="dim-sep">=</span>
-          <span class="dim-amount">{{ formatMoney(d.amount) }}</span>
+          <span class="dim-amount">{{ formatMoney(d.amount, { fractionDigits: BILLING_FRACTION_DIGITS }) }}</span>
         </div>
 
         <!-- ── Output 分组 ── -->
@@ -265,7 +265,7 @@ const outputDims = computed<DimRow[]>(() => {
           <span class="dim-group-name">Output</span>
           <span class="dim-group-totals">
             {{ log.usage.output.tokens.toLocaleString() }} tokens ·
-            {{ formatMoney(log.cost.output.amount) }}
+            {{ formatMoney(log.cost.output.amount, { fractionDigits: BILLING_FRACTION_DIGITS }) }}
           </span>
         </div>
         <div
@@ -279,7 +279,7 @@ const outputDims = computed<DimRow[]>(() => {
           <span class="dim-sep">×</span>
           <span class="dim-price">{{ formatMoney(d.perMToken, { fractionDigits: 2 }) }}/1M</span>
           <span class="dim-sep">=</span>
-          <span class="dim-amount">{{ formatMoney(d.amount) }}</span>
+          <span class="dim-amount">{{ formatMoney(d.amount, { fractionDigits: BILLING_FRACTION_DIGITS }) }}</span>
         </div>
       </template>
 
@@ -398,7 +398,7 @@ const outputDims = computed<DimRow[]>(() => {
           class="cost-total"
           :class="{ 'cost-total--reversed': log.bill?.status === 'reversed' }"
         >
-          {{ formatMoney(log.cost.total) }}
+          {{ formatMoney(log.cost.total, { fractionDigits: BILLING_FRACTION_DIGITS }) }}
         </span>
         <el-tag
           v-if="log.bill?.status === 'reversed'"
