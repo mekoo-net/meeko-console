@@ -9,7 +9,7 @@ import { computed, reactive, type Ref, ref, watch } from 'vue';
  */
 export interface PaginationOptions {
   initialPage?: number;
-  initialPageSize?: number;
+  pageSize?: number;
   pageSizes?: number[];
 }
 
@@ -21,12 +21,12 @@ export interface PaginationState {
 
 export function usePagination(opts: PaginationOptions = {}) {
   const initialPage = opts.initialPage ?? 1;
-  const initialPageSize = opts.initialPageSize ?? 20;
+  const defaultPageSize = opts.pageSize ?? 20;
   const pageSizes = opts.pageSizes ?? [10, 20, 50, 100];
 
   const state = reactive<PaginationState>({
     page: initialPage,
-    pageSize: initialPageSize,
+    pageSize: defaultPageSize,
     total: 0,
   });
 

@@ -26,23 +26,24 @@
   border-right: none !important;
 }
 
-/* 表头：浅灰底 + 二级文字色 + 加粗 */
+/* 表头：与 Element Plus 默认更接近，略加字重 */
 .compact-table th.el-table__cell {
-  background: #f8fafc !important;
-  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-light) !important;
+  color: var(--el-text-color-regular);
   font-weight: 600;
-  font-size: 12px;
-  letter-spacing: 0.02em;
+  font-size: 13px;
 }
 
-/* 行分割线淡化 */
+/* 行分割线使用 EP 变量 */
 .compact-table tr.el-table__row td.el-table__cell {
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  border-bottom: 1px solid var(--el-table-border-color);
 }
 
-/* 单元格紧凑 padding */
-.compact-table td.el-table__cell {
-  padding: 8px 0;
+/* 保留 EP 默认单元格内边距，仅略微压缩行高 */
+.compact-table td.el-table__cell,
+.compact-table th.el-table__cell {
+  padding-top: 7px;
+  padding-bottom: 7px;
 }
 
 /* 鼠标悬停整行高亮 */

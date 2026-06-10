@@ -21,6 +21,7 @@ import {
   User,
 } from '@element-plus/icons-vue';
 
+import { prefetchRoute } from '@/router/prefetch';
 import type { AppRole } from '@/stores/auth';
 import { useAuthStore } from '@/stores/auth';
 
@@ -252,6 +253,10 @@ function navigate(index: string): void {
   if (route.path === index || route.path.startsWith(index + '/')) return;
   void router.push(index);
 }
+
+function onMenuHover(index: string): void {
+  prefetchRoute(router, index);
+}
 </script>
 
 <template>
@@ -273,6 +278,7 @@ function navigate(index: string): void {
         v-if="node.type === 'leaf'"
         :index="node.index"
         :disabled="node.disabled"
+        @mouseenter="onMenuHover(node.index)"
       >
         <el-icon v-if="node.icon"><component :is="node.icon" /></el-icon>
         <template #title>
@@ -301,6 +307,7 @@ function navigate(index: string): void {
             v-if="child.type === 'leaf'"
             :index="child.index"
             :disabled="child.disabled"
+            @mouseenter="onMenuHover(child.index)"
           >
             <el-icon v-if="child.icon"><component :is="child.icon" /></el-icon>
             <template #title>
@@ -328,6 +335,7 @@ function navigate(index: string): void {
               :key="leaf.index"
               :index="leaf.index"
               :disabled="leaf.type === 'leaf' ? leaf.disabled : false"
+              @mouseenter="leaf.type === 'leaf' ? onMenuHover(leaf.index) : undefined"
             >
               <el-icon v-if="leaf.type === 'leaf' && leaf.icon">
                 <component :is="leaf.icon" />

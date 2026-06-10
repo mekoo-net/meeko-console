@@ -25,7 +25,7 @@ export interface UseListQueryOptions<T, F> {
 }
 
 export function useListQuery<T, F>(opts: UseListQueryOptions<T, F>) {
-  const pagination = usePagination({ initialPageSize: opts.pageSize ?? 20 });
+  const pagination = usePagination({ pageSize: opts.pageSize ?? 20 });
 
   const fetch = async (): Promise<AppResult<ListPage<T>>> => {
     return opts.fetcher({

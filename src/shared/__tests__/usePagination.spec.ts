@@ -11,13 +11,13 @@ describe('usePagination', () => {
   });
 
   it('setTotal 后 totalPages 正确', () => {
-    const p = usePagination({ initialPageSize: 10 });
+    const p = usePagination({ pageSize: 10 });
     p.setTotal(35);
     expect(p.totalPages.value).toBe(4);
   });
 
   it('setPage 越界被夹住', () => {
-    const p = usePagination({ initialPageSize: 10 });
+    const p = usePagination({ pageSize: 10 });
     p.setTotal(35);
     p.setPage(99);
     expect(p.state.page).toBe(4);
@@ -26,7 +26,7 @@ describe('usePagination', () => {
   });
 
   it('改 pageSize 时回到第一页', () => {
-    const p = usePagination({ initialPageSize: 10 });
+    const p = usePagination({ pageSize: 10 });
     p.setTotal(50);
     p.setPage(3);
     p.setPageSize(25);

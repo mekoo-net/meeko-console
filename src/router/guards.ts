@@ -1,9 +1,15 @@
+import { nextTick } from 'vue';
 import type { Router } from 'vue-router';
 
 import { useAuthStore } from '@/stores/auth';
+import { useNavigationStore } from '@/stores/navigation';
 
 export function installGuards(router: Router): void {
-  router.beforeEach((to) => {
+  router.beforeEach((to, from) => {
+    if (to.fullPath !== from.fullPath) {
+      useNavigationStore().start();
+    }
+
     const auth = useAuthStore();
 
     if (to.meta.requiresAuth === false) {
@@ -33,9 +39,16 @@ export function installGuards(router: Router): void {
     return true;
   });
 
-  router.afterEach((to) => {
+  router.afterEach(async (to) => {
+    await nextTick();
+    await useNavigationStore().finish();
+
     if (typeof document !== 'undefined') {
       document.title = to.meta.title ? `${to.meta.title} · Meeko Admin` : 'Meeko Admin';
     }
+  });
+
+  router.onError(async () => {
+    await useNavigationStore().finish();
   });
 }

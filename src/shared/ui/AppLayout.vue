@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
 
+import RouteViewport from './RouteViewport.vue';
 import SideMenu from './SideMenu.vue';
 import TopBar from './TopBar.vue';
 
@@ -33,11 +34,7 @@ const pageTitle = computed(() => {
         />
       </el-header>
       <el-main class="app-main">
-        <router-view v-slot="{ Component, route: r }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" :key="r.fullPath" />
-          </transition>
-        </router-view>
+        <RouteViewport />
       </el-main>
     </el-container>
   </el-container>
@@ -102,18 +99,7 @@ const pageTitle = computed(() => {
   background: #f3f4f6;
 }
 
-/* 让路由页根节点至少撑满 main，内容过少时也不会露出灰底 */
-.app-main > :deep(*) {
+.app-main :deep(.route-viewport__page) {
   min-height: 100%;
-  box-sizing: border-box;
-}
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.12s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
 }
 </style>
