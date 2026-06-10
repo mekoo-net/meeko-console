@@ -92,13 +92,23 @@ function openDetail(uid: string): void {
     <el-table-column label="余额" width="150" align="right">
       <template #default="{ row }: { row: Account }">
         <template v-if="row.walletSummary">
-          <span class="cell-money">
-            {{
-              formatMoney(row.walletSummary.available, {
-                currency: row.walletSummary.currency,
-              })
-            }}
-          </span>
+          <div class="cell-wallet">
+            <span class="cell-wallet__available">
+              {{
+                formatMoney(row.walletSummary.available, {
+                  currency: row.walletSummary.currency,
+                })
+              }}
+            </span>
+            <span class="cell-wallet__held">
+              冻结
+              {{
+                formatMoney(row.walletSummary.held, {
+                  currency: row.walletSummary.currency,
+                })
+              }}
+            </span>
+          </div>
         </template>
         <span v-else class="cell-muted">—</span>
       </template>
@@ -167,6 +177,23 @@ function openDetail(uid: string): void {
 }
 .cell-muted {
   color: var(--el-text-color-placeholder);
+}
+.cell-wallet {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.3;
+}
+.cell-wallet__available {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+  font-variant-numeric: tabular-nums;
+}
+.cell-wallet__held {
+  font-size: 11px;
+  color: var(--el-text-color-placeholder);
+  font-variant-numeric: tabular-nums;
 }
 .cell-contact__email {
   min-height: 18px;
