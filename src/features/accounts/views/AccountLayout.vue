@@ -20,6 +20,7 @@ import { getAccountAdminPort } from '../services';
 import AccountSideMenu from '../components/AccountSideMenu.vue';
 
 import ManualRechargeDialog from '@/features/billing/components/ManualRechargeDialog.vue';
+import RouteViewport from '@/shared/ui/RouteViewport.vue';
 
 const props = defineProps<{ uid: string }>();
 
@@ -183,8 +184,8 @@ async function toggleSuspend(): Promise<void> {
         class="acc-shell__alert"
       />
 
-      <section v-loading="detail.loading.value" class="acc-shell__content">
-        <router-view v-if="account" />
+      <section v-loading="detail.loading.value && !account" class="acc-shell__content">
+        <RouteViewport />
       </section>
     </main>
 

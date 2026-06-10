@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Refresh } from '@element-plus/icons-vue';
 
+import EmptyState from '@/shared/ui/EmptyState.vue';
+import { clientPaginate, usePagination } from '@/shared/composables/usePagination';
 import { formatDateTime } from '@/shared/lib/date';
 import type {
   ReferralProductRate,
@@ -16,6 +18,10 @@ const loading = ref(false);
 const saving = ref(false);
 const snapshot = ref<string>('');
 const rows = ref<ReferralProductRate[]>([]);
+const pagination = usePagination({ pageSize: 20 });
+const displayRows = computed(() =>
+  clientPaginate(rows.value, pagination.state.page, pagination.state.pageSize),
+);
 const updatedAtUtc = ref(0);
 
 function cloneRates(list: ReferralProductRate[]): ReferralProductRate[] {
@@ -24,6 +30,7 @@ function cloneRates(list: ReferralProductRate[]): ReferralProductRate[] {
 
 function applyStatus(status: ReferralSettingsAdmin): void {
   rows.value = cloneRates(status.productRates);
+  pagination.setTotal(rows.value.length);
   updatedAtUtc.value = status.updatedAtUtc;
   snapshot.value = JSON.stringify(rows.value);
 }
@@ -63,7 +70,7 @@ onMounted(() => load());
 </script>
 
 <template>
-  <div v-loading="loading" class="settings-panel">
+  <div class="settings-panel">
     <header class="settings-panel__head">
       <div>
         <h3 class="settings-panel__title">返利设置</h3>
@@ -80,7 +87,16 @@ onMounted(() => load());
     </header>
 
     <div class="settings-panel__body">
-      <el-table :data="rows" size="small" class="compact-table" empty-text="暂无产品配置">
+      <div class="settings-panel__table-wrap">
+      <el-table
+        v-loading="loading"
+        :data="displayRows"
+        row-key="productCode"
+        size="small"
+        class="compact-table"
+        height="100%"
+        :empty-text="' '"
+      >
         <el-table-column label="产品 / 渠道" min-width="200">
           <template #default="{ row }: { row: ReferralProductRate }">
             <div class="cell-product">
@@ -128,7 +144,26 @@ onMounted(() => load());
             <el-switch v-model="row.withdrawReviewRequired" :disabled="!row.enabled" />
           </template>
         </el-table-column>
+
+        <template #empty>
+          <EmptyState
+            title="暂无产品配置"
+            description="请先在「计费产品」中注册产品，或点击刷新拉取最新配置。"
+          />
+        </template>
       </el-table>
+      </div>
+
+      <div class="settings-panel__pagination">
+        <el-pagination
+          v-model:current-page="pagination.state.page"
+          v-model:page-size="pagination.state.pageSize"
+          :total="pagination.state.total"
+          :page-sizes="pagination.pageSizes"
+          layout="total, sizes, prev, pager, next"
+          background
+        />
+      </div>
     </div>
 
     <footer class="settings-panel__footer">
@@ -143,7 +178,8 @@ onMounted(() => load());
 .settings-panel {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .settings-panel__head {
@@ -181,7 +217,25 @@ onMounted(() => load());
 
 .settings-panel__body {
   flex: 1;
-  padding: 16px 24px 24px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px 24px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-panel__table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-panel__pagination {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 0;
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
 .cell-product {
@@ -203,8 +257,7 @@ onMounted(() => load());
 }
 
 .settings-panel__footer {
-  position: sticky;
-  bottom: 0;
+  flex-shrink: 0;
   display: flex;
   justify-content: flex-end;
   gap: 8px;

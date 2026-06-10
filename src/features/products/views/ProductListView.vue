@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Refresh, Search } from '@element-plus/icons-vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
+import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
+import { clientPaginate, usePagination } from '@/shared/composables/usePagination';
 import { formatDateTime } from '@/shared/lib/date';
 import ProductFormDialog from '../components/ProductFormDialog.vue';
 import ProductDiscoveryDialog from '../components/ProductDiscoveryDialog.vue';
@@ -13,6 +15,10 @@ import { getProductPort } from '../services';
 
 const port = getProductPort();
 const products = ref<BillingProduct[]>([]);
+const pagination = usePagination({ pageSize: 20 });
+const displayProducts = computed(() =>
+  clientPaginate(products.value, pagination.state.page, pagination.state.pageSize),
+);
 const loading = ref(false);
 const unregisteringCode = ref<string | null>(null);
 
@@ -24,8 +30,10 @@ async function load(): Promise<void> {
   loading.value = true;
   try {
     const r = await port.list();
-    if (r.success) products.value = r.data;
-    else ElMessage.error(r.error.message);
+    if (r.success) {
+      products.value = r.data;
+      pagination.setTotal(r.data.length);
+    } else ElMessage.error(r.error.message);
   } finally {
     loading.value = false;
   }
@@ -81,18 +89,28 @@ onMounted(() => load());
 </script>
 
 <template>
-  <section v-loading="loading">
-    <PageHeader
-      title="计费产品"
-      description="从 Consul 发现业务产品并注册到平台。ProductCode 贯穿下单/用量/冻结。"
-    >
-      <template #actions>
-        <el-button :icon="Refresh" plain @click="load">刷新</el-button>
-        <el-button type="primary" :icon="Search" @click="openDiscovery">发现产品</el-button>
-      </template>
-    </PageHeader>
+  <FillListPageLayout>
+    <template #header>
+      <PageHeader
+        title="计费产品"
+        description="从 Consul 发现业务产品并注册到平台。ProductCode 贯穿下单/用量/冻结。"
+      >
+        <template #actions>
+          <el-button :icon="Refresh" plain @click="load">刷新</el-button>
+          <el-button type="primary" :icon="Search" @click="openDiscovery">发现产品</el-button>
+        </template>
+      </PageHeader>
+    </template>
 
-    <el-table v-if="products.length" :data="products" size="small" class="compact-table">
+    <el-table
+      v-loading="loading"
+      :data="displayProducts"
+      row-key="code"
+      size="small"
+      class="compact-table"
+      height="100%"
+      :empty-text="' '"
+    >
       <el-table-column label="产品" min-width="220">
         <template #default="{ row }: { row: BillingProduct }">
           <div class="cell-product">
@@ -119,18 +137,30 @@ onMounted(() => load());
           </el-button>
         </template>
       </el-table-column>
+
+      <template #empty>
+        <EmptyState
+          title="暂无已注册产品"
+          description="点击「发现产品」从 Consul 读取业务服务声明的产品并注册到平台。"
+        />
+      </template>
     </el-table>
 
-    <EmptyState
-      v-else
-      title="暂无已注册产品"
-      description="点击「发现产品」从 Consul 读取业务服务声明的产品并注册到平台。"
-    />
+    <template #footer>
+      <el-pagination
+        v-model:current-page="pagination.state.page"
+        v-model:page-size="pagination.state.pageSize"
+        :total="pagination.state.total"
+        :page-sizes="pagination.pageSizes"
+        layout="total, sizes, prev, pager, next"
+        background
+      />
+    </template>
+  </FillListPageLayout>
 
-    <ProductDiscoveryDialog v-model="discoveryVisible" @registered="load" />
+  <ProductDiscoveryDialog v-model="discoveryVisible" @registered="load" />
 
-    <ProductFormDialog v-model="editVisible" :product="editing" @submit="onSubmit" />
-  </section>
+  <ProductFormDialog v-model="editVisible" :product="editing" @submit="onSubmit" />
 </template>
 
 <style scoped>

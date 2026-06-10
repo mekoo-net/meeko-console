@@ -3,6 +3,7 @@ import { ElMessage } from 'element-plus';
 import { Plus, Refresh } from '@element-plus/icons-vue';
 import { computed, nextTick, reactive, ref } from 'vue';
 
+import EmptyState from '@/shared/ui/EmptyState.vue';
 import { confirmDanger } from '@/shared/composables/useConfirm';
 import { formatDateTime } from '@/shared/lib/date';
 import { useAuthStore } from '@/stores/auth';
@@ -190,8 +191,17 @@ async function onDelete(row: StaffRoleListItem): Promise<void> {
         </div>
       </el-form>
 
-      <div v-loading="loading">
-        <el-table :data="rows" row-key="id" stripe>
+      <div class="settings-panel__table-wrap">
+        <el-table
+          v-loading="loading"
+          :data="rows"
+          row-key="id"
+          stripe
+          size="small"
+          class="compact-table"
+          height="100%"
+          :empty-text="' '"
+        >
           <el-table-column prop="name" label="角色名" min-width="140">
             <template #default="{ row }">
               <span>{{ row.name }}</span>
@@ -222,18 +232,25 @@ async function onDelete(row: StaffRoleListItem): Promise<void> {
               </el-button>
             </template>
           </el-table-column>
-        </el-table>
 
-        <div class="settings-panel__pagination">
-          <el-pagination
-            v-model:current-page="list.pagination.state.page"
-            v-model:page-size="list.pagination.state.pageSize"
-            :total="list.pagination.state.total"
-            :page-sizes="list.pagination.pageSizes"
-            layout="total, sizes, prev, pager, next"
-            background
-          />
-        </div>
+          <template #empty>
+            <EmptyState
+              title="暂无角色"
+              description="调整筛选条件或新建角色。"
+            />
+          </template>
+        </el-table>
+      </div>
+
+      <div class="settings-panel__pagination">
+        <el-pagination
+          v-model:current-page="list.pagination.state.page"
+          v-model:page-size="list.pagination.state.pageSize"
+          :total="list.pagination.state.total"
+          :page-sizes="list.pagination.pageSizes"
+          layout="total, sizes, prev, pager, next"
+          background
+        />
       </div>
     </div>
 
@@ -293,10 +310,12 @@ async function onDelete(row: StaffRoleListItem): Promise<void> {
 .settings-panel {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .settings-panel__head {
+  flex-shrink: 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -326,11 +345,15 @@ async function onDelete(row: StaffRoleListItem): Promise<void> {
 
 .settings-panel__body {
   flex: 1;
-  padding: 16px 24px 24px;
-  min-height: 220px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px 24px;
 }
 
 .settings-panel__filter {
+  flex-shrink: 0;
   padding-bottom: 16px;
   margin-bottom: 16px;
   border-bottom: 1px solid var(--el-border-color-lighter);
@@ -353,10 +376,18 @@ async function onDelete(row: StaffRoleListItem): Promise<void> {
   gap: 8px;
 }
 
+.settings-panel__table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .settings-panel__pagination {
+  flex-shrink: 0;
   display: flex;
   justify-content: flex-end;
-  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
 .perm-groups {

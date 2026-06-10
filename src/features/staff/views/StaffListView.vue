@@ -3,6 +3,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Refresh } from '@element-plus/icons-vue';
 import { computed, nextTick, reactive, ref } from 'vue';
 
+import EmptyState from '@/shared/ui/EmptyState.vue';
 import { confirmDanger } from '@/shared/composables/useConfirm';
 import { formatDateTime } from '@/shared/lib/date';
 import { useAuthStore } from '@/stores/auth';
@@ -216,69 +217,76 @@ async function confirmChangeRole(): Promise<void> {
         </div>
       </el-form>
 
-      <div v-loading="list.loading.value" class="settings-panel__table">
-        <el-alert
-          v-if="list.error.value"
-          :title="`加载失败：${list.error.value.code}`"
-          :description="list.error.value.message"
-          type="error"
-          show-icon
-          :closable="false"
-          class="settings-panel__alert"
-        />
-        <el-empty
-          v-else-if="!list.loading.value && list.items.value.length === 0"
-          description="暂无管理员"
+      <el-alert
+        v-if="list.error.value"
+        :title="`加载失败：${list.error.value.code}`"
+        :description="list.error.value.message"
+        type="error"
+        show-icon
+        :closable="false"
+        class="settings-panel__alert"
+      />
+
+      <div class="settings-panel__table-wrap">
+        <el-table
+          v-loading="list.loading.value"
+          :data="list.items.value"
+          row-key="uid"
+          stripe
+          size="small"
+          class="compact-table"
+          height="100%"
+          :empty-text="' '"
         >
-          <template #description>
-            <p>调整筛选条件或新建管理员。</p>
-          </template>
-        </el-empty>
-        <template v-else>
-          <div class="settings-panel__toolbar">共 {{ list.total.value }} 个管理员</div>
-          <el-table :data="list.items.value" row-key="uid" stripe>
-            <el-table-column prop="username" label="用户名" min-width="120" />
-            <el-table-column prop="displayName" label="显示名" min-width="120" />
-            <el-table-column prop="email" label="邮箱" min-width="180" />
-            <el-table-column prop="roleName" label="角色" width="120" />
-            <el-table-column label="状态" width="90">
-              <template #default="{ row }">
-                <el-tag :type="row.status === 'Active' ? 'success' : 'info'" size="small">
-                  {{ staffStatusLabel(row.status) }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="最近登录" min-width="160">
-              <template #default="{ row }">
-                {{ row.lastLoginAtUtc ? formatDateTime(row.lastLoginAtUtc) : '—' }}
-              </template>
-            </el-table-column>
-            <el-table-column v-if="canWrite" label="操作" width="260" fixed="right">
-              <template #default="{ row }">
-                <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-                <el-button link type="primary" @click="changeRole(row)">改角色</el-button>
-                <el-button link type="warning" @click="resetPassword(row)">重置密码</el-button>
-                <el-button
-                  link
-                  :type="row.status === 'Active' ? 'danger' : 'success'"
-                  @click="toggleStatus(row)"
-                >
-                  {{ row.status === 'Active' ? '停用' : '启用' }}
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <div class="settings-panel__pagination">
-            <el-pagination
-              v-model:current-page="list.pagination.state.page"
-              v-model:page-size="list.pagination.state.pageSize"
-              :total="list.pagination.state.total"
-              :page-sizes="list.pagination.pageSizes"
-              layout="total, sizes, prev, pager, next"
-              background
+          <el-table-column prop="username" label="用户名" min-width="120" />
+          <el-table-column prop="displayName" label="显示名" min-width="120" />
+          <el-table-column prop="email" label="邮箱" min-width="180" />
+          <el-table-column prop="roleName" label="角色" width="120" />
+          <el-table-column label="状态" width="90">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 'Active' ? 'success' : 'info'" size="small">
+                {{ staffStatusLabel(row.status) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="最近登录" min-width="160">
+            <template #default="{ row }">
+              {{ row.lastLoginAtUtc ? formatDateTime(row.lastLoginAtUtc) : '—' }}
+            </template>
+          </el-table-column>
+          <el-table-column v-if="canWrite" label="操作" width="260" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
+              <el-button link type="primary" @click="changeRole(row)">改角色</el-button>
+              <el-button link type="warning" @click="resetPassword(row)">重置密码</el-button>
+              <el-button
+                link
+                :type="row.status === 'Active' ? 'danger' : 'success'"
+                @click="toggleStatus(row)"
+              >
+                {{ row.status === 'Active' ? '停用' : '启用' }}
+              </el-button>
+            </template>
+          </el-table-column>
+
+          <template #empty>
+            <EmptyState
+              title="暂无管理员"
+              description="调整筛选条件或新建管理员。"
             />
-          </div>
-        </template>
+          </template>
+        </el-table>
+      </div>
+
+      <div class="settings-panel__pagination">
+        <el-pagination
+          v-model:current-page="list.pagination.state.page"
+          v-model:page-size="list.pagination.state.pageSize"
+          :total="list.pagination.state.total"
+          :page-sizes="list.pagination.pageSizes"
+          layout="total, sizes, prev, pager, next"
+          background
+        />
       </div>
     </div>
 
@@ -339,10 +347,12 @@ async function confirmChangeRole(): Promise<void> {
 .settings-panel {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .settings-panel__head {
+  flex-shrink: 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -372,10 +382,15 @@ async function confirmChangeRole(): Promise<void> {
 
 .settings-panel__body {
   flex: 1;
-  padding: 16px 24px 24px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px 24px;
 }
 
 .settings-panel__filter {
+  flex-shrink: 0;
   padding-bottom: 16px;
   margin-bottom: 16px;
   border-bottom: 1px solid var(--el-border-color-lighter);
@@ -399,23 +414,22 @@ async function confirmChangeRole(): Promise<void> {
 }
 
 .settings-panel__alert {
+  flex-shrink: 0;
   margin-bottom: 12px;
 }
 
-.settings-panel__toolbar {
-  margin-bottom: 12px;
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-}
-
-.settings-panel__table {
-  min-height: 220px;
+.settings-panel__table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .settings-panel__pagination {
+  flex-shrink: 0;
   display: flex;
   justify-content: flex-end;
-  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
 .mr-1 {

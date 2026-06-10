@@ -3,7 +3,8 @@ import { ElMessage } from 'element-plus';
 import { computed, reactive, ref, unref } from 'vue';
 import { useRouter } from 'vue-router';
 
-import DataTableShell from '@/shared/ui/DataTableShell.vue';
+import EmptyState from '@/shared/ui/EmptyState.vue';
+import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import { formatDateTime } from '@/shared/lib/date';
 
@@ -16,7 +17,7 @@ const router = useRouter();
 const list = useEmailTemplateList();
 const smtpList = useSmtpList();
 
-const rows = computed(() => list.data.value ?? []);
+const rows = computed(() => list.items.value);
 const loading = computed(() => unref(list.loading));
 const error = computed(() => unref(list.error));
 const smtpRows = computed(() => smtpList.data.value ?? []);
@@ -71,7 +72,7 @@ async function submitCreate(): Promise<void> {
     if (r.success) {
       ElMessage.success('模板已创建');
       dialog.value = false;
-      void list.run();
+      void list.refresh();
       await router.push({
         name: 'notice-template-edit',
         params: { code: form.code, locale: form.locale },
@@ -90,58 +91,88 @@ function editLink(code: string, locale: string): string {
 </script>
 
 <template>
-  <div>
-    <PageHeader title="邮件模板" description="管理邮件正文与修订记录，每个模板可绑定独立发信渠道">
-      <template #actions>
-        <el-button type="primary" @click="openCreate">新建模板</el-button>
-        <el-button @click="list.run()">刷新</el-button>
-      </template>
-    </PageHeader>
+  <FillListPageLayout>
+    <template #header>
+      <PageHeader title="邮件模板" description="管理邮件正文与修订记录，每个模板可绑定独立发信渠道">
+        <template #actions>
+          <el-button type="primary" @click="openCreate">新建模板</el-button>
+          <el-button @click="list.refresh()">刷新</el-button>
+        </template>
+      </PageHeader>
+    </template>
 
-    <DataTableShell
-      :loading="loading"
-      :error="error"
-      :items="rows"
-      empty-title="暂无模板"
+    <template #filters>
+      <el-alert
+        v-if="error"
+        :title="`加载失败：${error.code}`"
+        :description="error.message"
+        type="error"
+        show-icon
+        :closable="false"
+      />
+    </template>
+
+    <el-table
+      v-loading="loading"
+      :data="rows"
+      row-key="id"
+      size="small"
+      class="compact-table"
+      height="100%"
+      :empty-text="' '"
     >
-      <el-table :data="rows" stripe style="width: 100%">
-        <el-table-column prop="code" label="模板代码" min-width="140" />
-        <el-table-column prop="locale" label="语言" width="90" />
-        <el-table-column prop="subject" label="主题" min-width="200" show-overflow-tooltip />
-        <el-table-column label="发信渠道" min-width="160">
-          <template #default="{ row }">
-            <el-tooltip
-              :content="row.smtpProviderId ? '已绑定专属渠道' : '使用系统默认渠道'"
-              placement="top"
-            >
-              <el-tag :type="providerTag(row.smtpProviderId)" size="small" round>
-                {{ providerName(row.smtpProviderId) }}
-              </el-tag>
-            </el-tooltip>
-          </template>
-        </el-table-column>
-        <el-table-column prop="currentVersion" label="版本" width="70" align="center" />
-        <el-table-column label="状态" width="80" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.isActive ? 'success' : 'info'" size="small" round>
-              {{ row.isActive ? '启用' : '停用' }}
+      <el-table-column prop="code" label="模板代码" min-width="140" />
+      <el-table-column prop="locale" label="语言" width="90" />
+      <el-table-column prop="subject" label="主题" min-width="200" show-overflow-tooltip />
+      <el-table-column label="发信渠道" min-width="160">
+        <template #default="{ row }">
+          <el-tooltip
+            :content="row.smtpProviderId ? '已绑定专属渠道' : '使用系统默认渠道'"
+            placement="top"
+          >
+            <el-tag :type="providerTag(row.smtpProviderId)" size="small" round>
+              {{ providerName(row.smtpProviderId) }}
             </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="更新时间" min-width="150">
-          <template #default="{ row }">{{ formatDateTime(row.updatedAtUtc) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
-          <template #default="{ row }">
-            <router-link :to="editLink(row.code, row.locale)">
-              <el-button link type="primary">编辑</el-button>
-            </router-link>
-          </template>
-        </el-table-column>
-      </el-table>
-    </DataTableShell>
+          </el-tooltip>
+        </template>
+      </el-table-column>
+      <el-table-column prop="currentVersion" label="版本" width="70" align="center" />
+      <el-table-column label="状态" width="80" align="center">
+        <template #default="{ row }">
+          <el-tag :type="row.isActive ? 'success' : 'info'" size="small" round>
+            {{ row.isActive ? '启用' : '停用' }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="更新时间" min-width="150">
+        <template #default="{ row }">{{ formatDateTime(row.updatedAtUtc) }}</template>
+      </el-table-column>
+      <el-table-column label="操作" width="100" fixed="right">
+        <template #default="{ row }">
+          <router-link :to="editLink(row.code, row.locale)">
+            <el-button link type="primary">编辑</el-button>
+          </router-link>
+        </template>
+      </el-table-column>
 
-    <!-- 新建模板对话框 -->
+      <template #empty>
+        <EmptyState title="暂无模板" description="点击「新建模板」创建第一封邮件模板。" />
+      </template>
+    </el-table>
+
+    <template #footer>
+      <el-pagination
+        v-model:current-page="list.pagination.state.page"
+        v-model:page-size="list.pagination.state.pageSize"
+        :total="list.pagination.state.total"
+        :page-sizes="list.pagination.pageSizes"
+        layout="total, sizes, prev, pager, next"
+        background
+      />
+    </template>
+  </FillListPageLayout>
+
+  <!-- 新建模板对话框 -->
     <el-dialog v-model="dialog" title="新建邮件模板" width="580px" destroy-on-close>
       <el-form label-width="96px">
         <el-form-item label="模板代码" required>
@@ -197,7 +228,6 @@ function editLink(code: string, locale: string): string {
         <el-button type="primary" :loading="creating" @click="submitCreate">创建并编辑</el-button>
       </template>
     </el-dialog>
-  </div>
 </template>
 
 <style scoped>

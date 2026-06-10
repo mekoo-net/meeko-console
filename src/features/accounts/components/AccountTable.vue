@@ -15,6 +15,11 @@ import {
 
 defineProps<{
   items: Account[];
+  loading?: boolean;
+}>();
+
+defineSlots<{
+  empty?: () => unknown;
 }>();
 
 const router = useRouter();
@@ -27,10 +32,13 @@ function openDetail(uid: string): void {
 
 <template>
   <el-table
+    v-loading="loading"
     :data="items"
     row-key="uid"
     size="small"
     class="compact-table"
+    height="100%"
+    :empty-text="' '"
   >
     <el-table-column label="UID" width="130" prop="uid">
       <template #default="{ row }: { row: Account }">
@@ -119,6 +127,10 @@ function openDetail(uid: string): void {
         </el-button>
       </template>
     </el-table-column>
+
+    <template v-if="$slots.empty" #empty>
+      <slot name="empty" />
+    </template>
   </el-table>
 </template>
 

@@ -1,19 +1,45 @@
-import { onMounted } from 'vue';
+import { computed, ref } from 'vue';
 
-import { useAsyncState } from '@/shared/composables/useAsyncState';
+import { clientPaginate } from '@/shared/composables/usePagination';
+import { useListQuery } from '@/shared/composables/useListQuery';
+import { ok } from '@/shared/api/httpTypes';
 
-import type { EmailTemplateDto } from '../model/emailTemplate.types';
 import { getNoticeAdminPort } from '../services';
 
-export function useEmailTemplateList() {
-  const state = useAsyncState<EmailTemplateDto[], []>(
-    async () => getNoticeAdminPort().listEmailTemplates(),
-    { initial: [] },
-  );
+type EmailTemplateListFilter = Record<string, never>;
 
-  onMounted(() => {
-    void state.run();
+const defaultFilter = (): EmailTemplateListFilter => ({});
+
+export function useEmailTemplateList() {
+  const port = getNoticeAdminPort();
+  const filter = ref<EmailTemplateListFilter>(defaultFilter());
+
+  const list = useListQuery({
+    filter,
+    filterKey: () => '',
+    fetcher: async ({ page, pageSize }) => {
+      const r = await port.listEmailTemplates();
+      if (!r.success) return r;
+      const sorted = [...r.data].sort(
+        (a, b) => a.code.localeCompare(b.code) || a.locale.localeCompare(b.locale),
+      );
+      return ok({
+        items: clientPaginate(sorted, page, pageSize),
+        total: sorted.length,
+      });
+    },
+    pageSize: 20,
   });
 
-  return state;
+  const items = computed(() => list.items.value?.items ?? []);
+
+  void list.refresh();
+
+  return {
+    items,
+    loading: list.loading,
+    error: list.error,
+    pagination: list.pagination,
+    refresh: list.refresh,
+  };
 }

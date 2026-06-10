@@ -20,7 +20,8 @@
 .settings-layout {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: calc(100vh - 56px - 52px);
+  min-height: 480px;
 }
 
 .settings-layout__card {

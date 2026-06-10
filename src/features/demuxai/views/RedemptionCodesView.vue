@@ -3,7 +3,8 @@ import { onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { CopyDocument, Delete, Plus, Refresh, View } from '@element-plus/icons-vue';
 
-import DataTableShell from '@/shared/ui/DataTableShell.vue';
+import EmptyState from '@/shared/ui/EmptyState.vue';
+import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import StatusTag from '@/shared/ui/StatusTag.vue';
 import { formatDateTime } from '@/shared/lib/date';
@@ -190,51 +191,56 @@ onMounted(() => void refreshAll());
 </script>
 
 <template>
-  <div class="page">
-    <PageHeader
-      title="激活码"
-      description="管理充值兑换码与活动码；列表展示批次与进度，详情中查看完整 Key 与领取记录。"
-    >
-      <template #actions>
-        <el-button :icon="Refresh" :loading="loading" @click="refreshAll()">刷新</el-button>
-        <el-button type="primary" :icon="Plus" @click="createDrawerVisible = true">
-          发布激活码
-        </el-button>
-      </template>
-    </PageHeader>
-
-    <RedemptionStatsBar :stats="listStats" :loading="statsLoading" />
-
-    <RedemptionFilterBar
-      v-model:keyword="keyword"
-      v-model:status="statusFilter"
-      v-model:kind="kindFilter"
-      :loading="loading"
-      class="page-filter"
-      @refresh="page = 1; refreshAll()"
-      @reset="resetFilter()"
-    />
-
-    <DataTableShell
-      :loading="loading"
-      :error="error"
-      :items="items"
-      empty-title="暂无激活码"
-      empty-description="点击「发布激活码」创建；活动码可多人领取，一次性码可批量生成。"
-    >
-      <template #toolbar>
-        <span class="table-toolbar__meta">
-          当前筛选 <strong>{{ total }}</strong> 条
-        </span>
-      </template>
-
-      <el-table
-        :data="items"
-        row-key="id"
-        size="small"
-        class="compact-table redemption-table"
-        style="width: 100%"
+  <FillListPageLayout>
+    <template #header>
+      <PageHeader
+        title="激活码"
+        description="管理充值兑换码与活动码；列表展示批次与进度，详情中查看完整 Key 与领取记录。"
       >
+        <template #actions>
+          <el-button :icon="Refresh" :loading="loading" @click="refreshAll()">刷新</el-button>
+          <el-button type="primary" :icon="Plus" @click="createDrawerVisible = true">
+            发布激活码
+          </el-button>
+        </template>
+      </PageHeader>
+    </template>
+
+    <template #filters>
+      <RedemptionStatsBar :stats="listStats" :loading="statsLoading" />
+
+      <RedemptionFilterBar
+        v-model:keyword="keyword"
+        v-model:status="statusFilter"
+        v-model:kind="kindFilter"
+        :loading="loading"
+        @refresh="page = 1; refreshAll()"
+        @reset="resetFilter()"
+      />
+
+      <el-alert
+        v-if="error"
+        :title="`加载失败：${error.code}`"
+        :description="error.message"
+        type="error"
+        show-icon
+        :closable="false"
+      />
+
+      <span class="table-toolbar__meta">
+        当前筛选 <strong>{{ total }}</strong> 条
+      </span>
+    </template>
+
+    <el-table
+      v-loading="loading"
+      :data="items"
+      row-key="id"
+      size="small"
+      class="compact-table redemption-table"
+      height="100%"
+      :empty-text="' '"
+    >
         <el-table-column label="批次 / 活动" min-width="220" fixed="left">
           <template #default="{ row }">
             <div class="cell-batch">
@@ -339,48 +345,49 @@ onMounted(() => void refreshAll());
             </el-tooltip>
           </template>
         </el-table-column>
-      </el-table>
-
-      <template #pagination>
-        <el-pagination
-          v-model:current-page="page"
-          v-model:page-size="pageSize"
-          :total="total"
-          :page-sizes="[10, 20, 50, 100]"
-          layout="total, sizes, prev, pager, next"
-          background
-          @current-change="fetchData()"
-          @size-change="page = 1; fetchData()"
+      <template #empty>
+        <EmptyState
+          title="暂无激活码"
+          description="点击「发布激活码」创建；活动码可多人领取，一次性码可批量生成。"
         />
       </template>
-    </DataTableShell>
+    </el-table>
 
-    <RedemptionCreateDrawer v-model:visible="createDrawerVisible" @created="onCreated" />
+    <template #footer>
+      <el-pagination
+        v-model:current-page="page"
+        v-model:page-size="pageSize"
+        :total="total"
+        :page-sizes="[10, 20, 50, 100]"
+        layout="total, sizes, prev, pager, next"
+        background
+        @current-change="fetchData()"
+        @size-change="page = 1; fetchData()"
+      />
+    </template>
+  </FillListPageLayout>
 
-    <RedemptionCreateSuccessDialog
-      v-if="successDialogVisible"
-      v-model:visible="successDialogVisible"
-      :keys="successKeys"
-      :batch-name="successBatchName"
-      @closed="onSuccessDialogClosed"
-    />
+  <RedemptionCreateDrawer v-model:visible="createDrawerVisible" @created="onCreated" />
 
-    <RedemptionDetailDrawer
-      v-if="detailSnapshot"
-      :key="detailSnapshot.id"
-      v-model:visible="detailVisible"
-      :row="detailSnapshot"
-      @closed="onDetailClosed"
-      @remove="removeRow"
-    />
-  </div>
+  <RedemptionCreateSuccessDialog
+    v-if="successDialogVisible"
+    v-model:visible="successDialogVisible"
+    :keys="successKeys"
+    :batch-name="successBatchName"
+    @closed="onSuccessDialogClosed"
+  />
+
+  <RedemptionDetailDrawer
+    v-if="detailSnapshot"
+    :key="detailSnapshot.id"
+    v-model:visible="detailVisible"
+    :row="detailSnapshot"
+    @closed="onDetailClosed"
+    @remove="removeRow"
+  />
 </template>
 
 <style scoped>
-.page-filter {
-  margin-bottom: 14px;
-}
-
 .table-toolbar__meta {
   font-size: 13px;
   color: var(--el-text-color-secondary);
