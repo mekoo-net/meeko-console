@@ -19,6 +19,7 @@ import PageHeader from '@/shared/ui/PageHeader.vue';
 import StatusTag from '@/shared/ui/StatusTag.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import FilterBar from '@/shared/ui/FilterBar.vue';
+import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
 import { formatDateTime } from '@/shared/lib/date';
 import { BILLING_FRACTION_DIGITS, formatMoney } from '@/shared/lib/money';
 
@@ -29,7 +30,6 @@ import {
 } from '../model/enums';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 import type {
-  VendorConsumptionRow,
   ListLogsFilter,
   LogEntry,
   ReverseLogInput,
@@ -142,34 +142,16 @@ watch(
       filter.value.errorOnly,
     ] as const,
   () => {
-    page.value = 1;
-    void fetchData();
-    if (vendorPanel.value.length) void fetchVendorStats();
+    // 回到第一页：已在第 1 页则直接拉，否则只改 page，
+    // 由 [page, pageSize] watcher 单次触发，避免重复请求。
+    if (page.value === 1) {
+      void fetchData();
+    } else {
+      page.value = 1;
+    }
   },
   { deep: true },
 );
-
-// ---- 按渠道消费统计（折叠面板，展开时按需加载）----
-const vendorPanel = ref<string[]>([]);
-const vendorStats = ref<VendorConsumptionRow[]>([]);
-const vendorLoading = ref(false);
-
-async function fetchVendorStats(): Promise<void> {
-  if (!filter.value.dateRange || !filter.value.dateRange[0]) return;
-  vendorLoading.value = true;
-  try {
-    const r = await logsPort.statByVendor(buildPortFilter());
-    if (r.success) vendorStats.value = r.data;
-    else ElMessage.error(r.error.message);
-  } finally {
-    vendorLoading.value = false;
-  }
-}
-
-function onVendorPanelChange(names: string | number | (string | number)[]): void {
-  const open = Array.isArray(names) ? names.length > 0 : names != null && names !== '';
-  if (open && vendorStats.value.length === 0) void fetchVendorStats();
-}
 
 function resetFilter(): void {
   filter.value = defaultFilter();
@@ -436,93 +418,53 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page">
-    <PageHeader title="调用日志" />
+  <FillListPageLayout>
+    <template #header>
+      <PageHeader title="调用日志" />
+    </template>
 
-    <FilterBar
-      v-model:account-uid="filter.accountUid"
-      v-model:contact-keyword="filter.contactKeyword"
-      v-model:date-range="filter.dateRange"
-      :loading="loading"
-      @refresh="fetchData"
-      @reset="resetFilter"
-    >
-      <el-form-item label="渠道">
-        <el-input
-          v-model="filter.vendorKey"
-          :prefix-icon="Search"
-          placeholder="供应商组，如 gemini"
-          clearable
-          style="width: 220px"
-        />
-      </el-form-item>
-      <el-form-item label="模型名">
-        <el-input
-          v-model="filter.modelName"
-          :prefix-icon="Search"
-          placeholder="模糊匹配 modelName"
-          clearable
-          style="width: 220px"
-        />
-      </el-form-item>
-      <el-form-item>
-        <el-checkbox v-model="filter.errorOnly">
-          <span class="error-only">
-            <el-icon><Warning /></el-icon>
-            仅看异常
-          </span>
-        </el-checkbox>
-      </el-form-item>
-      <el-form-item v-if="filter.convId" label="会话">
-        <el-tag closable type="info" @close="clearConvFilter">
-          {{ filter.convId }}
-        </el-tag>
-      </el-form-item>
-    </FilterBar>
-
-    <el-collapse v-model="vendorPanel" class="vendor-panel" @change="onVendorPanelChange">
-      <el-collapse-item name="vendor">
-        <template #title>
-          <span class="vendor-panel__title">按渠道消费统计</span>
-          <span class="vendor-panel__hint">当前过滤条件 / 时间范围内，按调用命中渠道归集（来自定价快照，删模型不丢数据）</span>
-        </template>
-        <el-table
-          v-loading="vendorLoading"
-          :data="vendorStats"
-          size="small"
-          stripe
-          :empty-text="'该范围内无渠道消费'"
-        >
-          <el-table-column label="渠道" min-width="160">
-            <template #default="{ row }: { row: VendorConsumptionRow }">
-              <el-button link type="primary" class="mono" @click="setVendorFilter(row.vendorKey)">
-                {{ row.vendorKey }}
-              </el-button>
-            </template>
-          </el-table-column>
-          <el-table-column label="调用数" width="110" align="right">
-            <template #default="{ row }: { row: VendorConsumptionRow }">
-              <span class="num">{{ row.requestCount.toLocaleString() }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="输入 / 输出 token" min-width="180" align="right">
-            <template #default="{ row }: { row: VendorConsumptionRow }">
-              <span class="num">{{ row.totalPromptTokens.toLocaleString() }} / {{ row.totalCompletionTokens.toLocaleString() }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="上游模型数" width="110" align="right">
-            <template #default="{ row }: { row: VendorConsumptionRow }">
-              <span class="num">{{ row.upstreamModelCount }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="消费（元）" width="130" align="right">
-            <template #default="{ row }: { row: VendorConsumptionRow }">
-              <span class="num vendor-panel__cost">{{ formatMoney(row.totalCost, { fractionDigits: BILLING_FRACTION_DIGITS }) }}</span>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-collapse-item>
-    </el-collapse>
+    <template #filters>
+      <FilterBar
+        v-model:account-uid="filter.accountUid"
+        v-model:contact-keyword="filter.contactKeyword"
+        v-model:date-range="filter.dateRange"
+        :loading="loading"
+        @refresh="fetchData"
+        @reset="resetFilter"
+      >
+        <el-form-item label="渠道">
+          <el-input
+            v-model="filter.vendorKey"
+            :prefix-icon="Search"
+            placeholder="供应商组，如 gemini"
+            clearable
+            style="width: 220px"
+          />
+        </el-form-item>
+        <el-form-item label="模型名">
+          <el-input
+            v-model="filter.modelName"
+            :prefix-icon="Search"
+            placeholder="模糊匹配 modelName"
+            clearable
+            style="width: 220px"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-checkbox v-model="filter.errorOnly">
+            <span class="error-only">
+              <el-icon><Warning /></el-icon>
+              仅看异常
+            </span>
+          </el-checkbox>
+        </el-form-item>
+        <el-form-item v-if="filter.convId" label="会话">
+          <el-tag closable type="info" @close="clearConvFilter">
+            {{ filter.convId }}
+          </el-tag>
+        </el-form-item>
+      </FilterBar>
+    </template>
 
     <el-table
       v-loading="loading"
@@ -531,6 +473,7 @@ onMounted(() => {
       size="small"
       stripe
       class="log-table"
+      height="100%"
       :empty-text="' '"
     >
       <el-table-column label="详情" width="56" align="center" fixed>
@@ -710,7 +653,7 @@ onMounted(() => {
       </template>
     </el-table>
 
-    <div class="pagination-bar">
+    <template #footer>
       <el-pagination
         v-model:current-page="page"
         v-model:page-size="pageSize"
@@ -719,21 +662,21 @@ onMounted(() => {
         layout="total, sizes, prev, pager, next"
         background
       />
-    </div>
+    </template>
+  </FillListPageLayout>
 
-    <LogDetailDrawer
-      v-model="detailOpen"
-      :log="detailLog"
-      @reverse="onDrawerReverse"
-    />
+  <LogDetailDrawer
+    v-model="detailOpen"
+    :log="detailLog"
+    @reverse="onDrawerReverse"
+  />
 
-    <LogReverseDialog
-      v-model="reverseOpen"
-      :log="reverseLog"
-      :submitting="reverseSubmitting"
-      @submit="submitReverse"
-    />
-  </div>
+  <LogReverseDialog
+    v-model="reverseOpen"
+    :log="reverseLog"
+    :submitting="reverseSubmitting"
+    @submit="submitReverse"
+  />
 </template>
 
 <style scoped>
@@ -745,7 +688,7 @@ onMounted(() => {
 }
 
 .log-table {
-  margin-top: 4px;
+  margin-top: 0;
 }
 
 .mono {
@@ -827,23 +770,6 @@ onMounted(() => {
   font-size: 12.5px;
 }
 
-.vendor-panel {
-  margin-top: 4px;
-  margin-bottom: 8px;
-  border-radius: 6px;
-}
-.vendor-panel__title {
-  font-weight: 600;
-  margin-right: 12px;
-}
-.vendor-panel__hint {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-.vendor-panel__cost {
-  color: var(--el-color-warning);
-  font-weight: 500;
-}
 .cell-usage {
   display: flex;
   flex-direction: column;

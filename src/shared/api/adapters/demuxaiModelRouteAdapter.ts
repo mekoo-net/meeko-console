@@ -46,6 +46,7 @@ export class DemuxaiModelRouteHttpAdapter implements DemuxaiModelRoutePort {
         vendorKey: input.filter.vendorKey === 'all' ? undefined : input.filter.vendorKey,
         isPublished:
           input.filter.isPublished === 'all' ? undefined : input.filter.isPublished,
+        vendorModel: input.filter.vendorModel || undefined,
       },
     });
     if (!res.success) return res;

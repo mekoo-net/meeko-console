@@ -53,7 +53,7 @@ const emit = defineEmits<{
 }>();
 
 const keyword = ref('');
-const pagination = usePagination({ initialPageSize: 15, pageSizes: [10, 15, 20, 50] });
+const pagination = usePagination({ pageSize: 15, pageSizes: [10, 15, 20, 50] });
 
 const filteredGroups = computed(() => {
   const kw = keyword.value.trim().toLowerCase();

@@ -50,7 +50,7 @@ const modelDrawerModel = ref<ProviderUpstreamModel | null>(null);
 const groupEditOpen = ref(false);
 const groupEditTarget = ref<ProviderGroup | null>(null);
 
-const modelPagination = usePagination({ initialPageSize: 20, pageSizes: [10, 20, 50, 100] });
+const modelPagination = usePagination({ pageSize: 20, pageSizes: [10, 20, 50, 100] });
 
 const selectedGroup = computed(() =>
   groups.value.find((g) => g.queueGroup === selectedQueueGroup.value) ?? null,

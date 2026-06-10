@@ -64,17 +64,16 @@ async function loadRoutes(): Promise<void> {
   try {
     const r = await routePort.list({
       page: 1,
-      pageSize: 500,
+      pageSize: 100,
       filter: {
         keyword: '',
         vendorKey: props.group.queueGroup,
         isPublished: 'all',
+        vendorModel: props.model.vendorModel,
       },
     });
     if (r.success) {
-      routes.value = r.data.items.filter(
-        (rt) => rt.vendorModel === props.model!.vendorModel,
-      );
+      routes.value = r.data.items;
     } else {
       ElMessage.error(r.error.message);
     }

@@ -44,8 +44,8 @@ const vendorPricingCounts = ref<VendorPricingStatsMap>({});
 const unconfiguredItems = ref<UnconfiguredAlias[]>([]);
 const unconfiguredLoading = ref(false);
 
-const pricedPagination = usePagination({ initialPageSize: 20, pageSizes: [10, 20, 50, 100] });
-const unconfiguredPagination = usePagination({ initialPageSize: 15, pageSizes: [10, 15, 30, 50] });
+const pricedPagination = usePagination({ pageSize: 20, pageSizes: [10, 20, 50, 100] });
+const unconfiguredPagination = usePagination({ pageSize: 15, pageSizes: [10, 15, 30, 50] });
 
 interface PageFilter {
   keyword: string;

@@ -41,6 +41,8 @@ export interface ListModelRoutesFilter {
   keyword: string;
   vendorKey: string | 'all';
   isPublished: boolean | 'all';
+  /** 精确匹配上游模型 ID（服务端过滤）；缺省不筛。 */
+  vendorModel?: string;
 }
 
 /** 按渠道 + 上游模型聚合的别名计数（不含明细行）。 */

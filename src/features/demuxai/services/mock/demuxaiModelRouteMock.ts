@@ -25,6 +25,7 @@ function applyFilter(rows: ModelRoute[], f: ListModelRoutesFilter): ModelRoute[]
   return rows.filter((r) => {
     if (f.vendorKey !== 'all' && r.vendorKey !== f.vendorKey) return false;
     if (f.isPublished !== 'all' && r.isPublished !== f.isPublished) return false;
+    if (f.vendorModel && r.vendorModel !== f.vendorModel) return false;
     if (
       kw &&
       !r.alias.toLowerCase().includes(kw) &&
