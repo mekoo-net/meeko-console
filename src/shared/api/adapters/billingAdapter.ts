@@ -44,7 +44,7 @@ interface RechargeDtoWire {
 }
 
 function mapRechargeDto(raw: Record<string, unknown>): RechargeRecord {
-  const owner = (raw.owner ?? raw.Owner) as Record<string, unknown> | undefined;
+  const ownerParty = readParty((raw.owner ?? raw.Owner) as Record<string, unknown> | null | undefined);
   const source = (raw.source ?? raw.Source) as Record<string, unknown> | undefined;
   const amountBlock = raw.amount ?? raw.Amount;
   const operator = (raw.operator ?? raw.Operator) as Record<string, unknown> | null | undefined;
@@ -62,7 +62,10 @@ function mapRechargeDto(raw: Record<string, unknown>): RechargeRecord {
 
   return {
     id: String(raw.id ?? raw.Id ?? ''),
-    ownerAccountUid: String(owner?.accountUid ?? owner?.AccountUid ?? ''),
+    ownerAccountUid: ownerParty.accountUid,
+    ownerDisplayName: ownerParty.displayName,
+    ownerEmail: ownerParty.email,
+    ownerPhone: ownerParty.phone,
     provider: String(source?.provider ?? source?.Provider ?? 'manual') as RechargeProvider,
     scene: Number(source?.scene ?? source?.Scene ?? 0),
     refNo: String(source?.refNo ?? source?.RefNo ?? ''),

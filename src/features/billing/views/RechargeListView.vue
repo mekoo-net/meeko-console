@@ -5,11 +5,11 @@ import { useRouter } from 'vue-router';
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import StatusTag from '@/shared/ui/StatusTag.vue';
 import FilterBar from '@/shared/ui/FilterBar.vue';
+import EmptyState from '@/shared/ui/EmptyState.vue';
+import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
 import { formatMoney } from '@/shared/lib/money';
 import { formatDateTime } from '@/shared/lib/date';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
-import { getAccountAdminPort } from '@/features/accounts/services';
-import type { Account } from '@/features/accounts/model/account.types';
 
 import {
   rechargeProviderValues,
@@ -26,7 +26,6 @@ import type { ListRechargesFilter } from '../services/ports/billingPort';
 
 const router = useRouter();
 const billingPort = getBillingPort();
-const accountPort = getAccountAdminPort();
 
 const records = ref<RechargeRecord[]>([]);
 const total = ref(0);
@@ -52,21 +51,6 @@ const defaultFilter = (): PageFilter => ({
 });
 
 const filter = ref<PageFilter>(defaultFilter());
-
-const accountMap = ref<Map<string, Account>>(new Map());
-
-async function loadAccounts(): Promise<void> {
-  const r = await accountPort.listAccounts({
-    page: 1,
-    pageSize: 999,
-    filter: { accountUid: '', contactKeyword: '', type: 'all', status: 'all' },
-  });
-  if (r.success) {
-    const m = new Map<string, Account>();
-    r.data.items.forEach((a) => m.set(a.uid, a));
-    accountMap.value = m;
-  }
-}
 
 function buildPortFilter(): ListRechargesFilter {
   const f: ListRechargesFilter = {
@@ -103,25 +87,15 @@ const displayRecords = computed(() => {
   const kw = filter.value.contactKeyword.trim().toLowerCase();
   if (!kw) return records.value;
   return records.value.filter((r) => {
-    const a = accountMap.value.get(r.ownerAccountUid);
-    if (!a) return false;
-    const email = (a.ownerEmail ?? '').toLowerCase();
-    const phone = a.ownerPhone ?? '';
+    const email = (r.ownerEmail ?? '').toLowerCase();
+    const phone = r.ownerPhone ?? '';
     return email.includes(kw) || phone.includes(kw);
   });
 });
 
 watch(
-  () => ({
-    page: page.value,
-    pageSize: pageSize.value,
-    provider: filter.value.provider,
-    status: filter.value.status,
-    accountUid: filter.value.accountUid,
-    dateRange: filter.value.dateRange,
-  }),
+  () => [page.value, pageSize.value] as const,
   () => void fetchData(),
-  { deep: true },
 );
 
 watch(
@@ -133,7 +107,13 @@ watch(
       filter.value.dateRange,
     ] as const,
   () => {
-    page.value = 1;
+    // filter 变化回到第一页：已在第 1 页则直接拉，否则只改 page，
+    // 由上面的 page watcher 单次触发，避免「旧 page + 新 page」两次请求。
+    if (page.value === 1) {
+      void fetchData();
+    } else {
+      page.value = 1;
+    }
   },
   { deep: true },
 );
@@ -148,37 +128,39 @@ function isInternalProvider(p: RechargeProvider): boolean {
 }
 
 onMounted(() => {
-  void loadAccounts();
   void fetchData();
 });
 </script>
 
 <template>
-  <div class="page">
-    <PageHeader
-      title="充值记录"
-      description="账户钱包入账事件，含用户付费充值（支付宝 / 微信）与平台内部充值（客服补偿 / 营销奖励 / 手工充值）。人工入账请前往对应账户详情页发起。"
-    />
+  <FillListPageLayout>
+    <template #header>
+      <PageHeader
+        title="充值记录"
+        description="账户钱包入账事件，含用户付费充值（支付宝 / 微信）与平台内部充值（客服补偿 / 营销奖励 / 手工充值）。人工入账请前往对应账户详情页发起。"
+      />
+    </template>
 
-    <FilterBar
-      v-model:account-uid="filter.accountUid"
-      v-model:contact-keyword="filter.contactKeyword"
-      v-model:date-range="filter.dateRange"
-      :loading="loading"
-      @refresh="fetchData()"
-      @reset="resetFilter()"
-    >
-      <el-form-item label="渠道">
-        <el-select v-model="filter.provider">
-          <el-option label="全部渠道" value="all" />
-          <el-option
-            v-for="p in rechargeProviderValues"
-            :key="p"
-            :label="RechargeProviderLabel[p]"
-            :value="p"
-          />
-        </el-select>
-      </el-form-item>
+    <template #filters>
+      <FilterBar
+        v-model:account-uid="filter.accountUid"
+        v-model:contact-keyword="filter.contactKeyword"
+        v-model:date-range="filter.dateRange"
+        :loading="loading"
+        @refresh="fetchData()"
+        @reset="resetFilter()"
+      >
+        <el-form-item label="渠道">
+          <el-select v-model="filter.provider">
+            <el-option label="全部渠道" value="all" />
+            <el-option
+              v-for="p in rechargeProviderValues"
+              :key="p"
+              :label="RechargeProviderLabel[p]"
+              :value="p"
+            />
+          </el-select>
+        </el-form-item>
       <el-form-item label="状态">
         <el-select v-model="filter.status">
           <el-option label="全部状态" value="all" />
@@ -191,6 +173,7 @@ onMounted(() => {
         </el-select>
       </el-form-item>
     </FilterBar>
+    </template>
 
     <el-table
       v-loading="loading"
@@ -198,6 +181,8 @@ onMounted(() => {
       row-key="id"
       size="small"
       class="compact-table"
+      height="100%"
+      :empty-text="' '"
     >
       <el-table-column label="流水号" min-width="180" prop="id">
         <template #default="{ row }: { row: RechargeRecord }">
@@ -216,12 +201,8 @@ onMounted(() => {
               {{ row.ownerAccountUid }}
             </el-button>
             <div class="cell-account__contact">
-              <span v-if="accountMap.get(row.ownerAccountUid)?.ownerEmail">
-                {{ accountMap.get(row.ownerAccountUid)?.ownerEmail }}
-              </span>
-              <span v-else-if="accountMap.get(row.ownerAccountUid)?.ownerPhone">
-                {{ accountMap.get(row.ownerAccountUid)?.ownerPhone }}
-              </span>
+              <span v-if="row.ownerEmail">{{ row.ownerEmail }}</span>
+              <span v-else-if="row.ownerPhone">{{ row.ownerPhone }}</span>
               <span v-else class="cell-muted">—</span>
             </div>
           </div>
@@ -269,9 +250,16 @@ onMounted(() => {
           <span class="cell-date">{{ formatDateTime(row.paidAtUtc ?? row.createdAtUtc) }}</span>
         </template>
       </el-table-column>
+
+      <template #empty>
+        <EmptyState
+          title="暂无充值记录"
+          description="调整筛选条件或扩大时间范围后重试。"
+        />
+      </template>
     </el-table>
 
-    <div class="pagination-bar">
+    <template #footer>
       <el-pagination
         v-model:current-page="page"
         v-model:page-size="pageSize"
@@ -280,17 +268,11 @@ onMounted(() => {
         layout="total, sizes, prev, pager, next"
         background
       />
-    </div>
-  </div>
+    </template>
+  </FillListPageLayout>
 </template>
 
 <style scoped>
-.pagination-bar {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
-}
-
 .cell-account {
   display: flex;
   flex-direction: column;

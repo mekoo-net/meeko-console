@@ -14,6 +14,8 @@ import { InfoFilled } from '@element-plus/icons-vue';
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import StatusTag from '@/shared/ui/StatusTag.vue';
 import FilterBar from '@/shared/ui/FilterBar.vue';
+import EmptyState from '@/shared/ui/EmptyState.vue';
+import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
 import { formatMoney } from '@/shared/lib/money';
 import { formatDateTime } from '@/shared/lib/date';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
@@ -106,17 +108,8 @@ const displayRecords = computed(() => {
 });
 
 watch(
-  () => ({
-    page: page.value,
-    pageSize: pageSize.value,
-    productCode: filter.value.productCode.trim() || 'all',
-    subType: filter.value.subType,
-    status: filter.value.status,
-    accountUid: filter.value.accountUid,
-    dateRange: filter.value.dateRange,
-  }),
+  () => [page.value, pageSize.value] as const,
   () => void fetchData(),
-  { deep: true },
 );
 
 watch(
@@ -129,7 +122,13 @@ watch(
       filter.value.dateRange,
     ] as const,
   () => {
-    page.value = 1;
+    // filter 变化回到第一页：已在第 1 页则直接拉，否则只改 page，
+    // 由上面的 page watcher 单次触发，避免「旧 page + 新 page」两次请求。
+    if (page.value === 1) {
+      void fetchData();
+    } else {
+      page.value = 1;
+    }
   },
   { deep: true },
 );
@@ -165,38 +164,41 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page">
-    <PageHeader
-      title="账单流水"
-      description="账户钱包扣款流水（订阅 / 用量 / 一次性订单）。错扣回滚、部分退还直接驳回原账单，保留原始扣费与实际扣费便于审计。"
-    />
+  <FillListPageLayout>
+    <template #header>
+      <PageHeader
+        title="账单流水"
+        description="账户钱包扣款流水（订阅 / 用量 / 一次性订单）。错扣回滚、部分退还直接驳回原账单，保留原始扣费与实际扣费便于审计。"
+      />
+    </template>
 
-    <FilterBar
-      v-model:account-uid="filter.accountUid"
-      v-model:contact-keyword="filter.contactKeyword"
-      v-model:date-range="filter.dateRange"
-      :loading="loading"
-      @refresh="fetchData()"
-      @reset="resetFilter()"
-    >
-      <el-form-item label="产品">
-        <el-input
-          v-model="filter.productCode"
-          placeholder="产品代码，如 demux"
-          clearable
-        />
-      </el-form-item>
-      <el-form-item label="类型">
-        <el-select v-model="filter.subType">
-          <el-option label="全部类型" value="all" />
-          <el-option
-            v-for="t in billSubTypeValues"
-            :key="t"
-            :label="BillSubTypeLabel[t]"
-            :value="t"
+    <template #filters>
+      <FilterBar
+        v-model:account-uid="filter.accountUid"
+        v-model:contact-keyword="filter.contactKeyword"
+        v-model:date-range="filter.dateRange"
+        :loading="loading"
+        @refresh="fetchData()"
+        @reset="resetFilter()"
+      >
+        <el-form-item label="产品">
+          <el-input
+            v-model="filter.productCode"
+            placeholder="产品代码，如 demux"
+            clearable
           />
-        </el-select>
-      </el-form-item>
+        </el-form-item>
+        <el-form-item label="类型">
+          <el-select v-model="filter.subType">
+            <el-option label="全部类型" value="all" />
+            <el-option
+              v-for="t in billSubTypeValues"
+              :key="t"
+              :label="BillSubTypeLabel[t]"
+              :value="t"
+            />
+          </el-select>
+        </el-form-item>
       <el-form-item label="状态">
         <el-select v-model="filter.status">
           <el-option label="全部状态" value="all" />
@@ -209,6 +211,7 @@ onMounted(() => {
         </el-select>
       </el-form-item>
     </FilterBar>
+    </template>
 
     <el-table
       v-loading="loading"
@@ -216,6 +219,8 @@ onMounted(() => {
       row-key="id"
       size="small"
       class="compact-table"
+      height="100%"
+      :empty-text="' '"
     >
       <el-table-column label="流水号" min-width="180" prop="id">
         <template #default="{ row }: { row: BillingEntry }">
@@ -332,9 +337,16 @@ onMounted(() => {
           </el-tooltip>
         </template>
       </el-table-column>
+
+      <template #empty>
+        <EmptyState
+          title="暂无账单流水"
+          description="调整筛选条件或扩大时间范围后重试。"
+        />
+      </template>
     </el-table>
 
-    <div class="pagination-bar">
+    <template #footer>
       <el-pagination
         v-model:current-page="page"
         v-model:page-size="pageSize"
@@ -343,17 +355,11 @@ onMounted(() => {
         layout="total, sizes, prev, pager, next"
         background
       />
-    </div>
-  </div>
+    </template>
+  </FillListPageLayout>
 </template>
 
 <style scoped>
-.pagination-bar {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
-}
-
 /* 账户列：第一行名称，第二行邮箱/手机，第三行 主账户/IAM 标签 */
 .cell-account {
   display: flex;

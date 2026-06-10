@@ -110,6 +110,12 @@ export const rechargeRecordSchema = z.object({
   id: idString,
   /** 主账户 userId —— 钱归这个账户 */
   ownerAccountUid: idString,
+  /** BFF enrich：主账户展示名 */
+  ownerDisplayName: z.string().nullish(),
+  /** BFF enrich：主账户联系邮箱 */
+  ownerEmail: z.string().nullish(),
+  /** BFF enrich：主账户联系手机 */
+  ownerPhone: z.string().nullish(),
   provider: z.enum(rechargeProviderValues),
   scene: z.number().int(),
   /**
