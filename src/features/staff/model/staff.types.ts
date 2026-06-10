@@ -60,6 +60,7 @@ export const staffUserSchema = z.object({
 
 export type StaffUser = z.infer<typeof staffUserSchema>;
 
+/** 角色明细（含完整权限码集合）：编辑抽屉/命令结果使用。 */
 export const staffRoleSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -71,6 +72,19 @@ export const staffRoleSchema = z.object({
 });
 
 export type StaffRole = z.infer<typeof staffRoleSchema>;
+
+/** 角色列表项（只含权限数量，不下发完整权限码）：列表表格与下拉选项使用。 */
+export const staffRoleListItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  isSystem: z.boolean(),
+  permissionCount: z.number(),
+  memberCount: z.number(),
+  createdAtUtc: epochMillisSchema,
+});
+
+export type StaffRoleListItem = z.infer<typeof staffRoleListItemSchema>;
 
 export const permissionCatalogItemSchema = z.object({
   id: z.string(),

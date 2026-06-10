@@ -4,12 +4,24 @@ import type {
   PermissionCatalogItem,
   StaffListFilter,
   StaffRole,
+  StaffRoleListItem,
   StaffUser,
 } from '../../model/staff.types';
 
 export interface ListStaffPage {
   items: StaffUser[];
   total: number;
+}
+
+export interface ListRolePage {
+  items: StaffRoleListItem[];
+  total: number;
+}
+
+export interface ListRolesInput {
+  page?: number;
+  pageSize?: number;
+  keyword?: string;
 }
 
 export interface CreateStaffInput {
@@ -50,7 +62,8 @@ export interface StaffPort {
   resetStaffPassword(uid: string, newPassword: string): Promise<AppResult<StaffUser>>;
   changeStaffRole(uid: string, roleId: string): Promise<AppResult<StaffUser>>;
 
-  listRoles(): Promise<AppResult<StaffRole[]>>;
+  listRoles(input?: ListRolesInput): Promise<AppResult<ListRolePage>>;
+  getRole(id: string): Promise<AppResult<StaffRole>>;
   createRole(input: CreateRoleInput): Promise<AppResult<StaffRole>>;
   updateRole(id: string, input: UpdateRoleInput): Promise<AppResult<StaffRole>>;
   deleteRole(id: string): Promise<AppResult<void>>;

@@ -1,30 +1,32 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus';
 import { Plus, Refresh } from '@element-plus/icons-vue';
-import { computed, nextTick, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, reactive, ref } from 'vue';
 
 import { confirmDanger } from '@/shared/composables/useConfirm';
 import { formatDateTime } from '@/shared/lib/date';
 import { useAuthStore } from '@/stores/auth';
 
-import { useStaffRoles } from '../composables/useStaffRoles';
+import { useStaffRoleList } from '../composables/useStaffRoleList';
 import {
   PERMISSION_GROUPS,
-  type StaffRole,
+  type StaffRoleListItem,
 } from '../model/staff.types';
 import { getStaffPort } from '../services';
 
 const auth = useAuthStore();
 const canWrite = computed(() => auth.hasPermission('platform.role.write'));
 
-const rolesState = useStaffRoles();
-const rows = computed(() => rolesState.data.value ?? []);
-const loading = computed(() => rolesState.loading.value);
+const list = useStaffRoleList();
+const rows = computed(() => list.items.value);
+const loading = computed(() => list.loading.value);
 
 const drawer = ref(false);
 const drawerMode = ref<'create' | 'edit'>('create');
 const saving = ref(false);
+const loadingDetail = ref(false);
 const editingId = ref<string | null>(null);
+const editingIsSystem = ref(false);
 
 const form = reactive({
   name: '',
@@ -32,9 +34,8 @@ const form = reactive({
   permissionCodes: [] as string[],
 });
 
-const editingRow = computed(() => rows.value.find((r) => r.id === editingId.value) ?? null);
 const permissionsReadonly = computed(
-  () => drawerMode.value === 'edit' && (editingRow.value?.isSystem ?? false),
+  () => drawerMode.value === 'edit' && editingIsSystem.value,
 );
 
 function resetForm(): void {
@@ -46,18 +47,31 @@ function resetForm(): void {
 async function openCreate(): Promise<void> {
   drawerMode.value = 'create';
   editingId.value = null;
+  editingIsSystem.value = false;
   resetForm();
   drawer.value = true;
   await nextTick();
 }
 
-function openEdit(row: StaffRole): void {
-  drawerMode.value = 'edit';
-  editingId.value = row.id;
-  form.name = row.name;
-  form.description = row.description ?? '';
-  form.permissionCodes = [...row.permissionCodes];
-  drawer.value = true;
+async function openEdit(row: StaffRoleListItem): Promise<void> {
+  loadingDetail.value = true;
+  try {
+    const res = await getStaffPort().getRole(row.id);
+    if (!res.success) {
+      ElMessage.error(res.error.message);
+      return;
+    }
+    const detail = res.data;
+    drawerMode.value = 'edit';
+    editingId.value = detail.id;
+    editingIsSystem.value = detail.isSystem;
+    form.name = detail.name;
+    form.description = detail.description ?? '';
+    form.permissionCodes = [...detail.permissionCodes];
+    drawer.value = true;
+  } finally {
+    loadingDetail.value = false;
+  }
 }
 
 function isGroupChecked(groupKey: string): boolean {
@@ -100,7 +114,7 @@ async function submitDrawer(): Promise<void> {
       if (r.success) {
         ElMessage.success('角色已创建');
         drawer.value = false;
-        void rolesState.refresh();
+        void list.refresh();
       } else {
         ElMessage.error(r.error.message);
       }
@@ -112,7 +126,7 @@ async function submitDrawer(): Promise<void> {
     if (r.success) {
       ElMessage.success('已保存');
       drawer.value = false;
-      void rolesState.refresh();
+      void list.refresh();
     } else {
       ElMessage.error(r.error.message);
     }
@@ -121,7 +135,7 @@ async function submitDrawer(): Promise<void> {
   }
 }
 
-async function onDelete(row: StaffRole): Promise<void> {
+async function onDelete(row: StaffRoleListItem): Promise<void> {
   const ok = await confirmDanger({
     title: `删除角色「${row.name}」`,
     message: row.memberCount > 0
@@ -133,15 +147,11 @@ async function onDelete(row: StaffRole): Promise<void> {
   const r = await getStaffPort().deleteRole(row.id);
   if (r.success) {
     ElMessage.success('已删除');
-    void rolesState.refresh();
+    void list.refresh();
   } else {
     ElMessage.error(r.error.message);
   }
 }
-
-onMounted(() => {
-  void rolesState.run();
-});
 </script>
 
 <template>
@@ -152,7 +162,7 @@ onMounted(() => {
         <p class="settings-panel__desc">配置 Staff 角色及其权限；系统内置角色不可删除或修改权限集合</p>
       </div>
       <div class="settings-panel__head-actions">
-        <el-button :icon="Refresh" text :loading="loading" @click="rolesState.refresh()">
+        <el-button :icon="Refresh" text :loading="loading" @click="list.refresh()">
           刷新
         </el-button>
         <el-button v-if="canWrite" type="primary" @click="openCreate">
@@ -162,39 +172,69 @@ onMounted(() => {
       </div>
     </header>
 
-    <div v-loading="loading" class="settings-panel__body">
-      <el-table :data="rows" row-key="id" stripe>
-        <el-table-column prop="name" label="角色名" min-width="140">
-          <template #default="{ row }">
-            <span>{{ row.name }}</span>
-            <el-tag v-if="row.isSystem" size="small" type="info" class="ml-2">内置</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
-        <el-table-column label="权限数" width="90">
-          <template #default="{ row }">{{ row.permissionCodes.length }}</template>
-        </el-table-column>
-        <el-table-column prop="memberCount" label="成员数" width="90" />
-        <el-table-column label="创建时间" min-width="160">
-          <template #default="{ row }">{{ formatDateTime(row.createdAtUtc) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openEdit(row)">
-              {{ canWrite ? '编辑' : '查看' }}
-            </el-button>
-            <el-button
-              v-if="canWrite && !row.isSystem"
-              link
-              type="danger"
-              :disabled="row.memberCount > 0"
-              @click="onDelete(row)"
-            >
-              删除
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+    <div class="settings-panel__body">
+      <el-form class="settings-panel__filter" @submit.prevent="list.refresh()">
+        <div class="settings-panel__filter-row">
+          <el-form-item label="关键词">
+            <el-input
+              v-model="list.filter.value.keyword"
+              clearable
+              placeholder="角色名 / 描述"
+              style="width: 220px"
+            />
+          </el-form-item>
+          <div class="settings-panel__filter-actions">
+            <el-button type="primary" :loading="loading" @click="list.refresh()">查询</el-button>
+            <el-button @click="list.resetFilter()">重置</el-button>
+          </div>
+        </div>
+      </el-form>
+
+      <div v-loading="loading">
+        <el-table :data="rows" row-key="id" stripe>
+          <el-table-column prop="name" label="角色名" min-width="140">
+            <template #default="{ row }">
+              <span>{{ row.name }}</span>
+              <el-tag v-if="row.isSystem" size="small" type="info" class="ml-2">内置</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
+          <el-table-column label="权限数" width="90">
+            <template #default="{ row }">{{ row.permissionCount }}</template>
+          </el-table-column>
+          <el-table-column prop="memberCount" label="成员数" width="90" />
+          <el-table-column label="创建时间" min-width="160">
+            <template #default="{ row }">{{ formatDateTime(row.createdAtUtc) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="160" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" :loading="loadingDetail" @click="openEdit(row)">
+                {{ canWrite ? '编辑' : '查看' }}
+              </el-button>
+              <el-button
+                v-if="canWrite && !row.isSystem"
+                link
+                type="danger"
+                :disabled="row.memberCount > 0"
+                @click="onDelete(row)"
+              >
+                删除
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div class="settings-panel__pagination">
+          <el-pagination
+            v-model:current-page="list.pagination.state.page"
+            v-model:page-size="list.pagination.state.pageSize"
+            :total="list.pagination.state.total"
+            :page-sizes="list.pagination.pageSizes"
+            layout="total, sizes, prev, pager, next"
+            background
+          />
+        </div>
+      </div>
     </div>
 
     <el-drawer
@@ -288,6 +328,35 @@ onMounted(() => {
   flex: 1;
   padding: 16px 24px 24px;
   min-height: 220px;
+}
+
+.settings-panel__filter {
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.settings-panel__filter-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.settings-panel__filter :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+.settings-panel__filter-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.settings-panel__pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 
 .perm-groups {

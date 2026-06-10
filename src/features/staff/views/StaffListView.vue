@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Refresh } from '@element-plus/icons-vue';
-import { computed, nextTick, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, reactive, ref } from 'vue';
 
 import { confirmDanger } from '@/shared/composables/useConfirm';
 import { formatDateTime } from '@/shared/lib/date';
@@ -42,10 +42,6 @@ const editForm = reactive({
 async function loadRoles(): Promise<void> {
   await rolesState.refresh();
 }
-
-onMounted(() => {
-  void loadRoles();
-});
 
 async function openCreate(): Promise<void> {
   drawerMode.value = 'create';

@@ -3,6 +3,7 @@ import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import {
   ALL_STAFF_PERMISSIONS,
   READ_ONLY_STAFF_PERMISSIONS,
+  staffRoleListItemSchema,
   staffRoleSchema,
   staffUserSchema,
   type PermissionCatalogItem,
@@ -13,6 +14,8 @@ import {
 import type {
   CreateRoleInput,
   CreateStaffInput,
+  ListRolePage,
+  ListRolesInput,
   ListStaffPage,
   StaffPort,
   UpdateRoleInput,
@@ -193,9 +196,36 @@ export class StaffMock implements StaffPort {
     return ok(staffUserSchema.parse(user));
   }
 
-  async listRoles(): Promise<AppResult<StaffRole[]>> {
+  async listRoles(input?: ListRolesInput): Promise<AppResult<ListRolePage>> {
     syncRoleMemberCounts();
-    return ok(roles.map((r) => staffRoleSchema.parse(r)));
+    const page = input?.page ?? 1;
+    const pageSize = input?.pageSize ?? 20;
+    const kw = input?.keyword?.trim().toLowerCase() ?? '';
+    let rows = [...roles];
+    if (kw) {
+      rows = rows.filter(
+        (r) => r.name.toLowerCase().includes(kw) || (r.description ?? '').toLowerCase().includes(kw),
+      );
+    }
+    const start = (page - 1) * pageSize;
+    const items = rows.slice(start, start + pageSize).map((r) =>
+      staffRoleListItemSchema.parse({
+        id: r.id,
+        name: r.name,
+        description: r.description ?? null,
+        isSystem: r.isSystem,
+        permissionCount: r.permissionCodes.length,
+        memberCount: r.memberCount,
+        createdAtUtc: r.createdAtUtc,
+      }),
+    );
+    return ok({ items, total: rows.length });
+  }
+
+  async getRole(id: string): Promise<AppResult<StaffRole>> {
+    const role = roles.find((r) => r.id === id);
+    if (!role) return fail({ code: 'not_found', message: '角色不存在' });
+    return ok(staffRoleSchema.parse(role));
   }
 
   async createRole(input: CreateRoleInput): Promise<AppResult<StaffRole>> {

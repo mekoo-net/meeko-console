@@ -1,15 +1,19 @@
 import {
   permissionCatalogItemSchema,
+  staffRoleListItemSchema,
   staffRoleSchema,
   staffUserSchema,
   type PermissionCatalogItem,
   type StaffListFilter,
   type StaffRole,
+  type StaffRoleListItem,
   type StaffUser,
 } from '@/features/staff/model/staff.types';
 import type {
   CreateRoleInput,
   CreateStaffInput,
+  ListRolePage,
+  ListRolesInput,
   ListStaffPage,
   StaffPort,
   UpdateRoleInput,
@@ -53,6 +57,18 @@ function mapStaffRole(raw: Record<string, unknown>): StaffRole {
     description: raw.description ?? null,
     isSystem: raw.isSystem ?? raw.is_system ?? false,
     permissionCodes: raw.permissionCodes ?? raw.permission_codes ?? [],
+    memberCount: raw.memberCount ?? raw.member_count ?? 0,
+    createdAtUtc: raw.createdAtUtc ?? raw.created_at_utc,
+  });
+}
+
+function mapStaffRoleListItem(raw: Record<string, unknown>): StaffRoleListItem {
+  return staffRoleListItemSchema.parse({
+    id: String(raw.id ?? ''),
+    name: raw.name,
+    description: raw.description ?? null,
+    isSystem: raw.isSystem ?? raw.is_system ?? false,
+    permissionCount: raw.permissionCount ?? raw.permission_count ?? 0,
     memberCount: raw.memberCount ?? raw.member_count ?? 0,
     createdAtUtc: raw.createdAtUtc ?? raw.created_at_utc,
   });
@@ -139,10 +155,22 @@ export class StaffHttpAdapter implements StaffPort {
     return ok(mapStaffUser(res.data));
   }
 
-  async listRoles(): Promise<AppResult<StaffRole[]>> {
-    const res = await request<unknown[]>('/api/admin/staff/roles');
+  async listRoles(input?: ListRolesInput): Promise<AppResult<ListRolePage>> {
+    const query: Record<string, string | number> = {
+      page: input?.page ?? 1,
+      pageSize: input?.pageSize ?? 20,
+    };
+    if (input?.keyword?.trim()) query.keyword = input.keyword.trim();
+    const res = await request<{ items: unknown[]; total: number }>('/api/admin/staff/roles', { query });
     if (!res.success) return res;
-    return ok(res.data.map((row) => mapStaffRole(row as Record<string, unknown>)));
+    const items = res.data.items.map((row) => mapStaffRoleListItem(row as Record<string, unknown>));
+    return ok({ items, total: res.data.total });
+  }
+
+  async getRole(id: string): Promise<AppResult<StaffRole>> {
+    const res = await request<Record<string, unknown>>(`/api/admin/staff/roles/${id}`);
+    if (!res.success) return res;
+    return ok(mapStaffRole(res.data));
   }
 
   async createRole(input: CreateRoleInput): Promise<AppResult<StaffRole>> {
