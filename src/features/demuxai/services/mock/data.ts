@@ -561,7 +561,7 @@ function seedPricing(models: Model[]): Pricing[] {
         },
         currency: 'CNY',
         tierMultipliers: { '5': 0.7, '4': 0.85 },
-        updatedBy: { iamId: '200000001' },
+        updatedBy: { iamUserUid: '200000001' },
       },
     ],
     [
@@ -574,7 +574,7 @@ function seedPricing(models: Model[]): Pricing[] {
         },
         currency: 'CNY',
         tierMultipliers: { '5': 0.6 },
-        updatedBy: { iamId: '200000001' },
+        updatedBy: { iamUserUid: '200000001' },
       },
     ],
     [
@@ -591,7 +591,7 @@ function seedPricing(models: Model[]): Pricing[] {
         },
         currency: 'CNY',
         tierMultipliers: { '5': 0.75 },
-        updatedBy: { iamId: '200000001' },
+        updatedBy: { iamUserUid: '200000001' },
       },
     ],
     [
@@ -604,7 +604,7 @@ function seedPricing(models: Model[]): Pricing[] {
         },
         currency: 'CNY',
         tierMultipliers: {},
-        updatedBy: { iamId: '200000001' },
+        updatedBy: { iamUserUid: '200000001' },
       },
     ],
     [
@@ -617,7 +617,7 @@ function seedPricing(models: Model[]): Pricing[] {
         },
         currency: 'CNY',
         tierMultipliers: {},
-        updatedBy: { iamId: '200000001' },
+        updatedBy: { iamUserUid: '200000001' },
       },
     ],
     [
@@ -630,7 +630,7 @@ function seedPricing(models: Model[]): Pricing[] {
         },
         currency: 'CNY',
         tierMultipliers: {},
-        updatedBy: { iamId: '200000001' },
+        updatedBy: { iamUserUid: '200000001' },
       },
     ],
     [
@@ -643,7 +643,7 @@ function seedPricing(models: Model[]): Pricing[] {
         },
         currency: 'CNY',
         tierMultipliers: { '5': 0.5, '4': 0.75 },
-        updatedBy: { iamId: '200000001' },
+        updatedBy: { iamUserUid: '200000001' },
       },
     ],
     [
@@ -656,7 +656,7 @@ function seedPricing(models: Model[]): Pricing[] {
         },
         currency: 'CNY',
         tierMultipliers: {},
-        updatedBy: { iamId: '200000001' },
+        updatedBy: { iamUserUid: '200000001' },
       },
     ],
   ]);
@@ -809,7 +809,7 @@ function seedLogs(providers: Provider[]): LogEntry[] {
       createAt: occurred.getTime(),
       account: {
         uid: accountUid,
-        iamId: SEED_IAM_USERS[i % SEED_IAM_USERS.length]!,
+        iamUserUid: SEED_IAM_USERS[i % SEED_IAM_USERS.length]!,
         displayName: accountContact.displayName,
         email: accountContact.email,
         phone: accountContact.phone,

@@ -25,7 +25,7 @@ const MOCK_ADMIN_IAM_UID = '200000099';
 function applyFilter(rows: LogEntry[], f: ListLogsFilter): LogEntry[] {
   return rows.filter((r) => {
     if (f.accountUid && r.account.uid !== f.accountUid) return false;
-    if (f.iamId && r.account.iamId !== f.iamId) return false;
+    if (f.iamUserUid && r.account.iamUserUid !== f.iamUserUid) return false;
     if (f.modelName && !r.modelName.toLowerCase().includes(f.modelName.toLowerCase())) return false;
     if (f.vendorKey && vendorOf(r).toLowerCase() !== f.vendorKey.toLowerCase()) return false;
     if (f.providerId != null && r.providerId !== f.providerId) return false;

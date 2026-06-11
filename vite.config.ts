@@ -37,6 +37,8 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
+        // 平台公共契约（@demux/common）以嵌套子模块源码（src/common）就地消费。
+        '@demux/common': fileURLToPath(new URL('./src/common/src/index.ts', import.meta.url)),
       },
     },
     server: {

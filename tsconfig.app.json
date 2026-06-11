@@ -27,7 +27,8 @@
     "exactOptionalPropertyTypes": false,
 
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@demux/common": ["./src/common/src/index.ts"]
     },
 
     "types": ["element-plus/global", "vitest/globals", "node"]

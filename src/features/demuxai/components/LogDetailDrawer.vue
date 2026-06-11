@@ -202,7 +202,7 @@ const outputDims = computed<DimRow[]>(() => {
       </div>
       <div class="log-detail__row">
         <span class="label">IAM 用户</span>
-        <span class="mono">{{ log.account.iamId ?? '—' }}</span>
+        <span class="mono">{{ log.account.iamUserUid ?? '—' }}</span>
       </div>
       <div class="log-detail__row">
         <span class="label">请求 IP</span>
