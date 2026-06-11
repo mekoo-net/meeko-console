@@ -13,7 +13,7 @@ import EmptyState from '@/shared/ui/EmptyState.vue';
 import { formatDateTime } from '@/shared/lib/date';
 import { confirmDanger } from '@/shared/composables/useConfirm';
 
-import { ProviderGroupLabel, publishedLabel, publishedTone } from '../model/enums';
+import { ProviderGroupLabel, publishedLabel, publishedTone } from '@demux/common';
 import type { ProviderGroup, ProviderUpstreamModel } from '../model/catalog.types';
 import type {
   CreateModelRouteInput,

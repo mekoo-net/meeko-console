@@ -4,7 +4,7 @@ import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
 import type { Uid } from '@/shared/lib/id';
 import { asEpochMillis } from '@/shared/lib/epoch';
 
-import type { ApiType, ProviderStatus } from '@/features/demuxai/model/enums';
+import type { ApiType, ProviderStatus } from '@demux/common';
 import type {
   CreateProviderInput,
   FetchUpstreamModelsResult,
@@ -12,7 +12,7 @@ import type {
   Provider,
   ProviderTestResult,
   UpdateProviderInput,
-} from '@/features/demuxai/model/provider.types';
+} from '@demux/common';
 import type {
   DemuxaiProviderPort,
   ListProvidersPage,

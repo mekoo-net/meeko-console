@@ -13,7 +13,7 @@ import { ElMessage } from 'element-plus';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import { formatDateTime } from '@/shared/lib/date';
 
-import { ProviderGroupLabel } from '../model/enums';
+import { ProviderGroupLabel } from '@demux/common';
 import { isValidVendorSlug, normalizeVendorSlug } from '../model/vendorSlug';
 import type {
   DiscoverCatalogResult,

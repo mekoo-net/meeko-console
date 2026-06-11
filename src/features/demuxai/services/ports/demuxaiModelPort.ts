@@ -6,7 +6,7 @@ import type {
   Model,
   ModelCarriersMap,
   UpdateModelInput,
-} from '../../model/model.types';
+} from '@demux/common';
 
 export interface ListModelsPage {
   items: Model[];

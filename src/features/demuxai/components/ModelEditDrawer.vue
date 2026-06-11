@@ -19,8 +19,8 @@ import {
   ModelFamilyLabel,
   type ModelCapability,
   type ModelFamily,
-} from '../model/enums';
-import type { Model, UpdateModelInput } from '../model/model.types';
+} from '@demux/common';
+import type { Model, UpdateModelInput } from '@demux/common';
 
 interface CarriedByEntry {
   providerUid: string;

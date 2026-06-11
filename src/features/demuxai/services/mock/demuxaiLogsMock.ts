@@ -14,7 +14,7 @@ import {
   type LogStatsTopProvider,
   type ReverseLogInput,
   type ReverseLogResult,
-} from '../../model/log.types';
+} from '@demux/common';
 import type { DemuxaiLogsPort, ListLogsPage } from '../ports/demuxaiLogsPort';
 
 import { getDemuxaiStore } from './data';
@@ -25,7 +25,7 @@ const MOCK_ADMIN_IAM_UID = '200000099';
 function applyFilter(rows: LogEntry[], f: ListLogsFilter): LogEntry[] {
   return rows.filter((r) => {
     if (f.accountUid && r.account.uid !== f.accountUid) return false;
-    if (f.iamUserUid && r.account.iamUserUid !== f.iamUserUid) return false;
+    if (f.iamUid && r.account.iamUid !== f.iamUid) return false;
     if (f.modelName && !r.modelName.toLowerCase().includes(f.modelName.toLowerCase())) return false;
     if (f.vendorKey && vendorOf(r).toLowerCase() !== f.vendorKey.toLowerCase()) return false;
     if (f.providerId != null && r.providerId !== f.providerId) return false;

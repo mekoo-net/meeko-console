@@ -13,7 +13,7 @@ import { ElMessage } from 'element-plus';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 
-import type { ListLogsFilter, LogStats } from '../model/log.types';
+import type { ListLogsFilter, LogStats } from '@demux/common';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 import { getDemuxaiLogsPort } from '../services';
 

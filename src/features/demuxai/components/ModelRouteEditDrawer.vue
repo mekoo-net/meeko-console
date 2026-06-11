@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
 
-import { ProviderGroupLabel } from '../model/enums';
+import { ProviderGroupLabel } from '@demux/common';
 import type {
   CreateModelRouteInput,
   ModelRoute,

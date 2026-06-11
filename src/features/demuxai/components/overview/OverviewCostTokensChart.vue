@@ -7,7 +7,7 @@
  */
 import { computed, useTemplateRef } from 'vue';
 
-import type { LogStatsBucket } from '../../model/log.types';
+import type { LogStatsBucket } from '@demux/common';
 import Panel from './Panel.vue';
 import { useChartWidth } from './useChartWidth';
 import {

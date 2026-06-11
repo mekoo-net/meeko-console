@@ -3,7 +3,7 @@ import { clientPaginate } from '@/shared/composables/usePagination';
 import type { Uid } from '@/shared/lib/id';
 import { delay } from '@/shared/lib/delay';
 
-import type { ApiType, ProviderStatus } from '../../model/enums';
+import type { ApiType, ProviderStatus } from '@demux/common';
 import {
   providerSchema,
   type CreateProviderInput,
@@ -16,7 +16,7 @@ import {
   type ProviderModelMappingDraft,
   type ProviderTestResult,
   type UpdateProviderInput,
-} from '../../model/provider.types';
+} from '@demux/common';
 import type {
   DemuxaiProviderPort,
   ListProvidersPage,

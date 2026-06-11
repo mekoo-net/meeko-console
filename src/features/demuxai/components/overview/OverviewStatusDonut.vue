@@ -10,8 +10,8 @@
  */
 import { computed } from 'vue';
 
-import { LogErrorCodeLabel } from '../../model/enums';
-import type { LogStatsErrorCode } from '../../model/log.types';
+import { LogErrorCodeLabel } from '@demux/common';
+import type { LogStatsErrorCode } from '@demux/common';
 import Panel from './Panel.vue';
 
 const props = defineProps<{

@@ -29,9 +29,9 @@ import {
   ModelFamilyLabel,
   type ModelCapability,
   type ModelFamily,
-} from '../model/enums';
-import type { ListModelsFilter, Model, UpdateModelInput } from '../model/model.types';
-import type { ModelCarrierEntry } from '../model/model.types';
+} from '@demux/common';
+import type { ListModelsFilter, Model, UpdateModelInput } from '@demux/common';
+import type { ModelCarrierEntry } from '@demux/common';
 import { getDemuxaiModelPort } from '../services';
 import ModelEditDrawer from '../components/ModelEditDrawer.vue';
 

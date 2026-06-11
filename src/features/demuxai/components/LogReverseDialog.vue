@@ -25,8 +25,8 @@ import {
   BillReverseCodeHint,
   BillReverseCodeLabel,
   type BillReverseCode,
-} from '../model/enums';
-import type { LogEntry, ReverseLogInput } from '../model/log.types';
+} from '@demux/common';
+import type { LogEntry, ReverseLogInput } from '@demux/common';
 
 interface Props {
   modelValue: boolean;

@@ -9,7 +9,7 @@
  */
 import { computed } from 'vue';
 
-import type { LogStatsTopProvider } from '../../model/log.types';
+import type { LogStatsTopProvider } from '@demux/common';
 import Panel from './Panel.vue';
 
 const props = defineProps<{

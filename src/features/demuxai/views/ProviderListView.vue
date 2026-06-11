@@ -16,7 +16,7 @@ import {
   type ListProvidersFilter,
   type Provider,
   type UpdateProviderInput,
-} from '../model/provider.types';
+} from '@demux/common';
 import {
   apiTypeValues,
   ApiTypeLabel,
@@ -25,7 +25,7 @@ import {
   providerStatusValues,
   type ApiType,
   type ProviderStatus,
-} from '../model/enums';
+} from '@demux/common';
 import { getDemuxaiProviderPort } from '../services';
 import ProviderEditDrawer from '../components/ProviderEditDrawer.vue';
 

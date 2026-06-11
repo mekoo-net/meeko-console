@@ -22,14 +22,14 @@ import {
   billingTypeValues,
   BillingTypeLabel,
   type BillingType,
-} from '../model/enums';
+} from '@demux/common';
 import type {
   PerImageTier,
   PerVideoTier,
   Pricing,
   UpsertPricingInput,
-} from '../model/pricing.types';
-import type { Model } from '../model/model.types';
+} from '@demux/common';
+import type { Model } from '@demux/common';
 
 interface Props {
   modelValue: boolean;

@@ -7,7 +7,7 @@ import type {
   LogStats,
   ReverseLogInput,
   ReverseLogResult,
-} from '../../model/log.types';
+} from '@demux/common';
 
 export interface ListLogsPage {
   items: LogEntry[];

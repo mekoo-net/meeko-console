@@ -3,7 +3,7 @@ import { fail } from '@/shared/api/httpTypes';
 import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
 import { asEpochMillis } from '@/shared/lib/epoch';
 
-import { logEntrySchema } from '@/features/demuxai/model/log.types';
+import { logEntrySchema } from '@demux/common';
 import type {
   VendorConsumptionRow,
   ListLogsFilter,
@@ -13,7 +13,7 @@ import type {
   LogStatsTopProvider,
   ReverseLogInput,
   ReverseLogResult,
-} from '@/features/demuxai/model/log.types';
+} from '@demux/common';
 import type {
   DemuxaiLogsPort,
   ListLogsPage,
@@ -99,7 +99,7 @@ interface ProviderRankRow {
 
 /**
  * 将后端原始日志行映射为前端 LogEntry 形状：
- *  - account 字段名已与后端 wire 对齐（`iamUserUid`），仅做防御性归一
+ *  - account.iamUid 由后端 wire `iamUserUid` 映射改名；仅做防御性归一
  *  - 对 logEntrySchema 做 safeParse；解析失败时返回原始对象（兜底显示，不崩页面）
  */
 function mapRawItem(raw: unknown): LogEntry {
@@ -112,7 +112,7 @@ function mapRawItem(raw: unknown): LogEntry {
       account && typeof account === 'object'
         ? {
             uid: (account as Record<string, unknown>)['uid'],
-            iamUserUid: (account as Record<string, unknown>)['iamUserUid'] ?? null,
+            iamUid: (account as Record<string, unknown>)['iamUserUid'] ?? null,
             displayName: (account as Record<string, unknown>)['displayName'] ?? undefined,
             email: (account as Record<string, unknown>)['email'] ?? undefined,
             phone: (account as Record<string, unknown>)['phone'] ?? undefined,
@@ -201,7 +201,7 @@ export class DemuxaiLogsHttpAdapter implements DemuxaiLogsPort {
         p:          page,
         pageSize,
         accountUid: filter.accountUid || undefined,
-        iamUserUid: filter.iamUserUid || undefined,
+        iamUserUid: filter.iamUid || undefined,
         providerId: filter.providerId,
         apiType:    filter.apiType    || undefined,
         convId:     filter.convId     || undefined,
@@ -244,7 +244,7 @@ export class DemuxaiLogsHttpAdapter implements DemuxaiLogsPort {
       fromUtc:    filter.fromUtc,
       toUtc:      filter.toUtc,
       accountUid: filter.accountUid || undefined,
-      iamUserUid: filter.iamUserUid || undefined,
+      iamUserUid: filter.iamUid || undefined,
       modelName:  filter.modelName  || undefined,
     };
 

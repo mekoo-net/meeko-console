@@ -6,7 +6,7 @@ import { computed } from 'vue';
 
 import { BILLING_FRACTION_DIGITS, formatMoney } from '@/shared/lib/money';
 
-import type { LogStatsTopModel } from '../../model/log.types';
+import type { LogStatsTopModel } from '@demux/common';
 import Panel from './Panel.vue';
 import { pct } from './chartUtils';
 

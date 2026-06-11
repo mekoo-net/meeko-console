@@ -8,7 +8,7 @@ import type {
   ModelCarriersMap,
   ModelCarrierEntry,
   UpdateModelInput,
-} from '@/features/demuxai/model/model.types';
+} from '@demux/common';
 import type {
   DemuxaiModelPort,
   ListModelsPage,

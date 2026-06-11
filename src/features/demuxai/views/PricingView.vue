@@ -20,10 +20,10 @@ import {
   billingTypeValues,
   BillingTypeLabel,
   type BillingType,
-} from '../model/enums';
-import type { Pricing, UpsertPricingInput, VendorModelGroup } from '../model/pricing.types';
-import type { Model } from '../model/model.types';
-import type { UnconfiguredAlias, VendorPricingStatsMap } from '../model/pricing.types';
+} from '@demux/common';
+import type { Pricing, UpsertPricingInput, VendorModelGroup } from '@demux/common';
+import type { Model } from '@demux/common';
+import type { UnconfiguredAlias, VendorPricingStatsMap } from '@demux/common';
 import type { ProviderGroup } from '../model/catalog.types';
 import { getDemuxaiCatalogPort, getDemuxaiPricingPort } from '../services';
 import ProviderWorkspaceLayout from '../components/provider/ProviderWorkspaceLayout.vue';

@@ -18,7 +18,7 @@ import { fromNow } from '@/shared/lib/date';
 import { confirmDanger } from '@/shared/composables/useConfirm';
 import { clientPaginate, usePagination } from '@/shared/composables/usePagination';
 
-import { ProviderGroupLabel } from '../model/enums';
+import { ProviderGroupLabel } from '@demux/common';
 import type { ProviderGroup, ProviderUpstreamModel } from '../model/catalog.types';
 import type { ModelRouteStats } from '../model/modelRoute.types';
 import { getDemuxaiCatalogPort, getDemuxaiModelRoutePort } from '../services';

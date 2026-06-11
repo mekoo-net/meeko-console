@@ -27,13 +27,13 @@ import {
   BillingTypeLabel,
   BillReverseCodeLabel,
   LogErrorCodeLabel,
-} from '../model/enums';
+} from '@demux/common';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 import type {
   ListLogsFilter,
   LogEntry,
   ReverseLogInput,
-} from '../model/log.types';
+} from '@demux/common';
 import { getDemuxaiLogsPort } from '../services';
 import LogDetailDrawer from '../components/LogDetailDrawer.vue';
 import LogReverseDialog from '../components/LogReverseDialog.vue';

@@ -5,17 +5,17 @@ import type {
   BillReverseCode,
   ModelCapability,
   ModelFamily,
-} from '../../model/enums';
+} from '@demux/common';
 import type {
   Provider,
   ProviderModel,
   ProviderModelMapping,
-} from '../../model/provider.types';
+} from '@demux/common';
 import type { ProviderGroup, ProviderUpstreamModel } from '../../model/catalog.types';
 import type { ModelRoute } from '../../model/modelRoute.types';
-import type { Model } from '../../model/model.types';
-import type { Pricing } from '../../model/pricing.types';
-import type { LogEntry } from '../../model/log.types';
+import type { Model } from '@demux/common';
+import type { Pricing } from '@demux/common';
+import type { LogEntry } from '@demux/common';
 
 /**
  * demuxai 域共享内存仓。多个 Mock 类共享同一份引用，
@@ -561,7 +561,7 @@ function seedPricing(models: Model[]): Pricing[] {
         },
         currency: 'CNY',
         tierMultipliers: { '5': 0.7, '4': 0.85 },
-        updatedBy: { iamUserUid: '200000001' },
+        updatedBy: { iamUid: '200000001' },
       },
     ],
     [
@@ -574,7 +574,7 @@ function seedPricing(models: Model[]): Pricing[] {
         },
         currency: 'CNY',
         tierMultipliers: { '5': 0.6 },
-        updatedBy: { iamUserUid: '200000001' },
+        updatedBy: { iamUid: '200000001' },
       },
     ],
     [
@@ -591,7 +591,7 @@ function seedPricing(models: Model[]): Pricing[] {
         },
         currency: 'CNY',
         tierMultipliers: { '5': 0.75 },
-        updatedBy: { iamUserUid: '200000001' },
+        updatedBy: { iamUid: '200000001' },
       },
     ],
     [
@@ -604,7 +604,7 @@ function seedPricing(models: Model[]): Pricing[] {
         },
         currency: 'CNY',
         tierMultipliers: {},
-        updatedBy: { iamUserUid: '200000001' },
+        updatedBy: { iamUid: '200000001' },
       },
     ],
     [
@@ -617,7 +617,7 @@ function seedPricing(models: Model[]): Pricing[] {
         },
         currency: 'CNY',
         tierMultipliers: {},
-        updatedBy: { iamUserUid: '200000001' },
+        updatedBy: { iamUid: '200000001' },
       },
     ],
     [
@@ -630,7 +630,7 @@ function seedPricing(models: Model[]): Pricing[] {
         },
         currency: 'CNY',
         tierMultipliers: {},
-        updatedBy: { iamUserUid: '200000001' },
+        updatedBy: { iamUid: '200000001' },
       },
     ],
     [
@@ -643,7 +643,7 @@ function seedPricing(models: Model[]): Pricing[] {
         },
         currency: 'CNY',
         tierMultipliers: { '5': 0.5, '4': 0.75 },
-        updatedBy: { iamUserUid: '200000001' },
+        updatedBy: { iamUid: '200000001' },
       },
     ],
     [
@@ -656,7 +656,7 @@ function seedPricing(models: Model[]): Pricing[] {
         },
         currency: 'CNY',
         tierMultipliers: {},
-        updatedBy: { iamUserUid: '200000001' },
+        updatedBy: { iamUid: '200000001' },
       },
     ],
   ]);
@@ -809,7 +809,7 @@ function seedLogs(providers: Provider[]): LogEntry[] {
       createAt: occurred.getTime(),
       account: {
         uid: accountUid,
-        iamUserUid: SEED_IAM_USERS[i % SEED_IAM_USERS.length]!,
+        iamUid: SEED_IAM_USERS[i % SEED_IAM_USERS.length]!,
         displayName: accountContact.displayName,
         email: accountContact.email,
         phone: accountContact.phone,

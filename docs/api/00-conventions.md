@@ -214,7 +214,8 @@ type ApiError = {
 | 概念 | 全局命名 | 反例（已禁用） |
 | --- | --- | --- |
 | 时间字段 | `*AtUtc` 后缀；JSON **Unix 毫秒 number** | ISO8601 字符串；`createAt` 作为 wire 字段名（DemuxAi 日志除外，见 11-demuxai-logs） |
-| IAM 用户主键 | `iamUserUid` | `iamId` / `iamUid` |
+| IAM 用户主键（wire / API 契约） | `iamUserUid` | `iamId` |
+| IAM 用户主键（前端 demux-common 规范字段） | `iamUid`（adapter 由 wire `iamUserUid` 映射） | `iamId` |
 | 字段风格 | camelCase | snake_case（`avatar_url` / `is_account_owner`） |
 | 字符串枚举 | 全小写 / snake_case 字符串 | magic number（OTP `purpose: 1`） |
 | 错误对象 | `error: { code, message, ... }` | `errorCode + errorMessage` / `failureCode + failureMessage` |

@@ -4,7 +4,7 @@
  */
 import { computed } from 'vue';
 
-import type { LogStatsErrorCode } from '../../model/log.types';
+import type { LogStatsErrorCode } from '@demux/common';
 import Panel from './Panel.vue';
 
 const props = defineProps<{ items: LogStatsErrorCode[] }>();

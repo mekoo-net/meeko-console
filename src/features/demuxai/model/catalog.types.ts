@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { providerGroupStatusSchema } from './enums';
+import { providerGroupStatusSchema } from '@demux/common';
 import { epochMillisSchema } from '@/shared/lib/epoch';
 
 /** 后端主键以 long 下发（JSON number），前端统一规整为字符串，兼容 string/number 两种来源。 */

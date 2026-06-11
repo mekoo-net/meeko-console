@@ -10,7 +10,7 @@ import {
   type ModelCarriersMap,
   type ModelCarrierEntry,
   type UpdateModelInput,
-} from '../../model/model.types';
+} from '@demux/common';
 import type { DemuxaiModelPort, ListModelsPage } from '../ports/demuxaiModelPort';
 
 import { getDemuxaiStore } from './data';

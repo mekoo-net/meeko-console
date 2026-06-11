@@ -8,7 +8,7 @@ import type {
   UpsertPricingInput,
   VendorModelGroupedPage,
   VendorPricingStatsMap,
-} from '../../model/pricing.types';
+} from '@demux/common';
 
 export interface ListPricingPage {
   items: Pricing[];

@@ -37,14 +37,14 @@ import {
   modelFamilyValues,
   ModelFamilyLabel,
   type ApiType,
-} from '../model/enums';
+} from '@demux/common';
 import type {
   CreateProviderInput,
   Provider,
   ProviderModelDraft,
   ProviderModelMappingDraft,
   UpdateProviderInput,
-} from '../model/provider.types';
+} from '@demux/common';
 import { getDemuxaiProviderPort } from '../services';
 import {
   defaultCapabilitiesForFamily,

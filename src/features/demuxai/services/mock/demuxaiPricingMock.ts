@@ -13,7 +13,7 @@ import {
   type VendorModelGroup,
   type VendorModelGroupedPage,
   type VendorPricingStatsMap,
-} from '../../model/pricing.types';
+} from '@demux/common';
 import type { DemuxaiPricingPort, ListPricingPage } from '../ports/demuxaiPricingPort';
 
 import { genPricingUid, getDemuxaiStore } from './data';

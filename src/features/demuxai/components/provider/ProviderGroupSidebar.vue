@@ -10,7 +10,7 @@ import {
   ProviderGroupLabel,
   ProviderGroupStatusLabel,
   ProviderGroupStatusTone,
-} from '../../model/enums';
+} from '@demux/common';
 import type { ProviderGroup } from '../../model/catalog.types';
 
 /** 选中值：`all` 表示全部渠道；否则为 queueGroup */

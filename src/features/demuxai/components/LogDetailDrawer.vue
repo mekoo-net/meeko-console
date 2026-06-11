@@ -23,8 +23,8 @@ import {
   BillingTypeLabel,
   BillReverseCodeLabel,
   LogErrorCodeLabel,
-} from '../model/enums';
-import type { LogEntry } from '../model/log.types';
+} from '@demux/common';
+import type { LogEntry } from '@demux/common';
 
 interface Props {
   modelValue: boolean;
@@ -202,7 +202,7 @@ const outputDims = computed<DimRow[]>(() => {
       </div>
       <div class="log-detail__row">
         <span class="label">IAM 用户</span>
-        <span class="mono">{{ log.account.iamUserUid ?? '—' }}</span>
+        <span class="mono">{{ log.account.iamUid ?? '—' }}</span>
       </div>
       <div class="log-detail__row">
         <span class="label">请求 IP</span>

@@ -1,7 +1,7 @@
 import type { AppResult } from '@/shared/api/httpTypes';
 import type { Uid } from '@/shared/lib/id';
 
-import type { ApiType, ProviderStatus } from '../../model/enums';
+import type { ApiType, ProviderStatus } from '@demux/common';
 import type {
   CreateProviderInput,
   FetchUpstreamModelsResult,
@@ -9,7 +9,7 @@ import type {
   Provider,
   ProviderTestResult,
   UpdateProviderInput,
-} from '../../model/provider.types';
+} from '@demux/common';
 
 export interface ListProvidersPage {
   items: Provider[];
