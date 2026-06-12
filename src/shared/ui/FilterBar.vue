@@ -24,6 +24,8 @@
 import { ref, watch } from 'vue';
 import { RefreshLeft, Search } from '@element-plus/icons-vue';
 
+import { toLocalDateTimeValue } from '@/shared/lib/date';
+
 const accountUid = defineModel<string>('accountUid', { required: true });
 const contactKeyword = defineModel<string>('contactKeyword', { required: true });
 /**
@@ -59,7 +61,24 @@ const quickRangeMs: Readonly<Record<QuickKey, number>> = {
   '30d': 30 * 24 * 60 * 60 * 1000,
 };
 
-const activeQuick = ref<QuickKey | ''>('');
+/**
+ * 判断当前区间是否等于某个快捷范围（用于父组件以默认值“近 24h”初始化时点亮按钮）。
+ * 结束时间需贴近“现在”，否则视为用户自定义的历史区间，不点亮。
+ */
+function matchQuick(range: [string, string] | null | undefined): QuickKey | '' {
+  if (!range?.[0] || !range[1]) return '';
+  const from = new Date(range[0]).getTime();
+  const to = new Date(range[1]).getTime();
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return '';
+  if (Math.abs(Date.now() - to) > 60_000) return '';
+  const span = to - from;
+  for (const key of Object.keys(quickRangeMs) as QuickKey[]) {
+    if (Math.abs(span - quickRangeMs[key]) <= 2_000) return key;
+  }
+  return '';
+}
+
+const activeQuick = ref<QuickKey | ''>(matchQuick(dateRange.value));
 let suppressNextWatch = false;
 
 function pickQuick(key: QuickKey): void {
@@ -67,16 +86,38 @@ function pickQuick(key: QuickKey): void {
   const from = new Date(now.getTime() - quickRangeMs[key]);
   activeQuick.value = key;
   suppressNextWatch = true;
-  dateRange.value = [from.toISOString(), now.toISOString()];
+  dateRange.value = [toLocalDateTimeValue(from), toLocalDateTimeValue(now)];
 }
 
-watch(dateRange, () => {
+watch(dateRange, (val) => {
   if (suppressNextWatch) {
     suppressNextWatch = false;
     return;
   }
-  activeQuick.value = '';
+  activeQuick.value = matchQuick(val);
 });
+
+/**
+ * 点「查询」刷新：若当前是快捷区间（近 24h / 7d / 30d），把结束时间刷新到「现在」，
+ * 否则相对区间会冻结在进页那一刻，刷新拉不到最新数据。
+ * dateRange 变化会触发父级 watch 重新查询，故此处不再额外 emit('refresh') 以免重复请求；
+ * 仅在区间未变化（同一秒内）或自定义区间时直接 emit。
+ */
+function onRefresh(): void {
+  const key = activeQuick.value;
+  if (key) {
+    const now = new Date();
+    const from = new Date(now.getTime() - quickRangeMs[key]);
+    const next: [string, string] = [toLocalDateTimeValue(from), toLocalDateTimeValue(now)];
+    const cur = dateRange.value;
+    if (!cur || cur[0] !== next[0] || cur[1] !== next[1]) {
+      suppressNextWatch = true;
+      dateRange.value = next;
+      return;
+    }
+  }
+  emit('refresh');
+}
 
 function onReset(): void {
   activeQuick.value = '';
@@ -98,7 +139,7 @@ function onReset(): void {
     <div class="filter-bar__row">
       <slot />
       <div v-if="dateRange === undefined" class="filter-bar__actions">
-        <el-button type="primary" :icon="Search" :loading="loading" @click="emit('refresh')">
+        <el-button type="primary" :icon="Search" :loading="loading" @click="onRefresh">
           查询
         </el-button>
         <el-button :icon="RefreshLeft" @click="onReset">重置</el-button>
@@ -109,11 +150,12 @@ function onReset(): void {
       <el-form-item label="时间范围" class="filter-bar__date-item">
         <el-date-picker
           v-model="dateRange"
-          type="daterange"
+          type="datetimerange"
           range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          value-format="YYYY-MM-DDTHH:mm:ss[Z]"
+          start-placeholder="开始时间"
+          end-placeholder="结束时间"
+          format="YYYY-MM-DD HH:mm"
+          value-format="YYYY-MM-DDTHH:mm:ss"
           :default-time="datePickerDefaultTime"
           unlink-panels
           clearable
@@ -132,7 +174,7 @@ function onReset(): void {
       </el-form-item>
 
       <div class="filter-bar__actions">
-        <el-button type="primary" :icon="Search" :loading="loading" @click="emit('refresh')">
+        <el-button type="primary" :icon="Search" :loading="loading" @click="onRefresh">
           查询
         </el-button>
         <el-button :icon="RefreshLeft" @click="onReset">重置</el-button>
@@ -181,7 +223,7 @@ function onReset(): void {
   flex-wrap: nowrap;
 }
 .filter-bar__date-item :deep(.el-date-editor) {
-  width: 320px;
+  width: 400px;
 }
 
 .quick-range {

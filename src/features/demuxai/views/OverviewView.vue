@@ -15,6 +15,7 @@ import PageHeader from '@/shared/ui/PageHeader.vue';
 
 import type { ListLogsFilter, LogStats } from '@demux/common';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
+import { toLocalDateTimeValue } from '@/shared/lib/date';
 import { getDemuxaiLogsPort } from '../services';
 
 import DateRangeBar from '../components/overview/DateRangeBar.vue';
@@ -34,7 +35,7 @@ const loading = ref(false);
 const last24h = (): [string, string] => {
   const now = new Date();
   const from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  return [from.toISOString(), now.toISOString()];
+  return [toLocalDateTimeValue(from), toLocalDateTimeValue(now)];
 };
 
 const dateRange = ref<[string, string] | null>(last24h());

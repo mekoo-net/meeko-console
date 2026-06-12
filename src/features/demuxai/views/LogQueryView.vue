@@ -20,7 +20,7 @@ import StatusTag from '@/shared/ui/StatusTag.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import FilterBar from '@/shared/ui/FilterBar.vue';
 import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
-import { formatDateTime } from '@/shared/lib/date';
+import { formatDateTime, toLocalDateTimeValue } from '@/shared/lib/date';
 import { BILLING_FRACTION_DIGITS, formatMoney } from '@/shared/lib/money';
 
 import {
@@ -65,7 +65,7 @@ interface PageFilter {
 const last24h = (): [string, string] => {
   const now = new Date();
   const from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  return [from.toISOString(), now.toISOString()];
+  return [toLocalDateTimeValue(from), toLocalDateTimeValue(now)];
 };
 
 const defaultFilter = (): PageFilter => ({

@@ -8,7 +8,7 @@ import FilterBar from '@/shared/ui/FilterBar.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
 import { formatMoney } from '@/shared/lib/money';
-import { formatDateTime } from '@/shared/lib/date';
+import { formatDateTime, toLocalDateTimeValue } from '@/shared/lib/date';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 
 import {
@@ -42,10 +42,16 @@ interface PageFilter {
   status: RechargeStatus | 'all';
 }
 
+const last24h = (): [string, string] => {
+  const now = new Date();
+  const from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  return [toLocalDateTimeValue(from), toLocalDateTimeValue(now)];
+};
+
 const defaultFilter = (): PageFilter => ({
   accountUid: '',
   contactKeyword: '',
-  dateRange: null,
+  dateRange: last24h(),
   provider: 'all',
   status: 'all',
 });
