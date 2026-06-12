@@ -73,6 +73,18 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '计费产品', requiresAuth: true, roles: ['Admin'] },
           },
           {
+            path: 'vouchers',
+            name: 'billing-vouchers',
+            component: () => import('@/features/vouchers/views/VoucherTemplateListView.vue'),
+            meta: { title: '代金券', requiresAuth: true, permissions: ['billing.voucher.read'] },
+          },
+          {
+            path: 'user-vouchers',
+            name: 'billing-user-vouchers',
+            component: () => import('@/features/vouchers/views/UserVoucherLookupView.vue'),
+            meta: { title: '用户代金券', requiresAuth: true, permissions: ['billing.voucher.read'] },
+          },
+          {
             path: 'redemption',
             redirect: { name: 'demuxai-redemption' },
           },
