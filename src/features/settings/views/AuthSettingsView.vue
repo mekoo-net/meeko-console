@@ -49,14 +49,10 @@ const captchaProviderOptions: Array<{ value: CaptchaProvider; label: string }> =
   { value: 'hcaptcha', label: 'hCaptcha' },
 ];
 
-const captchaProviderLabel = computed(() =>
-  captchaProviderOptions.find((o) => o.value === form.captchaProvider)?.label ?? form.captchaProvider,
-);
-
 const registrationChannelOptions: Array<{ value: RegistrationChannel; label: string; hint: string }> = [
-  { value: 'email', label: '邮箱注册' },
-  { value: 'phone', label: '手机注册' },
-  { value: 'both', label: '邮箱 + 手机' },
+  { value: 'email', label: '邮箱注册', hint: '用户仅可通过邮箱完成注册。' },
+  { value: 'phone', label: '手机注册', hint: '用户仅可通过手机号完成注册。' },
+  { value: 'both', label: '邮箱 + 手机', hint: '用户可选择邮箱或手机号注册。' },
 ];
 
 function applyStatus(status: AuthSettingsAdmin): void {
