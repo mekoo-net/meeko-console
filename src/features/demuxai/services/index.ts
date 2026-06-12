@@ -8,7 +8,9 @@ import { DemuxaiModelRouteMock } from './mock/demuxaiModelRouteMock';
 import { DemuxaiPricingMock } from './mock/demuxaiPricingMock';
 import { DemuxaiProviderMock } from './mock/demuxaiProviderMock';
 import { DemuxaiBackendMock } from './mock/demuxaiBackendMock';
+import { DemuxaiRateLimitMock } from './mock/demuxaiRateLimitMock';
 import { DemuxaiBackendHttpAdapter } from '@/shared/api/adapters/demuxaiBackendAdapter';
+import { DemuxaiRateLimitHttpAdapter } from '@/shared/api/adapters/demuxaiRateLimitAdapter';
 import { DemuxaiCatalogHttpAdapter } from '@/shared/api/adapters/demuxaiCatalogAdapter';
 import { DemuxaiModelRouteHttpAdapter } from '@/shared/api/adapters/demuxaiModelRouteAdapter';
 import { DemuxaiProviderHttpAdapter } from '@/shared/api/adapters/demuxaiProviderAdapter';
@@ -24,6 +26,7 @@ import type { DemuxaiPricingPort } from './ports/demuxaiPricingPort';
 import type { DemuxaiProviderPort } from './ports/demuxaiProviderPort';
 import type { DemuxaiRedemptionPort } from './ports/demuxaiRedemptionPort';
 import type { DemuxaiBackendPort } from './ports/demuxaiBackendPort';
+import type { DemuxaiRateLimitPort } from './ports/demuxaiRateLimitPort';
 
 /**
  * demuxai 域端口工厂。
@@ -41,6 +44,7 @@ abstract class DemuxaiServices {
   abstract readonly pricing: DemuxaiPricingPort;
   abstract readonly logs: DemuxaiLogsPort;
   abstract readonly backend: DemuxaiBackendPort;
+  abstract readonly rateLimit: DemuxaiRateLimitPort;
 }
 
 class DemuxaiMockServices extends DemuxaiServices {
@@ -52,6 +56,7 @@ class DemuxaiMockServices extends DemuxaiServices {
   readonly pricing = new DemuxaiPricingMock();
   readonly logs = new DemuxaiLogsMock();
   readonly backend = new DemuxaiBackendMock();
+  readonly rateLimit = new DemuxaiRateLimitMock();
 }
 
 class DemuxaiHttpServices extends DemuxaiServices {
@@ -63,6 +68,7 @@ class DemuxaiHttpServices extends DemuxaiServices {
   readonly pricing = new DemuxaiPricingHttpAdapter();
   readonly logs = new DemuxaiLogsHttpAdapter();
   readonly backend = new DemuxaiBackendHttpAdapter();
+  readonly rateLimit = new DemuxaiRateLimitHttpAdapter();
 }
 
 const services: DemuxaiServices = isMockMode ? new DemuxaiMockServices() : new DemuxaiHttpServices();
@@ -97,4 +103,8 @@ export function getDemuxaiLogsPort(): DemuxaiLogsPort {
 
 export function getDemuxaiBackendPort(): DemuxaiBackendPort {
   return services.backend;
+}
+
+export function getDemuxaiRateLimitPort(): DemuxaiRateLimitPort {
+  return services.rateLimit;
 }

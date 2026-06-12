@@ -82,6 +82,15 @@ const tree: readonly MenuNode[] = [
       { type: 'leaf', index: '/demuxai/providers', title: '供应商组', icon: Link },
       { type: 'leaf', index: '/demuxai/pricing', title: '模型定价', icon: PriceTag },
       { type: 'leaf', index: '/demuxai/logs', title: '调用日志', icon: DataLine },
+      {
+        type: 'group',
+        index: '/demuxai/settings',
+        title: '系统设置',
+        icon: Setting,
+        children: [
+          { type: 'leaf', index: '/demuxai/settings/rate', title: '速率设置', icon: Operation },
+        ],
+      },
     ],
   },
   {

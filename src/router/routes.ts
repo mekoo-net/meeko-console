@@ -132,7 +132,13 @@ export const routes: RouteRecordRaw[] = [
           },
           {
             path: 'settings',
-            redirect: { name: 'settings-auth' },
+            redirect: { name: 'demuxai-settings-rate' },
+          },
+          {
+            path: 'settings/rate',
+            name: 'demuxai-settings-rate',
+            component: () => import('@/features/demuxai/views/SettingsView.vue'),
+            meta: { title: '速率设置', requiresAuth: true, roles: ['Admin'] },
           },
         ],
       },
