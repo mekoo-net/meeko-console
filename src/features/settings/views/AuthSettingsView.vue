@@ -54,9 +54,9 @@ const captchaProviderLabel = computed(() =>
 );
 
 const registrationChannelOptions: Array<{ value: RegistrationChannel; label: string; hint: string }> = [
-  { value: 'email', label: '邮箱注册', hint: '用户使用邮箱 + 密码注册' },
-  { value: 'phone', label: '手机注册', hint: '用户使用手机 + 验证码注册' },
-  { value: 'both', label: '邮箱 + 手机', hint: '同时开放两种注册方式' },
+  { value: 'email', label: '邮箱注册' },
+  { value: 'phone', label: '手机注册' },
+  { value: 'both', label: '邮箱 + 手机' },
 ];
 
 function applyStatus(status: AuthSettingsAdmin): void {
@@ -246,7 +246,6 @@ onMounted(() => {
 
         <el-form-item label="开放用户注册">
           <el-switch v-model="form.registrationEnabled" />
-          <span class="settings-panel__item-tip">关闭后所有前端注册入口不可用</span>
         </el-form-item>
 
         <el-form-item label="注册渠道">
@@ -277,7 +276,6 @@ onMounted(() => {
 
         <el-form-item label="启用人机验证">
           <el-switch v-model="form.captchaEnabled" :disabled="!form.registrationEnabled" />
-          <span class="settings-panel__item-tip">注册 / 登录提交前完成 CAPTCHA 校验</span>
         </el-form-item>
 
         <el-form-item label="验证提供商" :required="form.captchaEnabled">
@@ -294,9 +292,6 @@ onMounted(() => {
               :disabled="opt.value === 'none' && form.captchaEnabled"
             />
           </el-select>
-          <span v-if="!form.captchaEnabled" class="settings-panel__item-tip">
-            当前：{{ captchaProviderLabel }}
-          </span>
         </el-form-item>
 
         <el-form-item label="Site Key" :required="form.captchaEnabled">
@@ -321,17 +316,6 @@ onMounted(() => {
               form.captchaSecretConfigured ? '留空则不修改' : '服务端校验私钥（首次启用必填）'
             "
           />
-          <span class="settings-panel__item-tip">
-            Secret 状态：
-            <el-tag
-              size="small"
-              :type="form.captchaSecretConfigured ? 'success' : 'info'"
-              effect="light"
-              round
-            >
-              {{ form.captchaSecretConfigured ? '已配置' : '未配置' }}
-            </el-tag>
-          </span>
         </el-form-item>
       </section>
 
@@ -342,7 +326,6 @@ onMounted(() => {
 
         <el-form-item label="密码登录">
           <el-switch v-model="form.passwordLogin" />
-          <span class="settings-panel__item-tip">关闭后无法使用用户名/邮箱 + 密码登录</span>
         </el-form-item>
       </section>
     </el-form>

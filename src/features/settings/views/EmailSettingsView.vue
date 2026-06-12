@@ -162,14 +162,13 @@ onMounted(() => {
       <section class="settings-panel__section">
         <h4 class="settings-panel__section-title">后缀白名单</h4>
 
-        <el-form-item label="邮箱后缀白名单">
+        <el-form-item label="邮箱后缀限制">
           <el-switch v-model="form.emailSuffixRestrictionEnabled" />
-          <span class="settings-panel__item-tip">仅允许指定域名后缀注册</span>
         </el-form-item>
 
         <el-form-item
           v-if="form.emailSuffixRestrictionEnabled"
-          label="允许的后缀"
+          label="后缀"
           required
         >
           <el-select
@@ -199,7 +198,6 @@ onMounted(() => {
 
         <el-form-item label="注册验证码">
           <el-switch v-model="form.verificationCodeEnabled" />
-          <span class="settings-panel__item-tip">注册时校验邮箱验证码</span>
         </el-form-item>
       </section>
     </el-form>
