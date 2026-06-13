@@ -2,13 +2,19 @@
 import { computed, reactive, ref, watch } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
 
+import type { BillingProduct } from '@/features/products/model/product.types';
+import { getProductPort } from '@/features/products/services';
+
 import {
+  VoucherApplyMode,
   VoucherDeductKind,
   VoucherScopeKind,
   VoucherValidityKind,
   type CreateVoucherTemplateInput,
   type UpdateVoucherTemplateInput,
+  type VoucherRule,
   type VoucherTemplate,
+  type VoucherValidity,
 } from '../model/voucher.types';
 
 const props = defineProps<{
@@ -27,11 +33,12 @@ const formRef = ref<FormInstance>();
 interface FormState {
   name: string;
   deductKind: number;
+  applyMode: number;
   faceValue: number;
   thresholdAmount: number;
   discountRate: number;
   scopeKind: number;
-  scopeProductCodes: string;
+  scopeProductCodes: string[];
   validityKind: number;
   validRange: [Date, Date] | null;
   validDays: number;
@@ -44,11 +51,12 @@ function emptyForm(): FormState {
   return {
     name: '',
     deductKind: VoucherDeductKind.NoThreshold,
+    applyMode: VoucherApplyMode.FirstPaymentOnly,
     faceValue: 5,
     thresholdAmount: 0,
     discountRate: 90,
     scopeKind: VoucherScopeKind.AllProducts,
-    scopeProductCodes: '',
+    scopeProductCodes: [],
     validityKind: VoucherValidityKind.RelativeDays,
     validRange: null,
     validDays: 30,
@@ -60,8 +68,41 @@ function emptyForm(): FormState {
 
 const form = reactive<FormState>(emptyForm());
 
+const productPort = getProductPort();
+const products = ref<BillingProduct[]>([]);
+const productsLoading = ref(false);
+
+async function loadProducts(): Promise<void> {
+  if (products.value.length || productsLoading.value) return;
+  productsLoading.value = true;
+  try {
+    const r = await productPort.list();
+    if (r.success) products.value = r.data;
+  } finally {
+    productsLoading.value = false;
+  }
+}
+
 const isEdit = computed(() => !!props.template);
 const dialogTitle = computed(() => (isEdit.value ? '编辑券批次' : '新建券批次'));
+
+const deductOptions = [
+  { label: '无门槛', value: VoucherDeductKind.NoThreshold },
+  { label: '满减', value: VoucherDeductKind.FullReduction },
+  { label: '折扣', value: VoucherDeductKind.Discount },
+];
+const applyOptions = [
+  { label: '单次', value: VoucherApplyMode.FirstPaymentOnly },
+  { label: '循环', value: VoucherApplyMode.EveryRenewal },
+];
+const scopeOptions = [
+  { label: '全部产品', value: VoucherScopeKind.AllProducts },
+  { label: '指定产品', value: VoucherScopeKind.SpecificProducts },
+];
+const validityOptions = [
+  { label: '领取后 N 天', value: VoucherValidityKind.RelativeDays },
+  { label: '固定区间', value: VoucherValidityKind.Absolute },
+];
 
 const rules: FormRules = {
   name: [{ required: true, message: '请输入券名称', trigger: 'blur' }],
@@ -76,21 +117,36 @@ watch(
   () => [props.modelValue, props.template] as const,
   ([open, template]) => {
     if (!open) return;
+    void loadProducts();
     Object.assign(form, emptyForm());
     if (template) {
       form.name = template.name;
-      form.deductKind = template.deductKind;
-      form.faceValue = template.faceValue;
-      form.thresholdAmount = template.thresholdAmount;
-      form.discountRate = template.discountRate != null ? template.discountRate * 100 : 90;
+      form.applyMode = template.applyMode;
+
+      const rule = template.rule;
+      form.deductKind = rule.kind;
+      if (rule.kind === VoucherDeductKind.Discount) {
+        form.faceValue = rule.capValue;
+        form.thresholdAmount = rule.thresholdAmount;
+        form.discountRate = rule.discountRate * 100;
+      } else if (rule.kind === VoucherDeductKind.FullReduction) {
+        form.faceValue = rule.faceValue;
+        form.thresholdAmount = rule.thresholdAmount;
+      } else {
+        form.faceValue = rule.faceValue;
+      }
+
       form.scopeKind = template.scopeKind;
-      form.scopeProductCodes = template.scopeProductCodes.join(', ');
-      form.validityKind = template.validityKind;
-      form.validRange =
-        template.validFromUtc && template.validToUtc
-          ? [new Date(template.validFromUtc), new Date(template.validToUtc)]
-          : null;
-      form.validDays = template.validDays ?? 30;
+      form.scopeProductCodes = [...template.scopeProductCodes];
+
+      const validity = template.validity;
+      form.validityKind = validity.kind;
+      if (validity.kind === VoucherValidityKind.Absolute) {
+        form.validRange = [new Date(validity.fromUtc), new Date(validity.toUtc)];
+      } else {
+        form.validDays = validity.days;
+      }
+
       form.stackable = template.stackable;
       form.totalQuota = template.totalQuota ?? null;
       form.perUserLimit = template.perUserLimit ?? null;
@@ -99,39 +155,58 @@ watch(
   { immediate: true },
 );
 
+// 抵扣周期仅折扣券有意义；无门槛/满减用一次即绑定账单，强制单次。
+watch(
+  () => form.deductKind,
+  (kind) => {
+    if (kind !== VoucherDeductKind.Discount) {
+      form.applyMode = VoucherApplyMode.FirstPaymentOnly;
+    }
+  },
+);
+
 function scopeCodes(): string[] {
-  return form.scopeKind === VoucherScopeKind.SpecificProducts
-    ? form.scopeProductCodes
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : [];
+  return form.scopeKind === VoucherScopeKind.SpecificProducts ? [...form.scopeProductCodes] : [];
 }
 
-function validityFields(): { validFromUtc: string | null; validToUtc: string | null; validDays: number | null } {
-  if (form.validityKind === VoucherValidityKind.Absolute) {
+function buildRule(): VoucherRule {
+  if (form.deductKind === VoucherDeductKind.Discount) {
     return {
-      validFromUtc: form.validRange?.[0] ? form.validRange[0].toISOString() : null,
-      validToUtc: form.validRange?.[1] ? form.validRange[1].toISOString() : null,
-      validDays: null,
+      kind: VoucherDeductKind.Discount,
+      discountRate: form.discountRate / 100,
+      capValue: form.faceValue,
+      thresholdAmount: form.thresholdAmount,
     };
   }
-  return { validFromUtc: null, validToUtc: null, validDays: form.validDays };
+  if (form.deductKind === VoucherDeductKind.FullReduction) {
+    return { kind: VoucherDeductKind.FullReduction, faceValue: form.faceValue, thresholdAmount: form.thresholdAmount };
+  }
+  return { kind: VoucherDeductKind.NoThreshold, faceValue: form.faceValue };
+}
+
+function buildValidity(): VoucherValidity {
+  if (form.validityKind === VoucherValidityKind.Absolute) {
+    return {
+      kind: VoucherValidityKind.Absolute,
+      fromUtc: form.validRange?.[0]?.getTime() ?? 0,
+      toUtc: form.validRange?.[1]?.getTime() ?? 0,
+    };
+  }
+  return { kind: VoucherValidityKind.RelativeDays, days: form.validDays };
 }
 
 async function onSubmit(): Promise<void> {
   const valid = await formRef.value?.validate().catch(() => false);
   if (!valid) return;
 
-  const validity = validityFields();
+  const validity = buildValidity();
 
   if (isEdit.value && props.template) {
     const payload: UpdateVoucherTemplateInput = {
       name: form.name.trim(),
       scopeKind: form.scopeKind,
       scopeProductCodes: scopeCodes(),
-      validityKind: form.validityKind,
-      ...validity,
+      validity,
       stackable: form.stackable,
       totalQuota: form.totalQuota,
       perUserLimit: form.perUserLimit,
@@ -142,14 +217,11 @@ async function onSubmit(): Promise<void> {
 
   const payload: CreateVoucherTemplateInput = {
     name: form.name.trim(),
-    deductKind: form.deductKind,
-    faceValue: form.faceValue,
-    thresholdAmount: form.deductKind === VoucherDeductKind.NoThreshold ? 0 : form.thresholdAmount,
-    discountRate: form.deductKind === VoucherDeductKind.Discount ? form.discountRate / 100 : null,
+    applyMode: form.applyMode,
+    rule: buildRule(),
     scopeKind: form.scopeKind,
     scopeProductCodes: scopeCodes(),
-    validityKind: form.validityKind,
-    ...validity,
+    validity,
     stackable: form.stackable,
     totalQuota: form.totalQuota,
     perUserLimit: form.perUserLimit,
@@ -162,15 +234,20 @@ async function onSubmit(): Promise<void> {
   <el-dialog
     v-model="visible"
     :title="dialogTitle"
-    width="620px"
+    width="640px"
     destroy-on-close
+    class="voucher-form-dialog"
   >
     <el-form
       ref="formRef"
       :model="form"
       :rules="rules"
-      label-width="120px"
+      label-width="92px"
+      label-position="right"
     >
+      <el-divider content-position="left">
+        基本信息
+      </el-divider>
       <el-form-item
         label="券名称"
         prop="name"
@@ -181,52 +258,59 @@ async function onSubmit(): Promise<void> {
         />
       </el-form-item>
 
+      <el-divider content-position="left">
+        抵扣规则
+      </el-divider>
       <el-form-item label="抵扣类型">
-        <el-radio-group
+        <el-segmented
           v-model="form.deductKind"
-          :disabled="isEdit"
-        >
-          <el-radio-button :value="VoucherDeductKind.NoThreshold">
-            无门槛
-          </el-radio-button>
-          <el-radio-button :value="VoucherDeductKind.FullReduction">
-            满减
-          </el-radio-button>
-          <el-radio-button :value="VoucherDeductKind.Discount">
-            折扣
-          </el-radio-button>
-        </el-radio-group>
-      </el-form-item>
-
-      <el-form-item
-        v-if="form.deductKind !== VoucherDeductKind.Discount"
-        :label="form.deductKind === VoucherDeductKind.NoThreshold ? '面额(元)' : '减免(元)'"
-      >
-        <el-input-number
-          v-model="form.faceValue"
-          :min="0.01"
-          :step="1"
-          :precision="2"
-          :disabled="isEdit"
-        />
-      </el-form-item>
-
-      <el-form-item
-        v-else
-        label="券额上限(元)"
-      >
-        <el-input-number
-          v-model="form.faceValue"
-          :min="0.01"
-          :step="1"
-          :precision="2"
+          :options="deductOptions"
           :disabled="isEdit"
         />
       </el-form-item>
 
       <el-form-item
         v-if="form.deductKind === VoucherDeductKind.Discount"
-        label="折扣(%)"
+        label="抵扣周期"
+      >
+        <el-segmented
+          v-model="form.applyMode"
+          :options="applyOptions"
+          :disabled="isEdit"
+        />
+      </el-form-item>
+
+      <el-form-item
+        v-if="form.deductKind !== VoucherDeductKind.Discount"
+        :label="form.deductKind === VoucherDeductKind.NoThreshold ? '面额' : '减免'"
+      >
+        <el-input-number
+          v-model="form.faceValue"
+          :min="0.01"
+          :step="1"
+          :precision="2"
+          :disabled="isEdit"
+        />
+        <span class="unit">元</span>
+      </el-form-item>
+
+      <el-form-item
+        v-else
+        label="券额上限"
+      >
+        <el-input-number
+          v-model="form.faceValue"
+          :min="0.01"
+          :step="1"
+          :precision="2"
+          :disabled="isEdit"
+        />
+        <span class="unit">元</span>
+      </el-form-item>
+
+      <el-form-item
+        v-if="form.deductKind === VoucherDeductKind.Discount"
+        label="折扣"
       >
         <el-input-number
           v-model="form.discountRate"
@@ -236,12 +320,12 @@ async function onSubmit(): Promise<void> {
           :precision="0"
           :disabled="isEdit"
         />
-        <span class="hint">例如 90 表示打 9 折（立减 10%）</span>
+        <span class="unit">%</span>
       </el-form-item>
 
       <el-form-item
         v-if="form.deductKind !== VoucherDeductKind.NoThreshold"
-        label="使用门槛(元)"
+        label="使用门槛"
       >
         <el-input-number
           v-model="form.thresholdAmount"
@@ -250,39 +334,48 @@ async function onSubmit(): Promise<void> {
           :precision="2"
           :disabled="isEdit"
         />
-        <span class="hint">账单达到门槛才可使用</span>
+        <span class="unit">元</span>
       </el-form-item>
 
-      <el-form-item label="适用范围">
-        <el-radio-group v-model="form.scopeKind">
-          <el-radio-button :value="VoucherScopeKind.AllProducts">
-            全部产品
-          </el-radio-button>
-          <el-radio-button :value="VoucherScopeKind.SpecificProducts">
-            指定产品
-          </el-radio-button>
-        </el-radio-group>
+      <el-divider content-position="left">
+        适用范围
+      </el-divider>
+      <el-form-item label="范围">
+        <el-segmented
+          v-model="form.scopeKind"
+          :options="scopeOptions"
+        />
       </el-form-item>
 
       <el-form-item
         v-if="form.scopeKind === VoucherScopeKind.SpecificProducts"
-        label="ProductCode"
+        label="适用产品"
       >
-        <el-input
+        <el-select
           v-model="form.scopeProductCodes"
-          placeholder="逗号分隔，如 demux, voice"
-        />
+          multiple
+          filterable
+          :loading="productsLoading"
+          placeholder="选择适用的计费产品"
+          style="width: 100%"
+        >
+          <el-option
+            v-for="p in products"
+            :key="p.code"
+            :label="`${p.displayName || p.code}（${p.code}）`"
+            :value="p.code"
+          />
+        </el-select>
       </el-form-item>
 
-      <el-form-item label="有效期类型">
-        <el-radio-group v-model="form.validityKind">
-          <el-radio-button :value="VoucherValidityKind.RelativeDays">
-            领取后 N 天
-          </el-radio-button>
-          <el-radio-button :value="VoucherValidityKind.Absolute">
-            固定区间
-          </el-radio-button>
-        </el-radio-group>
+      <el-divider content-position="left">
+        有效期
+      </el-divider>
+      <el-form-item label="类型">
+        <el-segmented
+          v-model="form.validityKind"
+          :options="validityOptions"
+        />
       </el-form-item>
 
       <el-form-item
@@ -295,6 +388,7 @@ async function onSubmit(): Promise<void> {
           :step="1"
           :precision="0"
         />
+        <span class="unit">天</span>
       </el-form-item>
 
       <el-form-item
@@ -307,12 +401,15 @@ async function onSubmit(): Promise<void> {
           range-separator="至"
           start-placeholder="开始"
           end-placeholder="结束"
+          style="width: 100%"
         />
       </el-form-item>
 
+      <el-divider content-position="left">
+        发放与限制
+      </el-divider>
       <el-form-item label="可叠加">
         <el-switch v-model="form.stackable" />
-        <span class="hint">关闭时该券只能单独使用</span>
       </el-form-item>
 
       <el-form-item label="发放总量">
@@ -321,8 +418,9 @@ async function onSubmit(): Promise<void> {
           :min="1"
           :step="100"
           :precision="0"
+          placeholder="不限"
         />
-        <span class="hint">留空表示不限量</span>
+        <span class="unit">张</span>
       </el-form-item>
 
       <el-form-item label="每用户限领">
@@ -332,7 +430,7 @@ async function onSubmit(): Promise<void> {
           :step="1"
           :precision="0"
         />
-        <span class="hint">留空表示不限</span>
+        <span class="unit">张</span>
       </el-form-item>
     </el-form>
 
@@ -351,9 +449,17 @@ async function onSubmit(): Promise<void> {
 </template>
 
 <style scoped>
-.hint {
-  margin-left: 12px;
-  font-size: 12px;
+.voucher-form-dialog :deep(.el-divider--horizontal) {
+  margin: 4px 0 18px;
+}
+.voucher-form-dialog :deep(.el-divider__text) {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--el-color-primary);
+}
+.unit {
+  margin-left: 10px;
+  font-size: 13px;
   color: var(--el-text-color-secondary);
 }
 </style>

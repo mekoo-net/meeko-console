@@ -8,7 +8,6 @@ import {
   Coin,
   DataAnalysis,
   DataLine,
-  Discount,
   Document,
   Link,
   MagicStick,
@@ -17,7 +16,9 @@ import {
   Operation,
   PriceTag,
   Lock,
+  Discount,
   Setting,
+  Ticket,
   Tickets,
   User,
 } from '@element-plus/icons-vue';
@@ -69,8 +70,17 @@ const tree: readonly MenuNode[] = [
       { type: 'leaf', index: '/billing/withdrawals', title: '提现审核', icon: Coin },
       { type: 'leaf', index: '/billing/channels', title: '充值渠道', icon: Link, roles: ['Admin'] },
       { type: 'leaf', index: '/billing/products', title: '计费产品', icon: PriceTag, roles: ['Admin'] },
-      { type: 'leaf', index: '/billing/vouchers', title: '代金券', icon: Discount, perm: 'billing.voucher.read' },
-      { type: 'leaf', index: '/billing/user-vouchers', title: '用户代金券', icon: Tickets, perm: 'billing.voucher.read' },
+      {
+        type: 'group',
+        index: '/billing/voucher',
+        title: '券务管理',
+        icon: Discount,
+        roles: ['Admin'],
+        children: [
+          { type: 'leaf', index: '/billing/vouchers', title: '券务生成', icon: Discount },
+          { type: 'leaf', index: '/billing/voucher-activities', title: '领券活动', icon: Ticket },
+        ],
+      },
     ],
   },
   {

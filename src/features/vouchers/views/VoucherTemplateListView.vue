@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Plus, Refresh } from '@element-plus/icons-vue';
+import { CopyDocument, Plus, Refresh, Ticket } from '@element-plus/icons-vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
@@ -12,9 +12,12 @@ import { formatMoney } from '@/shared/lib/money';
 
 import VoucherTemplateFormDialog from '../components/VoucherTemplateFormDialog.vue';
 import IssueVouchersDialog from '../components/IssueVouchersDialog.vue';
+import TemplateActivitiesDialog from '../components/TemplateActivitiesDialog.vue';
 import {
   VoucherDeductKind,
   VoucherTemplateStatus,
+  VoucherValidityKind,
+  applyModeLabels,
   deductKindLabels,
   templateStatusLabels,
   type CreateVoucherTemplateInput,
@@ -35,8 +38,10 @@ const displayed = computed(() =>
 
 const editVisible = ref(false);
 const issueVisible = ref(false);
+const activitiesVisible = ref(false);
 const editing = ref<VoucherTemplate | null>(null);
 const issuing = ref<VoucherTemplate | null>(null);
+const viewingActivities = ref<VoucherTemplate | null>(null);
 
 const statusTagType: Record<number, string> = {
   [VoucherTemplateStatus.Draft]: 'info',
@@ -46,18 +51,18 @@ const statusTagType: Record<number, string> = {
 };
 
 function ruleSummary(t: VoucherTemplate): string {
-  if (t.deductKind === VoucherDeductKind.NoThreshold) return `无门槛减 ${formatMoney(t.faceValue)}`;
-  if (t.deductKind === VoucherDeductKind.FullReduction)
-    return `满 ${formatMoney(t.thresholdAmount)} 减 ${formatMoney(t.faceValue)}`;
-  const pct = t.discountRate != null ? Math.round(t.discountRate * 100) / 10 : 0;
-  return `满 ${formatMoney(t.thresholdAmount)} 打 ${pct} 折（封顶 ${formatMoney(t.faceValue)}）`;
+  const r = t.rule;
+  if (r.kind === VoucherDeductKind.NoThreshold) return `无门槛减 ${formatMoney(r.faceValue)}`;
+  if (r.kind === VoucherDeductKind.FullReduction)
+    return `满 ${formatMoney(r.thresholdAmount)} 减 ${formatMoney(r.faceValue)}`;
+  const pct = Math.round(r.discountRate * 100) / 10;
+  return `满 ${formatMoney(r.thresholdAmount)} 打 ${pct} 折（封顶 ${formatMoney(r.capValue)}）`;
 }
 
 function validitySummary(t: VoucherTemplate): string {
-  if (t.validDays != null) return `领取后 ${t.validDays} 天`;
-  if (t.validFromUtc && t.validToUtc)
-    return `${formatDateTime(t.validFromUtc)} ~ ${formatDateTime(t.validToUtc)}`;
-  return '—';
+  const v = t.validity;
+  if (v.kind === VoucherValidityKind.RelativeDays) return `领取后 ${v.days} 天`;
+  return `${formatDateTime(v.fromUtc)} ~ ${formatDateTime(v.toUtc)}`;
 }
 
 async function load(): Promise<void> {
@@ -86,6 +91,20 @@ function openEdit(row: VoucherTemplate): void {
 function openIssue(row: VoucherTemplate): void {
   issuing.value = row;
   issueVisible.value = true;
+}
+
+function openActivities(row: VoucherTemplate): void {
+  viewingActivities.value = row;
+  activitiesVisible.value = true;
+}
+
+async function copyKey(code: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(code);
+    ElMessage.success('券 Key 已复制');
+  } catch {
+    ElMessage.warning('复制失败，请手动复制');
+  }
 }
 
 async function onCreate(payload: CreateVoucherTemplateInput): Promise<void> {
@@ -132,8 +151,8 @@ onMounted(() => load());
   <FillListPageLayout>
     <template #header>
       <PageHeader
-        title="代金券"
-        description="创建券批次（无门槛/满减/折扣），并向用户下发。联合扣费：券额优先，余额补足，可透支记欠款。"
+        title="券务生成"
+        description="生成抵扣券（无门槛/满减/折扣），设置抵扣周期与生命周期，获取券 Key，并向用户下发或生成兑换码。"
       >
         <template #actions>
           <el-switch
@@ -182,15 +201,41 @@ onMounted(() => load());
         </template>
       </el-table-column>
       <el-table-column
-        label="类型"
-        width="90"
+        label="券 Key"
+        width="170"
+      >
+        <template #default="{ row }: { row: VoucherTemplate }">
+          <el-tag
+            size="small"
+            type="info"
+            effect="plain"
+            class="key-tag"
+            @click="copyKey(row.code)"
+          >
+            {{ row.code }}
+            <el-icon class="key-tag__copy"><CopyDocument /></el-icon>
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="类型 / 周期"
+        width="150"
       >
         <template #default="{ row }: { row: VoucherTemplate }">
           <el-tag
             size="small"
             effect="plain"
           >
-            {{ deductKindLabels[row.deductKind] }}
+            {{ deductKindLabels[row.rule.kind] }}
+          </el-tag>
+          <el-tag
+            v-if="row.rule.kind === VoucherDeductKind.Discount"
+            size="small"
+            type="info"
+            effect="plain"
+            class="mode-tag"
+          >
+            {{ applyModeLabels[row.applyMode] }}
           </el-tag>
         </template>
       </el-table-column>
@@ -225,10 +270,18 @@ onMounted(() => load());
       </el-table-column>
       <el-table-column
         label="操作"
-        width="230"
+        width="320"
         fixed="right"
       >
         <template #default="{ row }: { row: VoucherTemplate }">
+          <el-button
+            link
+            type="primary"
+            :icon="Ticket"
+            @click="openActivities(row)"
+          >
+            领券活动
+          </el-button>
           <el-button
             link
             type="primary"
@@ -303,6 +356,11 @@ onMounted(() => load());
     :template="issuing"
     @issued="load"
   />
+
+  <TemplateActivitiesDialog
+    v-model="activitiesVisible"
+    :template="viewingActivities"
+  />
 </template>
 
 <style scoped>
@@ -317,5 +375,16 @@ onMounted(() => load());
 .cell-name__rule {
   font-size: 11px;
   color: var(--el-text-color-secondary);
+}
+.key-tag {
+  cursor: pointer;
+  font-family: var(--el-font-family-mono, monospace);
+}
+.key-tag__copy {
+  margin-left: 4px;
+  vertical-align: -2px;
+}
+.mode-tag {
+  margin-top: 2px;
 }
 </style>

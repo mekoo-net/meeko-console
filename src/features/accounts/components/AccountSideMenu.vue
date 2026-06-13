@@ -40,6 +40,7 @@ const sections: readonly SectionItem[] = [
     children: [
       { key: 'recharges', title: '充值' },
       { key: 'bills', title: '流水' },
+      { key: 'vouchers', title: '代金券' },
     ],
   },
   {

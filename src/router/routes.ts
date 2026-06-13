@@ -76,13 +76,21 @@ export const routes: RouteRecordRaw[] = [
             path: 'vouchers',
             name: 'billing-vouchers',
             component: () => import('@/features/vouchers/views/VoucherTemplateListView.vue'),
-            meta: { title: '代金券', requiresAuth: true, permissions: ['billing.voucher.read'] },
+            meta: { title: '券务生成', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'voucher-activities',
+            name: 'billing-voucher-activities',
+            component: () => import('@/features/vouchers/views/VoucherActivityListView.vue'),
+            meta: { title: '领券活动', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'voucher-codes',
+            redirect: { name: 'billing-voucher-activities' },
           },
           {
             path: 'user-vouchers',
-            name: 'billing-user-vouchers',
-            component: () => import('@/features/vouchers/views/UserVoucherLookupView.vue'),
-            meta: { title: '用户代金券', requiresAuth: true, permissions: ['billing.voucher.read'] },
+            redirect: { name: 'billing-vouchers' },
           },
           {
             path: 'redemption',
@@ -293,6 +301,13 @@ export const routes: RouteRecordRaw[] = [
             component: () =>
               import('@/features/accounts/views/sections/billing/BillingBillsSection.vue'),
             meta: { title: '账单流水', requiresAuth: true },
+          },
+          {
+            path: 'vouchers',
+            name: 'account-billing-vouchers',
+            component: () =>
+              import('@/features/accounts/views/sections/billing/BillingVouchersSection.vue'),
+            meta: { title: '代金券', requiresAuth: true },
           },
         ],
       },
