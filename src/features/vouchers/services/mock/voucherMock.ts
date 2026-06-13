@@ -218,8 +218,8 @@ export class VoucherMock implements VoucherPort {
       items: picked.map((t) => ({ templateId: t.id, templateName: t.name, templateCode: t.code })),
       pickCount,
       claimKey: randClaimKey(),
-      startAtUtc: input.startAtUtc ? Date.parse(input.startAtUtc) : null,
-      endAtUtc: input.endAtUtc ? Date.parse(input.endAtUtc) : null,
+      startAtUtc: input.startAtUtc ?? null,
+      endAtUtc: input.endAtUtc ?? null,
       totalQuota: input.totalQuota ?? null,
       claimedCount: 0,
       perUserLimit: input.perUserLimit ?? null,
@@ -235,8 +235,8 @@ export class VoucherMock implements VoucherPort {
     const a = activities.find((x) => x.id === id);
     if (!a) return fail({ code: 'not_found', message: '活动不存在' });
     a.name = input.name.trim() || a.name;
-    a.startAtUtc = input.startAtUtc ? Date.parse(input.startAtUtc) : null;
-    a.endAtUtc = input.endAtUtc ? Date.parse(input.endAtUtc) : null;
+    a.startAtUtc = input.startAtUtc ?? null;
+    a.endAtUtc = input.endAtUtc ?? null;
     a.totalQuota = input.totalQuota ?? null;
     a.perUserLimit = input.perUserLimit ?? null;
     return ok(toWireActivity(a));

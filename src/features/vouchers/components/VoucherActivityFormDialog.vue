@@ -109,11 +109,12 @@ watch(
   },
 );
 
-function windowFields(): { startAtUtc: string | null; endAtUtc: string | null } {
+function windowFields(): { startAtUtc: number | null; endAtUtc: number | null } {
   if (form.hasWindow && form.window) {
+    // 后端 DateTime 走 Unix 毫秒，发 epoch 毫秒而非 ISO 字符串。
     return {
-      startAtUtc: form.window[0]?.toISOString() ?? null,
-      endAtUtc: form.window[1]?.toISOString() ?? null,
+      startAtUtc: form.window[0]?.getTime() ?? null,
+      endAtUtc: form.window[1]?.getTime() ?? null,
     };
   }
   return { startAtUtc: null, endAtUtc: null };

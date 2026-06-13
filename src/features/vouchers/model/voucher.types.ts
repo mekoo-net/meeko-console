@@ -206,16 +206,20 @@ export interface CreateVoucherActivityInput {
   templateIds: string[];
   /** 可选领取张数 M（1..templateIds.length）。 */
   pickCount: number;
-  startAtUtc?: string | null;
-  endAtUtc?: string | null;
+  /** 领取开始（epoch 毫秒，null=立即开放）。 */
+  startAtUtc?: number | null;
+  /** 领取结束（epoch 毫秒，null=长期）。 */
+  endAtUtc?: number | null;
   totalQuota?: number | null;
   perUserLimit?: number | null;
 }
 
 export interface UpdateVoucherActivityInput {
   name: string;
-  startAtUtc?: string | null;
-  endAtUtc?: string | null;
+  /** 领取开始（epoch 毫秒，null=立即开放）。 */
+  startAtUtc?: number | null;
+  /** 领取结束（epoch 毫秒，null=长期）。 */
+  endAtUtc?: number | null;
   totalQuota?: number | null;
   perUserLimit?: number | null;
 }

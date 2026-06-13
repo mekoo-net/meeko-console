@@ -99,10 +99,11 @@ function flattenRule(rule: VoucherRule): Record<string, unknown> {
 
 function flattenValidity(v: VoucherValidity): Record<string, unknown> {
   if (v.kind === VoucherValidityKind.Absolute) {
+    // 后端 DateTime 走 Unix 毫秒（EpochMillisNullableDateTimeConverter），不能发 ISO 字符串。
     return {
       validityKind: v.kind,
-      validFromUtc: new Date(v.fromUtc).toISOString(),
-      validToUtc: new Date(v.toUtc).toISOString(),
+      validFromUtc: v.fromUtc,
+      validToUtc: v.toUtc,
       validDays: null,
     };
   }
