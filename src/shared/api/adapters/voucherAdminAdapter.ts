@@ -22,6 +22,7 @@ import {
   type VoucherValidity,
 } from '@/features/vouchers/model/voucher.types';
 import type {
+  ListActivityClaimersInput,
   ListUserVouchersInput,
   ListVoucherActivitiesInput,
   ListVoucherTemplatesInput,
@@ -231,15 +232,9 @@ function flattenRule(rule: VoucherRule): Record<string, unknown> {
 function flattenValidity(v: VoucherValidity): Record<string, unknown> {
   if (v.kind === VoucherValidityKind.Absolute) {
     return {
-<<<<<<< Updated upstream
-      validityKind: v.kind,
+      validityKind: enumWire(VALIDITY_KIND_TO_WIRE, v.kind),
       validFromUtc: new Date(v.fromUtc).toISOString(),
       validToUtc: new Date(v.toUtc).toISOString(),
-=======
-      validityKind: enumWire(VALIDITY_KIND_TO_WIRE, v.kind),
-      validFromUtc: v.fromUtc,
-      validToUtc: v.toUtc,
->>>>>>> Stashed changes
       validDays: null,
     };
   }
@@ -273,8 +268,15 @@ function mapRedemption(raw: Raw): VoucherRedemption {
     id: String(raw.id ?? ''),
     userVoucherId: String(raw.userVoucherId ?? ''),
     accountUid: String(raw.accountUid ?? ''),
+    holdId: String(raw.holdId ?? ''),
+    referenceKind: num(raw.referenceKind),
+    referenceId:
+      raw.referenceId === undefined || raw.referenceId === null
+        ? null
+        : String(raw.referenceId),
     productCode: String(raw.productCode ?? ''),
     amountDeducted: num(raw.amountDeducted),
+    billAmount: num(raw.billAmount),
     occurredAtUtc: asEpochMillis(raw.occurredAtUtc) ?? 0,
   };
 }
@@ -432,6 +434,22 @@ export class VoucherHttpAdapter implements VoucherPort {
     return ok(rows.map((r) => mapRedemption((r ?? {}) as Raw)));
   }
 
+  async listRedemptionsByVoucher(userVoucherId: string, take = 100): Promise<AppResult<VoucherRedemption[]>> {
+    const res = await request<unknown>(`${VOUCHERS}/redemptions/by-voucher`, {
+      query: { userVoucherId, take },
+    });
+    if (!res.success) return res;
+    const rows = Array.isArray(res.data) ? res.data : [];
+    return ok(rows.map((r) => mapRedemption((r ?? {}) as Raw)));
+  }
+
+  async listRedemptionsByBill(holdId: string): Promise<AppResult<VoucherRedemption[]>> {
+    const res = await request<unknown>(`${VOUCHERS}/redemptions/by-bill`, { query: { holdId } });
+    if (!res.success) return res;
+    const rows = Array.isArray(res.data) ? res.data : [];
+    return ok(rows.map((r) => mapRedemption((r ?? {}) as Raw)));
+  }
+
   async listActivities(input: ListVoucherActivitiesInput): Promise<AppResult<ListPage<VoucherActivity>>> {
     const res = await request<unknown>(ACTIVITIES, {
       query: {
@@ -469,12 +487,21 @@ export class VoucherHttpAdapter implements VoucherPort {
     return parseActivity(res.data);
   }
 
-  async listActivityClaimers(activityId: string, take = 1000): Promise<AppResult<ActivityClaimer[]>> {
-    const res = await request<unknown>(`${ACTIVITIES}/${encodeURIComponent(activityId)}/claimers`, {
-      query: { take },
-    });
+  async listActivityClaimers(
+    input: ListActivityClaimersInput,
+  ): Promise<AppResult<ListPage<ActivityClaimer>>> {
+    const res = await request<unknown>(
+      `${ACTIVITIES}/${encodeURIComponent(input.activityId)}/claimers`,
+      {
+        query: {
+          page: input.page,
+          pageSize: input.pageSize,
+          keyword: input.accountUid ?? undefined,
+          status: input.status ?? undefined,
+        },
+      },
+    );
     if (!res.success) return res;
-    const rows = Array.isArray(res.data) ? res.data : [];
-    return ok(rows.map((r) => mapClaimer((r ?? {}) as Raw)));
+    return ok(parseListPage(res.data, mapClaimer));
   }
 }

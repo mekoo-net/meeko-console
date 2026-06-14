@@ -165,8 +165,16 @@ export interface VoucherRedemption {
   id: string;
   userVoucherId: string;
   accountUid: string;
+  /** 所抵扣账单（Hold 落账单元）Id。 */
+  holdId: string;
+  /** 账单上游引用类型（快照，0=None/1=Recharge/2=Hold/3=Manual）。 */
+  referenceKind: number;
+  /** 账单上游引用 Id（快照），无则为 null。 */
+  referenceId: string | null;
   productCode: string;
   amountDeducted: number;
+  /** 该账单实付总额（快照）。 */
+  billAmount: number;
   occurredAtUtc: number;
 }
 

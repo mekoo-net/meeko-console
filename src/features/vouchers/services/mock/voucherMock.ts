@@ -221,6 +221,14 @@ export class VoucherMock implements VoucherPort {
     return ok(redemptions.filter((r) => r.accountUid === accountUid).map((r) => ({ ...r })));
   }
 
+  async listRedemptionsByVoucher(userVoucherId: string): Promise<AppResult<VoucherRedemption[]>> {
+    return ok(redemptions.filter((r) => r.userVoucherId === userVoucherId).map((r) => ({ ...r })));
+  }
+
+  async listRedemptionsByBill(holdId: string): Promise<AppResult<VoucherRedemption[]>> {
+    return ok(redemptions.filter((r) => r.holdId === holdId).map((r) => ({ ...r })));
+  }
+
   async listActivities(input: ListVoucherActivitiesInput) {
     let rows = activities.slice();
     if (input.templateId) rows = rows.filter((a) => a.items.some((i) => i.templateId === input.templateId));

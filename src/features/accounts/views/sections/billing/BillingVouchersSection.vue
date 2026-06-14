@@ -52,6 +52,45 @@ async function loadRedemptions(uid: string): Promise<void> {
   if (r.success) redemptions.value = r.data;
 }
 
+function billLabel(row: VoucherRedemption): string {
+  if (row.referenceId) return `订单 ${row.referenceId}`;
+  return row.holdId ? `账单 #${row.holdId}` : '—';
+}
+
+const drillVisible = ref(false);
+const drillTitle = ref('');
+const drillLoading = ref(false);
+const drillRows = ref<VoucherRedemption[]>([]);
+
+async function openDrill(title: string, loader: () => Promise<typeof drillRows.value | null>): Promise<void> {
+  drillTitle.value = title;
+  drillVisible.value = true;
+  drillLoading.value = true;
+  drillRows.value = [];
+  try {
+    const rows = await loader();
+    if (rows) drillRows.value = rows;
+  } finally {
+    drillLoading.value = false;
+  }
+}
+
+function drillByBill(row: VoucherRedemption): void {
+  if (!row.holdId) return;
+  void openDrill(`${billLabel(row)} · 券抵扣明细`, async () => {
+    const r = await port.listRedemptionsByBill(row.holdId);
+    return r.success ? r.data : null;
+  });
+}
+
+function drillByVoucher(userVoucherId: string): void {
+  if (!userVoucherId) return;
+  void openDrill(`券 #${userVoucherId} · 核销流水`, async () => {
+    const r = await port.listRedemptionsByVoucher(userVoucherId);
+    return r.success ? r.data : null;
+  });
+}
+
 watch(
   accountUid,
   (uid) => {
@@ -206,11 +245,27 @@ async function revoke(row: UserVoucher): Promise<void> {
           </template>
         </el-table-column>
         <el-table-column
-          label="抵扣金额"
-          width="120"
+          label="抵扣 / 账单金额"
+          width="170"
         >
           <template #default="{ row }: { row: VoucherRedemption }">
-            {{ formatMoney(row.amountDeducted) }}
+            <span class="amount-deduct">{{ formatMoney(row.amountDeducted) }}</span>
+            <span class="amount-bill"> / {{ formatMoney(row.billAmount) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="账单"
+          min-width="140"
+        >
+          <template #default="{ row }: { row: VoucherRedemption }">
+            <el-button
+              link
+              type="primary"
+              :disabled="!row.holdId"
+              @click="drillByBill(row)"
+            >
+              {{ billLabel(row) }}
+            </el-button>
           </template>
         </el-table-column>
         <el-table-column
@@ -218,12 +273,76 @@ async function revoke(row: UserVoucher): Promise<void> {
           min-width="120"
         >
           <template #default="{ row }: { row: VoucherRedemption }">
-            {{ row.userVoucherId }}
+            <el-button
+              link
+              type="primary"
+              @click="drillByVoucher(row.userVoucherId)"
+            >
+              {{ row.userVoucherId }}
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-tab-pane>
   </el-tabs>
+
+  <el-dialog
+    v-model="drillVisible"
+    :title="drillTitle"
+    width="640px"
+    append-to-body
+  >
+    <el-table
+      v-loading="drillLoading"
+      :data="drillRows"
+      size="small"
+      class="compact-table"
+      :empty-text="'暂无记录'"
+      max-height="420"
+    >
+      <el-table-column
+        label="时间"
+        width="160"
+      >
+        <template #default="{ row }: { row: VoucherRedemption }">
+          {{ formatDateTime(row.occurredAtUtc) }}
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="产品"
+        min-width="100"
+      >
+        <template #default="{ row }: { row: VoucherRedemption }">
+          {{ row.productCode }}
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="抵扣 / 账单金额"
+        width="160"
+      >
+        <template #default="{ row }: { row: VoucherRedemption }">
+          <span class="amount-deduct">{{ formatMoney(row.amountDeducted) }}</span>
+          <span class="amount-bill"> / {{ formatMoney(row.billAmount) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="账单"
+        min-width="120"
+      >
+        <template #default="{ row }: { row: VoucherRedemption }">
+          {{ billLabel(row) }}
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="券号"
+        width="90"
+      >
+        <template #default="{ row }: { row: VoucherRedemption }">
+          {{ row.userVoucherId }}
+        </template>
+      </el-table-column>
+    </el-table>
+  </el-dialog>
 </template>
 
 <style scoped>
@@ -234,5 +353,12 @@ async function revoke(row: UserVoucher): Promise<void> {
   display: flex;
   justify-content: flex-end;
   margin-top: 12px;
+}
+.amount-deduct {
+  font-weight: 600;
+  color: var(--el-color-primary);
+}
+.amount-bill {
+  color: var(--el-text-color-secondary);
 }
 </style>
