@@ -268,16 +268,18 @@ function mapRedemption(raw: Raw): VoucherRedemption {
     id: String(raw.id ?? ''),
     userVoucherId: String(raw.userVoucherId ?? ''),
     accountUid: String(raw.accountUid ?? ''),
-    holdId: String(raw.holdId ?? ''),
+    kind: num(raw.kind),
+    delta: num(raw.delta),
+    balanceAfter: num(raw.balanceAfter),
+    occurredAtUtc: asEpochMillis(raw.occurredAtUtc) ?? 0,
+    holdId: raw.holdId === undefined || raw.holdId === null ? '' : String(raw.holdId),
     referenceKind: num(raw.referenceKind),
     referenceId:
       raw.referenceId === undefined || raw.referenceId === null
         ? null
         : String(raw.referenceId),
     productCode: String(raw.productCode ?? ''),
-    amountDeducted: num(raw.amountDeducted),
     billAmount: num(raw.billAmount),
-    occurredAtUtc: asEpochMillis(raw.occurredAtUtc) ?? 0,
   };
 }
 
@@ -434,6 +436,13 @@ export class VoucherHttpAdapter implements VoucherPort {
     return ok(rows.map((r) => mapRedemption((r ?? {}) as Raw)));
   }
 
+  async listLedger(accountUid: string, take = 100): Promise<AppResult<VoucherRedemption[]>> {
+    const res = await request<unknown>(`${VOUCHERS}/ledger`, { query: { accountUid, take } });
+    if (!res.success) return res;
+    const rows = Array.isArray(res.data) ? res.data : [];
+    return ok(rows.map((r) => mapRedemption((r ?? {}) as Raw)));
+  }
+
   async listRedemptionsByVoucher(userVoucherId: string, take = 100): Promise<AppResult<VoucherRedemption[]>> {
     const res = await request<unknown>(`${VOUCHERS}/redemptions/by-voucher`, {
       query: { userVoucherId, take },
@@ -443,8 +452,24 @@ export class VoucherHttpAdapter implements VoucherPort {
     return ok(rows.map((r) => mapRedemption((r ?? {}) as Raw)));
   }
 
+  async listLedgerByVoucher(userVoucherId: string, take = 100): Promise<AppResult<VoucherRedemption[]>> {
+    const res = await request<unknown>(`${VOUCHERS}/ledger/by-voucher`, {
+      query: { userVoucherId, take },
+    });
+    if (!res.success) return res;
+    const rows = Array.isArray(res.data) ? res.data : [];
+    return ok(rows.map((r) => mapRedemption((r ?? {}) as Raw)));
+  }
+
   async listRedemptionsByBill(holdId: string): Promise<AppResult<VoucherRedemption[]>> {
     const res = await request<unknown>(`${VOUCHERS}/redemptions/by-bill`, { query: { holdId } });
+    if (!res.success) return res;
+    const rows = Array.isArray(res.data) ? res.data : [];
+    return ok(rows.map((r) => mapRedemption((r ?? {}) as Raw)));
+  }
+
+  async listLedgerByBill(holdId: string): Promise<AppResult<VoucherRedemption[]>> {
+    const res = await request<unknown>(`${VOUCHERS}/ledger/by-bill`, { query: { holdId } });
     if (!res.success) return res;
     const rows = Array.isArray(res.data) ? res.data : [];
     return ok(rows.map((r) => mapRedemption((r ?? {}) as Raw)));

@@ -20,6 +20,8 @@ import {
   applyModeLabels,
   deductKindLabels,
   templateStatusLabels,
+  voucherCategoryLabels,
+  voucherCategoryOf,
   type CreateVoucherTemplateInput,
   type UpdateVoucherTemplateInput,
   type VoucherTemplate,
@@ -161,7 +163,7 @@ async function setStatus(row: VoucherTemplate, status: number, label: string): P
             :icon="Plus"
             @click="openCreate"
           >
-            创建抵扣券
+            创建代金券 / 优惠券
           </el-button>
         </template>
       </PageHeader>
@@ -201,6 +203,20 @@ async function setStatus(row: VoucherTemplate, status: number, label: string): P
           >
             {{ row.code }}
             <el-icon class="key-tag__copy"><CopyDocument /></el-icon>
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="大类"
+        width="148"
+      >
+        <template #default="{ row }: { row: VoucherTemplate }">
+          <el-tag
+            size="small"
+            :type="voucherCategoryOf(row.rule.kind) === 'credit' ? 'success' : 'warning'"
+            effect="plain"
+          >
+            {{ voucherCategoryLabels[voucherCategoryOf(row.rule.kind)] }}
           </el-tag>
         </template>
       </el-table-column>

@@ -7,9 +7,12 @@ import { getProductPort } from '@/features/products/services';
 
 import {
   VoucherApplyMode,
+  VoucherCategory,
   VoucherDeductKind,
   VoucherScopeKind,
   VoucherValidityKind,
+  voucherCategoryLabels,
+  voucherCategoryOf,
   type CreateVoucherTemplateInput,
   type UpdateVoucherTemplateInput,
   type VoucherRule,
@@ -31,6 +34,7 @@ const emit = defineEmits<{
 const formRef = ref<FormInstance>();
 
 interface FormState {
+  category: VoucherCategory;
   name: string;
   deductKind: number;
   applyMode: number;
@@ -49,6 +53,7 @@ interface FormState {
 
 function emptyForm(): FormState {
   return {
+    category: VoucherCategory.Credit,
     name: '',
     deductKind: VoucherDeductKind.NoThreshold,
     applyMode: VoucherApplyMode.FirstPaymentOnly,
@@ -84,10 +89,19 @@ async function loadProducts(): Promise<void> {
 }
 
 const isEdit = computed(() => !!props.template);
-const dialogTitle = computed(() => (isEdit.value ? '编辑抵扣券' : '创建抵扣券'));
+const dialogTitle = computed(() => {
+  if (isEdit.value) {
+    return form.category === VoucherCategory.Credit ? '编辑代金券' : '编辑优惠券';
+  }
+  return form.category === VoucherCategory.Credit ? '创建代金券' : '创建优惠券';
+});
 
-const deductOptions = [
-  { label: '无门槛', value: VoucherDeductKind.NoThreshold },
+const categoryOptions = [
+  { label: voucherCategoryLabels[VoucherCategory.Credit], value: VoucherCategory.Credit },
+  { label: voucherCategoryLabels[VoucherCategory.Coupon], value: VoucherCategory.Coupon },
+];
+
+const couponDeductOptions = [
   { label: '满减', value: VoucherDeductKind.FullReduction },
   { label: '折扣', value: VoucherDeductKind.Discount },
 ];
@@ -122,6 +136,7 @@ watch(
     if (template) {
       form.name = template.name;
       form.applyMode = template.applyMode;
+      form.category = voucherCategoryOf(template.rule.kind);
 
       const rule = template.rule;
       form.deductKind = rule.kind;
@@ -153,6 +168,19 @@ watch(
     }
   },
   { immediate: true },
+);
+
+// 大类切换：余额型锁定无门槛；优惠型默认满减。
+watch(
+  () => form.category,
+  (category) => {
+    if (isEdit.value) return;
+    if (category === VoucherCategory.Credit) {
+      form.deductKind = VoucherDeductKind.NoThreshold;
+    } else if (form.deductKind === VoucherDeductKind.NoThreshold) {
+      form.deductKind = VoucherDeductKind.FullReduction;
+    }
+  },
 );
 
 // 抵扣周期仅折扣券有意义；无门槛/满减用一次即绑定账单，强制单次。
@@ -249,6 +277,15 @@ async function onSubmit(): Promise<void> {
         基本信息
       </el-divider>
       <el-form-item
+        label="券大类"
+      >
+        <el-segmented
+          v-model="form.category"
+          :options="categoryOptions"
+          :disabled="isEdit"
+        />
+      </el-form-item>
+      <el-form-item
         label="券名称"
         prop="name"
       >
@@ -261,12 +298,21 @@ async function onSubmit(): Promise<void> {
       <el-divider content-position="left">
         抵扣规则
       </el-divider>
-      <el-form-item label="抵扣类型">
+      <el-form-item
+        v-if="form.category === VoucherCategory.Coupon"
+        label="优惠类型"
+      >
         <el-segmented
           v-model="form.deductKind"
-          :options="deductOptions"
+          :options="couponDeductOptions"
           :disabled="isEdit"
         />
+      </el-form-item>
+      <el-form-item
+        v-else
+        label="抵扣类型"
+      >
+        <el-tag type="primary" effect="plain">无门槛（余额自动抵扣）</el-tag>
       </el-form-item>
 
       <el-form-item

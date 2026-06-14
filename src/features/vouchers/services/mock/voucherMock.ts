@@ -7,6 +7,7 @@ import {
   UserVoucherStatus,
   VoucherActivityStatus,
   VoucherDeductKind,
+  VoucherLedgerKind,
   VoucherValidityKind,
   type ActivityClaimer,
   type CreateVoucherActivityInput,
@@ -221,11 +222,27 @@ export class VoucherMock implements VoucherPort {
     return ok(redemptions.filter((r) => r.accountUid === accountUid).map((r) => ({ ...r })));
   }
 
+  async listLedger(accountUid: string): Promise<AppResult<VoucherRedemption[]>> {
+    return ok(redemptions.filter((r) => r.accountUid === accountUid).map((r) => ({ ...r })));
+  }
+
   async listRedemptionsByVoucher(userVoucherId: string): Promise<AppResult<VoucherRedemption[]>> {
     return ok(redemptions.filter((r) => r.userVoucherId === userVoucherId).map((r) => ({ ...r })));
   }
 
+  async listLedgerByVoucher(userVoucherId: string): Promise<AppResult<VoucherRedemption[]>> {
+    return ok(redemptions.filter((r) => r.userVoucherId === userVoucherId).map((r) => ({ ...r })));
+  }
+
   async listRedemptionsByBill(holdId: string): Promise<AppResult<VoucherRedemption[]>> {
+    return ok(
+      redemptions
+        .filter((r) => r.holdId === holdId && r.kind === VoucherLedgerKind.Redeem)
+        .map((r) => ({ ...r })),
+    );
+  }
+
+  async listLedgerByBill(holdId: string): Promise<AppResult<VoucherRedemption[]>> {
     return ok(redemptions.filter((r) => r.holdId === holdId).map((r) => ({ ...r })));
   }
 

@@ -54,10 +54,16 @@ export interface VoucherPort {
   revoke(userVoucherId: string): Promise<AppResult<boolean>>;
   listUserVouchers(input: ListUserVouchersInput): Promise<AppResult<ListPage<UserVoucher>>>;
   listRedemptions(accountUid: string, take?: number): Promise<AppResult<VoucherRedemption[]>>;
+  /** 完整券余额流水（发放/预占/释放/抵扣/退回/过期/作废）。 */
+  listLedger(accountUid: string, take?: number): Promise<AppResult<VoucherRedemption[]>>;
   /** 审计：按券查其全部抵扣流水。 */
   listRedemptionsByVoucher(userVoucherId: string, take?: number): Promise<AppResult<VoucherRedemption[]>>;
   /** 审计：按账单(Hold)查其全部券抵扣。 */
   listRedemptionsByBill(holdId: string): Promise<AppResult<VoucherRedemption[]>>;
+  /** 审计：按券查完整余额流水。 */
+  listLedgerByVoucher(userVoucherId: string, take?: number): Promise<AppResult<VoucherRedemption[]>>;
+  /** 审计：按账单查完整券流水。 */
+  listLedgerByBill(holdId: string): Promise<AppResult<VoucherRedemption[]>>;
 
   listActivities(input: ListVoucherActivitiesInput): Promise<AppResult<ListPage<VoucherActivity>>>;
   createActivity(input: CreateVoucherActivityInput): Promise<AppResult<VoucherActivity>>;

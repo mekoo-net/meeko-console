@@ -50,10 +50,50 @@ export const VoucherActivityStatus = {
 } as const;
 export type VoucherActivityStatus = (typeof VoucherActivityStatus)[keyof typeof VoucherActivityStatus];
 
+/** 券大类：余额型（用量/出账自动抵）vs 优惠型（下单付款时抵）。 */
+export const VoucherCategory = {
+  Credit: 'credit',
+  Coupon: 'coupon',
+} as const;
+export type VoucherCategory = (typeof VoucherCategory)[keyof typeof VoucherCategory];
+
+export const voucherCategoryLabels: Record<VoucherCategory, string> = {
+  [VoucherCategory.Credit]: '代金券（余额抵扣）',
+  [VoucherCategory.Coupon]: '优惠券（下单抵扣）',
+};
+
+export function voucherCategoryOf(deductKind: number): VoucherCategory {
+  return deductKind === VoucherDeductKind.NoThreshold
+    ? VoucherCategory.Credit
+    : VoucherCategory.Coupon;
+}
+
 export const deductKindLabels: Record<number, string> = {
   [VoucherDeductKind.NoThreshold]: '无门槛',
   [VoucherDeductKind.FullReduction]: '满减',
   [VoucherDeductKind.Discount]: '折扣',
+};
+
+/** 券余额流水类型（与后端 VoucherLedgerKind 对齐）。 */
+export const VoucherLedgerKind = {
+  Issue: 0,
+  Hold: 1,
+  Release: 2,
+  Redeem: 3,
+  Refund: 4,
+  Expire: 5,
+  Revoke: 6,
+} as const;
+export type VoucherLedgerKind = (typeof VoucherLedgerKind)[keyof typeof VoucherLedgerKind];
+
+export const voucherLedgerKindLabels: Record<number, string> = {
+  [VoucherLedgerKind.Issue]: '发放',
+  [VoucherLedgerKind.Hold]: '预占',
+  [VoucherLedgerKind.Release]: '释放',
+  [VoucherLedgerKind.Redeem]: '抵扣',
+  [VoucherLedgerKind.Refund]: '退回',
+  [VoucherLedgerKind.Expire]: '过期',
+  [VoucherLedgerKind.Revoke]: '作废',
 };
 
 export const applyModeLabels: Record<number, string> = {
@@ -165,17 +205,18 @@ export interface VoucherRedemption {
   id: string;
   userVoucherId: string;
   accountUid: string;
-  /** 所抵扣账单（Hold 落账单元）Id。 */
-  holdId: string;
-  /** 账单上游引用类型（快照，0=None/1=Recharge/2=Hold/3=Manual）。 */
-  referenceKind: number;
-  /** 账单上游引用 Id（快照），无则为 null。 */
-  referenceId: string | null;
-  productCode: string;
-  amountDeducted: number;
-  /** 该账单实付总额（快照）。 */
-  billAmount: number;
+  kind: number;
+  /** 带符号变动额；抵扣额取 Math.abs(delta)。 */
+  delta: number;
+  balanceAfter: number;
   occurredAtUtc: number;
+  /** 账单（Hold）Id；非账单类流水为空串。 */
+  holdId: string;
+  referenceKind: number;
+  referenceId: string | null;
+  /** 产品码；非账单类流水为空串。 */
+  productCode: string;
+  billAmount: number;
 }
 
 /** 活动投放的单张券（券 Key = templateCode）。 */

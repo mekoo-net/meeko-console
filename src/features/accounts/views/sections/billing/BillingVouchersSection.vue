@@ -10,6 +10,7 @@ import {
   UserVoucherStatus,
   deductKindLabels,
   userVoucherStatusLabels,
+  voucherLedgerKindLabels,
   type UserVoucher,
   type VoucherRedemption,
 } from '@/features/vouchers/model/voucher.types';
@@ -35,7 +36,7 @@ const voucherList = useListQuery({
 
 const loading = ref(false);
 const loaded = ref(false);
-const redemptions = ref<VoucherRedemption[]>([]);
+const ledgerRows = ref<VoucherRedemption[]>([]);
 const tab = ref('vouchers');
 
 const vouchers = computed(() => voucherList.items.value?.items ?? []);
@@ -47,9 +48,9 @@ const statusTagType: Record<number, string> = {
   [UserVoucherStatus.Revoked]: 'danger',
 };
 
-async function loadRedemptions(uid: string): Promise<void> {
-  const r = await port.listRedemptions(uid);
-  if (r.success) redemptions.value = r.data;
+async function loadLedger(uid: string): Promise<void> {
+  const r = await port.listLedger(uid);
+  if (r.success) ledgerRows.value = r.data;
 }
 
 function billLabel(row: VoucherRedemption): string {
@@ -77,16 +78,16 @@ async function openDrill(title: string, loader: () => Promise<typeof drillRows.v
 
 function drillByBill(row: VoucherRedemption): void {
   if (!row.holdId) return;
-  void openDrill(`${billLabel(row)} · 券抵扣明细`, async () => {
-    const r = await port.listRedemptionsByBill(row.holdId);
+  void openDrill(`${billLabel(row)} · 券流水`, async () => {
+    const r = await port.listLedgerByBill(row.holdId);
     return r.success ? r.data : null;
   });
 }
 
 function drillByVoucher(userVoucherId: string): void {
   if (!userVoucherId) return;
-  void openDrill(`券 #${userVoucherId} · 核销流水`, async () => {
-    const r = await port.listRedemptionsByVoucher(userVoucherId);
+  void openDrill(`券 #${userVoucherId} · 余额流水`, async () => {
+    const r = await port.listLedgerByVoucher(userVoucherId);
     return r.success ? r.data : null;
   });
 }
@@ -96,7 +97,7 @@ watch(
   (uid) => {
     if (!uid) return;
     loaded.value = false;
-    void loadRedemptions(uid).finally(() => {
+    void loadLedger(uid).finally(() => {
       loaded.value = true;
     });
   },
@@ -218,59 +219,70 @@ async function revoke(row: UserVoucher): Promise<void> {
     </el-tab-pane>
 
     <el-tab-pane
-      label="核销记录"
-      name="redemptions"
+      label="余额流水"
+      name="ledger"
     >
       <el-table
         v-loading="loading"
-        :data="redemptions"
+        :data="ledgerRows"
         size="small"
         class="compact-table"
-        :empty-text="loaded ? '暂无核销记录' : '加载中…'"
+        :empty-text="loaded ? '暂无流水' : '加载中…'"
       >
         <el-table-column
           label="时间"
-          width="170"
+          width="160"
         >
           <template #default="{ row }: { row: VoucherRedemption }">
             {{ formatDateTime(row.occurredAtUtc) }}
           </template>
         </el-table-column>
         <el-table-column
-          label="产品"
-          min-width="120"
+          label="类型"
+          width="72"
         >
           <template #default="{ row }: { row: VoucherRedemption }">
-            {{ row.productCode }}
+            {{ voucherLedgerKindLabels[row.kind] ?? row.kind }}
           </template>
         </el-table-column>
         <el-table-column
-          label="抵扣 / 账单金额"
-          width="170"
+          label="变动 / 余额"
+          width="150"
         >
           <template #default="{ row }: { row: VoucherRedemption }">
-            <span class="amount-deduct">{{ formatMoney(row.amountDeducted) }}</span>
-            <span class="amount-bill"> / {{ formatMoney(row.billAmount) }}</span>
+            <span :class="row.delta >= 0 ? 'delta-plus' : 'delta-minus'">
+              {{ formatMoney(row.delta) }}
+            </span>
+            <span class="amount-bill"> → {{ formatMoney(row.balanceAfter) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="产品"
+          width="100"
+        >
+          <template #default="{ row }: { row: VoucherRedemption }">
+            {{ row.productCode || '—' }}
           </template>
         </el-table-column>
         <el-table-column
           label="账单"
-          min-width="140"
+          min-width="120"
         >
           <template #default="{ row }: { row: VoucherRedemption }">
             <el-button
+              v-if="row.holdId"
               link
               type="primary"
-              :disabled="!row.holdId"
               @click="drillByBill(row)"
             >
               {{ billLabel(row) }}
             </el-button>
+            <span v-else>—</span>
           </template>
         </el-table-column>
         <el-table-column
           label="券号"
-          min-width="120"
+          min-width="100"
         >
           <template #default="{ row }: { row: VoucherRedemption }">
             <el-button
@@ -321,7 +333,7 @@ async function revoke(row: UserVoucher): Promise<void> {
         width="160"
       >
         <template #default="{ row }: { row: VoucherRedemption }">
-          <span class="amount-deduct">{{ formatMoney(row.amountDeducted) }}</span>
+          <span class="amount-deduct">{{ formatMoney(Math.abs(row.delta)) }}</span>
           <span class="amount-bill"> / {{ formatMoney(row.billAmount) }}</span>
         </template>
       </el-table-column>
@@ -360,5 +372,13 @@ async function revoke(row: UserVoucher): Promise<void> {
 }
 .amount-bill {
   color: var(--el-text-color-secondary);
+}
+.delta-plus {
+  font-weight: 600;
+  color: var(--el-color-success);
+}
+.delta-minus {
+  font-weight: 600;
+  color: var(--el-color-danger);
 }
 </style>
