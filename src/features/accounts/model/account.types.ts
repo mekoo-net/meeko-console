@@ -122,6 +122,37 @@ export const accountSchema = z.object({
 
 export type Account = z.infer<typeof accountSchema>;
 
+/**
+ * 账户联系信息（嵌套对象）：与后端 `AccountContactDto` 对齐。
+ * 硬规范：凡接口返回的账户身份，统一用此嵌套对象，禁止展平成 ownerXxx / 平铺到外层。
+ */
+export const accountContactSchema = z.object({
+  uid: z.string().min(1),
+  displayName: z.string().nullish(),
+  email: z.string().nullish(),
+  phone: z.string().nullish(),
+  type: z.enum(accountTypeValues).nullish(),
+});
+
+export type AccountContact = z.infer<typeof accountContactSchema>;
+
+/** 把后端 `AccountContactDto`（accountType 字符串）映射为前端 {@link AccountContact}。 */
+export function mapAccountContact(raw: unknown): AccountContact | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const uid = r.uid != null ? String(r.uid) : '';
+  if (!uid) return undefined;
+  const type =
+    r.accountType === 'personal' || r.accountType === 'organization' ? r.accountType : undefined;
+  return {
+    uid,
+    displayName: typeof r.displayName === 'string' ? r.displayName : undefined,
+    email: typeof r.email === 'string' ? r.email : undefined,
+    phone: typeof r.phone === 'string' ? r.phone : undefined,
+    type,
+  };
+}
+
 export interface AccountListFilter {
   /** 账户 UID 精确匹配 */
   accountUid: string;

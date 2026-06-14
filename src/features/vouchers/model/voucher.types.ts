@@ -1,3 +1,5 @@
+import type { AccountContact } from '@/features/accounts/model/account.types';
+
 export const VoucherDeductKind = {
   NoThreshold: 0,
   FullReduction: 1,
@@ -241,4 +243,6 @@ export interface ActivityClaimer {
   claimedAtUtc: number;
   claimIp?: string | null;
   status: number;
+  /** 账户联系信息（嵌套对象，BFF 按当前页 uid 关联补全）。 */
+  contact?: AccountContact;
 }

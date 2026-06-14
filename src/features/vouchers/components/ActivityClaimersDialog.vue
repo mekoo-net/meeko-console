@@ -4,11 +4,10 @@ import { ElMessage } from 'element-plus';
 import { useRouter } from 'vue-router';
 import { CopyDocument, Search, TopRight } from '@element-plus/icons-vue';
 
-import { clientPaginate, usePagination } from '@/shared/composables/usePagination';
+import { useListQuery } from '@/shared/composables/useListQuery';
+import { debounce } from '@/shared/lib/debounce';
 import { formatDateTime } from '@/shared/lib/date';
-import { getAccountAdminPort } from '@/features/accounts/services';
-import { accountTypeLabel, type Account } from '@/features/accounts/model/account.types';
-import { TIER_THRESHOLDS } from '@/features/accounts/model/tierConfig';
+import { accountTypeLabel, type AccountType } from '@/features/accounts/model/account.types';
 import { getVoucherPort } from '../services';
 import {
   UserVoucherStatus,
@@ -34,15 +33,11 @@ const emit = defineEmits<{
 
 const router = useRouter();
 const port = getVoucherPort();
-const accountPort = getAccountAdminPort();
 
-const claimers = ref<ActivityClaimer[]>([]);
-const accountMap = ref<Map<string, Account>>(new Map());
-const loading = ref(false);
-
+// keywordInput：输入框即时值；keyword：防抖后的查询值（服务端按账户 UID 过滤）。
+const keywordInput = ref('');
 const keyword = ref('');
 const statusFilter = ref<number | null>(null);
-const pagination = usePagination({ pageSize: 20 });
 
 const visible = computed({
   get: () => props.modelValue,
@@ -56,70 +51,57 @@ const statusTagType: Record<number, string> = {
   [UserVoucherStatus.Revoked]: 'danger',
 };
 
-function acc(uid: string): Account | undefined {
-  return accountMap.value.get(uid);
+interface ClaimerFilter {
+  keyword: string;
+  status: number | null;
 }
 
-function tierName(tier?: number): string {
-  if (tier == null) return '';
-  return TIER_THRESHOLDS.find((t) => t.level === tier)?.name ?? `Lv${tier}`;
+const list = useListQuery<ActivityClaimer, ClaimerFilter>({
+  pageSize: 20,
+  filter: computed(() => ({ keyword: keyword.value.trim(), status: statusFilter.value })),
+  filterKey: () => `${keyword.value.trim()}|${statusFilter.value ?? ''}`,
+  fetcher: ({ page, pageSize, filter }) =>
+    port.listActivityClaimers({
+      activityId: props.activity?.id ?? '',
+      page,
+      pageSize,
+      accountUid: filter.keyword || undefined,
+      status: filter.status,
+    }),
+});
+
+const displayed = computed(() => list.items.value?.items ?? []);
+
+const applyKeyword = debounce((value: string) => {
+  keyword.value = value;
+}, 300);
+
+function onKeywordInput(value: string): void {
+  applyKeyword(value);
 }
 
-function accName(uid: string): string {
-  return acc(uid)?.displayName || '未命名账户';
+function accName(c: ActivityClaimer): string {
+  return c.contact?.displayName || '未命名账户';
 }
 
-function initials(uid: string): string {
-  const a = acc(uid);
-  const base = (a?.displayName || a?.ownerEmail || uid).trim();
+function initials(c: ActivityClaimer): string {
+  const base = (c.contact?.displayName || c.contact?.email || c.accountUid).trim();
   return base.charAt(0).toUpperCase() || '#';
 }
 
-const filtered = computed(() => {
-  const kw = keyword.value.trim().toLowerCase();
-  return claimers.value.filter((c) => {
-    if (statusFilter.value != null && c.status !== statusFilter.value) return false;
-    if (kw) {
-      const a = acc(c.accountUid);
-      const hay = `${c.accountUid} ${c.claimIp ?? ''} ${a?.ownerEmail ?? ''} ${a?.displayName ?? ''}`.toLowerCase();
-      if (!hay.includes(kw)) return false;
-    }
-    return true;
-  });
-});
-
-const displayed = computed(() =>
-  clientPaginate(filtered.value, pagination.state.page, pagination.state.pageSize),
-);
-
-watch(filtered, (rows) => pagination.setTotal(rows.length), { immediate: true });
+function claimerType(c: ActivityClaimer): AccountType | null {
+  return c.contact?.type ?? null;
+}
 
 watch(
   () => props.modelValue,
-  async (open) => {
+  (open) => {
     if (!open || !props.activity) return;
-    loading.value = true;
-    claimers.value = [];
+    keywordInput.value = '';
     keyword.value = '';
     statusFilter.value = null;
-    pagination.state.page = 1;
-    try {
-      const [claimRes, accRes] = await Promise.all([
-        port.listActivityClaimers(props.activity.id, 10000),
-        accountPort.listAccounts({
-          page: 1,
-          pageSize: 500,
-          filter: { accountUid: '', contactKeyword: '', type: 'all', status: 'all' },
-        }),
-      ]);
-      if (claimRes.success) claimers.value = claimRes.data;
-      else ElMessage.error(claimRes.error.message);
-      accountMap.value = accRes.success
-        ? new Map(accRes.data.items.map((a) => [a.uid, a]))
-        : new Map();
-    } finally {
-      loading.value = false;
-    }
+    list.pagination.state.page = 1;
+    void list.refresh();
   },
 );
 
@@ -138,15 +120,26 @@ async function copyKey(): Promise<void> {
   }
 }
 
-function exportCsv(): void {
+// 导出按用户当前过滤条件，单次拉取一大页生成 CSV（仅在显式点击时发生）。
+async function exportCsv(): Promise<void> {
   if (!props.activity) return;
-  const header = 'account_uid,email,claim_ip,claimed_at,status\n';
-  const rows = claimers.value
+  const res = await port.listActivityClaimers({
+    activityId: props.activity.id,
+    page: 1,
+    pageSize: 10000,
+    accountUid: keyword.value.trim() || undefined,
+    status: statusFilter.value,
+  });
+  if (!res.success) {
+    ElMessage.error(res.error.message);
+    return;
+  }
+  const header = 'account_uid,display_name,email,claim_ip,claimed_at,status\n';
+  const rows = res.data.items
     .map((c) => {
-      const a = acc(c.accountUid);
       const at = c.claimedAtUtc ? formatDateTime(c.claimedAtUtc) : '';
       const status = userVoucherStatusLabels[c.status] ?? '';
-      return `${c.accountUid},${a?.ownerEmail ?? ''},${c.claimIp ?? ''},${at},${status}`;
+      return `${c.accountUid},${c.contact?.displayName ?? ''},${c.contact?.email ?? ''},${c.claimIp ?? ''},${at},${status}`;
     })
     .join('\n');
   const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8' });
@@ -209,11 +202,12 @@ function exportCsv(): void {
 
     <div class="toolbar">
       <el-input
-        v-model="keyword"
+        v-model="keywordInput"
         :prefix-icon="Search"
-        placeholder="搜索 UID / 邮箱 / 名称 / IP"
+        placeholder="按账户 UID 搜索"
         clearable
         style="width: 280px"
+        @input="onKeywordInput"
       />
       <el-select
         v-model="statusFilter"
@@ -239,7 +233,7 @@ function exportCsv(): void {
     </div>
 
     <el-table
-      v-loading="loading"
+      v-loading="list.loading.value"
       :data="displayed"
       height="520"
       class="claimers-table"
@@ -255,7 +249,7 @@ function exportCsv(): void {
               :size="36"
               class="user__avatar"
             >
-              {{ initials(row.accountUid) }}
+              {{ initials(row) }}
             </el-avatar>
             <div class="user__main">
               <button
@@ -263,11 +257,11 @@ function exportCsv(): void {
                 class="user__name"
                 @click="openAccount(row.accountUid)"
               >
-                {{ accName(row.accountUid) }}
+                {{ accName(row) }}
                 <el-icon class="user__go"><TopRight /></el-icon>
               </button>
               <div class="user__sub">
-                <span>{{ acc(row.accountUid)?.ownerEmail || '无邮箱' }}</span>
+                <span>{{ row.contact?.email || '无邮箱' }}</span>
                 <span class="user__uid">{{ row.accountUid }}</span>
               </div>
             </div>
@@ -280,33 +274,13 @@ function exportCsv(): void {
       >
         <template #default="{ row }: { row: ActivityClaimer }">
           <el-tag
-            v-if="acc(row.accountUid)"
-            :type="acc(row.accountUid)!.type === 'organization' ? 'primary' : 'info'"
+            v-if="claimerType(row)"
+            :type="claimerType(row) === 'organization' ? 'primary' : 'info'"
             effect="light"
             round
             size="small"
           >
-            {{ accountTypeLabel[acc(row.accountUid)!.type] }}
-          </el-tag>
-          <span
-            v-else
-            class="muted"
-          >—</span>
-        </template>
-      </el-table-column>
-      <el-table-column
-        label="等级"
-        width="90"
-      >
-        <template #default="{ row }: { row: ActivityClaimer }">
-          <el-tag
-            v-if="acc(row.accountUid)"
-            type="warning"
-            effect="light"
-            round
-            size="small"
-          >
-            {{ tierName(acc(row.accountUid)!.tier) }}
+            {{ accountTypeLabel[claimerType(row)!] }}
           </el-tag>
           <span
             v-else
@@ -349,10 +323,10 @@ function exportCsv(): void {
 
     <div class="claimers-pager">
       <el-pagination
-        v-model:current-page="pagination.state.page"
-        v-model:page-size="pagination.state.pageSize"
-        :total="pagination.state.total"
-        :page-sizes="pagination.pageSizes"
+        v-model:current-page="list.pagination.state.page"
+        v-model:page-size="list.pagination.state.pageSize"
+        :total="list.pagination.state.total"
+        :page-sizes="list.pagination.pageSizes"
         layout="total, sizes, prev, pager, next"
         background
         small

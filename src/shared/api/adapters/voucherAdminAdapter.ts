@@ -21,7 +21,9 @@ import {
   type VoucherTemplate,
   type VoucherValidity,
 } from '@/features/vouchers/model/voucher.types';
+import { mapAccountContact } from '@/features/accounts/model/account.types';
 import type {
+  ListActivityClaimersInput,
   ListUserVouchersInput,
   ListVoucherActivitiesInput,
   ListVoucherTemplatesInput,
@@ -111,6 +113,13 @@ const USER_VOUCHER_STATUS_FROM_WIRE: Record<string, number> = {
   used: UserVoucherStatus.Used,
   expired: UserVoucherStatus.Expired,
   revoked: UserVoucherStatus.Revoked,
+};
+
+const USER_VOUCHER_STATUS_TO_WIRE: Record<number, string> = {
+  [UserVoucherStatus.Unused]: 'unused',
+  [UserVoucherStatus.Used]: 'used',
+  [UserVoucherStatus.Expired]: 'expired',
+  [UserVoucherStatus.Revoked]: 'revoked',
 };
 
 function num(value: unknown, fallback = 0): number {
@@ -230,7 +239,6 @@ function flattenRule(rule: VoucherRule): Record<string, unknown> {
 
 function flattenValidity(v: VoucherValidity): Record<string, unknown> {
   if (v.kind === VoucherValidityKind.Absolute) {
-    // 后端 DateTime 走 Unix 毫秒（EpochMillisNullableDateTimeConverter），不能发 ISO 字符串。
     return {
       validityKind: enumWire(VALIDITY_KIND_TO_WIRE, v.kind),
       validFromUtc: v.fromUtc,
@@ -312,6 +320,7 @@ function mapClaimer(raw: Raw): ActivityClaimer {
     claimedAtUtc: asEpochMillis(raw.claimedAtUtc) ?? 0,
     claimIp: raw.claimIp != null ? String(raw.claimIp) : null,
     status: enumNum(USER_VOUCHER_STATUS_FROM_WIRE, raw.status),
+    contact: mapAccountContact(raw.contact),
   };
 }
 
@@ -464,12 +473,20 @@ export class VoucherHttpAdapter implements VoucherPort {
     return parseActivity(res.data);
   }
 
-  async listActivityClaimers(activityId: string, take = 1000): Promise<AppResult<ActivityClaimer[]>> {
-    const res = await request<unknown>(`${ACTIVITIES}/${encodeURIComponent(activityId)}/claimers`, {
-      query: { take },
-    });
+  async listActivityClaimers(input: ListActivityClaimersInput): Promise<AppResult<ListPage<ActivityClaimer>>> {
+    const res = await request<unknown>(
+      `${ACTIVITIES}/${encodeURIComponent(input.activityId)}/claimers`,
+      {
+        query: {
+          page: input.page,
+          pageSize: input.pageSize,
+          keyword: input.accountUid || undefined,
+          status:
+            input.status != null ? enumWire(USER_VOUCHER_STATUS_TO_WIRE, input.status) : undefined,
+        },
+      },
+    );
     if (!res.success) return res;
-    const rows = Array.isArray(res.data) ? res.data : [];
-    return ok(rows.map((r) => mapClaimer((r ?? {}) as Raw)));
+    return ok(parseListPage(res.data, mapClaimer));
   }
 }

@@ -21,6 +21,7 @@ import {
   type VoucherTemplate,
 } from '../../model/voucher.types';
 import type {
+  ListActivityClaimersInput,
   ListUserVouchersInput,
   ListVoucherActivitiesInput,
   ListVoucherTemplatesInput,
@@ -89,6 +90,12 @@ const activities: MockActivity[] = [
       claimedAtUtc: Date.now() - i * 3600000,
       claimIp: `203.0.113.${10 + i}`,
       status: i % 3 === 0 ? UserVoucherStatus.Used : UserVoucherStatus.Unused,
+      contact: {
+        uid: String(100000000000 + i),
+        displayName: `演示账户 ${i + 1}`,
+        email: `claimer${i + 1}@example.com`,
+        type: i % 4 === 0 ? ('organization' as const) : ('personal' as const),
+      },
     })),
   },
 ];
@@ -269,9 +276,15 @@ export class VoucherMock implements VoucherPort {
     return ok(toWireActivity(a));
   }
 
-  async listActivityClaimers(activityId: string, take = 1000): Promise<AppResult<ActivityClaimer[]>> {
-    const a = activities.find((x) => x.id === activityId);
+  async listActivityClaimers(input: ListActivityClaimersInput) {
+    const a = activities.find((x) => x.id === input.activityId);
     if (!a) return fail({ code: 'not_found', message: '活动不存在' });
-    return ok(a.claimers.slice(0, take).map((c) => ({ ...c })));
+    let rows = a.claimers.map((c) => ({ ...c }));
+    if (input.accountUid) rows = rows.filter((c) => c.accountUid === input.accountUid);
+    if (input.status != null) rows = rows.filter((c) => c.status === input.status);
+    return ok({
+      items: clientPaginate(rows, input.page, input.pageSize),
+      total: rows.length,
+    });
   }
 }

@@ -34,6 +34,16 @@ export interface ListUserVouchersInput {
   accountUid: string;
 }
 
+export interface ListActivityClaimersInput {
+  activityId: string;
+  page: number;
+  pageSize: number;
+  /** 按账户 UID 精确过滤（关键字为纯数字时生效）。 */
+  accountUid?: string;
+  /** 券状态过滤（UserVoucherStatus）。 */
+  status?: number | null;
+}
+
 export interface VoucherPort {
   listTemplates(input: ListVoucherTemplatesInput): Promise<AppResult<ListPage<VoucherTemplate>>>;
   getTemplate(id: string): Promise<AppResult<VoucherTemplate>>;
@@ -49,5 +59,5 @@ export interface VoucherPort {
   createActivity(input: CreateVoucherActivityInput): Promise<AppResult<VoucherActivity>>;
   updateActivity(id: string, input: UpdateVoucherActivityInput): Promise<AppResult<VoucherActivity>>;
   setActivityStatus(id: string, status: number): Promise<AppResult<VoucherActivity>>;
-  listActivityClaimers(activityId: string, take?: number): Promise<AppResult<ActivityClaimer[]>>;
+  listActivityClaimers(input: ListActivityClaimersInput): Promise<AppResult<ListPage<ActivityClaimer>>>;
 }
