@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { CopyDocument, Plus, Refresh, Ticket } from '@element-plus/icons-vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
-import { clientPaginate, usePagination } from '@/shared/composables/usePagination';
+import { useListQuery } from '@/shared/composables/useListQuery';
 import { formatDateTime } from '@/shared/lib/date';
 import { formatMoney } from '@/shared/lib/money';
 
@@ -27,14 +27,17 @@ import {
 import { getVoucherPort } from '../services';
 
 const port = getVoucherPort();
-const templates = ref<VoucherTemplate[]>([]);
-const loading = ref(false);
 const includeArchived = ref(false);
 
-const pagination = usePagination({ pageSize: 20 });
-const displayed = computed(() =>
-  clientPaginate(templates.value, pagination.state.page, pagination.state.pageSize),
-);
+const list = useListQuery({
+  filter: includeArchived,
+  filterKey: () => String(includeArchived.value),
+  fetcher: ({ page, pageSize, filter }) =>
+    port.listTemplates({ page, pageSize, includeArchived: filter }),
+  pageSize: 20,
+});
+
+const displayed = computed(() => list.items.value?.items ?? []);
 
 const editVisible = ref(false);
 const issueVisible = ref(false);
@@ -63,19 +66,6 @@ function validitySummary(t: VoucherTemplate): string {
   const v = t.validity;
   if (v.kind === VoucherValidityKind.RelativeDays) return `领取后 ${v.days} 天`;
   return `${formatDateTime(v.fromUtc)} ~ ${formatDateTime(v.toUtc)}`;
-}
-
-async function load(): Promise<void> {
-  loading.value = true;
-  try {
-    const r = await port.listTemplates(includeArchived.value);
-    if (r.success) {
-      templates.value = r.data;
-      pagination.setTotal(r.data.length);
-    } else ElMessage.error(r.error.message);
-  } finally {
-    loading.value = false;
-  }
 }
 
 function openCreate(): void {
@@ -112,7 +102,7 @@ async function onCreate(payload: CreateVoucherTemplateInput): Promise<void> {
   if (r.success) {
     ElMessage.success('券批次已创建');
     editVisible.value = false;
-    await load();
+    list.refresh();
   } else ElMessage.error(r.error.message);
 }
 
@@ -121,7 +111,7 @@ async function onUpdate(id: string, payload: UpdateVoucherTemplateInput): Promis
   if (r.success) {
     ElMessage.success('券批次已更新');
     editVisible.value = false;
-    await load();
+    list.refresh();
   } else ElMessage.error(r.error.message);
 }
 
@@ -140,11 +130,9 @@ async function setStatus(row: VoucherTemplate, status: number, label: string): P
   const r = await port.setTemplateStatus(row.id, status);
   if (r.success) {
     ElMessage.success(`已${label}`);
-    await load();
+    list.refresh();
   } else ElMessage.error(r.error.message);
 }
-
-onMounted(() => load());
 </script>
 
 <template>
@@ -160,12 +148,11 @@ onMounted(() => load());
             inline-prompt
             active-text="含归档"
             inactive-text="含归档"
-            @change="load"
           />
           <el-button
             :icon="Refresh"
             plain
-            @click="load"
+            @click="list.refresh()"
           >
             刷新
           </el-button>
@@ -181,7 +168,7 @@ onMounted(() => load());
     </template>
 
     <el-table
-      v-loading="loading"
+      v-loading="list.loading.value"
       :data="displayed"
       row-key="id"
       size="small"
@@ -334,10 +321,10 @@ onMounted(() => load());
 
     <template #footer>
       <el-pagination
-        v-model:current-page="pagination.state.page"
-        v-model:page-size="pagination.state.pageSize"
-        :total="pagination.state.total"
-        :page-sizes="pagination.pageSizes"
+        v-model:current-page="list.pagination.state.page"
+        v-model:page-size="list.pagination.state.pageSize"
+        :total="list.pagination.state.total"
+        :page-sizes="list.pagination.pageSizes"
         layout="total, sizes, prev, pager, next"
         background
       />
@@ -354,7 +341,7 @@ onMounted(() => load());
   <IssueVouchersDialog
     v-model="issueVisible"
     :template="issuing"
-    @issued="load"
+    @issued="list.refresh()"
   />
 
   <TemplateActivitiesDialog

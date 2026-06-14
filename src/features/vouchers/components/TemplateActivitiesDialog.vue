@@ -4,7 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { CopyDocument, Plus, Refresh, Search } from '@element-plus/icons-vue';
 
 import LargeDialog from '@/shared/ui/LargeDialog.vue';
-import { clientPaginate, usePagination } from '@/shared/composables/usePagination';
+import { usePagination } from '@/shared/composables/usePagination';
 import { formatDateTime } from '@/shared/lib/date';
 import { getVoucherPort } from '../services';
 import {
@@ -55,7 +55,7 @@ const statusTagType: Record<number, string> = {
 const summary = computed(() => {
   const claimed = activities.value.reduce((s, a) => s + a.claimedCount, 0);
   const active = activities.value.filter((a) => a.status === VoucherActivityStatus.Active).length;
-  return { count: activities.value.length, claimed, active };
+  return { count: pagination.state.total, claimed, active };
 });
 
 const filtered = computed(() => {
@@ -67,11 +67,33 @@ const filtered = computed(() => {
   });
 });
 
-const displayed = computed(() =>
-  clientPaginate(filtered.value, pagination.state.page, pagination.state.pageSize),
-);
+const displayed = computed(() => filtered.value);
 
-watch(filtered, (rows) => pagination.setTotal(rows.length), { immediate: true });
+async function load(): Promise<void> {
+  if (!props.template) return;
+  loading.value = true;
+  try {
+    const r = await port.listActivities({
+      templateId: props.template.id,
+      includeEnded: true,
+      page: pagination.state.page,
+      pageSize: pagination.state.pageSize,
+    });
+    if (r.success) {
+      activities.value = r.data.items;
+      pagination.setTotal(r.data.total);
+    } else ElMessage.error(r.error.message);
+  } finally {
+    loading.value = false;
+  }
+}
+
+watch(
+  () => [pagination.state.page, pagination.state.pageSize] as const,
+  () => {
+    if (props.modelValue && props.template) void load();
+  },
+);
 
 function windowText(a: VoucherActivity): string {
   if (!a.startAtUtc && !a.endAtUtc) return '长期';
@@ -83,18 +105,6 @@ function windowText(a: VoucherActivity): string {
 function progressPct(a: VoucherActivity): number {
   if (!a.totalQuota) return 0;
   return Math.round((a.claimedCount / a.totalQuota) * 100);
-}
-
-async function load(): Promise<void> {
-  if (!props.template) return;
-  loading.value = true;
-  try {
-    const r = await port.listActivities(props.template.id, true);
-    if (r.success) activities.value = r.data;
-    else ElMessage.error(r.error.message);
-  } finally {
-    loading.value = false;
-  }
 }
 
 watch(

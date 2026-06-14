@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { inject, ref, watch } from 'vue';
+import { computed, inject, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
 import { formatDateTime } from '@/shared/lib/date';
 import { formatMoney } from '@/shared/lib/money';
+import { useListQuery } from '@/shared/composables/useListQuery';
+import { ok } from '@/shared/api/httpTypes';
 import {
   UserVoucherStatus,
   deductKindLabels,
@@ -18,11 +20,25 @@ import { AccountDetailKey } from '../../../composables/accountDetailContext';
 const ctx = inject(AccountDetailKey);
 const port = getVoucherPort();
 
+const accountUid = computed(() => ctx?.account.value?.uid ?? '');
+const filter = computed(() => accountUid.value);
+
+const voucherList = useListQuery({
+  filter,
+  filterKey: () => filter.value,
+  fetcher: ({ page, pageSize, filter: uid }) => {
+    if (!uid) return Promise.resolve(ok({ items: [], total: 0 }));
+    return port.listUserVouchers({ page, pageSize, accountUid: uid });
+  },
+  pageSize: 20,
+});
+
 const loading = ref(false);
 const loaded = ref(false);
-const vouchers = ref<UserVoucher[]>([]);
 const redemptions = ref<VoucherRedemption[]>([]);
 const tab = ref('vouchers');
+
+const vouchers = computed(() => voucherList.items.value?.items ?? []);
 
 const statusTagType: Record<number, string> = {
   [UserVoucherStatus.Unused]: 'success',
@@ -31,23 +47,19 @@ const statusTagType: Record<number, string> = {
   [UserVoucherStatus.Revoked]: 'danger',
 };
 
-async function load(uid: string): Promise<void> {
-  loading.value = true;
-  try {
-    const [v, r] = await Promise.all([port.listUserVouchers(uid), port.listRedemptions(uid)]);
-    if (v.success) vouchers.value = v.data;
-    else ElMessage.error(v.error.message);
-    if (r.success) redemptions.value = r.data;
-    loaded.value = true;
-  } finally {
-    loading.value = false;
-  }
+async function loadRedemptions(uid: string): Promise<void> {
+  const r = await port.listRedemptions(uid);
+  if (r.success) redemptions.value = r.data;
 }
 
 watch(
-  () => ctx?.account.value?.uid,
+  accountUid,
   (uid) => {
-    if (uid) void load(uid);
+    if (!uid) return;
+    loaded.value = false;
+    void loadRedemptions(uid).finally(() => {
+      loaded.value = true;
+    });
   },
   { immediate: true },
 );
@@ -65,8 +77,7 @@ async function revoke(row: UserVoucher): Promise<void> {
   const r = await port.revoke(row.id);
   if (r.success) {
     ElMessage.success('已作废');
-    const uid = ctx?.account.value?.uid;
-    if (uid) await load(uid);
+    voucherList.refresh();
   } else ElMessage.error(r.error.message);
 }
 </script>
@@ -81,7 +92,7 @@ async function revoke(row: UserVoucher): Promise<void> {
       name="vouchers"
     >
       <el-table
-        v-loading="loading"
+        v-loading="voucherList.loading.value"
         :data="vouchers"
         size="small"
         class="compact-table"
@@ -154,6 +165,17 @@ async function revoke(row: UserVoucher): Promise<void> {
           </template>
         </el-table-column>
       </el-table>
+      <div class="voucher-pager">
+        <el-pagination
+          v-model:current-page="voucherList.pagination.state.page"
+          v-model:page-size="voucherList.pagination.state.pageSize"
+          :total="voucherList.pagination.state.total"
+          :page-sizes="voucherList.pagination.pageSizes"
+          layout="total, sizes, prev, pager, next"
+          background
+          small
+        />
+      </div>
     </el-tab-pane>
 
     <el-tab-pane
@@ -207,5 +229,10 @@ async function revoke(row: UserVoucher): Promise<void> {
 <style scoped>
 .voucher-tabs {
   height: 100%;
+}
+.voucher-pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 </style>

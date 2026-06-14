@@ -72,8 +72,8 @@ const pickRuleText = computed(() => {
 const editingItems = computed(() => props.activity?.items ?? []);
 
 async function loadTemplates(): Promise<void> {
-  const r = await port.listTemplates(false);
-  if (r.success) templates.value = r.data.filter((t) => t.status === VoucherTemplateStatus.Active);
+  const r = await port.listTemplates({ page: 1, pageSize: 100, includeArchived: false });
+  if (r.success) templates.value = r.data.items.filter((t) => t.status === VoucherTemplateStatus.Active);
 }
 
 watch(

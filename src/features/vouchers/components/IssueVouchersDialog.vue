@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
+import { Search } from '@element-plus/icons-vue';
 
 import LargeDialog from '@/shared/ui/LargeDialog.vue';
 import { getAccountAdminPort } from '@/features/accounts/services';
 import type { Account } from '@/features/accounts/model/account.types';
 import { TIER_THRESHOLDS } from '@/features/accounts/model/tierConfig';
 import { ACHIEVEMENT_CATALOG, findAchievementDef } from '@/features/accounts/model/achievementCatalog';
+import { debounce } from '@/shared/lib/debounce';
 
 import type { IssueVouchersResult, VoucherTemplate } from '../model/voucher.types';
 import { getVoucherPort } from '../services';
@@ -38,10 +40,15 @@ interface TransferItem {
   badges: string;
 }
 
-/** 候选用户全量（一次拉取，等级/徽章前端筛选；大体量后端应补服务端过滤）。 */
-const allAccounts = ref<Account[]>([]);
+/** 候选用户（服务端搜索分页；等级/徽章在当前结果集内筛选）。 */
+const candidateAccounts = ref<Account[]>([]);
+const selectedAccounts = ref<Account[]>([]);
 const loading = ref(false);
 const submitting = ref(false);
+const searchKeyword = ref('');
+const candidatePage = ref(1);
+const candidatePageSize = 20;
+const candidateTotal = ref(0);
 
 const filters = reactive({
   tier: '' as number | '',
@@ -75,7 +82,10 @@ function toItem(a: Account): TransferItem {
 // 候选 = 通过等级/徽章筛选的用户 ∪ 已选用户（保证已选项始终可见、不被筛选隐藏）。
 const transferData = computed<TransferItem[]>(() => {
   const selected = new Set(targetKeys.value);
-  return allAccounts.value
+  const byUid = new Map<string, Account>();
+  for (const a of candidateAccounts.value) byUid.set(a.uid, a);
+  for (const a of selectedAccounts.value) byUid.set(a.uid, a);
+  return [...byUid.values()]
     .filter((a) => {
       if (selected.has(a.uid)) return true;
       if (filters.tier !== '' && a.tier !== filters.tier) return false;
@@ -106,22 +116,58 @@ async function reset(): Promise<void> {
   filters.tier = '';
   filters.badge = '';
   targetKeys.value = [];
+  selectedAccounts.value = [];
+  searchKeyword.value = '';
+  candidatePage.value = 1;
   await loadAccounts();
 }
 
 async function loadAccounts(): Promise<void> {
   loading.value = true;
   try {
+    const keyword = searchKeyword.value.trim();
     const r = await accountPort.listAccounts({
-      page: 1,
-      pageSize: 500,
-      filter: { accountUid: '', contactKeyword: '', type: 'all', status: 'active' },
+      page: candidatePage.value,
+      pageSize: candidatePageSize,
+      filter: {
+        accountUid: /^\d+$/.test(keyword) ? keyword : '',
+        contactKeyword: /^\d+$/.test(keyword) ? '' : keyword,
+        type: 'all',
+        status: 'active',
+      },
     });
-    allAccounts.value = r.success ? r.data.items : [];
-    if (!r.success) ElMessage.error(r.error.message);
+    if (r.success) {
+      candidateAccounts.value = r.data.items;
+      candidateTotal.value = r.data.total;
+    } else {
+      candidateAccounts.value = [];
+      candidateTotal.value = 0;
+      ElMessage.error(r.error.message);
+    }
   } finally {
     loading.value = false;
   }
+}
+
+const debouncedSearch = debounce(() => {
+  candidatePage.value = 1;
+  void loadAccounts();
+}, 300);
+
+watch(searchKeyword, () => debouncedSearch());
+
+watch(targetKeys, (keys) => {
+  const known = new Map<string, Account>();
+  for (const a of candidateAccounts.value) known.set(a.uid, a);
+  for (const a of selectedAccounts.value) known.set(a.uid, a);
+  selectedAccounts.value = keys
+    .map((uid) => known.get(uid))
+    .filter((a): a is Account => !!a);
+});
+
+function onCandidatePageChange(page: number): void {
+  candidatePage.value = page;
+  void loadAccounts();
 }
 
 async function onSubmit(): Promise<void> {
@@ -158,6 +204,14 @@ async function onSubmit(): Promise<void> {
     >
       <div class="filters">
         <span class="filters__label">筛选候选用户</span>
+        <el-input
+          v-model="searchKeyword"
+          :prefix-icon="Search"
+          placeholder="搜索 用户ID / 邮箱 / 名称"
+          clearable
+          size="small"
+          style="width: 240px"
+        />
         <el-select
           v-model="filters.tier"
           placeholder="用户等级"
@@ -187,7 +241,7 @@ async function onSubmit(): Promise<void> {
             :value="b.code"
           />
         </el-select>
-        <span class="filters__hint">用户 ID / 邮箱 / 名称可在下方面板搜索框检索</span>
+        <span class="filters__hint">等级/徽章在当前页结果内筛选；搜索走服务端分页</span>
       </div>
 
       <el-transfer
@@ -216,6 +270,17 @@ async function onSubmit(): Promise<void> {
           </div>
         </template>
       </el-transfer>
+      <div class="candidate-pager">
+        <el-pagination
+          :current-page="candidatePage"
+          :page-size="candidatePageSize"
+          :total="candidateTotal"
+          layout="total, prev, pager, next"
+          background
+          small
+          @current-change="onCandidatePageChange"
+        />
+      </div>
     </div>
 
     <template #footer>
@@ -255,6 +320,11 @@ async function onSubmit(): Promise<void> {
 .filters__hint {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+.candidate-pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
 }
 .ti {
   display: flex;

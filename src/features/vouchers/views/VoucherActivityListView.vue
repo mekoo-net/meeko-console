@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { CopyDocument, Plus, Refresh } from '@element-plus/icons-vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
-import { clientPaginate, usePagination } from '@/shared/composables/usePagination';
+import { useListQuery } from '@/shared/composables/useListQuery';
 import { formatDateTime } from '@/shared/lib/date';
 
 import VoucherActivityFormDialog from '../components/VoucherActivityFormDialog.vue';
@@ -22,14 +22,17 @@ import {
 import { getVoucherPort } from '../services';
 
 const port = getVoucherPort();
-const activities = ref<VoucherActivity[]>([]);
-const loading = ref(false);
 const includeEnded = ref(false);
 
-const pagination = usePagination({ pageSize: 20 });
-const displayed = computed(() =>
-  clientPaginate(activities.value, pagination.state.page, pagination.state.pageSize),
-);
+const list = useListQuery({
+  filter: includeEnded,
+  filterKey: () => String(includeEnded.value),
+  fetcher: ({ page, pageSize, filter }) =>
+    port.listActivities({ page, pageSize, templateId: null, includeEnded: filter }),
+  pageSize: 20,
+});
+
+const displayed = computed(() => list.items.value?.items ?? []);
 
 const formVisible = ref(false);
 const editing = ref<VoucherActivity | null>(null);
@@ -53,19 +56,6 @@ function windowText(a: VoucherActivity): string {
   const s = a.startAtUtc ? formatDateTime(a.startAtUtc) : '即时';
   const e = a.endAtUtc ? formatDateTime(a.endAtUtc) : '长期';
   return `${s} ~ ${e}`;
-}
-
-async function load(): Promise<void> {
-  loading.value = true;
-  try {
-    const r = await port.listActivities(null, includeEnded.value);
-    if (r.success) {
-      activities.value = r.data;
-      pagination.setTotal(r.data.length);
-    } else ElMessage.error(r.error.message);
-  } finally {
-    loading.value = false;
-  }
 }
 
 function openCreate(): void {
@@ -97,7 +87,7 @@ async function onCreate(payload: CreateVoucherActivityInput): Promise<void> {
   if (r.success) {
     ElMessage.success('活动已创建');
     formVisible.value = false;
-    await load();
+    list.refresh();
   } else ElMessage.error(r.error.message);
 }
 
@@ -106,7 +96,7 @@ async function onUpdate(id: string, payload: UpdateVoucherActivityInput): Promis
   if (r.success) {
     ElMessage.success('活动已更新');
     formVisible.value = false;
-    await load();
+    list.refresh();
   } else ElMessage.error(r.error.message);
 }
 
@@ -125,11 +115,9 @@ async function setStatus(a: VoucherActivity, status: number, label: string): Pro
   const r = await port.setActivityStatus(a.id, status);
   if (r.success) {
     ElMessage.success(`已${label}`);
-    await load();
+    list.refresh();
   } else ElMessage.error(r.error.message);
 }
-
-onMounted(() => load());
 </script>
 
 <template>
@@ -145,12 +133,11 @@ onMounted(() => load());
             inline-prompt
             active-text="含结束"
             inactive-text="含结束"
-            @change="load"
           />
           <el-button
             :icon="Refresh"
             plain
-            @click="load"
+            @click="list.refresh()"
           >
             刷新
           </el-button>
@@ -166,7 +153,7 @@ onMounted(() => load());
     </template>
 
     <el-table
-      v-loading="loading"
+      v-loading="list.loading.value"
       :data="displayed"
       row-key="id"
       size="small"
@@ -296,10 +283,10 @@ onMounted(() => load());
 
     <template #footer>
       <el-pagination
-        v-model:current-page="pagination.state.page"
-        v-model:page-size="pagination.state.pageSize"
-        :total="pagination.state.total"
-        :page-sizes="pagination.pageSizes"
+        v-model:current-page="list.pagination.state.page"
+        v-model:page-size="list.pagination.state.pageSize"
+        :total="list.pagination.state.total"
+        :page-sizes="list.pagination.pageSizes"
         layout="total, sizes, prev, pager, next"
         background
       />

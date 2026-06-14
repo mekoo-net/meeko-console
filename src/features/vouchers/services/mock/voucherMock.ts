@@ -1,5 +1,6 @@
 import type { AppResult } from '@/shared/api/httpTypes';
 import { ok, fail } from '@/shared/api/httpTypes';
+import { clientPaginate } from '@/shared/composables/usePagination';
 
 import {
   VoucherTemplateStatus,
@@ -19,7 +20,12 @@ import {
   type VoucherRedemption,
   type VoucherTemplate,
 } from '../../model/voucher.types';
-import type { VoucherPort } from '../ports/voucherPort';
+import type {
+  ListUserVouchersInput,
+  ListVoucherActivitiesInput,
+  ListVoucherTemplatesInput,
+  VoucherPort,
+} from '../ports/voucherPort';
 
 let seq = 100;
 const nextId = (): string => String(++seq);
@@ -88,11 +94,15 @@ const activities: MockActivity[] = [
 ];
 
 export class VoucherMock implements VoucherPort {
-  async listTemplates(includeArchived = false): Promise<AppResult<VoucherTemplate[]>> {
-    const rows = includeArchived
+  async listTemplates(input: ListVoucherTemplatesInput) {
+    const rows = (input.includeArchived
       ? templates
-      : templates.filter((t) => t.status !== VoucherTemplateStatus.Archived);
-    return ok(rows.map((t) => ({ ...t })));
+      : templates.filter((t) => t.status !== VoucherTemplateStatus.Archived)
+    ).map((t) => ({ ...t }));
+    return ok({
+      items: clientPaginate(rows, input.page, input.pageSize),
+      total: rows.length,
+    });
   }
 
   async getTemplate(id: string): Promise<AppResult<VoucherTemplate>> {
@@ -190,19 +200,29 @@ export class VoucherMock implements VoucherPort {
     return ok(true);
   }
 
-  async listUserVouchers(accountUid: string): Promise<AppResult<UserVoucher[]>> {
-    return ok(userVouchers.filter((v) => v.accountUid === accountUid).map((v) => ({ ...v })));
+  async listUserVouchers(input: ListUserVouchersInput) {
+    const rows = userVouchers
+      .filter((v) => v.accountUid === input.accountUid)
+      .map((v) => ({ ...v }));
+    return ok({
+      items: clientPaginate(rows, input.page, input.pageSize),
+      total: rows.length,
+    });
   }
 
   async listRedemptions(accountUid: string): Promise<AppResult<VoucherRedemption[]>> {
     return ok(redemptions.filter((r) => r.accountUid === accountUid).map((r) => ({ ...r })));
   }
 
-  async listActivities(templateId?: string | null, includeEnded = false): Promise<AppResult<VoucherActivity[]>> {
+  async listActivities(input: ListVoucherActivitiesInput) {
     let rows = activities.slice();
-    if (templateId) rows = rows.filter((a) => a.items.some((i) => i.templateId === templateId));
-    if (!includeEnded) rows = rows.filter((a) => a.status !== VoucherActivityStatus.Ended);
-    return ok(rows.map((a) => toWireActivity(a)));
+    if (input.templateId) rows = rows.filter((a) => a.items.some((i) => i.templateId === input.templateId));
+    if (!input.includeEnded) rows = rows.filter((a) => a.status !== VoucherActivityStatus.Ended);
+    const mapped = rows.map((a) => toWireActivity(a));
+    return ok({
+      items: clientPaginate(mapped, input.page, input.pageSize),
+      total: mapped.length,
+    });
   }
 
   async createActivity(input: CreateVoucherActivityInput): Promise<AppResult<VoucherActivity>> {

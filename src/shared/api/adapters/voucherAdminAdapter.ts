@@ -1,6 +1,11 @@
 import {
+  VoucherActivityStatus,
+  VoucherApplyMode,
   VoucherDeductKind,
+  VoucherScopeKind,
+  VoucherTemplateStatus,
   VoucherValidityKind,
+  UserVoucherStatus,
   type ActivityClaimer,
   type ActivityVoucherItem,
   type CreateVoucherActivityInput,
@@ -16,7 +21,13 @@ import {
   type VoucherTemplate,
   type VoucherValidity,
 } from '@/features/vouchers/model/voucher.types';
-import type { VoucherPort } from '@/features/vouchers/services/ports/voucherPort';
+import type {
+  ListUserVouchersInput,
+  ListVoucherActivitiesInput,
+  ListVoucherTemplatesInput,
+  VoucherPort,
+} from '@/features/vouchers/services/ports/voucherPort';
+import type { ListPage } from '@/shared/composables/useListQuery';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { request } from '@/shared/api/httpClient';
 import { asEpochMillis, asEpochMillisNullable } from '@/shared/lib/epoch';
@@ -26,6 +37,81 @@ const ACTIVITIES = '/api/admin/billing/voucher/activities';
 const VOUCHERS = '/api/admin/billing/vouchers';
 
 type Raw = Record<string, unknown>;
+
+const DEDUCT_KIND_FROM_WIRE: Record<string, number> = {
+  no_threshold: VoucherDeductKind.NoThreshold,
+  full_reduction: VoucherDeductKind.FullReduction,
+  discount: VoucherDeductKind.Discount,
+};
+
+const DEDUCT_KIND_TO_WIRE: Record<number, string> = {
+  [VoucherDeductKind.NoThreshold]: 'no_threshold',
+  [VoucherDeductKind.FullReduction]: 'full_reduction',
+  [VoucherDeductKind.Discount]: 'discount',
+};
+
+const APPLY_MODE_FROM_WIRE: Record<string, number> = {
+  first_payment_only: VoucherApplyMode.FirstPaymentOnly,
+  every_renewal: VoucherApplyMode.EveryRenewal,
+};
+
+const APPLY_MODE_TO_WIRE: Record<number, string> = {
+  [VoucherApplyMode.FirstPaymentOnly]: 'first_payment_only',
+  [VoucherApplyMode.EveryRenewal]: 'every_renewal',
+};
+
+const SCOPE_KIND_FROM_WIRE: Record<string, number> = {
+  all_products: VoucherScopeKind.AllProducts,
+  specific_products: VoucherScopeKind.SpecificProducts,
+};
+
+const SCOPE_KIND_TO_WIRE: Record<number, string> = {
+  [VoucherScopeKind.AllProducts]: 'all_products',
+  [VoucherScopeKind.SpecificProducts]: 'specific_products',
+};
+
+const VALIDITY_KIND_FROM_WIRE: Record<string, number> = {
+  absolute: VoucherValidityKind.Absolute,
+  relative_days: VoucherValidityKind.RelativeDays,
+};
+
+const VALIDITY_KIND_TO_WIRE: Record<number, string> = {
+  [VoucherValidityKind.Absolute]: 'absolute',
+  [VoucherValidityKind.RelativeDays]: 'relative_days',
+};
+
+const TEMPLATE_STATUS_FROM_WIRE: Record<string, number> = {
+  draft: VoucherTemplateStatus.Draft,
+  active: VoucherTemplateStatus.Active,
+  paused: VoucherTemplateStatus.Paused,
+  archived: VoucherTemplateStatus.Archived,
+};
+
+const TEMPLATE_STATUS_TO_WIRE: Record<number, string> = {
+  [VoucherTemplateStatus.Draft]: 'draft',
+  [VoucherTemplateStatus.Active]: 'active',
+  [VoucherTemplateStatus.Paused]: 'paused',
+  [VoucherTemplateStatus.Archived]: 'archived',
+};
+
+const ACTIVITY_STATUS_FROM_WIRE: Record<string, number> = {
+  active: VoucherActivityStatus.Active,
+  paused: VoucherActivityStatus.Paused,
+  ended: VoucherActivityStatus.Ended,
+};
+
+const ACTIVITY_STATUS_TO_WIRE: Record<number, string> = {
+  [VoucherActivityStatus.Active]: 'active',
+  [VoucherActivityStatus.Paused]: 'paused',
+  [VoucherActivityStatus.Ended]: 'ended',
+};
+
+const USER_VOUCHER_STATUS_FROM_WIRE: Record<string, number> = {
+  unused: UserVoucherStatus.Unused,
+  used: UserVoucherStatus.Used,
+  expired: UserVoucherStatus.Expired,
+  revoked: UserVoucherStatus.Revoked,
+};
 
 function num(value: unknown, fallback = 0): number {
   const n = typeof value === 'string' ? Number(value) : value;
@@ -38,13 +124,43 @@ function numOrNull(value: unknown): number | null {
   return typeof n === 'number' && Number.isFinite(n) ? n : null;
 }
 
+function enumNum(map: Record<string, number>, value: unknown, fallback = 0): number {
+  if (typeof value === 'string') return map[value] ?? fallback;
+  return fallback;
+}
+
+function enumWire(map: Record<number, string>, value: number): string {
+  return map[value] ?? String(value);
+}
+
+function parseListPage<T>(value: unknown, mapRow: (raw: Raw) => T): ListPage<T> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const obj = value as Raw;
+    const rows = Array.isArray(obj.items) ? obj.items : [];
+    return {
+      items: rows.map((r) => mapRow((r ?? {}) as Raw)),
+      total: num(obj.total, rows.length),
+    };
+  }
+  const rows = Array.isArray(value) ? value : [];
+  return {
+    items: rows.map((r) => mapRow((r ?? {}) as Raw)),
+    total: rows.length,
+  };
+}
+
 // 平铺 wire → 判别联合：把券类型专属字段收进 rule，杜绝下游的可空字段兜底。
 function mapRule(raw: Raw): VoucherRule {
   const faceValue = num(raw.faceValue);
   const thresholdAmount = num(raw.thresholdAmount);
-  switch (num(raw.deductKind)) {
+  switch (enumNum(DEDUCT_KIND_FROM_WIRE, raw.deductKind)) {
     case VoucherDeductKind.Discount:
-      return { kind: VoucherDeductKind.Discount, discountRate: num(raw.discountRate), capValue: faceValue, thresholdAmount };
+      return {
+        kind: VoucherDeductKind.Discount,
+        discountRate: num(raw.discountRate),
+        capValue: faceValue,
+        thresholdAmount,
+      };
     case VoucherDeductKind.FullReduction:
       return { kind: VoucherDeductKind.FullReduction, faceValue, thresholdAmount };
     default:
@@ -53,7 +169,7 @@ function mapRule(raw: Raw): VoucherRule {
 }
 
 function mapValidity(raw: Raw): VoucherValidity {
-  if (num(raw.validityKind) === VoucherValidityKind.Absolute) {
+  if (enumNum(VALIDITY_KIND_FROM_WIRE, raw.validityKind) === VoucherValidityKind.Absolute) {
     return {
       kind: VoucherValidityKind.Absolute,
       fromUtc: asEpochMillis(raw.validFromUtc) ?? 0,
@@ -68,9 +184,9 @@ function mapTemplate(raw: Raw): VoucherTemplate {
     id: String(raw.id ?? ''),
     name: String(raw.name ?? ''),
     code: String(raw.code ?? ''),
-    applyMode: num(raw.applyMode),
+    applyMode: enumNum(APPLY_MODE_FROM_WIRE, raw.applyMode),
     rule: mapRule(raw),
-    scopeKind: num(raw.scopeKind),
+    scopeKind: enumNum(SCOPE_KIND_FROM_WIRE, raw.scopeKind),
     scopeProductCodes: Array.isArray(raw.scopeProductCodes)
       ? (raw.scopeProductCodes as unknown[]).map((c) => String(c))
       : [],
@@ -79,21 +195,36 @@ function mapTemplate(raw: Raw): VoucherTemplate {
     totalQuota: numOrNull(raw.totalQuota),
     issuedCount: num(raw.issuedCount),
     perUserLimit: numOrNull(raw.perUserLimit),
-    status: num(raw.status),
+    status: enumNum(TEMPLATE_STATUS_FROM_WIRE, raw.status),
     createdAtUtc: asEpochMillis(raw.createdAtUtc) ?? Date.now(),
     updatedAtUtc: asEpochMillis(raw.updatedAtUtc) ?? Date.now(),
   };
 }
 
-// 判别联合 → 平铺 wire：写回后端时展开 rule/validity 为后端期望的平铺字段。
+// 判别联合 → 平铺 wire：写回后端时展开 rule/validity 为后端期望的平铺字段（snake_case 枚举）。
 function flattenRule(rule: VoucherRule): Record<string, unknown> {
   switch (rule.kind) {
     case VoucherDeductKind.Discount:
-      return { deductKind: rule.kind, faceValue: rule.capValue, thresholdAmount: rule.thresholdAmount, discountRate: rule.discountRate };
+      return {
+        deductKind: enumWire(DEDUCT_KIND_TO_WIRE, rule.kind),
+        faceValue: rule.capValue,
+        thresholdAmount: rule.thresholdAmount,
+        discountRate: rule.discountRate,
+      };
     case VoucherDeductKind.FullReduction:
-      return { deductKind: rule.kind, faceValue: rule.faceValue, thresholdAmount: rule.thresholdAmount, discountRate: null };
+      return {
+        deductKind: enumWire(DEDUCT_KIND_TO_WIRE, rule.kind),
+        faceValue: rule.faceValue,
+        thresholdAmount: rule.thresholdAmount,
+        discountRate: null,
+      };
     default:
-      return { deductKind: rule.kind, faceValue: rule.faceValue, thresholdAmount: 0, discountRate: null };
+      return {
+        deductKind: enumWire(DEDUCT_KIND_TO_WIRE, rule.kind),
+        faceValue: rule.faceValue,
+        thresholdAmount: 0,
+        discountRate: null,
+      };
   }
 }
 
@@ -101,13 +232,18 @@ function flattenValidity(v: VoucherValidity): Record<string, unknown> {
   if (v.kind === VoucherValidityKind.Absolute) {
     // 后端 DateTime 走 Unix 毫秒（EpochMillisNullableDateTimeConverter），不能发 ISO 字符串。
     return {
-      validityKind: v.kind,
+      validityKind: enumWire(VALIDITY_KIND_TO_WIRE, v.kind),
       validFromUtc: v.fromUtc,
       validToUtc: v.toUtc,
       validDays: null,
     };
   }
-  return { validityKind: v.kind, validFromUtc: null, validToUtc: null, validDays: v.days };
+  return {
+    validityKind: enumWire(VALIDITY_KIND_TO_WIRE, v.kind),
+    validFromUtc: null,
+    validToUtc: null,
+    validDays: v.days,
+  };
 }
 
 function mapUserVoucher(raw: Raw): UserVoucher {
@@ -116,13 +252,13 @@ function mapUserVoucher(raw: Raw): UserVoucher {
     templateId: String(raw.templateId ?? ''),
     accountUid: String(raw.accountUid ?? ''),
     serialNo: raw.serialNo != null ? String(raw.serialNo) : null,
-    deductKind: num(raw.deductKind),
+    deductKind: enumNum(DEDUCT_KIND_FROM_WIRE, raw.deductKind),
     faceValue: num(raw.faceValue),
     thresholdAmount: num(raw.thresholdAmount),
     remainingValue: num(raw.remainingValue),
     validFromUtc: asEpochMillis(raw.validFromUtc) ?? 0,
     validToUtc: asEpochMillis(raw.validToUtc) ?? 0,
-    status: num(raw.status),
+    status: enumNum(USER_VOUCHER_STATUS_FROM_WIRE, raw.status),
     issuedAtUtc: asEpochMillis(raw.issuedAtUtc) ?? 0,
   };
 }
@@ -147,7 +283,6 @@ function mapActivityItem(raw: Raw): ActivityVoucherItem {
 }
 
 function mapActivity(raw: Raw): VoucherActivity {
-  // 兼容旧单券字段：后端尚未返回 items 时，用 templateId/templateName/templateCode 兜底成单元素数组。
   const items: ActivityVoucherItem[] = Array.isArray(raw.items)
     ? (raw.items as unknown[]).map((it) => mapActivityItem((it ?? {}) as Raw))
     : raw.templateId != null
@@ -164,7 +299,7 @@ function mapActivity(raw: Raw): VoucherActivity {
     totalQuota: numOrNull(raw.totalQuota),
     claimedCount: num(raw.claimedCount),
     perUserLimit: numOrNull(raw.perUserLimit),
-    status: num(raw.status),
+    status: enumNum(ACTIVITY_STATUS_FROM_WIRE, raw.status),
     createdAtUtc: asEpochMillis(raw.createdAtUtc) ?? Date.now(),
   };
 }
@@ -176,7 +311,7 @@ function mapClaimer(raw: Raw): ActivityClaimer {
     userVoucherId: String(raw.userVoucherId ?? ''),
     claimedAtUtc: asEpochMillis(raw.claimedAtUtc) ?? 0,
     claimIp: raw.claimIp != null ? String(raw.claimIp) : null,
-    status: num(raw.status),
+    status: enumNum(USER_VOUCHER_STATUS_FROM_WIRE, raw.status),
   };
 }
 
@@ -191,13 +326,16 @@ function parseActivity(value: unknown): AppResult<VoucherActivity> {
 }
 
 export class VoucherHttpAdapter implements VoucherPort {
-  async listTemplates(includeArchived = false): Promise<AppResult<VoucherTemplate[]>> {
+  async listTemplates(input: ListVoucherTemplatesInput): Promise<AppResult<ListPage<VoucherTemplate>>> {
     const res = await request<unknown>(TEMPLATES, {
-      query: { includeArchived: includeArchived ? 'true' : undefined },
+      query: {
+        includeArchived: input.includeArchived ? 'true' : undefined,
+        page: input.page,
+        pageSize: input.pageSize,
+      },
     });
     if (!res.success) return res;
-    const rows = Array.isArray(res.data) ? res.data : [];
-    return ok(rows.map((r) => mapTemplate((r ?? {}) as Raw)));
+    return ok(parseListPage(res.data, mapTemplate));
   }
 
   async getTemplate(id: string): Promise<AppResult<VoucherTemplate>> {
@@ -209,9 +347,9 @@ export class VoucherHttpAdapter implements VoucherPort {
   async createTemplate(input: CreateVoucherTemplateInput): Promise<AppResult<VoucherTemplate>> {
     const body = {
       name: input.name,
-      applyMode: input.applyMode,
+      applyMode: enumWire(APPLY_MODE_TO_WIRE, input.applyMode),
       ...flattenRule(input.rule),
-      scopeKind: input.scopeKind,
+      scopeKind: enumWire(SCOPE_KIND_TO_WIRE, input.scopeKind),
       scopeProductCodes: input.scopeProductCodes,
       ...flattenValidity(input.validity),
       stackable: input.stackable,
@@ -226,7 +364,7 @@ export class VoucherHttpAdapter implements VoucherPort {
   async updateTemplate(id: string, input: UpdateVoucherTemplateInput): Promise<AppResult<VoucherTemplate>> {
     const body = {
       name: input.name,
-      scopeKind: input.scopeKind,
+      scopeKind: enumWire(SCOPE_KIND_TO_WIRE, input.scopeKind),
       scopeProductCodes: input.scopeProductCodes,
       ...flattenValidity(input.validity),
       stackable: input.stackable,
@@ -244,7 +382,7 @@ export class VoucherHttpAdapter implements VoucherPort {
   async setTemplateStatus(id: string, status: number): Promise<AppResult<VoucherTemplate>> {
     const res = await request<unknown>(`${TEMPLATES}/${encodeURIComponent(id)}/status`, {
       method: 'POST',
-      body: { status },
+      body: { status: enumWire(TEMPLATE_STATUS_TO_WIRE, status) },
     });
     if (!res.success) return res;
     return parseTemplate(res.data);
@@ -270,11 +408,16 @@ export class VoucherHttpAdapter implements VoucherPort {
     return ok(Boolean(res.data));
   }
 
-  async listUserVouchers(accountUid: string, take = 100): Promise<AppResult<UserVoucher[]>> {
-    const res = await request<unknown>(VOUCHERS, { query: { accountUid, take } });
+  async listUserVouchers(input: ListUserVouchersInput): Promise<AppResult<ListPage<UserVoucher>>> {
+    const res = await request<unknown>(VOUCHERS, {
+      query: {
+        accountUid: input.accountUid,
+        page: input.page,
+        pageSize: input.pageSize,
+      },
+    });
     if (!res.success) return res;
-    const rows = Array.isArray(res.data) ? res.data : [];
-    return ok(rows.map((r) => mapUserVoucher((r ?? {}) as Raw)));
+    return ok(parseListPage(res.data, mapUserVoucher));
   }
 
   async listRedemptions(accountUid: string, take = 100): Promise<AppResult<VoucherRedemption[]>> {
@@ -284,16 +427,17 @@ export class VoucherHttpAdapter implements VoucherPort {
     return ok(rows.map((r) => mapRedemption((r ?? {}) as Raw)));
   }
 
-  async listActivities(templateId?: string | null, includeEnded = false): Promise<AppResult<VoucherActivity[]>> {
+  async listActivities(input: ListVoucherActivitiesInput): Promise<AppResult<ListPage<VoucherActivity>>> {
     const res = await request<unknown>(ACTIVITIES, {
       query: {
-        templateId: templateId || undefined,
-        includeEnded: includeEnded ? 'true' : undefined,
+        templateId: input.templateId || undefined,
+        includeEnded: input.includeEnded ? 'true' : undefined,
+        page: input.page,
+        pageSize: input.pageSize,
       },
     });
     if (!res.success) return res;
-    const rows = Array.isArray(res.data) ? res.data : [];
-    return ok(rows.map((r) => mapActivity((r ?? {}) as Raw)));
+    return ok(parseListPage(res.data, mapActivity));
   }
 
   async createActivity(input: CreateVoucherActivityInput): Promise<AppResult<VoucherActivity>> {
@@ -314,7 +458,7 @@ export class VoucherHttpAdapter implements VoucherPort {
   async setActivityStatus(id: string, status: number): Promise<AppResult<VoucherActivity>> {
     const res = await request<unknown>(`${ACTIVITIES}/${encodeURIComponent(id)}/status`, {
       method: 'POST',
-      body: { status },
+      body: { status: enumWire(ACTIVITY_STATUS_TO_WIRE, status) },
     });
     if (!res.success) return res;
     return parseActivity(res.data);
