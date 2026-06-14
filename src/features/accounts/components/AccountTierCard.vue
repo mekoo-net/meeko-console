@@ -1,17 +1,56 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { ElMessage } from 'element-plus';
 
 import MoneyText from '@/shared/ui/MoneyText.vue';
-import { tierProgress } from '../model/tierConfig';
+import { TIER_THRESHOLDS } from '../model/tierConfig';
+import { getAccountAdminPort } from '../services';
 
 const props = defineProps<{
-  /** 账户当前 tier（由后端 / mock 计算后返回） */
+  /** 账户 UID（调整等级时使用）。 */
+  uid: string;
+  /** 账户当前等级（后端存储，管理员手动维护）。 */
   tier: number;
-  /** 账户累积充值金额（元） */
+  /** 账户累积充值金额（元）。 */
   totalRechargedAmount: number;
 }>();
 
-const progress = computed(() => tierProgress(props.totalRechargedAmount));
+const emit = defineEmits<{ changed: [] }>();
+
+const port = getAccountAdminPort();
+
+const selected = ref(props.tier);
+const saving = ref(false);
+
+// 外部刷新带来新 tier 时同步本地选择。
+watch(
+  () => props.tier,
+  (value) => {
+    selected.value = value;
+  },
+);
+
+const tierName = computed(
+  () => TIER_THRESHOLDS.find((t) => t.level === props.tier)?.name ?? `Lv${props.tier}`,
+);
+const dirty = computed(() => selected.value !== props.tier);
+
+async function save(): Promise<void> {
+  if (!dirty.value) return;
+  saving.value = true;
+  try {
+    const r = await port.setAccountTier(props.uid, selected.value);
+    if (r.success) {
+      ElMessage.success(`已调整为 Lv${selected.value}`);
+      emit('changed');
+    } else {
+      selected.value = props.tier;
+      ElMessage.error(r.error.message);
+    }
+  } finally {
+    saving.value = false;
+  }
+}
 </script>
 
 <template>
@@ -20,26 +59,39 @@ const progress = computed(() => tierProgress(props.totalRechargedAmount));
       <span class="tier-card__label">账户等级</span>
       <span class="tier-card__level">Lv{{ tier }}</span>
     </div>
-    <div class="tier-card__name">{{ progress.current.name }}</div>
+    <div class="tier-card__name">{{ tierName }}</div>
 
     <div class="tier-card__amount">
       <span class="tier-card__amount-label">累计充值</span>
-      <MoneyText :value="totalRechargedAmount" :options="{ currency: 'CNY' }" />
+      <MoneyText
+        :value="totalRechargedAmount"
+        :options="{ currency: 'CNY' }"
+      />
     </div>
 
-    <el-progress
-      :percentage="progress.percent"
-      :show-text="false"
-      :stroke-width="6"
-      class="tier-card__progress"
-    />
-
-    <div class="tier-card__next">
-      <template v-if="progress.next">
-        距 Lv{{ progress.next.level }} 还差
-        <MoneyText :value="progress.remainingToNext" :options="{ currency: 'CNY' }" />
-      </template>
-      <template v-else>已达最高等级</template>
+    <div class="tier-card__adjust">
+      <span class="tier-card__adjust-label">调整等级</span>
+      <el-select
+        v-model="selected"
+        size="small"
+        class="tier-card__select"
+      >
+        <el-option
+          v-for="t in TIER_THRESHOLDS"
+          :key="t.level"
+          :label="`Lv${t.level}`"
+          :value="t.level"
+        />
+      </el-select>
+      <el-button
+        type="primary"
+        size="small"
+        :disabled="!dirty"
+        :loading="saving"
+        @click="save"
+      >
+        保存
+      </el-button>
     </div>
   </div>
 </template>
@@ -84,11 +136,17 @@ const progress = computed(() => tierProgress(props.totalRechargedAmount));
 .tier-card__amount-label {
   color: var(--el-text-color-secondary);
 }
-.tier-card__progress {
-  margin-top: 2px;
+.tier-card__adjust {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
 }
-.tier-card__next {
+.tier-card__adjust-label {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+.tier-card__select {
+  width: 90px;
 }
 </style>

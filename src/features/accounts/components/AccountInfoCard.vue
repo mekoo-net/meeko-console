@@ -53,6 +53,7 @@ defineProps<{ account: Account }>();
 
     <div class="info-card__grid">
       <AccountTierCard
+        :uid="account.uid"
         :tier="account.tier"
         :total-recharged-amount="account.totalRechargedAmount"
       />

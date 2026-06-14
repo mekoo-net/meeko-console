@@ -35,6 +35,9 @@ export interface AccountAdminPort {
 
   setAccountStatus(uid: string, status: AccountStatus): Promise<AppResult<Account>>;
 
+  /** 管理员手动设置账户等级（1..5）。返回更新后的 Account。 */
+  setAccountTier(uid: string, tier: number): Promise<AppResult<Account>>;
+
   /**
    * 授予勋章。`code` 已存在则视为幂等成功。
    * 返回更新后的 Account。

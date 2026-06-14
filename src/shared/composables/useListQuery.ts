@@ -21,6 +21,8 @@ export interface UseListQueryOptions<T, F> {
   fetcher(input: { page: number; pageSize: number; filter: F }): Promise<AppResult<ListPage<T>>>;
   /** 当前 filter 的引用，fetcher 中通过 input.filter 拿到（避免 fetcher 依赖闭包）。 */
   filter: Ref<F>;
+  /** 创建时是否立即拉取一次（默认 true）。filter 静态的列表页依赖它完成首屏加载。 */
+  immediate?: boolean;
   pageSize?: number;
 }
 
@@ -61,6 +63,11 @@ export function useListQuery<T, F>(opts: UseListQueryOptions<T, F>) {
   );
 
   const refresh = () => state.run();
+
+  // 首屏加载：filter 与分页在挂载时都不会变化，watcher 不会触发，需主动拉取一次。
+  if (opts.immediate !== false) {
+    void state.run();
+  }
 
   return {
     pagination,

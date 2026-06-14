@@ -102,8 +102,10 @@ function openInviter(): void {
     <div class="overview__cards">
       <AccountWalletCard :wallet="account.wallet" />
       <AccountTierCard
+        :uid="account.uid"
         :tier="account.tier"
         :total-recharged-amount="account.totalRechargedAmount"
+        @changed="ctx?.refresh()"
       />
       <AccountOAuthCard :bindings="account.oauthBindings ?? undefined" />
     </div>

@@ -108,6 +108,8 @@ export const accountSchema = z.object({
   oauthBindings: z.array(oauthBindingSchema).nullish(),
   /** 已获得勋章。 */
   achievements: z.array(achievementSchema).nullish(),
+  /** 列表投影：已持有勋章 code（列表 API 仅返回 code，用于筛选/徽章展示）。 */
+  achievementCodes: z.array(z.string()).nullish(),
   /** 列表投影：钱包概要（`GET /api/admin/accounts`）。 */
   walletSummary: walletSummarySchema.nullable().optional(),
   /** 详情投影：完整钱包（`GET /api/admin/accounts/{uid}`）。 */
@@ -160,6 +162,10 @@ export interface AccountListFilter {
   contactKeyword: string;
   type: AccountType | 'all';
   status: AccountStatus | 'all';
+  /** 账户等级（1..5）精确筛选；null/省略不筛。 */
+  tier?: number | null;
+  /** 成就/徽章 code；非空时只返回持有该徽章的账户。 */
+  badgeCode?: string;
 }
 
 export const accountTypeLabel: Readonly<Record<AccountType, string>> = {

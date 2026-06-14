@@ -95,6 +95,9 @@ function mapListItem(raw: Record<string, unknown>): Record<string, unknown> {
     walletSummary: mapWalletSummary(raw.walletSummary ?? raw.wallet_summary),
     wallet: mapAccountWallet(raw.wallet),
     achievements: Array.isArray(raw.achievements) ? raw.achievements : undefined,
+    achievementCodes: Array.isArray(raw.achievementCodes ?? raw.achievement_codes)
+      ? (raw.achievementCodes ?? raw.achievement_codes)
+      : undefined,
     oauthBindings: Array.isArray(raw.oauthBindings ?? raw.oauth_bindings)
       ? (raw.oauthBindings ?? raw.oauth_bindings)
       : undefined,
@@ -165,6 +168,8 @@ function buildListQuery(input: ListAccountsInput): string {
   if (filter.contactKeyword.trim()) params.set('contactKeyword', filter.contactKeyword.trim());
   if (filter.type !== 'all') params.set('type', filter.type);
   if (filter.status !== 'all') params.set('status', filter.status);
+  if (filter.tier != null && filter.tier > 0) params.set('tier', String(filter.tier));
+  if (filter.badgeCode?.trim()) params.set('badgeCode', filter.badgeCode.trim());
   return params.toString();
 }
 
@@ -231,6 +236,15 @@ export class AccountAdminHttpAdapter implements AccountAdminPort {
     const res = await apiFetch<unknown>(`${ADMIN_ACCOUNTS}/${encodeURIComponent(uid)}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    });
+    if (!res.success) return res;
+    return parseAccount(res.data);
+  }
+
+  async setAccountTier(uid: string, tier: number): Promise<AppResult<Account>> {
+    const res = await apiFetch<unknown>(`${ADMIN_ACCOUNTS}/${encodeURIComponent(uid)}/tier`, {
+      method: 'PATCH',
+      body: JSON.stringify({ tier }),
     });
     if (!res.success) return res;
     return parseAccount(res.data);
