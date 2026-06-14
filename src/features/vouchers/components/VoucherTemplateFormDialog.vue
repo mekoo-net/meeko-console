@@ -84,7 +84,7 @@ async function loadProducts(): Promise<void> {
 }
 
 const isEdit = computed(() => !!props.template);
-const dialogTitle = computed(() => (isEdit.value ? '编辑券批次' : '新建券批次'));
+const dialogTitle = computed(() => (isEdit.value ? '编辑抵扣券' : '创建抵扣券'));
 
 const deductOptions = [
   { label: '无门槛', value: VoucherDeductKind.NoThreshold },
@@ -337,6 +337,13 @@ async function onSubmit(): Promise<void> {
         <span class="unit">元</span>
       </el-form-item>
 
+      <el-form-item
+        v-if="form.deductKind !== VoucherDeductKind.NoThreshold"
+        label="可叠加"
+      >
+        <el-switch v-model="form.stackable" />
+      </el-form-item>
+
       <el-divider content-position="left">
         适用范围
       </el-divider>
@@ -408,10 +415,6 @@ async function onSubmit(): Promise<void> {
       <el-divider content-position="left">
         发放与限制
       </el-divider>
-      <el-form-item label="可叠加">
-        <el-switch v-model="form.stackable" />
-      </el-form-item>
-
       <el-form-item label="发放总量">
         <el-input-number
           v-model="form.totalQuota"

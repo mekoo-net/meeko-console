@@ -161,7 +161,7 @@ async function setStatus(row: VoucherTemplate, status: number, label: string): P
             :icon="Plus"
             @click="openCreate"
           >
-            新建券批次
+            创建抵扣券
           </el-button>
         </template>
       </PageHeader>
@@ -293,7 +293,10 @@ async function setStatus(row: VoucherTemplate, status: number, label: string): P
             暂停
           </el-button>
           <el-button
-            v-else-if="row.status === VoucherTemplateStatus.Paused"
+            v-else-if="
+              row.status === VoucherTemplateStatus.Paused ||
+                row.status === VoucherTemplateStatus.Draft
+            "
             link
             type="success"
             @click="setStatus(row, VoucherTemplateStatus.Active, '启用')"
@@ -314,7 +317,7 @@ async function setStatus(row: VoucherTemplate, status: number, label: string): P
       <template #empty>
         <EmptyState
           title="暂无券批次"
-          description="点击「新建券批次」创建第一个代金券规则。"
+          description="点击「创建抵扣券」创建第一个代金券规则。"
         />
       </template>
     </el-table>

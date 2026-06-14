@@ -58,6 +58,8 @@ interface ClaimerFilter {
 
 const list = useListQuery<ActivityClaimer, ClaimerFilter>({
   pageSize: 20,
+  // 弹窗在打开时（watch modelValue）才 refresh，避免挂载时带空 activityId 发无效请求。
+  immediate: false,
   filter: computed(() => ({ keyword: keyword.value.trim(), status: statusFilter.value })),
   filterKey: () => `${keyword.value.trim()}|${statusFilter.value ?? ''}`,
   fetcher: ({ page, pageSize, filter }) =>
