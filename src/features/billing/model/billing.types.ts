@@ -243,12 +243,26 @@ export const BillReversedCodeLabel: Readonly<Record<BillReversedCode, string>> =
   manual_correction: '人工调账',
 };
 
+/** 券抵扣类型：无门槛代金券 / 满减券 / 折扣券。 */
+export const voucherDeductKindValues = ['noThreshold', 'fullReduction', 'discount'] as const;
+export type VoucherDeductKind = (typeof voucherDeductKindValues)[number];
+
+export const VoucherDeductKindLabel: Readonly<Record<VoucherDeductKind, string>> = {
+  noThreshold: '代金券',
+  fullReduction: '满减券',
+  discount: '折扣券',
+};
+
 /** 单张代金券在账单上的抵扣明细。 */
 export const billVoucherDeductionSchema = z.object({
   userVoucherId: idString,
   /** 券面序列号（可空），便于对账定位 */
   serialNo: z.string().nullish(),
   amountDeducted: z.number(),
+  /** 券名称（取自模板），便于一眼看出用的是哪张券 */
+  name: z.string().nullish(),
+  /** 券抵扣类型 */
+  deductKind: z.enum(voucherDeductKindValues).nullish(),
 });
 
 export type BillVoucherDeduction = z.infer<typeof billVoucherDeductionSchema>;

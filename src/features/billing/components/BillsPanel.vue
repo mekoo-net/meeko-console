@@ -12,6 +12,7 @@ import {
   BillStatusLabel,
   BillStatusTone,
   BillSubTypeLabel,
+  VoucherDeductKindLabel,
   type BillingEntry,
   type BillStatus,
   type BillSubType,
@@ -23,27 +24,32 @@ const props = defineProps<{ accountUid: string }>();
 const billingPort = getBillingPort();
 
 interface DeductionRow {
+  tag: string;
   name: string;
+  sub: string;
   amount: number;
   kind: 'voucher' | 'balance';
 }
 
-/** 把账单扣费聚合对象拆成表格行：先逐券抵扣，再钱包余额。 */
+/** 把账单扣费聚合对象拆成表格行：先逐券抵扣（券名 + 序列号 + 类型），再钱包余额。 */
 function deductionRows(row: BillingEntry): DeductionRow[] {
   const d = row.deduction;
   if (!d) return [];
   const rows: DeductionRow[] = [];
   for (const v of d.voucherItems) {
+    const tag = v.deductKind ? VoucherDeductKindLabel[v.deductKind] : '代金券';
     rows.push({
-      name: v.serialNo ? `代金券 ${v.serialNo}` : `代金券 #${v.userVoucherId}`,
+      tag,
+      name: v.name?.trim() || tag,
+      sub: v.serialNo ?? `#${v.userVoucherId}`,
       amount: v.amountDeducted,
       kind: 'voucher',
     });
   }
   if (d.voucherItems.length === 0 && d.voucherDeducted > 0) {
-    rows.push({ name: '代金券抵扣', amount: d.voucherDeducted, kind: 'voucher' });
+    rows.push({ tag: '券', name: '代金券抵扣', sub: '', amount: d.voucherDeducted, kind: 'voucher' });
   }
-  rows.push({ name: '钱包余额', amount: d.balanceDeducted, kind: 'balance' });
+  rows.push({ tag: '余额', name: '钱包余额', sub: '', amount: d.balanceDeducted, kind: 'balance' });
   return rows;
 }
 
@@ -206,9 +212,12 @@ onMounted(() => void fetchBills());
                     class="deduct-detail__tag"
                     :class="d.kind === 'voucher' ? 'is-voucher' : 'is-balance'"
                   >
-                    {{ d.kind === 'voucher' ? '券' : '余额' }}
+                    {{ d.tag }}
                   </span>
-                  <span class="deduct-detail__name">{{ d.name }}</span>
+                  <span class="deduct-detail__name">
+                    {{ d.name }}
+                    <span v-if="d.sub" class="deduct-detail__serial">{{ d.sub }}</span>
+                  </span>
                   <span class="deduct-detail__amount">
                     -{{ formatMoney(d.amount, { currency: row.currency }) }}
                   </span>
@@ -338,11 +347,17 @@ onMounted(() => void fetchBills());
   color: var(--el-color-warning);
 }
 .deduct-detail__name {
-  color: var(--el-text-color-secondary);
-  max-width: 130px;
+  color: var(--el-text-color-regular);
+  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.deduct-detail__serial {
+  margin-left: 4px;
+  color: var(--el-text-color-placeholder);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 10px;
 }
 .deduct-detail__amount {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;

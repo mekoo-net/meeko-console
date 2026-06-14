@@ -19,6 +19,7 @@ import type {
   BillReversedCode,
   BillStatus,
   BillSubType,
+  VoucherDeductKind,
 } from '@/features/billing/model/billing.types';
 import type {
   BillingPort,
@@ -177,6 +178,14 @@ function mapDeduction(raw: Record<string, unknown> | null | undefined): BillDedu
           ? String(item.serialNo ?? item.SerialNo)
           : null,
       amountDeducted: Number(item.amountDeducted ?? item.AmountDeducted ?? 0),
+      name:
+        item.name != null || item.Name != null
+          ? String(item.name ?? item.Name)
+          : null,
+      deductKind:
+        item.deductKind != null || item.DeductKind != null
+          ? (String(item.deductKind ?? item.DeductKind) as VoucherDeductKind)
+          : null,
     };
   });
 
@@ -272,5 +281,13 @@ export class BillingHttpAdapter implements BillingPort {
         total: res.data.total,
       },
     };
+  }
+
+  async getBill(serial: string): Promise<AppResult<BillingEntry>> {
+    const res = await request<Record<string, unknown>>(
+      `/api/admin/billing/bills/${encodeURIComponent(serial)}`,
+    );
+    if (!res.success) return res;
+    return { success: true, data: mapBillDto(res.data) };
   }
 }

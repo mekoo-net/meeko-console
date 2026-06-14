@@ -9,7 +9,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
-import { InfoFilled } from '@element-plus/icons-vue';
+import { InfoFilled, View } from '@element-plus/icons-vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import StatusTag from '@/shared/ui/StatusTag.vue';
@@ -28,12 +28,14 @@ import {
   BillStatusLabel,
   BillStatusTone,
   BillSubTypeLabel,
+  VoucherDeductKindLabel,
   type BillingEntry,
   type BillStatus,
   type BillSubType,
 } from '../model/billing.types';
 import { getBillingPort } from '../services';
 import type { ListBillsFilter } from '../services/ports/billingPort';
+import BillDetailDrawer from '../components/BillDetailDrawer.vue';
 
 const router = useRouter();
 const billingPort = getBillingPort();
@@ -158,6 +160,49 @@ function isReverseLike(row: BillingEntry): boolean {
   return row.status === 'reversed' || row.status === 'partial_refunded';
 }
 
+const detailOpen = ref(false);
+const detailBillId = ref<string | null>(null);
+
+function openDetail(row: BillingEntry): void {
+  detailBillId.value = row.id;
+  detailOpen.value = true;
+}
+
+interface DeductionRow {
+  tag: string;
+  name: string;
+  sub: string;
+  amount: number;
+  kind: 'voucher' | 'balance';
+}
+
+/** 把账单扣费聚合对象拆成表格行：先逐券抵扣（券名 + 序列号 + 类型），再钱包余额。 */
+function deductionRows(row: BillingEntry): DeductionRow[] {
+  const d = row.deduction;
+  if (!d) return [];
+  const rows: DeductionRow[] = [];
+  for (const v of d.voucherItems) {
+    const tag = v.deductKind ? VoucherDeductKindLabel[v.deductKind] : '代金券';
+    rows.push({
+      tag,
+      name: v.name?.trim() || tag,
+      sub: v.serialNo ?? `#${v.userVoucherId}`,
+      amount: v.amountDeducted,
+      kind: 'voucher',
+    });
+  }
+  if (d.voucherItems.length === 0 && d.voucherDeducted > 0) {
+    rows.push({ tag: '券', name: '代金券抵扣', sub: '', amount: d.voucherDeducted, kind: 'voucher' });
+  }
+  rows.push({ tag: '余额', name: '钱包余额', sub: '', amount: d.balanceDeducted, kind: 'balance' });
+  return rows;
+}
+
+/** 仅当确实用了代金券抵扣时才展开明细，避免纯余额扣费刷屏。 */
+function hasVoucherDeduction(row: BillingEntry): boolean {
+  return row.deduction != null && row.deduction.voucherDeducted > 0;
+}
+
 onMounted(() => {
   void fetchData();
 });
@@ -222,6 +267,18 @@ onMounted(() => {
       height="100%"
       :empty-text="' '"
     >
+      <el-table-column label="详情" width="56" align="center" fixed>
+        <template #default="{ row }: { row: BillingEntry }">
+          <el-button
+            :icon="View"
+            link
+            type="primary"
+            title="查看详情"
+            @click="openDetail(row)"
+          />
+        </template>
+      </el-table-column>
+
       <el-table-column label="流水号" min-width="180" prop="id">
         <template #default="{ row }: { row: BillingEntry }">
           <span class="cell-uid">{{ row.id }}</span>
@@ -283,7 +340,7 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="金额" width="180" align="right">
+      <el-table-column label="金额 / 扣款明细" min-width="240" align="right">
         <template #default="{ row }: { row: BillingEntry }">
           <div class="cell-amount">
             <span
@@ -297,8 +354,37 @@ onMounted(() => {
             >
               {{ row.refType === 'recharge' ? '+' : '-' }}{{ formatMoney(row.actualAmount, { currency: row.currency }) }}
             </span>
+            <template v-if="hasVoucherDeduction(row)">
+              <span class="cell-amount__saved">
+                券抵 {{ formatMoney(row.deduction!.voucherDeducted, { currency: row.currency }) }}
+              </span>
+              <div class="deduct-detail">
+                <div
+                  v-for="(d, i) in deductionRows(row)"
+                  :key="i"
+                  class="deduct-detail__row"
+                >
+                  <span
+                    class="deduct-detail__tag"
+                    :class="d.kind === 'voucher' ? 'is-voucher' : 'is-balance'"
+                  >
+                    {{ d.tag }}
+                  </span>
+                  <span class="deduct-detail__name">
+                    {{ d.name }}
+                    <span v-if="d.sub" class="deduct-detail__serial">{{ d.sub }}</span>
+                  </span>
+                  <span class="deduct-detail__amount">
+                    -{{ formatMoney(d.amount, { currency: row.currency }) }}
+                  </span>
+                </div>
+                <div class="deduct-detail__total">
+                  应扣 {{ formatMoney(row.deduction!.total, { currency: row.currency }) }}
+                </div>
+              </div>
+            </template>
             <span
-              v-if="row.actualAmount !== row.originalAmount"
+              v-else-if="row.actualAmount !== row.originalAmount"
               class="cell-amount__original"
             >
               原 {{ formatMoney(row.originalAmount, { currency: row.currency }) }}
@@ -357,6 +443,8 @@ onMounted(() => {
       />
     </template>
   </FillListPageLayout>
+
+  <BillDetailDrawer v-model="detailOpen" :bill-id="detailBillId" />
 </template>
 
 <style scoped>
@@ -418,6 +506,63 @@ onMounted(() => {
   color: var(--el-text-color-secondary);
   text-decoration: line-through;
   font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+.cell-amount__saved {
+  font-size: 11px;
+  color: var(--el-color-success);
+  font-weight: 600;
+  margin-top: 2px;
+}
+.deduct-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  margin-top: 4px;
+}
+.deduct-detail__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.deduct-detail__tag {
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+  line-height: 1.4;
+}
+.deduct-detail__tag.is-voucher {
+  color: var(--el-color-success);
+}
+.deduct-detail__tag.is-balance {
+  color: var(--el-color-warning);
+}
+.deduct-detail__name {
+  color: var(--el-text-color-regular);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.deduct-detail__serial {
+  margin-left: 4px;
+  color: var(--el-text-color-placeholder);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 10px;
+}
+.deduct-detail__amount {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--el-text-color-regular);
+  font-variant-numeric: tabular-nums;
+}
+.deduct-detail__total {
+  font-size: 11px;
+  color: var(--el-text-color-primary);
   margin-top: 2px;
 }
 .cell-money--out {

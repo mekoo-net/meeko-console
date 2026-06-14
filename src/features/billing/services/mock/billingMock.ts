@@ -1,4 +1,4 @@
-import { ok, type AppResult } from '@/shared/api/httpTypes';
+import { ok, fail, type AppResult } from '@/shared/api/httpTypes';
 import { clientPaginate } from '@/shared/composables/usePagination';
 import { createUidSeq, type Uid } from '@/shared/lib/id';
 import { delay } from '@/shared/lib/delay';
@@ -81,7 +81,13 @@ function seedAccount(uid: string): AccountBilling {
       voucherDeducted: 0.08,
       balanceDeducted: 0.12,
       voucherItems: [
-        { userVoucherId: '7000001', serialNo: 'VC20260601000000001', amountDeducted: 0.08 },
+        {
+          userVoucherId: '7000001',
+          serialNo: 'VC20260601000000001',
+          amountDeducted: 0.08,
+          name: '新人体验代金券',
+          deductKind: 'noThreshold',
+        },
       ],
     },
   };
@@ -201,5 +207,17 @@ export class BillingMock implements BillingPort {
       .filter((r) => r.success)
       .map((r) => r.data);
     return ok({ items: parsed, total: all.length });
+  }
+
+  async getBill(serial: string): Promise<AppResult<BillingEntry>> {
+    await delay();
+    for (const b of store.values()) {
+      const found = b.bills.find((x) => x.id === serial);
+      if (found) {
+        const parsed = billingEntrySchema.safeParse(found);
+        if (parsed.success) return ok(parsed.data);
+      }
+    }
+    return fail({ code: 'not_found', message: `账单 ${serial} 不存在` });
   }
 }

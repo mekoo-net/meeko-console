@@ -57,4 +57,7 @@ export interface BillingPort {
     pageSize: number;
     filter: ListBillsFilter;
   }): Promise<AppResult<ListBillsPage>>;
+
+  /** 按账单流水号拉取单条详情（含扣款明细 / 业务信息），用于详情抽屉懒加载。 */
+  getBill(serial: string): Promise<AppResult<BillingEntry>>;
 }
