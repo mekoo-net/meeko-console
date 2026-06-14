@@ -70,12 +70,20 @@ function seedAccount(uid: string): AccountBilling {
     productCode: 'demux',
     subType: 'usage',
     status: 'completed',
-    originalAmount: 0.12,
+    originalAmount: 0.2,
     actualAmount: 0.12,
     currency: 'CNY',
     refType: 'hold',
     refId: 'HD-5000001',
     occurredAtUtc: now - 3_600_000,
+    deduction: {
+      total: 0.2,
+      voucherDeducted: 0.08,
+      balanceDeducted: 0.12,
+      voucherItems: [
+        { userVoucherId: '7000001', serialNo: 'VC20260601000000001', amountDeducted: 0.08 },
+      ],
+    },
   };
 
   return {

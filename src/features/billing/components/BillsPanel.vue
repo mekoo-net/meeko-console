@@ -22,6 +22,35 @@ const props = defineProps<{ accountUid: string }>();
 
 const billingPort = getBillingPort();
 
+interface DeductionRow {
+  name: string;
+  amount: number;
+  kind: 'voucher' | 'balance';
+}
+
+/** 把账单扣费聚合对象拆成表格行：先逐券抵扣，再钱包余额。 */
+function deductionRows(row: BillingEntry): DeductionRow[] {
+  const d = row.deduction;
+  if (!d) return [];
+  const rows: DeductionRow[] = [];
+  for (const v of d.voucherItems) {
+    rows.push({
+      name: v.serialNo ? `代金券 ${v.serialNo}` : `代金券 #${v.userVoucherId}`,
+      amount: v.amountDeducted,
+      kind: 'voucher',
+    });
+  }
+  if (d.voucherItems.length === 0 && d.voucherDeducted > 0) {
+    rows.push({ name: '代金券抵扣', amount: d.voucherDeducted, kind: 'voucher' });
+  }
+  rows.push({ name: '钱包余额', amount: d.balanceDeducted, kind: 'balance' });
+  return rows;
+}
+
+function hasDeduction(row: BillingEntry): boolean {
+  return row.deduction != null;
+}
+
 const billSubType = ref<BillSubType | 'all'>('all');
 const billStatus = ref<BillStatus | 'all'>('all');
 const billItems = ref<BillingEntry[]>([]);
@@ -153,7 +182,7 @@ onMounted(() => void fetchBills());
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="金额" width="160" align="right">
+        <el-table-column label="金额 / 扣款明细" min-width="220" align="right">
           <template #default="{ row }: { row: BillingEntry }">
             <div class="cell-amount">
               <span
@@ -167,8 +196,29 @@ onMounted(() => void fetchBills());
               >
                 {{ row.refType === 'recharge' ? '+' : '-' }}{{ formatMoney(row.actualAmount, { currency: row.currency }) }}
               </span>
+              <div v-if="hasDeduction(row)" class="deduct-detail">
+                <div
+                  v-for="(d, i) in deductionRows(row)"
+                  :key="i"
+                  class="deduct-detail__row"
+                >
+                  <span
+                    class="deduct-detail__tag"
+                    :class="d.kind === 'voucher' ? 'is-voucher' : 'is-balance'"
+                  >
+                    {{ d.kind === 'voucher' ? '券' : '余额' }}
+                  </span>
+                  <span class="deduct-detail__name">{{ d.name }}</span>
+                  <span class="deduct-detail__amount">
+                    -{{ formatMoney(d.amount, { currency: row.currency }) }}
+                  </span>
+                </div>
+                <div class="deduct-detail__total">
+                  应扣 {{ formatMoney(row.deduction!.total, { currency: row.currency }) }}
+                </div>
+              </div>
               <span
-                v-if="row.actualAmount !== row.originalAmount"
+                v-else-if="row.actualAmount !== row.originalAmount"
                 class="cell-amount__original"
               >
                 原 {{ formatMoney(row.originalAmount, { currency: row.currency }) }}
@@ -257,6 +307,50 @@ onMounted(() => void fetchBills());
   font-size: 11px;
   color: var(--el-text-color-secondary);
   text-decoration: line-through;
+  margin-top: 2px;
+}
+.deduct-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  margin-top: 4px;
+}
+.deduct-detail__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.deduct-detail__tag {
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+  line-height: 1.4;
+}
+.deduct-detail__tag.is-voucher {
+  color: var(--el-color-success);
+}
+.deduct-detail__tag.is-balance {
+  color: var(--el-color-warning);
+}
+.deduct-detail__name {
+  color: var(--el-text-color-secondary);
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.deduct-detail__amount {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--el-text-color-regular);
+}
+.deduct-detail__total {
+  font-size: 11px;
+  color: var(--el-text-color-primary);
   margin-top: 2px;
 }
 .cell-money--in {

@@ -144,12 +144,6 @@ function resetFilter(): void {
   page.value = 1;
 }
 
-/** 第二行账户标签：主账户 / IAM 子账户 */
-function operatorLabel(row: BillingEntry): string {
-  if (row.operatorAccountUid === row.ownerAccountUid) return '主账户';
-  return `IAM 子账户 · ${row.operatorAccountUid}`;
-}
-
 function ownerPrimaryLine(row: BillingEntry): string {
   return row.ownerDisplayName?.trim() || row.ownerAccountUid;
 }
@@ -248,12 +242,12 @@ onMounted(() => {
                 <span class="cell-account__secondary">{{ ownerSecondaryLine(row) }}</span>
               </span>
             </el-button>
-            <div
-              class="cell-account__role"
-              :class="{ 'cell-account__role--iam': row.operatorAccountUid !== row.ownerAccountUid }"
+            <span
+              v-if="row.operatorAccountUid !== row.ownerAccountUid"
+              class="cell-account__iam"
             >
-              {{ operatorLabel(row) }}
-            </div>
+              IAM · {{ row.operatorAccountUid }}
+            </span>
           </div>
         </template>
       </el-table-column>
@@ -366,7 +360,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* 账户列：第一行名称，第二行邮箱/手机，第三行 主账户/IAM 标签 */
+/* 账户列：第一行名称，第二行邮箱/手机；IAM 子账户时附一个紧凑标签 */
 .cell-account {
   display: flex;
   flex-direction: column;
@@ -395,13 +389,14 @@ onMounted(() => {
   color: var(--el-text-color-secondary);
   word-break: break-all;
 }
-.cell-account__role {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  margin-top: 4px;
-}
-.cell-account__role--iam {
+.cell-account__iam {
+  margin-top: 3px;
+  font-size: 11px;
   color: var(--el-color-warning);
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 1.4;
 }
 
 /* 产品列：等宽字体的 productCode */

@@ -12,6 +12,7 @@ import type {
   RechargeStatus,
 } from '@/features/billing/model/billing.types';
 import type {
+  BillDeduction,
   BillingEntry,
   BillFailureCode,
   BillRefType,
@@ -159,6 +160,31 @@ function mapBillDto(raw: Record<string, unknown>): BillingEntry {
         ? (String(reversal.code ?? reversal.Code) as BillReversedCode)
         : null,
     occurredAtUtc: asEpochMillis(raw.occurredAtUtc ?? raw.OccurredAtUtc) ?? 0,
+    deduction: mapDeduction((raw.deduction ?? raw.Deduction) as Record<string, unknown> | null | undefined),
+  };
+}
+
+function mapDeduction(raw: Record<string, unknown> | null | undefined): BillDeduction | null {
+  if (raw == null || typeof raw !== 'object') return null;
+
+  const itemsRaw = (raw.voucherItems ?? raw.VoucherItems) as unknown[] | null | undefined;
+  const voucherItems = (itemsRaw ?? []).map((it) => {
+    const item = it as Record<string, unknown>;
+    return {
+      userVoucherId: String(item.userVoucherId ?? item.UserVoucherId ?? ''),
+      serialNo:
+        item.serialNo != null || item.SerialNo != null
+          ? String(item.serialNo ?? item.SerialNo)
+          : null,
+      amountDeducted: Number(item.amountDeducted ?? item.AmountDeducted ?? 0),
+    };
+  });
+
+  return {
+    total: Number(raw.total ?? raw.Total ?? 0),
+    voucherDeducted: Number(raw.voucherDeducted ?? raw.VoucherDeducted ?? 0),
+    balanceDeducted: Number(raw.balanceDeducted ?? raw.BalanceDeducted ?? 0),
+    voucherItems,
   };
 }
 

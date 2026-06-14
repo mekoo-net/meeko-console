@@ -243,6 +243,33 @@ export const BillReversedCodeLabel: Readonly<Record<BillReversedCode, string>> =
   manual_correction: '人工调账',
 };
 
+/** 单张代金券在账单上的抵扣明细。 */
+export const billVoucherDeductionSchema = z.object({
+  userVoucherId: idString,
+  /** 券面序列号（可空），便于对账定位 */
+  serialNo: z.string().nullish(),
+  amountDeducted: z.number(),
+});
+
+export type BillVoucherDeduction = z.infer<typeof billVoucherDeductionSchema>;
+
+/**
+ * 账单扣费聚合对象：一笔用量扣费"钱从哪来"的拆分（先券抵扣，余额补足）。
+ * 仅用量扣费类账单有值，充值等加钱类为 null。
+ */
+export const billDeductionSchema = z.object({
+  /** 应扣总额（= 代金券抵扣 + 余额扣除） */
+  total: z.number(),
+  /** 代金券抵扣合计 */
+  voucherDeducted: z.number(),
+  /** 钱包余额实际扣除额 */
+  balanceDeducted: z.number(),
+  /** 各张券的抵扣明细 */
+  voucherItems: z.array(billVoucherDeductionSchema).default([]),
+});
+
+export type BillDeduction = z.infer<typeof billDeductionSchema>;
+
 export const billingEntrySchema = z.object({
   /** 账单主键（BL + UTC 日期 + 9 位序列，如 BL20260531000001234），按时间有序 */
   id: idString,
@@ -285,6 +312,8 @@ export const billingEntrySchema = z.object({
   /** 驳回原因码（枚举，仅当 status∈{reversed, partial_refunded} 时有值） */
   reversedCode: z.enum(billReversedCodeValues).nullable().optional(),
   occurredAtUtc: epochMillisSchema,
+  /** 扣费明细（代金券抵扣 / 余额扣除拆分）；仅用量扣费账单有值 */
+  deduction: billDeductionSchema.nullable().optional(),
 });
 
 export type BillingEntry = z.infer<typeof billingEntrySchema>;
