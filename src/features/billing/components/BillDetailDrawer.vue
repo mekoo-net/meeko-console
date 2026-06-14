@@ -45,33 +45,21 @@ const RefTypeLabel: Record<string, string> = {
   manual: '人工调账',
 };
 
-interface DeductionRow {
-  tag: string;
-  name: string;
-  sub: string;
-  amount: number;
-  kind: 'voucher' | 'balance';
+type VoucherItem = NonNullable<BillingEntry['deduction']>['voucherItems'][number];
+
+function kindLabel(v: VoucherItem): string {
+  return v.deductKind ? VoucherDeductKindLabel[v.deductKind] : '代金券';
 }
 
-function deductionRows(row: BillingEntry): DeductionRow[] {
-  const d = row.deduction;
-  if (!d) return [];
-  const rows: DeductionRow[] = [];
-  for (const v of d.voucherItems) {
-    const tag = v.deductKind ? VoucherDeductKindLabel[v.deductKind] : '代金券';
-    rows.push({
-      tag,
-      name: v.name?.trim() || tag,
-      sub: v.serialNo ?? `#${v.userVoucherId}`,
-      amount: v.amountDeducted,
-      kind: 'voucher',
-    });
+/** 满减/折扣券的规则副标题，无门槛券返回空串。 */
+function ruleText(v: VoucherItem, currency: string): string {
+  if (v.deductKind === 'fullReduction' && v.thresholdAmount) {
+    return `满 ${formatMoney(v.thresholdAmount, { currency })} 可用`;
   }
-  if (d.voucherItems.length === 0 && d.voucherDeducted > 0) {
-    rows.push({ tag: '券', name: '代金券抵扣', sub: '', amount: d.voucherDeducted, kind: 'voucher' });
+  if (v.deductKind === 'discount' && v.discountRate != null) {
+    return `${(v.discountRate * 10).toFixed(1)} 折`;
   }
-  rows.push({ tag: '余额', name: '钱包余额', sub: '', amount: d.balanceDeducted, kind: 'balance' });
-  return rows;
+  return '';
 }
 
 function close(): void {
@@ -184,25 +172,60 @@ watch(
               代金券共抵 {{ formatMoney(bill.deduction.voucherDeducted, { currency: bill.currency }) }}
             </span>
           </h4>
+
+          <!-- 逐张代金券（完整属性卡片） -->
           <div
-            v-for="(d, i) in deductionRows(bill)"
+            v-for="(v, i) in bill.deduction.voucherItems"
             :key="i"
+            class="voucher-card"
+          >
+            <div class="voucher-card__head">
+              <span class="voucher-card__tag">{{ kindLabel(v) }}</span>
+              <span class="voucher-card__name">{{ v.name?.trim() || kindLabel(v) }}</span>
+              <span class="voucher-card__deducted num">
+                -{{ formatMoney(v.amountDeducted, { currency: bill.currency }) }}
+              </span>
+            </div>
+            <div class="voucher-card__meta">
+              <span class="voucher-card__serial mono">{{ v.serialNo ?? `#${v.userVoucherId}` }}</span>
+              <span v-if="ruleText(v, bill.currency)" class="voucher-card__rule">
+                {{ ruleText(v, bill.currency) }}
+              </span>
+            </div>
+            <div class="voucher-card__props">
+              <span v-if="v.faceValue != null">
+                面额 {{ formatMoney(v.faceValue, { currency: bill.currency }) }}
+              </span>
+              <span v-if="v.remainingValue != null">
+                当前剩余 {{ formatMoney(v.remainingValue, { currency: bill.currency }) }}
+              </span>
+              <span v-if="v.validToUtc != null">
+                有效期至 {{ formatDateTime(v.validToUtc, 'YYYY-MM-DD HH:mm') }}
+              </span>
+            </div>
+          </div>
+
+          <!-- 无逐券明细但有券抵扣合计的兜底 -->
+          <div
+            v-if="bill.deduction.voucherItems.length === 0 && bill.deduction.voucherDeducted > 0"
             class="deduct-row"
           >
-            <span
-              class="deduct-row__tag"
-              :class="d.kind === 'voucher' ? 'is-voucher' : 'is-balance'"
-            >
-              {{ d.tag }}
-            </span>
-            <span class="deduct-row__name">
-              {{ d.name }}
-              <span v-if="d.sub" class="deduct-row__serial mono">{{ d.sub }}</span>
-            </span>
+            <span class="deduct-row__tag is-voucher">券</span>
+            <span class="deduct-row__name">代金券抵扣</span>
             <span class="deduct-row__amount num">
-              -{{ formatMoney(d.amount, { currency: bill.currency }) }}
+              -{{ formatMoney(bill.deduction.voucherDeducted, { currency: bill.currency }) }}
             </span>
           </div>
+
+          <!-- 钱包余额 -->
+          <div class="deduct-row">
+            <span class="deduct-row__tag is-balance">余额</span>
+            <span class="deduct-row__name">钱包余额</span>
+            <span class="deduct-row__amount num">
+              -{{ formatMoney(bill.deduction.balanceDeducted, { currency: bill.currency }) }}
+            </span>
+          </div>
+
           <div class="deduct-total">
             应扣合计 {{ formatMoney(bill.deduction.total, { currency: bill.currency }) }}
           </div>
@@ -344,5 +367,66 @@ watch(
   font-size: 12.5px;
   font-weight: 600;
   color: var(--el-text-color-primary);
+}
+.voucher-card {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: var(--el-fill-color-blank);
+}
+.voucher-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.voucher-card__tag {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 0 5px;
+  border-radius: 3px;
+  border: 1px solid var(--el-color-success);
+  color: var(--el-color-success);
+  line-height: 1.5;
+}
+.voucher-card__name {
+  flex: 1;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.voucher-card__deducted {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--el-color-success);
+}
+.voucher-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.voucher-card__serial {
+  font-size: 11px;
+  color: var(--el-text-color-placeholder);
+}
+.voucher-card__rule {
+  font-size: 11px;
+  color: var(--el-color-warning);
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 1.5;
+}
+.voucher-card__props {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--el-text-color-secondary);
+  font-variant-numeric: tabular-nums;
 }
 </style>

@@ -263,6 +263,16 @@ export const billVoucherDeductionSchema = z.object({
   name: z.string().nullish(),
   /** 券抵扣类型 */
   deductKind: z.enum(voucherDeductKindValues).nullish(),
+  /** 券面额（发放时初始可抵扣额） */
+  faceValue: z.number().nullish(),
+  /** 该券当前剩余可抵扣额（查询时刻快照） */
+  remainingValue: z.number().nullish(),
+  /** 券有效期截止（epoch millis） */
+  validToUtc: epochMillisNullableSchema.optional(),
+  /** 使用门槛金额（满减/折扣券） */
+  thresholdAmount: z.number().nullish(),
+  /** 折扣率（仅折扣券，区间 (0,1)） */
+  discountRate: z.number().nullish(),
 });
 
 export type BillVoucherDeduction = z.infer<typeof billVoucherDeductionSchema>;

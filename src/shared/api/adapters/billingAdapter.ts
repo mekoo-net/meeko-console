@@ -186,6 +186,23 @@ function mapDeduction(raw: Record<string, unknown> | null | undefined): BillDedu
         item.deductKind != null || item.DeductKind != null
           ? (String(item.deductKind ?? item.DeductKind) as VoucherDeductKind)
           : null,
+      faceValue:
+        item.faceValue != null || item.FaceValue != null
+          ? Number(item.faceValue ?? item.FaceValue)
+          : null,
+      remainingValue:
+        item.remainingValue != null || item.RemainingValue != null
+          ? Number(item.remainingValue ?? item.RemainingValue)
+          : null,
+      validToUtc: asEpochMillisNullable(item.validToUtc ?? item.ValidToUtc),
+      thresholdAmount:
+        item.thresholdAmount != null || item.ThresholdAmount != null
+          ? Number(item.thresholdAmount ?? item.ThresholdAmount)
+          : null,
+      discountRate:
+        item.discountRate != null || item.DiscountRate != null
+          ? Number(item.discountRate ?? item.DiscountRate)
+          : null,
     };
   });
 
