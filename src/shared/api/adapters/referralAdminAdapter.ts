@@ -35,13 +35,8 @@ function extractRows(value: unknown): { rows: unknown[]; total: number } {
   }
   if (value && typeof value === 'object') {
     const raw = value as Record<string, unknown>;
-    const rows = (raw.items ?? raw.data ?? []) as unknown[];
-    const total =
-      typeof raw.total === 'number'
-        ? raw.total
-        : typeof raw.total_count === 'number'
-          ? raw.total_count
-          : rows.length;
+    const rows = (raw.items ?? []) as unknown[];
+    const total = typeof raw.total === 'number' ? raw.total : rows.length;
     return { rows: Array.isArray(rows) ? rows : [], total };
   }
   return { rows: [], total: 0 };
@@ -53,30 +48,10 @@ function parseSummary(value: unknown): AppResult<ReferralAccountSummary> {
   }
   const raw = value as Record<string, unknown>;
   const mapped = {
-    inviteCount:
-      typeof raw.inviteCount === 'number'
-        ? raw.inviteCount
-        : typeof raw.invite_count === 'number'
-          ? raw.invite_count
-          : 0,
-    totalRebateAmount:
-      typeof raw.totalRebateAmount === 'number'
-        ? raw.totalRebateAmount
-        : typeof raw.total_rebate_amount === 'number'
-          ? raw.total_rebate_amount
-          : 0,
-    withdrawableAmount:
-      typeof raw.withdrawableAmount === 'number'
-        ? raw.withdrawableAmount
-        : typeof raw.withdrawable_amount === 'number'
-          ? raw.withdrawable_amount
-          : 0,
-    withdrawnAmount:
-      typeof raw.withdrawnAmount === 'number'
-        ? raw.withdrawnAmount
-        : typeof raw.withdrawn_amount === 'number'
-          ? raw.withdrawn_amount
-          : 0,
+    inviteCount: typeof raw.inviteCount === 'number' ? raw.inviteCount : 0,
+    totalRebateAmount: typeof raw.totalRebateAmount === 'number' ? raw.totalRebateAmount : 0,
+    withdrawableAmount: typeof raw.withdrawableAmount === 'number' ? raw.withdrawableAmount : 0,
+    withdrawnAmount: typeof raw.withdrawnAmount === 'number' ? raw.withdrawnAmount : 0,
     currency: typeof raw.currency === 'string' ? raw.currency : 'CNY',
   };
   const r = referralAccountSummarySchema.safeParse(mapped);
@@ -90,19 +65,17 @@ function parseSummary(value: unknown): AppResult<ReferralAccountSummary> {
 }
 
 function mapInvitee(raw: Record<string, unknown>): Record<string, unknown> {
+  // 账户身份统一走嵌套 contact（AccountContactDto）。
+  const contact = (raw.contact ?? null) as Record<string, unknown> | null;
   return {
-    accountUid: String(raw.accountUid ?? raw.account_uid ?? ''),
-    displayName: raw.displayName ?? raw.display_name,
-    email: raw.email,
-    phone: raw.phone,
-    registeredAtUtc: asEpochMillis(raw.registeredAtUtc ?? raw.registered_at_utc) ?? 0,
-    hasRecharged: Boolean(raw.hasRecharged ?? raw.has_recharged),
+    accountUid: String(raw.accountUid ?? contact?.uid ?? ''),
+    displayName: contact?.displayName,
+    email: contact?.email,
+    phone: contact?.phone,
+    registeredAtUtc: asEpochMillis(raw.registeredAtUtc) ?? 0,
+    hasRecharged: Boolean(raw.hasRecharged),
     contributedRebateAmount:
-      typeof raw.contributedRebateAmount === 'number'
-        ? raw.contributedRebateAmount
-        : typeof raw.contributed_rebate_amount === 'number'
-          ? raw.contributed_rebate_amount
-          : 0,
+      typeof raw.contributedRebateAmount === 'number' ? raw.contributedRebateAmount : 0,
     status: raw.status ?? 'active',
   };
 }
@@ -110,29 +83,14 @@ function mapInvitee(raw: Record<string, unknown>): Record<string, unknown> {
 function mapRebate(raw: Record<string, unknown>): Record<string, unknown> {
   return {
     id: String(raw.id ?? ''),
-    sourceAccountUid: String(raw.sourceAccountUid ?? raw.source_account_uid ?? ''),
-    sourceLabel: String(raw.sourceLabel ?? raw.source_label ?? ''),
-    rechargeAmount:
-      typeof raw.rechargeAmount === 'number'
-        ? raw.rechargeAmount
-        : typeof raw.recharge_amount === 'number'
-          ? raw.recharge_amount
-          : 0,
-    rebateRatePercent:
-      typeof raw.rebateRatePercent === 'number'
-        ? raw.rebateRatePercent
-        : typeof raw.rebate_rate_percent === 'number'
-          ? raw.rebate_rate_percent
-          : 0,
-    rebateAmount:
-      typeof raw.rebateAmount === 'number'
-        ? raw.rebateAmount
-        : typeof raw.rebate_amount === 'number'
-          ? raw.rebate_amount
-          : 0,
+    sourceAccountUid: String(raw.sourceAccountUid ?? ''),
+    sourceLabel: String(raw.sourceLabel ?? ''),
+    rechargeAmount: typeof raw.rechargeAmount === 'number' ? raw.rechargeAmount : 0,
+    rebateRatePercent: typeof raw.rebateRatePercent === 'number' ? raw.rebateRatePercent : 0,
+    rebateAmount: typeof raw.rebateAmount === 'number' ? raw.rebateAmount : 0,
     currency: typeof raw.currency === 'string' ? raw.currency : 'CNY',
-    occurredAtUtc: asEpochMillis(raw.occurredAtUtc ?? raw.occurred_at_utc) ?? 0,
-    linkedRechargeId: String(raw.linkedRechargeId ?? raw.linked_recharge_id ?? ''),
+    occurredAtUtc: asEpochMillis(raw.occurredAtUtc) ?? 0,
+    linkedRechargeId: String(raw.linkedRechargeId ?? ''),
   };
 }
 
@@ -142,13 +100,13 @@ function mapWithdrawal(raw: Record<string, unknown>): Record<string, unknown> {
     amount: typeof raw.amount === 'number' ? raw.amount : 0,
     currency: typeof raw.currency === 'string' ? raw.currency : 'CNY',
     method: raw.method ?? 'alipay',
-    accountNo: String(raw.accountNo ?? raw.account_no ?? ''),
-    accountName: String(raw.accountName ?? raw.account_name ?? ''),
+    accountNo: String(raw.accountNo ?? ''),
+    accountName: String(raw.accountName ?? ''),
     status: raw.status ?? 'pending',
-    rejectReason: raw.rejectReason ?? raw.reject_reason,
-    appliedAtUtc: asEpochMillis(raw.appliedAtUtc ?? raw.applied_at_utc) ?? 0,
-    reviewedAtUtc: asEpochMillisNullable(raw.reviewedAtUtc ?? raw.reviewed_at_utc),
-    paidAtUtc: asEpochMillisNullable(raw.paidAtUtc ?? raw.paid_at_utc),
+    rejectReason: raw.rejectReason,
+    appliedAtUtc: asEpochMillis(raw.appliedAtUtc) ?? 0,
+    reviewedAtUtc: asEpochMillisNullable(raw.reviewedAtUtc),
+    paidAtUtc: asEpochMillisNullable(raw.paidAtUtc),
   };
 }
 

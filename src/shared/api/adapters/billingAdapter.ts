@@ -87,16 +87,16 @@ function readParty(raw: Record<string, unknown> | null | undefined) {
       phone: null as string | null,
     };
   }
+  // 账户身份/联系信息统一走嵌套 contact（AccountContactDto）；兼容历史展平字段。
+  const contact = (raw.contact ?? raw.Contact) as Record<string, unknown> | null | undefined;
+  const displayName = contact?.displayName ?? contact?.DisplayName ?? raw.displayName ?? raw.DisplayName;
+  const email = contact?.email ?? contact?.Email ?? raw.email ?? raw.Email;
+  const phone = contact?.phone ?? contact?.Phone ?? raw.phone ?? raw.Phone;
   return {
-    accountUid: String(raw.accountUid ?? raw.AccountUid ?? ''),
-    displayName:
-      raw.displayName != null || raw.DisplayName != null
-        ? String(raw.displayName ?? raw.DisplayName)
-        : null,
-    email:
-      raw.email != null || raw.Email != null ? String(raw.email ?? raw.Email) : null,
-    phone:
-      raw.phone != null || raw.Phone != null ? String(raw.phone ?? raw.Phone) : null,
+    accountUid: String(raw.accountUid ?? raw.AccountUid ?? contact?.uid ?? contact?.Uid ?? ''),
+    displayName: displayName != null ? String(displayName) : null,
+    email: email != null ? String(email) : null,
+    phone: phone != null ? String(phone) : null,
   };
 }
 

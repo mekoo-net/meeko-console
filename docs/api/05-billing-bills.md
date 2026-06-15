@@ -108,6 +108,7 @@
 | `id` | string | 账单主键（PG identity 自增，JSON 为 string）。 |
 | `owner.accountUid` | string | 主账户 userId（**钱归它扣**，计费主体）。 |
 | `operator.accountUid` | string | 实操账户 userId（主账户 / IAM 子账户）。**与 owner 拆成两个对象**：一是双账户语义独立，二是未来要扩 `operator.iamUserUid` 区分席位级时无侵入。 |
+| `owner.contact` / `operator.contact` | object \| null | 账户身份与联系信息，由 BFF 按 uid 批量 enrich，统一嵌套 **`AccountContactDto`**：`{ uid, displayName, email, phone, accountType }`。**硬规范**：账户身份一律走此嵌套对象，不再展平成 `owner.displayName` / `owner.email` / `owner.phone`。 |
 | `business` | object | `{ productCode }`；`productCode` 为入账时快照（关联 `/api/admin/billing/products` 的 `code`）；充值/手工调账无产品归属时 `productCode` 为 `null`。 |
 | `subType` | enum | `prepaid`（订阅 / 一次性订单）/ `usage`（按量）。 |
 | `status` | enum | 见下表。 |
