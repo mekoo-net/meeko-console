@@ -251,6 +251,7 @@ export class BillingHttpAdapter implements BillingPort {
         amount: input.amount,
         note: input.note,
         idempotencyKey: input.idempotencyKey,
+        productCode: input.productCode,
       },
     });
     if (!res.success) return res;

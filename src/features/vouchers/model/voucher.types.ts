@@ -284,6 +284,98 @@ export function activityPickLabel(activity: Pick<VoucherActivity, 'items' | 'pic
   return `${n} 选 ${m}`;
 }
 
+// ─────────────────────────── 自动发券规则 ───────────────────────────
+
+// 自动发券规则状态：进行中 / 暂停 / 结束。结束为终态。
+export const VoucherGrantRuleStatus = {
+  Active: 0,
+  Paused: 1,
+  Ended: 2,
+} as const;
+export type VoucherGrantRuleStatus =
+  (typeof VoucherGrantRuleStatus)[keyof typeof VoucherGrantRuleStatus];
+
+export const grantRuleStatusLabels: Record<number, string> = {
+  [VoucherGrantRuleStatus.Active]: '进行中',
+  [VoucherGrantRuleStatus.Paused]: '已暂停',
+  [VoucherGrantRuleStatus.Ended]: '已结束',
+};
+
+// 触发条件判定方式：立即（命中即发）/ 金额达标（事件金额 ≥ 阈值）。
+export const GrantConditionKind = {
+  Immediate: 0,
+  EventAmountAtLeast: 1,
+} as const;
+export type GrantConditionKind = (typeof GrantConditionKind)[keyof typeof GrantConditionKind];
+
+export const grantConditionKindLabels: Record<number, string> = {
+  [GrantConditionKind.Immediate]: '立即发放',
+  [GrantConditionKind.EventAmountAtLeast]: '金额达标发放',
+};
+
+// 触发事件（与后端 GrantTriggerEvents 常量对齐）。新增触发源时在此登记。
+export const GrantTriggerEvent = {
+  AccountRegistered: 'account.registered',
+  RechargeSucceeded: 'billing.recharge.succeeded',
+} as const;
+export type GrantTriggerEvent = (typeof GrantTriggerEvent)[keyof typeof GrantTriggerEvent];
+
+export const grantTriggerEventLabels: Record<string, string> = {
+  [GrantTriggerEvent.AccountRegistered]: '用户注册',
+  [GrantTriggerEvent.RechargeSucceeded]: '充值成功',
+};
+
+/**
+ * 自动发券规则：由业务事件（注册 / 充值等）触发，命中条件后向触发账户发放投放的券。
+ * 与领券活动（用户凭 Key 主动领）相对，这是系统按事件被动发放。
+ */
+export interface VoucherGrantRule {
+  id: string;
+  name: string;
+  /** 触发事件类型（GrantTriggerEvent）。 */
+  triggerEventType: string;
+  /** 条件判定方式（GrantConditionKind）。 */
+  conditionKind: number;
+  /** 金额阈值（仅 EventAmountAtLeast 使用）：事件金额 ≥ 此值才发放。 */
+  thresholdAmount?: number | null;
+  /** 业务范围：非空时仅当事件产品码匹配才触发。 */
+  scopeProductCode?: string | null;
+  /** 命中后发放的券集合。 */
+  items: ActivityVoucherItem[];
+  startAtUtc?: number | null;
+  endAtUtc?: number | null;
+  totalQuota?: number | null;
+  grantedCount: number;
+  /** 每账户最多触发发放次数（1 = 仅首次，可实现注册送 / 首充送）。 */
+  perUserLimit?: number | null;
+  status: number;
+  createdAtUtc: number;
+}
+
+export interface CreateVoucherGrantRuleInput {
+  name: string;
+  triggerEventType: string;
+  conditionKind: number;
+  /** 命中后发放的券模板（至少 1 张）。 */
+  templateIds: string[];
+  thresholdAmount?: number | null;
+  scopeProductCode?: string | null;
+  startAtUtc?: number | null;
+  endAtUtc?: number | null;
+  totalQuota?: number | null;
+  perUserLimit?: number | null;
+}
+
+export interface UpdateVoucherGrantRuleInput {
+  name: string;
+  thresholdAmount?: number | null;
+  scopeProductCode?: string | null;
+  startAtUtc?: number | null;
+  endAtUtc?: number | null;
+  totalQuota?: number | null;
+  perUserLimit?: number | null;
+}
+
 /** 活动领取记录：谁领了、领取 IP、时间，以及对应发出的用户券。 */
 export interface ActivityClaimer {
   id: string;

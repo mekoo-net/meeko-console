@@ -79,6 +79,7 @@ const tree: readonly MenuNode[] = [
         children: [
           { type: 'leaf', index: '/billing/vouchers', title: '券务生成', icon: Discount },
           { type: 'leaf', index: '/billing/voucher-activities', title: '领券活动', icon: Ticket },
+          { type: 'leaf', index: '/billing/voucher-grants', title: '自动发券', icon: MagicStick },
         ],
       },
     ],

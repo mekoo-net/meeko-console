@@ -4,13 +4,16 @@ import type { AppResult } from '@/shared/api/httpTypes';
 import type {
   ActivityClaimer,
   CreateVoucherActivityInput,
+  CreateVoucherGrantRuleInput,
   CreateVoucherTemplateInput,
   IssueVouchersInput,
   IssueVouchersResult,
   UpdateVoucherActivityInput,
+  UpdateVoucherGrantRuleInput,
   UpdateVoucherTemplateInput,
   UserVoucher,
   VoucherActivity,
+  VoucherGrantRule,
   VoucherRedemption,
   VoucherTemplate,
 } from '../../model/voucher.types';
@@ -44,6 +47,14 @@ export interface ListActivityClaimersInput {
   status?: number | null;
 }
 
+export interface ListVoucherGrantRulesInput {
+  page: number;
+  pageSize: number;
+  /** 按触发事件类型过滤（GrantTriggerEvent）。 */
+  triggerEventType?: string | null;
+  includeEnded?: boolean;
+}
+
 export interface VoucherPort {
   listTemplates(input: ListVoucherTemplatesInput): Promise<AppResult<ListPage<VoucherTemplate>>>;
   getTemplate(id: string): Promise<AppResult<VoucherTemplate>>;
@@ -70,4 +81,9 @@ export interface VoucherPort {
   updateActivity(id: string, input: UpdateVoucherActivityInput): Promise<AppResult<VoucherActivity>>;
   setActivityStatus(id: string, status: number): Promise<AppResult<VoucherActivity>>;
   listActivityClaimers(input: ListActivityClaimersInput): Promise<AppResult<ListPage<ActivityClaimer>>>;
+
+  listGrantRules(input: ListVoucherGrantRulesInput): Promise<AppResult<ListPage<VoucherGrantRule>>>;
+  createGrantRule(input: CreateVoucherGrantRuleInput): Promise<AppResult<VoucherGrantRule>>;
+  updateGrantRule(id: string, input: UpdateVoucherGrantRuleInput): Promise<AppResult<VoucherGrantRule>>;
+  setGrantRuleStatus(id: string, status: number): Promise<AppResult<VoucherGrantRule>>;
 }

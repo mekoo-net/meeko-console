@@ -3,6 +3,9 @@ import { ok, fail } from '@/shared/api/httpTypes';
 import { clientPaginate } from '@/shared/composables/usePagination';
 
 import {
+  GrantConditionKind,
+  GrantTriggerEvent,
+  VoucherGrantRuleStatus,
   VoucherTemplateStatus,
   UserVoucherStatus,
   VoucherActivityStatus,
@@ -11,13 +14,16 @@ import {
   VoucherValidityKind,
   type ActivityClaimer,
   type CreateVoucherActivityInput,
+  type CreateVoucherGrantRuleInput,
   type CreateVoucherTemplateInput,
   type IssueVouchersInput,
   type IssueVouchersResult,
   type UpdateVoucherActivityInput,
+  type UpdateVoucherGrantRuleInput,
   type UpdateVoucherTemplateInput,
   type UserVoucher,
   type VoucherActivity,
+  type VoucherGrantRule,
   type VoucherRedemption,
   type VoucherTemplate,
 } from '../../model/voucher.types';
@@ -25,6 +31,7 @@ import type {
   ListActivityClaimersInput,
   ListUserVouchersInput,
   ListVoucherActivitiesInput,
+  ListVoucherGrantRulesInput,
   ListVoucherTemplatesInput,
   VoucherPort,
 } from '../ports/voucherPort';
@@ -98,6 +105,41 @@ const activities: MockActivity[] = [
         type: i % 4 === 0 ? ('organization' as const) : ('personal' as const),
       },
     })),
+  },
+];
+
+const grantRules: VoucherGrantRule[] = [
+  {
+    id: '70',
+    name: '新人注册礼包',
+    triggerEventType: GrantTriggerEvent.AccountRegistered,
+    conditionKind: GrantConditionKind.Immediate,
+    thresholdAmount: null,
+    scopeProductCode: null,
+    items: [{ templateId: '1', templateName: '新用户无门槛 5 元券', templateCode: 'VC-DEMO0001' }],
+    startAtUtc: null,
+    endAtUtc: null,
+    totalQuota: null,
+    grantedCount: 34,
+    perUserLimit: 1,
+    status: VoucherGrantRuleStatus.Active,
+    createdAtUtc: Date.now() - 14 * 86400000,
+  },
+  {
+    id: '71',
+    name: '充值满 100 送券',
+    triggerEventType: GrantTriggerEvent.RechargeSucceeded,
+    conditionKind: GrantConditionKind.EventAmountAtLeast,
+    thresholdAmount: 100,
+    scopeProductCode: null,
+    items: [{ templateId: '1', templateName: '新用户无门槛 5 元券', templateCode: 'VC-DEMO0001' }],
+    startAtUtc: Date.now() - 3 * 86400000,
+    endAtUtc: Date.now() + 27 * 86400000,
+    totalQuota: 5000,
+    grantedCount: 128,
+    perUserLimit: null,
+    status: VoucherGrantRuleStatus.Active,
+    createdAtUtc: Date.now() - 3 * 86400000,
   },
 ];
 
@@ -311,5 +353,65 @@ export class VoucherMock implements VoucherPort {
       items: clientPaginate(rows, input.page, input.pageSize),
       total: rows.length,
     });
+  }
+
+  async listGrantRules(input: ListVoucherGrantRulesInput) {
+    let rows = grantRules.slice();
+    if (input.triggerEventType)
+      rows = rows.filter((r) => r.triggerEventType === input.triggerEventType);
+    if (!input.includeEnded) rows = rows.filter((r) => r.status !== VoucherGrantRuleStatus.Ended);
+    const mapped = rows.map((r) => ({ ...r }));
+    return ok({
+      items: clientPaginate(mapped, input.page, input.pageSize),
+      total: mapped.length,
+    });
+  }
+
+  async createGrantRule(input: CreateVoucherGrantRuleInput): Promise<AppResult<VoucherGrantRule>> {
+    const picked = input.templateIds
+      .map((id) => templates.find((t) => t.id === id))
+      .filter((t): t is VoucherTemplate => !!t);
+    if (picked.length === 0) return fail({ code: 'not_found', message: '券模板不存在' });
+    const rule: VoucherGrantRule = {
+      id: nextId(),
+      name: input.name.trim() || '发券规则',
+      triggerEventType: input.triggerEventType,
+      conditionKind: input.conditionKind,
+      thresholdAmount: input.thresholdAmount ?? null,
+      scopeProductCode: input.scopeProductCode ?? null,
+      items: picked.map((t) => ({ templateId: t.id, templateName: t.name, templateCode: t.code })),
+      startAtUtc: input.startAtUtc ?? null,
+      endAtUtc: input.endAtUtc ?? null,
+      totalQuota: input.totalQuota ?? null,
+      grantedCount: 0,
+      perUserLimit: input.perUserLimit ?? null,
+      status: VoucherGrantRuleStatus.Active,
+      createdAtUtc: Date.now(),
+    };
+    grantRules.unshift(rule);
+    return ok({ ...rule });
+  }
+
+  async updateGrantRule(
+    id: string,
+    input: UpdateVoucherGrantRuleInput,
+  ): Promise<AppResult<VoucherGrantRule>> {
+    const r = grantRules.find((x) => x.id === id);
+    if (!r) return fail({ code: 'not_found', message: '发券规则不存在' });
+    r.name = input.name.trim() || r.name;
+    r.thresholdAmount = input.thresholdAmount ?? null;
+    r.scopeProductCode = input.scopeProductCode ?? null;
+    r.startAtUtc = input.startAtUtc ?? null;
+    r.endAtUtc = input.endAtUtc ?? null;
+    r.totalQuota = input.totalQuota ?? null;
+    r.perUserLimit = input.perUserLimit ?? null;
+    return ok({ ...r });
+  }
+
+  async setGrantRuleStatus(id: string, status: number): Promise<AppResult<VoucherGrantRule>> {
+    const r = grantRules.find((x) => x.id === id);
+    if (!r) return fail({ code: 'not_found', message: '发券规则不存在' });
+    r.status = status;
+    return ok({ ...r });
   }
 }

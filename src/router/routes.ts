@@ -85,6 +85,12 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '领券活动', requiresAuth: true, roles: ['Admin'] },
           },
           {
+            path: 'voucher-grants',
+            name: 'billing-voucher-grants',
+            component: () => import('@/features/vouchers/views/VoucherGrantRuleListView.vue'),
+            meta: { title: '自动发券', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
             path: 'voucher-codes',
             redirect: { name: 'billing-voucher-activities' },
           },

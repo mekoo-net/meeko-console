@@ -1,7 +1,9 @@
 import {
+  GrantConditionKind,
   VoucherActivityStatus,
   VoucherApplyMode,
   VoucherDeductKind,
+  VoucherGrantRuleStatus,
   VoucherScopeKind,
   VoucherTemplateStatus,
   VoucherValidityKind,
@@ -9,13 +11,16 @@ import {
   type ActivityClaimer,
   type ActivityVoucherItem,
   type CreateVoucherActivityInput,
+  type CreateVoucherGrantRuleInput,
   type CreateVoucherTemplateInput,
   type IssueVouchersInput,
   type IssueVouchersResult,
   type UpdateVoucherActivityInput,
+  type UpdateVoucherGrantRuleInput,
   type UpdateVoucherTemplateInput,
   type UserVoucher,
   type VoucherActivity,
+  type VoucherGrantRule,
   type VoucherRedemption,
   type VoucherRule,
   type VoucherTemplate,
@@ -25,6 +30,7 @@ import type {
   ListActivityClaimersInput,
   ListUserVouchersInput,
   ListVoucherActivitiesInput,
+  ListVoucherGrantRulesInput,
   ListVoucherTemplatesInput,
   VoucherPort,
 } from '@/features/vouchers/services/ports/voucherPort';
@@ -35,6 +41,7 @@ import { asEpochMillis, asEpochMillisNullable } from '@/shared/lib/epoch';
 
 const TEMPLATES = '/api/admin/billing/voucher/templates';
 const ACTIVITIES = '/api/admin/billing/voucher/activities';
+const GRANT_RULES = '/api/admin/billing/voucher/grant';
 const VOUCHERS = '/api/admin/billing/vouchers';
 
 type Raw = Record<string, unknown>;
@@ -105,6 +112,28 @@ const ACTIVITY_STATUS_TO_WIRE: Record<number, string> = {
   [VoucherActivityStatus.Active]: 'active',
   [VoucherActivityStatus.Paused]: 'paused',
   [VoucherActivityStatus.Ended]: 'ended',
+};
+
+const GRANT_RULE_STATUS_FROM_WIRE: Record<string, number> = {
+  active: VoucherGrantRuleStatus.Active,
+  paused: VoucherGrantRuleStatus.Paused,
+  ended: VoucherGrantRuleStatus.Ended,
+};
+
+const GRANT_RULE_STATUS_TO_WIRE: Record<number, string> = {
+  [VoucherGrantRuleStatus.Active]: 'active',
+  [VoucherGrantRuleStatus.Paused]: 'paused',
+  [VoucherGrantRuleStatus.Ended]: 'ended',
+};
+
+const GRANT_CONDITION_FROM_WIRE: Record<string, number> = {
+  immediate: GrantConditionKind.Immediate,
+  event_amount_at_least: GrantConditionKind.EventAmountAtLeast,
+};
+
+const GRANT_CONDITION_TO_WIRE: Record<number, string> = {
+  [GrantConditionKind.Immediate]: 'immediate',
+  [GrantConditionKind.EventAmountAtLeast]: 'event_amount_at_least',
 };
 
 const USER_VOUCHER_STATUS_FROM_WIRE: Record<string, number> = {
@@ -313,6 +342,28 @@ function mapActivity(raw: Raw): VoucherActivity {
   };
 }
 
+function mapGrantRule(raw: Raw): VoucherGrantRule {
+  const items: ActivityVoucherItem[] = Array.isArray(raw.items)
+    ? (raw.items as unknown[]).map((it) => mapActivityItem((it ?? {}) as Raw))
+    : [];
+  return {
+    id: String(raw.id ?? ''),
+    name: String(raw.name ?? ''),
+    triggerEventType: String(raw.triggerEventType ?? ''),
+    conditionKind: enumNum(GRANT_CONDITION_FROM_WIRE, raw.conditionKind),
+    thresholdAmount: numOrNull(raw.thresholdAmount),
+    scopeProductCode: raw.scopeProductCode != null ? String(raw.scopeProductCode) : null,
+    items,
+    startAtUtc: asEpochMillisNullable(raw.startAtUtc),
+    endAtUtc: asEpochMillisNullable(raw.endAtUtc),
+    totalQuota: numOrNull(raw.totalQuota),
+    grantedCount: num(raw.grantedCount),
+    perUserLimit: numOrNull(raw.perUserLimit),
+    status: enumNum(GRANT_RULE_STATUS_FROM_WIRE, raw.status),
+    createdAtUtc: asEpochMillis(raw.createdAtUtc) ?? Date.now(),
+  };
+}
+
 function mapClaimer(raw: Raw): ActivityClaimer {
   return {
     id: String(raw.id ?? ''),
@@ -332,6 +383,12 @@ function parseTemplate(value: unknown): AppResult<VoucherTemplate> {
 function parseActivity(value: unknown): AppResult<VoucherActivity> {
   if (!value || typeof value !== 'object') return fail({ code: 'validation', message: '活动数据格式错误' });
   return ok(mapActivity(value as Raw));
+}
+
+function parseGrantRule(value: unknown): AppResult<VoucherGrantRule> {
+  if (!value || typeof value !== 'object')
+    return fail({ code: 'validation', message: '发券规则数据格式错误' });
+  return ok(mapGrantRule(value as Raw));
 }
 
 export class VoucherHttpAdapter implements VoucherPort {
@@ -528,5 +585,68 @@ export class VoucherHttpAdapter implements VoucherPort {
     );
     if (!res.success) return res;
     return ok(parseListPage(res.data, mapClaimer));
+  }
+
+  async listGrantRules(
+    input: ListVoucherGrantRulesInput,
+  ): Promise<AppResult<ListPage<VoucherGrantRule>>> {
+    const res = await request<unknown>(GRANT_RULES, {
+      query: {
+        triggerEventType: input.triggerEventType || undefined,
+        includeEnded: input.includeEnded ? 'true' : undefined,
+        page: input.page,
+        pageSize: input.pageSize,
+      },
+    });
+    if (!res.success) return res;
+    return ok(parseListPage(res.data, mapGrantRule));
+  }
+
+  async createGrantRule(input: CreateVoucherGrantRuleInput): Promise<AppResult<VoucherGrantRule>> {
+    const body = {
+      name: input.name,
+      triggerEventType: input.triggerEventType,
+      conditionKind: enumWire(GRANT_CONDITION_TO_WIRE, input.conditionKind),
+      templateIds: input.templateIds,
+      thresholdAmount: input.thresholdAmount,
+      scopeProductCode: input.scopeProductCode,
+      startAtUtc: input.startAtUtc,
+      endAtUtc: input.endAtUtc,
+      totalQuota: input.totalQuota,
+      perUserLimit: input.perUserLimit,
+    };
+    const res = await request<unknown>(GRANT_RULES, { method: 'POST', body });
+    if (!res.success) return res;
+    return parseGrantRule(res.data);
+  }
+
+  async updateGrantRule(
+    id: string,
+    input: UpdateVoucherGrantRuleInput,
+  ): Promise<AppResult<VoucherGrantRule>> {
+    const body = {
+      name: input.name,
+      thresholdAmount: input.thresholdAmount,
+      scopeProductCode: input.scopeProductCode,
+      startAtUtc: input.startAtUtc,
+      endAtUtc: input.endAtUtc,
+      totalQuota: input.totalQuota,
+      perUserLimit: input.perUserLimit,
+    };
+    const res = await request<unknown>(`${GRANT_RULES}/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body,
+    });
+    if (!res.success) return res;
+    return parseGrantRule(res.data);
+  }
+
+  async setGrantRuleStatus(id: string, status: number): Promise<AppResult<VoucherGrantRule>> {
+    const res = await request<unknown>(`${GRANT_RULES}/${encodeURIComponent(id)}/status`, {
+      method: 'POST',
+      body: { status: enumWire(GRANT_RULE_STATUS_TO_WIRE, status) },
+    });
+    if (!res.success) return res;
+    return parseGrantRule(res.data);
   }
 }

@@ -2,6 +2,9 @@
 import { computed, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 
+import type { BillingProduct } from '@/features/products/model/product.types';
+import { getProductPort } from '@/features/products/services';
+
 import {
   RechargeProviderLabel,
   type RechargeProvider,
@@ -21,12 +24,39 @@ const emit = defineEmits<{
 const internalSources: RechargeProvider[] = ['manual', 'cs_compensation', 'marketing_reward'];
 
 const billingPort = getBillingPort();
+const productPort = getProductPort();
 const submitting = ref(false);
 
 const amount = ref<number | null>(null);
 const source = ref<RechargeProvider>('manual');
 const note = ref('');
 const idempotencyKey = ref('');
+const productCode = ref('');
+
+const products = ref<BillingProduct[]>([]);
+const productsLoading = ref(false);
+
+/** 仅「人工充值」需要选择入账业务：用于按业务返利率触发邀请返利。 */
+const showProductSelect = computed(() => source.value === 'manual');
+
+async function loadProducts(): Promise<void> {
+  if (products.value.length || productsLoading.value) return;
+  productsLoading.value = true;
+  try {
+    const r = await productPort.list();
+    if (r.success) products.value = r.data.filter((p) => p.active);
+  } finally {
+    productsLoading.value = false;
+  }
+}
+
+watch(source, (next) => {
+  if (next !== 'manual') {
+    productCode.value = '';
+  } else {
+    void loadProducts();
+  }
+});
 
 const dialogVisible = computed({
   get: () => props.visible,
@@ -40,12 +70,16 @@ function resetForm(): void {
   source.value = 'manual';
   note.value = '';
   idempotencyKey.value = '';
+  productCode.value = '';
 }
 
 watch(
   () => props.visible,
   (open) => {
-    if (open) resetForm();
+    if (open) {
+      resetForm();
+      void loadProducts();
+    }
   },
 );
 
@@ -67,6 +101,7 @@ async function handleSubmit(): Promise<void> {
       source: source.value,
       note: note.value.trim() || undefined,
       idempotencyKey: idempotencyKey.value.trim() || undefined,
+      productCode: showProductSelect.value ? productCode.value.trim() || undefined : undefined,
     });
     if (r.success) {
       ElMessage.success('人工入账成功');
@@ -116,6 +151,27 @@ async function handleSubmit(): Promise<void> {
         </el-select>
       </el-form-item>
 
+      <el-form-item v-if="showProductSelect" label="入账业务">
+        <el-select
+          v-model="productCode"
+          style="width: 100%"
+          clearable
+          filterable
+          :loading="productsLoading"
+          placeholder="选择业务后按该业务返利率触发邀请返利（不选则不返利）"
+        >
+          <el-option
+            v-for="p in products"
+            :key="p.code"
+            :label="`${p.displayName}（${p.code}）`"
+            :value="p.code"
+          />
+        </el-select>
+        <div class="manual-recharge__hint">
+          人工充值可触发邀请返利，返利倍率取决于所选业务；不选业务则本次入账不返利。
+        </div>
+      </el-form-item>
+
       <el-form-item label="备注">
         <el-input
           v-model="note"
@@ -142,3 +198,12 @@ async function handleSubmit(): Promise<void> {
     </template>
   </el-dialog>
 </template>
+
+<style scoped>
+.manual-recharge__hint {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
+}
+</style>
