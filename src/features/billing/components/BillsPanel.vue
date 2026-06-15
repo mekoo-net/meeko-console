@@ -3,7 +3,7 @@ import { onMounted, ref, watch } from 'vue';
 import { RefreshLeft, Search } from '@element-plus/icons-vue';
 
 import StatusTag from '@/shared/ui/StatusTag.vue';
-import { formatMoney } from '@/shared/lib/money';
+import { formatMoney, BILLING_FRACTION_DIGITS } from '@/shared/lib/money';
 import { formatDateTime } from '@/shared/lib/date';
 
 import {
@@ -170,7 +170,7 @@ onMounted(() => void fetchBills());
                 v-if="row.business.refType === 'recharge'"
                 class="cell-money cell-money--in"
               >
-                +{{ formatMoney(row.amount.actual, { currency: row.amount.currency }) }}
+                +{{ formatMoney(row.amount.actual, { currency: row.amount.currency, fractionDigits: BILLING_FRACTION_DIGITS }) }}
               </span>
               <template v-else>
                 <span
@@ -181,16 +181,16 @@ onMounted(() => void fetchBills());
                     'cell-money--out': row.status === 'completed',
                   }"
                 >
-                  -{{ formatMoney(balanceAmount(row), { currency: row.amount.currency }) }}
+                  -{{ formatMoney(balanceAmount(row), { currency: row.amount.currency, fractionDigits: BILLING_FRACTION_DIGITS }) }}
                 </span>
                 <span v-if="voucherAmount(row) > 0" class="cell-voucher">
-                  券抵 {{ formatMoney(voucherAmount(row), { currency: row.amount.currency }) }}
+                  券抵 {{ formatMoney(voucherAmount(row), { currency: row.amount.currency, fractionDigits: BILLING_FRACTION_DIGITS }) }}
                 </span>
                 <span
                   v-else-if="!row.deduction && row.amount.actual !== row.amount.original"
                   class="cell-amount__original"
                 >
-                  原 {{ formatMoney(row.amount.original, { currency: row.amount.currency }) }}
+                  原 {{ formatMoney(row.amount.original, { currency: row.amount.currency, fractionDigits: BILLING_FRACTION_DIGITS }) }}
                 </span>
               </template>
             </div>

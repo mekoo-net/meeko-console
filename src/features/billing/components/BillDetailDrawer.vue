@@ -9,7 +9,7 @@
 import { ref, watch } from 'vue';
 
 import StatusTag from '@/shared/ui/StatusTag.vue';
-import { formatMoney } from '@/shared/lib/money';
+import { formatMoney, BILLING_FRACTION_DIGITS } from '@/shared/lib/money';
 import { formatDateTime } from '@/shared/lib/date';
 
 import {
@@ -48,7 +48,7 @@ function kindLabel(v: VoucherItem): string {
 /** 满减/折扣券的规则副标题，无门槛券返回空串。 */
 function ruleText(v: VoucherItem, currency: string): string {
   if (v.deductKind === 'fullReduction' && v.thresholdAmount) {
-    return `满 ${formatMoney(v.thresholdAmount, { currency })} 可用`;
+    return `满 ${formatMoney(v.thresholdAmount, { currency, fractionDigits: BILLING_FRACTION_DIGITS })} 可用`;
   }
   if (v.deductKind === 'discount' && v.discountRate != null) {
     return `${(v.discountRate * 10).toFixed(1)} 折`;
@@ -150,17 +150,17 @@ watch(
         <h4 class="section-title">金额</h4>
         <div class="bill-detail__row">
           <span class="label">原始金额</span>
-          <span class="num">{{ formatMoney(bill.amount.original, { currency: bill.amount.currency }) }}</span>
+          <span class="num">{{ formatMoney(bill.amount.original, { currency: bill.amount.currency, fractionDigits: BILLING_FRACTION_DIGITS }) }}</span>
         </div>
         <div class="bill-detail__row">
           <span class="label">实际扣费</span>
           <span class="num cost-total">
-            {{ formatMoney(bill.amount.actual, { currency: bill.amount.currency }) }}
+            {{ formatMoney(bill.amount.actual, { currency: bill.amount.currency, fractionDigits: BILLING_FRACTION_DIGITS }) }}
           </span>
         </div>
         <div v-if="bill.amount.balanceAfter != null" class="bill-detail__row">
           <span class="label">扣后余额</span>
-          <span class="num">{{ formatMoney(bill.amount.balanceAfter, { currency: bill.amount.currency }) }}</span>
+          <span class="num">{{ formatMoney(bill.amount.balanceAfter, { currency: bill.amount.currency, fractionDigits: BILLING_FRACTION_DIGITS }) }}</span>
         </div>
 
         <template v-if="bill.deduction">
@@ -168,7 +168,7 @@ watch(
           <h4 class="section-title">
             扣款明细
             <span v-if="bill.deduction.voucherDeducted > 0" class="saved-hint">
-              代金券共抵 {{ formatMoney(bill.deduction.voucherDeducted, { currency: bill.amount.currency }) }}
+              代金券共抵 {{ formatMoney(bill.deduction.voucherDeducted, { currency: bill.amount.currency, fractionDigits: BILLING_FRACTION_DIGITS }) }}
             </span>
           </h4>
 
@@ -182,7 +182,7 @@ watch(
               <span class="voucher-card__tag">{{ kindLabel(v) }}</span>
               <span class="voucher-card__name">{{ v.name?.trim() || kindLabel(v) }}</span>
               <span class="voucher-card__deducted num">
-                -{{ formatMoney(v.amountDeducted, { currency: bill.amount.currency }) }}
+                -{{ formatMoney(v.amountDeducted, { currency: bill.amount.currency, fractionDigits: BILLING_FRACTION_DIGITS }) }}
               </span>
             </div>
             <div class="voucher-card__meta">
@@ -193,10 +193,10 @@ watch(
             </div>
             <div class="voucher-card__props">
               <span v-if="v.faceValue != null">
-                面额 {{ formatMoney(v.faceValue, { currency: bill.amount.currency }) }}
+                面额 {{ formatMoney(v.faceValue, { currency: bill.amount.currency, fractionDigits: BILLING_FRACTION_DIGITS }) }}
               </span>
               <span v-if="v.remainingValue != null">
-                当前剩余 {{ formatMoney(v.remainingValue, { currency: bill.amount.currency }) }}
+                当前剩余 {{ formatMoney(v.remainingValue, { currency: bill.amount.currency, fractionDigits: BILLING_FRACTION_DIGITS }) }}
               </span>
               <span v-if="v.validToUtc != null">
                 有效期至 {{ formatDateTime(v.validToUtc, 'YYYY-MM-DD HH:mm') }}
@@ -212,7 +212,7 @@ watch(
             <span class="deduct-row__tag is-voucher">券</span>
             <span class="deduct-row__name">代金券抵扣</span>
             <span class="deduct-row__amount num">
-              -{{ formatMoney(bill.deduction.voucherDeducted, { currency: bill.amount.currency }) }}
+              -{{ formatMoney(bill.deduction.voucherDeducted, { currency: bill.amount.currency, fractionDigits: BILLING_FRACTION_DIGITS }) }}
             </span>
           </div>
 
@@ -221,12 +221,12 @@ watch(
             <span class="deduct-row__tag is-balance">余额</span>
             <span class="deduct-row__name">钱包余额</span>
             <span class="deduct-row__amount num">
-              -{{ formatMoney(bill.deduction.balanceDeducted, { currency: bill.amount.currency }) }}
+              -{{ formatMoney(bill.deduction.balanceDeducted, { currency: bill.amount.currency, fractionDigits: BILLING_FRACTION_DIGITS }) }}
             </span>
           </div>
 
           <div class="deduct-total">
-            应扣合计 {{ formatMoney(bill.deduction.total, { currency: bill.amount.currency }) }}
+            应扣合计 {{ formatMoney(bill.deduction.total, { currency: bill.amount.currency, fractionDigits: BILLING_FRACTION_DIGITS }) }}
           </div>
         </template>
 
