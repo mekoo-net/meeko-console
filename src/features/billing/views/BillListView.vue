@@ -28,7 +28,6 @@ import {
   BillStatusLabel,
   BillStatusTone,
   BillSubTypeLabel,
-  VoucherDeductKindLabel,
   type BillingEntry,
   type BillStatus,
   type BillSubType,
@@ -109,8 +108,8 @@ const displayRecords = computed(() => {
   const kw = filter.value.contactKeyword.trim().toLowerCase();
   if (!kw) return records.value;
   return records.value.filter((r) => {
-    const email = (r.ownerEmail ?? '').toLowerCase();
-    const phone = r.ownerPhone ?? '';
+    const email = (r.owner.email ?? '').toLowerCase();
+    const phone = r.owner.phone ?? '';
     return email.includes(kw) || phone.includes(kw);
   });
 });
@@ -147,12 +146,12 @@ function resetFilter(): void {
 }
 
 function ownerPrimaryLine(row: BillingEntry): string {
-  return row.ownerDisplayName?.trim() || row.ownerAccountUid;
+  return row.owner.displayName?.trim() || row.owner.accountUid;
 }
 
 function ownerSecondaryLine(row: BillingEntry): string {
-  const email = row.ownerEmail?.trim() || '—';
-  const phone = row.ownerPhone?.trim() || '—';
+  const email = row.owner.email?.trim() || '—';
+  const phone = row.owner.phone?.trim() || '—';
   return `${email} · ${phone}`;
 }
 
@@ -168,39 +167,14 @@ function openDetail(row: BillingEntry): void {
   detailOpen.value = true;
 }
 
-interface DeductionRow {
-  tag: string;
-  name: string;
-  sub: string;
-  amount: number;
-  kind: 'voucher' | 'balance';
+/** 第一行展示的金额：有扣费拆分时取钱包余额扣除额（可能为 0），否则回落到实际扣费额。 */
+function balanceAmount(row: BillingEntry): number {
+  return row.deduction ? row.deduction.balanceDeducted : row.amount.actual;
 }
 
-/** 把账单扣费聚合对象拆成表格行：先逐券抵扣（券名 + 序列号 + 类型），再钱包余额。 */
-function deductionRows(row: BillingEntry): DeductionRow[] {
-  const d = row.deduction;
-  if (!d) return [];
-  const rows: DeductionRow[] = [];
-  for (const v of d.voucherItems) {
-    const tag = v.deductKind ? VoucherDeductKindLabel[v.deductKind] : '代金券';
-    rows.push({
-      tag,
-      name: v.name?.trim() || tag,
-      sub: v.serialNo ?? `#${v.userVoucherId}`,
-      amount: v.amountDeducted,
-      kind: 'voucher',
-    });
-  }
-  if (d.voucherItems.length === 0 && d.voucherDeducted > 0) {
-    rows.push({ tag: '券', name: '代金券抵扣', sub: '', amount: d.voucherDeducted, kind: 'voucher' });
-  }
-  rows.push({ tag: '余额', name: '钱包余额', sub: '', amount: d.balanceDeducted, kind: 'balance' });
-  return rows;
-}
-
-/** 仅当确实用了代金券抵扣时才展开明细，避免纯余额扣费刷屏。 */
-function hasVoucherDeduction(row: BillingEntry): boolean {
-  return row.deduction != null && row.deduction.voucherDeducted > 0;
+/** 第二行券抵金额，仅当本笔有代金券抵扣时返回 > 0，用于决定是否渲染。 */
+function voucherAmount(row: BillingEntry): number {
+  return row.deduction?.voucherDeducted ?? 0;
 }
 
 onMounted(() => {
@@ -292,7 +266,7 @@ onMounted(() => {
               link
               type="primary"
               class="cell-account__link"
-              @click="router.push(`/accounts/${row.ownerAccountUid}`)"
+              @click="router.push(`/accounts/${row.owner.accountUid}`)"
             >
               <span class="cell-account__lines">
                 <span class="cell-account__primary">{{ ownerPrimaryLine(row) }}</span>
@@ -300,10 +274,10 @@ onMounted(() => {
               </span>
             </el-button>
             <span
-              v-if="row.operatorAccountUid !== row.ownerAccountUid"
+              v-if="row.operator.accountUid !== row.owner.accountUid"
               class="cell-account__iam"
             >
-              IAM · {{ row.operatorAccountUid }}
+              IAM · {{ row.operator.accountUid }}
             </span>
           </div>
         </template>
@@ -311,7 +285,7 @@ onMounted(() => {
 
       <el-table-column label="产品" min-width="160">
         <template #default="{ row }: { row: BillingEntry }">
-          <span v-if="row.productCode" class="cell-product">{{ row.productCode }}</span>
+          <span v-if="row.business.productCode" class="cell-product">{{ row.business.productCode }}</span>
           <span v-else class="cell-muted">—</span>
         </template>
       </el-table-column>
@@ -319,13 +293,13 @@ onMounted(() => {
       <el-table-column label="类型" width="120">
         <template #default="{ row }: { row: BillingEntry }">
           <el-tag
-            v-if="row.subType != null"
+            v-if="row.business.subType != null"
             size="small"
-            :type="row.subType === 'usage' ? 'warning' : 'info'"
+            :type="row.business.subType === 'usage' ? 'warning' : 'info'"
             effect="plain"
             round
           >
-            {{ BillSubTypeLabel[row.subType] }}
+            {{ BillSubTypeLabel[row.business.subType] }}
           </el-tag>
           <span v-else class="cell-muted">—</span>
         </template>
@@ -340,55 +314,36 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="金额 / 扣款明细" min-width="240" align="right">
+      <el-table-column label="金额" min-width="150" align="right">
         <template #default="{ row }: { row: BillingEntry }">
           <div class="cell-amount">
             <span
-              class="cell-money"
-              :class="{
-                'cell-money--reverted': isReverseLike(row),
-                'cell-money--failed': row.status === 'failed',
-                'cell-money--out': row.status === 'completed' && row.refType !== 'recharge',
-                'cell-money--in': row.refType === 'recharge',
-              }"
+              v-if="row.business.refType === 'recharge'"
+              class="cell-money cell-money--in"
             >
-              {{ row.refType === 'recharge' ? '+' : '-' }}{{ formatMoney(row.actualAmount, { currency: row.currency }) }}
+              +{{ formatMoney(row.amount.actual, { currency: row.amount.currency }) }}
             </span>
-            <template v-if="hasVoucherDeduction(row)">
-              <span class="cell-amount__saved">
-                券抵 {{ formatMoney(row.deduction!.voucherDeducted, { currency: row.currency }) }}
+            <template v-else>
+              <span
+                class="cell-money"
+                :class="{
+                  'cell-money--reverted': isReverseLike(row),
+                  'cell-money--failed': row.status === 'failed',
+                  'cell-money--out': row.status === 'completed',
+                }"
+              >
+                -{{ formatMoney(balanceAmount(row), { currency: row.amount.currency }) }}
               </span>
-              <div class="deduct-detail">
-                <div
-                  v-for="(d, i) in deductionRows(row)"
-                  :key="i"
-                  class="deduct-detail__row"
-                >
-                  <span
-                    class="deduct-detail__tag"
-                    :class="d.kind === 'voucher' ? 'is-voucher' : 'is-balance'"
-                  >
-                    {{ d.tag }}
-                  </span>
-                  <span class="deduct-detail__name">
-                    {{ d.name }}
-                    <span v-if="d.sub" class="deduct-detail__serial">{{ d.sub }}</span>
-                  </span>
-                  <span class="deduct-detail__amount">
-                    -{{ formatMoney(d.amount, { currency: row.currency }) }}
-                  </span>
-                </div>
-                <div class="deduct-detail__total">
-                  应扣 {{ formatMoney(row.deduction!.total, { currency: row.currency }) }}
-                </div>
-              </div>
+              <span v-if="voucherAmount(row) > 0" class="cell-amount__saved">
+                券抵 {{ formatMoney(voucherAmount(row), { currency: row.amount.currency }) }}
+              </span>
+              <span
+                v-else-if="!row.deduction && row.amount.actual !== row.amount.original"
+                class="cell-amount__original"
+              >
+                原 {{ formatMoney(row.amount.original, { currency: row.amount.currency }) }}
+              </span>
             </template>
-            <span
-              v-else-if="row.actualAmount !== row.originalAmount"
-              class="cell-amount__original"
-            >
-              原 {{ formatMoney(row.originalAmount, { currency: row.currency }) }}
-            </span>
           </div>
         </template>
       </el-table-column>
@@ -402,7 +357,7 @@ onMounted(() => {
       <el-table-column label="" width="40">
         <template #default="{ row }: { row: BillingEntry }">
           <el-tooltip
-            v-if="row.failureCode || row.reversedCode"
+            v-if="row.failureCode || row.reversal?.code"
             placement="left"
             effect="dark"
           >
@@ -411,11 +366,11 @@ onMounted(() => {
                 <div v-if="row.failureCode" class="tooltip-block__reason">
                   失败原因：{{ BillFailureCodeLabel[row.failureCode] }}
                 </div>
-                <div v-if="row.reversedCode" class="tooltip-block__reason">
-                  驳回原因：{{ BillReversedCodeLabel[row.reversedCode] }}
+                <div v-if="row.reversal?.code" class="tooltip-block__reason">
+                  驳回原因：{{ BillReversedCodeLabel[row.reversal.code] }}
                 </div>
-                <div v-if="row.reversedAtUtc" class="tooltip-block__time">
-                  驳回时间：{{ formatDateTime(row.reversedAtUtc) }}
+                <div v-if="row.reversal?.atUtc" class="tooltip-block__time">
+                  驳回时间：{{ formatDateTime(row.reversal.atUtc) }}
                 </div>
               </div>
             </template>
@@ -509,60 +464,8 @@ onMounted(() => {
   margin-top: 2px;
 }
 .cell-amount__saved {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--el-color-success);
-  font-weight: 600;
-  margin-top: 2px;
-}
-.deduct-detail {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  margin-top: 4px;
-}
-.deduct-detail__row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  line-height: 1.4;
-}
-.deduct-detail__tag {
-  flex-shrink: 0;
-  font-size: 10px;
-  padding: 0 4px;
-  border-radius: 3px;
-  border: 1px solid currentColor;
-  line-height: 1.4;
-}
-.deduct-detail__tag.is-voucher {
-  color: var(--el-color-success);
-}
-.deduct-detail__tag.is-balance {
-  color: var(--el-color-warning);
-}
-.deduct-detail__name {
-  color: var(--el-text-color-regular);
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.deduct-detail__serial {
-  margin-left: 4px;
-  color: var(--el-text-color-placeholder);
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 10px;
-}
-.deduct-detail__amount {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  color: var(--el-text-color-regular);
-  font-variant-numeric: tabular-nums;
-}
-.deduct-detail__total {
-  font-size: 11px;
-  color: var(--el-text-color-primary);
   margin-top: 2px;
 }
 .cell-money--out {

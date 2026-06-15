@@ -64,20 +64,15 @@ function mapRechargeDto(raw: Record<string, unknown>): RechargeRecord {
 
   return {
     id: String(raw.id ?? raw.Id ?? ''),
-    ownerAccountUid: ownerParty.accountUid,
-    ownerDisplayName: ownerParty.displayName,
-    ownerEmail: ownerParty.email,
-    ownerPhone: ownerParty.phone,
-    provider: String(source?.provider ?? source?.Provider ?? 'manual') as RechargeProvider,
-    scene: Number(source?.scene ?? source?.Scene ?? 0),
-    refNo: String(source?.refNo ?? source?.RefNo ?? ''),
-    amount,
-    currency,
+    owner: ownerParty,
+    source: {
+      provider: String(source?.provider ?? source?.Provider ?? 'manual') as RechargeProvider,
+      scene: Number(source?.scene ?? source?.Scene ?? 0),
+      refNo: String(source?.refNo ?? source?.RefNo ?? ''),
+    },
+    amount: { value: amount, currency },
     status: String(raw.status ?? raw.Status ?? 'pending') as RechargeStatus,
-    operatorIamId:
-      operator?.iamUserUid != null || operator?.IamUserUid != null
-        ? String(operator.iamUserUid ?? operator.IamUserUid)
-        : null,
+    operatorIamId: str(operator?.iamUserUid, operator?.IamUserUid),
     createdAtUtc: asEpochMillis(raw.createdAtUtc ?? raw.CreatedAtUtc) ?? 0,
     paidAtUtc: asEpochMillisNullable(raw.paidAtUtc ?? raw.PaidAtUtc),
   };
@@ -105,6 +100,14 @@ function readParty(raw: Record<string, unknown> | null | undefined) {
   };
 }
 
+/** 读取可空字段为 string | null（兼容驼峰/帕斯卡两种 wire 命名）。 */
+function str(...vals: unknown[]): string | null {
+  for (const v of vals) {
+    if (v != null) return String(v);
+  }
+  return null;
+}
+
 function mapBillDto(raw: Record<string, unknown>): BillingEntry {
   const owner = readParty((raw.owner ?? raw.Owner) as Record<string, unknown> | null | undefined);
   const operator = readParty(
@@ -112,54 +115,39 @@ function mapBillDto(raw: Record<string, unknown>): BillingEntry {
   );
   const business = (raw.business ?? raw.Business) as Record<string, unknown> | null | undefined;
   const amount = (raw.amount ?? raw.Amount) as Record<string, unknown> | null | undefined;
+  // ref/subType/requestId 现已收进 business；保留对旧 wire（顶层 Ref/SubType）的兜底读取。
   const ref = (raw.ref ?? raw.Ref) as Record<string, unknown> | null | undefined;
   const failure = (raw.failure ?? raw.Failure) as Record<string, unknown> | null | undefined;
   const reversal = (raw.reversal ?? raw.Reversal) as Record<string, unknown> | null | undefined;
 
   return {
     id: String(raw.id ?? raw.Id ?? ''),
-    ownerAccountUid: owner.accountUid,
-    operatorAccountUid: operator.accountUid || owner.accountUid,
-    ownerDisplayName: owner.displayName,
-    ownerEmail: owner.email,
-    ownerPhone: owner.phone,
-    operatorDisplayName: operator.displayName,
-    operatorEmail: operator.email,
-    operatorPhone: operator.phone,
-    productCode:
-      business?.productCode != null || business?.ProductCode != null
-        ? String(business.productCode ?? business.ProductCode)
-        : null,
-    subType:
-      raw.subType != null || raw.SubType != null
-        ? (String(raw.subType ?? raw.SubType) as BillSubType)
-        : null,
+    owner: { ...owner, accountUid: owner.accountUid },
+    operator: { ...operator, accountUid: operator.accountUid || owner.accountUid },
+    business: {
+      productCode: str(business?.productCode, business?.ProductCode),
+      subType: str(business?.subType, business?.SubType, raw.subType, raw.SubType) as BillSubType | null,
+      refType: str(business?.refType, business?.RefType, ref?.type, ref?.Type) as BillRefType | null,
+      refId: str(business?.refId, business?.RefId, ref?.id, ref?.Id),
+      requestId: str(business?.requestId, business?.RequestId, raw.requestId, raw.RequestId),
+      originLogId: str(business?.originLogId, business?.OriginLogId),
+    },
     status: String(raw.status ?? raw.Status ?? 'pending') as BillStatus,
-    failureCode:
-      failure?.code != null || failure?.Code != null
-        ? (String(failure.code ?? failure.Code) as BillFailureCode)
-        : null,
-    originalAmount: Number(amount?.original ?? amount?.Original ?? 0),
-    actualAmount: Number(amount?.actual ?? amount?.Actual ?? 0),
-    currency: String(amount?.currency ?? amount?.Currency ?? 'CNY'),
-    balanceAfter:
-      amount?.balanceAfter != null || amount?.BalanceAfter != null
-        ? Number(amount.balanceAfter ?? amount.BalanceAfter)
-        : null,
-    refType:
-      ref?.type != null || ref?.Type != null
-        ? (String(ref.type ?? ref.Type) as BillRefType)
-        : null,
-    refId: ref?.id != null || ref?.Id != null ? String(ref.id ?? ref.Id) : null,
-    reversedAtUtc: asEpochMillisNullable(reversal?.atUtc ?? reversal?.AtUtc),
-    reversedByIamId:
-      reversal?.byIamUserUid != null || reversal?.ByIamUserUid != null
-        ? String(reversal.byIamUserUid ?? reversal.ByIamUserUid)
-        : null,
-    reversedCode:
-      reversal?.code != null || reversal?.Code != null
-        ? (String(reversal.code ?? reversal.Code) as BillReversedCode)
-        : null,
+    failureCode: str(failure?.code, failure?.Code) as BillFailureCode | null,
+    amount: {
+      original: Number(amount?.original ?? amount?.Original ?? 0),
+      actual: Number(amount?.actual ?? amount?.Actual ?? 0),
+      currency: String(amount?.currency ?? amount?.Currency ?? 'CNY'),
+      balanceAfter:
+        amount?.balanceAfter != null || amount?.BalanceAfter != null
+          ? Number(amount.balanceAfter ?? amount.BalanceAfter)
+          : null,
+    },
+    reversal: {
+      atUtc: asEpochMillisNullable(reversal?.atUtc ?? reversal?.AtUtc),
+      byIamId: str(reversal?.byIamUserUid, reversal?.ByIamUserUid),
+      code: str(reversal?.code, reversal?.Code) as BillReversedCode | null,
+    },
     occurredAtUtc: asEpochMillis(raw.occurredAtUtc ?? raw.OccurredAtUtc) ?? 0,
     deduction: mapDeduction((raw.deduction ?? raw.Deduction) as Record<string, unknown> | null | undefined),
   };

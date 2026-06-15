@@ -39,12 +39,6 @@ const loading = ref(false);
 const errorMsg = ref<string | null>(null);
 const bill = ref<BillingEntry | null>(null);
 
-const RefTypeLabel: Record<string, string> = {
-  recharge: '充值',
-  hold: '用量预占',
-  manual: '人工调账',
-};
-
 type VoucherItem = NonNullable<BillingEntry['deduction']>['voucherItems'][number];
 
 function kindLabel(v: VoucherItem): string {
@@ -114,11 +108,11 @@ watch(
             <StatusTag :label="BillStatusLabel[bill.status]" :tone="BillStatusTone[bill.status]" />
           </el-descriptions-item>
           <el-descriptions-item label="类型">
-            <span v-if="bill.subType">{{ BillSubTypeLabel[bill.subType] }}</span>
+            <span v-if="bill.business.subType">{{ BillSubTypeLabel[bill.business.subType] }}</span>
             <span v-else class="muted">—</span>
           </el-descriptions-item>
           <el-descriptions-item label="产品">
-            <span v-if="bill.productCode" class="mono">{{ bill.productCode }}</span>
+            <span v-if="bill.business.productCode" class="mono">{{ bill.business.productCode }}</span>
             <span v-else class="muted">—</span>
           </el-descriptions-item>
           <el-descriptions-item label="发生时间">
@@ -131,19 +125,19 @@ watch(
         <h4 class="section-title">账户</h4>
         <div class="bill-detail__row">
           <span class="label">主账户</span>
-          <span>{{ bill.ownerDisplayName?.trim() || bill.ownerAccountUid }}</span>
+          <span>{{ bill.owner.displayName?.trim() || bill.owner.accountUid }}</span>
         </div>
         <div class="bill-detail__row">
           <span class="label">联系方式</span>
-          <span>{{ bill.ownerEmail?.trim() || '—' }} · {{ bill.ownerPhone?.trim() || '—' }}</span>
+          <span>{{ bill.owner.email?.trim() || '—' }} · {{ bill.owner.phone?.trim() || '—' }}</span>
         </div>
         <div class="bill-detail__row">
           <span class="label">账户 UID</span>
-          <span class="mono">{{ bill.ownerAccountUid }}</span>
+          <span class="mono">{{ bill.owner.accountUid }}</span>
         </div>
-        <div v-if="bill.operatorAccountUid !== bill.ownerAccountUid" class="bill-detail__row">
+        <div v-if="bill.operator.accountUid !== bill.owner.accountUid" class="bill-detail__row">
           <span class="label">实操(IAM)</span>
-          <span class="mono">{{ bill.operatorAccountUid }}</span>
+          <span class="mono">{{ bill.operator.accountUid }}</span>
         </div>
 
         <el-divider />
@@ -151,17 +145,17 @@ watch(
         <h4 class="section-title">金额</h4>
         <div class="bill-detail__row">
           <span class="label">原始金额</span>
-          <span class="num">{{ formatMoney(bill.originalAmount, { currency: bill.currency }) }}</span>
+          <span class="num">{{ formatMoney(bill.amount.original, { currency: bill.amount.currency }) }}</span>
         </div>
         <div class="bill-detail__row">
           <span class="label">实际扣费</span>
           <span class="num cost-total">
-            {{ formatMoney(bill.actualAmount, { currency: bill.currency }) }}
+            {{ formatMoney(bill.amount.actual, { currency: bill.amount.currency }) }}
           </span>
         </div>
-        <div v-if="bill.balanceAfter != null" class="bill-detail__row">
+        <div v-if="bill.amount.balanceAfter != null" class="bill-detail__row">
           <span class="label">扣后余额</span>
-          <span class="num">{{ formatMoney(bill.balanceAfter, { currency: bill.currency }) }}</span>
+          <span class="num">{{ formatMoney(bill.amount.balanceAfter, { currency: bill.amount.currency }) }}</span>
         </div>
 
         <template v-if="bill.deduction">
@@ -169,7 +163,7 @@ watch(
           <h4 class="section-title">
             扣款明细
             <span v-if="bill.deduction.voucherDeducted > 0" class="saved-hint">
-              代金券共抵 {{ formatMoney(bill.deduction.voucherDeducted, { currency: bill.currency }) }}
+              代金券共抵 {{ formatMoney(bill.deduction.voucherDeducted, { currency: bill.amount.currency }) }}
             </span>
           </h4>
 
@@ -183,21 +177,21 @@ watch(
               <span class="voucher-card__tag">{{ kindLabel(v) }}</span>
               <span class="voucher-card__name">{{ v.name?.trim() || kindLabel(v) }}</span>
               <span class="voucher-card__deducted num">
-                -{{ formatMoney(v.amountDeducted, { currency: bill.currency }) }}
+                -{{ formatMoney(v.amountDeducted, { currency: bill.amount.currency }) }}
               </span>
             </div>
             <div class="voucher-card__meta">
               <span class="voucher-card__serial mono">{{ v.serialNo ?? `#${v.userVoucherId}` }}</span>
-              <span v-if="ruleText(v, bill.currency)" class="voucher-card__rule">
-                {{ ruleText(v, bill.currency) }}
+              <span v-if="ruleText(v, bill.amount.currency)" class="voucher-card__rule">
+                {{ ruleText(v, bill.amount.currency) }}
               </span>
             </div>
             <div class="voucher-card__props">
               <span v-if="v.faceValue != null">
-                面额 {{ formatMoney(v.faceValue, { currency: bill.currency }) }}
+                面额 {{ formatMoney(v.faceValue, { currency: bill.amount.currency }) }}
               </span>
               <span v-if="v.remainingValue != null">
-                当前剩余 {{ formatMoney(v.remainingValue, { currency: bill.currency }) }}
+                当前剩余 {{ formatMoney(v.remainingValue, { currency: bill.amount.currency }) }}
               </span>
               <span v-if="v.validToUtc != null">
                 有效期至 {{ formatDateTime(v.validToUtc, 'YYYY-MM-DD HH:mm') }}
@@ -213,7 +207,7 @@ watch(
             <span class="deduct-row__tag is-voucher">券</span>
             <span class="deduct-row__name">代金券抵扣</span>
             <span class="deduct-row__amount num">
-              -{{ formatMoney(bill.deduction.voucherDeducted, { currency: bill.currency }) }}
+              -{{ formatMoney(bill.deduction.voucherDeducted, { currency: bill.amount.currency }) }}
             </span>
           </div>
 
@@ -222,12 +216,12 @@ watch(
             <span class="deduct-row__tag is-balance">余额</span>
             <span class="deduct-row__name">钱包余额</span>
             <span class="deduct-row__amount num">
-              -{{ formatMoney(bill.deduction.balanceDeducted, { currency: bill.currency }) }}
+              -{{ formatMoney(bill.deduction.balanceDeducted, { currency: bill.amount.currency }) }}
             </span>
           </div>
 
           <div class="deduct-total">
-            应扣合计 {{ formatMoney(bill.deduction.total, { currency: bill.currency }) }}
+            应扣合计 {{ formatMoney(bill.deduction.total, { currency: bill.amount.currency }) }}
           </div>
         </template>
 
@@ -235,12 +229,13 @@ watch(
 
         <h4 class="section-title">关联业务</h4>
         <div class="bill-detail__row">
-          <span class="label">关联类型</span>
-          <span>{{ bill.refType ? (RefTypeLabel[bill.refType] ?? bill.refType) : '—' }}</span>
+          <span class="label">关联业务</span>
+          <span v-if="bill.business.productCode" class="mono">{{ bill.business.productCode }}</span>
+          <span v-else class="muted">—</span>
         </div>
-        <div class="bill-detail__row">
+        <div v-if="bill.business.originLogId" class="bill-detail__row">
           <span class="label">关联单号</span>
-          <span class="mono">{{ bill.refId ?? '—' }}</span>
+          <span class="mono">{{ bill.business.originLogId }}</span>
         </div>
 
         <template v-if="bill.failureCode">
@@ -254,20 +249,20 @@ watch(
           </div>
         </template>
 
-        <template v-if="bill.reversedCode || bill.reversedAtUtc">
+        <template v-if="bill.reversal?.code || bill.reversal?.atUtc">
           <el-divider />
           <h4 class="section-title">驳回 / 退还</h4>
           <div class="bill-detail__row">
             <span class="label">原因</span>
-            <span>{{ bill.reversedCode ? BillReversedCodeLabel[bill.reversedCode] : '—' }}</span>
+            <span>{{ bill.reversal.code ? BillReversedCodeLabel[bill.reversal.code] : '—' }}</span>
           </div>
           <div class="bill-detail__row">
             <span class="label">时间</span>
-            <span>{{ bill.reversedAtUtc ? formatDateTime(bill.reversedAtUtc, 'YYYY-MM-DD HH:mm:ss') : '—' }}</span>
+            <span>{{ bill.reversal.atUtc ? formatDateTime(bill.reversal.atUtc, 'YYYY-MM-DD HH:mm:ss') : '—' }}</span>
           </div>
           <div class="bill-detail__row">
             <span class="label">操作人</span>
-            <span class="mono">{{ bill.reversedByIamId ?? '—' }}</span>
+            <span class="mono">{{ bill.reversal.byIamId ?? '—' }}</span>
           </div>
         </template>
       </template>

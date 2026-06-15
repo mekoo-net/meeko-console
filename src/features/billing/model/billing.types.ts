@@ -30,6 +30,18 @@ export const RechargeStatusTone: Readonly<Record<RechargeStatus, 'success' | 'wa
 /** long / 雪花 ID → string；用于 `id` 与 `*AccountUid` / `*IamId` 字段 */
 const idString = z.union([z.string(), z.number()]).transform((v) => String(v));
 
+/**
+ * 账户方信息（账单 owner/operator、充值 owner 等共用）：uid + BFF 按 uid 补全的联系信息。
+ */
+export const accountPartySchema = z.object({
+  accountUid: idString,
+  displayName: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+});
+
+export type AccountParty = z.infer<typeof accountPartySchema>;
+
 export const walletSnapshotSchema = z.object({
   accountUid: idString,
   available: z.number(),
@@ -105,17 +117,10 @@ export const RechargeRefNoLabel: Readonly<Record<RechargeProvider, string>> = {
   referral_rebate: '返利单号',
 };
 
-export const rechargeRecordSchema = z.object({
-  /** 充值记录主键（RC + 日期 + 9 位序列，如 RC20260531000001234） */
-  id: idString,
-  /** 主账户 userId —— 钱归这个账户 */
-  ownerAccountUid: idString,
-  /** BFF enrich：主账户展示名 */
-  ownerDisplayName: z.string().nullish(),
-  /** BFF enrich：主账户联系邮箱 */
-  ownerEmail: z.string().nullish(),
-  /** BFF enrich：主账户联系手机 */
-  ownerPhone: z.string().nullish(),
+/**
+ * 充值来源块：渠道 / 场景 / 业务单号（与后端 RechargeDto.source 对应）。
+ */
+export const rechargeSourceSchema = z.object({
   provider: z.enum(rechargeProviderValues),
   scene: z.number().int(),
   /**
@@ -125,8 +130,27 @@ export const rechargeRecordSchema = z.object({
    * 必填（每种 provider 都应有结构化业务关联）。
    */
   refNo: z.string(),
-  amount: z.number(),
+});
+
+export type RechargeSource = z.infer<typeof rechargeSourceSchema>;
+
+/** 充值金额块：到账金额 + 币种。 */
+export const rechargeAmountSchema = z.object({
+  value: z.number(),
   currency: z.string(),
+});
+
+export type RechargeAmount = z.infer<typeof rechargeAmountSchema>;
+
+export const rechargeRecordSchema = z.object({
+  /** 充值记录主键（RC + 日期 + 9 位序列，如 RC20260531000001234） */
+  id: idString,
+  /** 主账户（钱归它），含 BFF 补全的联系信息 */
+  owner: accountPartySchema,
+  /** 来源（渠道 / 场景 / 业务单号） */
+  source: rechargeSourceSchema,
+  /** 金额块 */
+  amount: rechargeAmountSchema,
   status: z.enum(rechargeStatusValues),
   /**
    * 内部操作人 IAM userId，仅 manual / cs_compensation / marketing_reward 有值。
@@ -294,47 +318,76 @@ export const billDeductionSchema = z.object({
 
 export type BillDeduction = z.infer<typeof billDeductionSchema>;
 
-export const billingEntrySchema = z.object({
-  /** 账单主键（BL + UTC 日期 + 9 位序列，如 BL20260531000001234），按时间有序 */
-  id: idString,
-  /** 主账户 userId（钱归它） */
-  ownerAccountUid: idString,
-  /** 实操账户 userId（主账户本身 or IAM 子账户） */
-  operatorAccountUid: idString,
-  /** BFF enrich：主账户展示名 */
-  ownerDisplayName: z.string().nullable().optional(),
-  /** BFF enrich：主账户联系邮箱 */
-  ownerEmail: z.string().nullable().optional(),
-  /** BFF enrich：主账户联系手机 */
-  ownerPhone: z.string().nullish(),
-  /** BFF enrich：操作账户展示名 */
-  operatorDisplayName: z.string().nullable().optional(),
-  /** BFF enrich：操作账户联系邮箱 */
-  operatorEmail: z.string().nullable().optional(),
-  /** BFF enrich：操作账户联系手机 */
-  operatorPhone: z.string().nullish(),
+/**
+ * 账单的业务归属与溯源：产品 / 计费类型 / 关联业务实体 / 发起调用日志。
+ */
+export const billBusinessSchema = z.object({
   /** 产品代码；扣款/充值归属产品时有值 */
   productCode: z.string().nullable().optional(),
+  /** 计费类型（prepaid / usage） */
   subType: z.enum(billSubTypeValues).nullable().optional(),
-  status: z.enum(billStatusValues),
-  /** 失败码（枚举，仅当 status='failed' 时有值） */
-  failureCode: z.enum(billFailureCodeValues).nullable().optional(),
-  /** 原始扣费金额（系统首次计算的值） */
-  originalAmount: z.number(),
-  /** 实际扣费金额（被驳回 → 0；部分退还 → 原值的一部分） */
-  actualAmount: z.number(),
-  currency: z.string(),
-  /** 扣费后钱包余额快照，便于对账 */
-  balanceAfter: z.number().nullable().optional(),
   /** 关联业务实体类型（充值 / 预占 / 手工），定位上下文用 */
   refType: z.enum(billRefTypeValues).nullable().optional(),
   refId: idString.nullable().optional(),
+  /**
+   * 产品域请求幂等键（= commit idempotencyKey，等于 DemuxAi UsageLog.RequestId）。
+   * 用于跨域把账单流水反查回发起它的调用日志。
+   */
+  requestId: z.string().nullable().optional(),
+  /**
+   * 发起本次扣费的调用日志号（产品域 UsageLog.Id）。由 requestId 跨域解析得到；
+   * 历史数据 / 未关联 / 非用量扣费时为 null。
+   */
+  originLogId: idString.nullable().optional(),
+});
+
+export type BillBusiness = z.infer<typeof billBusinessSchema>;
+
+/**
+ * 账单金额块：原始扣费 / 实际扣费 + 币种 + 扣后余额快照。
+ */
+export const billAmountSchema = z.object({
+  /** 原始扣费金额（系统首次计算的值） */
+  original: z.number(),
+  /** 实际扣费金额（被驳回 → 0；部分退还 → 原值的一部分） */
+  actual: z.number(),
+  currency: z.string(),
+  /** 扣费后钱包余额快照，便于对账 */
+  balanceAfter: z.number().nullable().optional(),
+});
+
+export type BillAmount = z.infer<typeof billAmountSchema>;
+
+/**
+ * 驳回 / 部分退还信息；仅 status∈{reversed, partial_refunded} 时有值。
+ */
+export const billReversalSchema = z.object({
   /** 驳回时间 */
-  reversedAtUtc: epochMillisNullableSchema.optional(),
+  atUtc: epochMillisNullableSchema.optional(),
   /** 驳回操作人 IAM userId */
-  reversedByIamId: idString.nullable().optional(),
-  /** 驳回原因码（枚举，仅当 status∈{reversed, partial_refunded} 时有值） */
-  reversedCode: z.enum(billReversedCodeValues).nullable().optional(),
+  byIamId: idString.nullable().optional(),
+  /** 驳回原因码（枚举） */
+  code: z.enum(billReversedCodeValues).nullable().optional(),
+});
+
+export type BillReversal = z.infer<typeof billReversalSchema>;
+
+export const billingEntrySchema = z.object({
+  /** 账单主键（BL + UTC 日期 + 9 位序列，如 BL20260531000001234），按时间有序 */
+  id: idString,
+  /** 主账户（钱归它） */
+  owner: accountPartySchema,
+  /** 实操账户（主账户本身 or IAM 子账户） */
+  operator: accountPartySchema,
+  /** 业务归属与溯源 */
+  business: billBusinessSchema,
+  status: z.enum(billStatusValues),
+  /** 失败码（枚举，仅当 status='failed' 时有值） */
+  failureCode: z.enum(billFailureCodeValues).nullable().optional(),
+  /** 金额块 */
+  amount: billAmountSchema,
+  /** 驳回 / 退还 */
+  reversal: billReversalSchema.nullable().optional(),
   occurredAtUtc: epochMillisSchema,
   /** 扣费明细（代金券抵扣 / 余额扣除拆分）；仅用量扣费账单有值 */
   deduction: billDeductionSchema.nullable().optional(),

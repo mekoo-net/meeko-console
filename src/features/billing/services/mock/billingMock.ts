@@ -52,12 +52,13 @@ const now = Date.now();
 function seedAccount(uid: string): AccountBilling {
   const recharge: RechargeRecord = {
     id: genRechargeSerial(),
-    ownerAccountUid: uid,
-    provider: 'alipay',
-    scene: 0,
-    refNo: '202605310001',
-    amount: 100,
-    currency: 'CNY',
+    owner: { accountUid: uid },
+    source: {
+      provider: 'alipay',
+      scene: 0,
+      refNo: '202605310001',
+    },
+    amount: { value: 100, currency: 'CNY' },
     status: 'paid',
     createdAtUtc: now - 86_400_000,
     paidAtUtc: now - 86_000_000,
@@ -65,16 +66,22 @@ function seedAccount(uid: string): AccountBilling {
 
   const bill: BillingEntry = {
     id: genBillSerial(),
-    ownerAccountUid: uid,
-    operatorAccountUid: uid,
-    productCode: 'demux',
-    subType: 'usage',
+    owner: { accountUid: uid },
+    operator: { accountUid: uid },
+    business: {
+      productCode: 'demux',
+      subType: 'usage',
+      refType: 'hold',
+      refId: 'HD-5000001',
+      requestId: 'req-demux-5000001',
+      originLogId: '7300000000000001',
+    },
     status: 'completed',
-    originalAmount: 0.2,
-    actualAmount: 0.12,
-    currency: 'CNY',
-    refType: 'hold',
-    refId: 'HD-5000001',
+    amount: {
+      original: 0.2,
+      actual: 0.12,
+      currency: 'CNY',
+    },
     occurredAtUtc: now - 3_600_000,
     deduction: {
       total: 0.2,
@@ -141,12 +148,13 @@ export class BillingMock implements BillingPort {
     const b = ensure(input.ownerAccountUid);
     const record = rechargeRecordSchema.parse({
       id: genRechargeSerial(),
-      ownerAccountUid: input.ownerAccountUid,
-      provider: input.source,
-      scene: 99,
-      refNo: input.idempotencyKey ?? `INT-${Date.now()}`,
-      amount: input.amount,
-      currency: 'CNY',
+      owner: { accountUid: input.ownerAccountUid },
+      source: {
+        provider: input.source,
+        scene: 99,
+        refNo: input.idempotencyKey ?? `INT-${Date.now()}`,
+      },
+      amount: { value: input.amount, currency: 'CNY' },
       status: 'paid',
       operatorIamId: '90001',
       createdAtUtc: Date.now(),
@@ -171,7 +179,7 @@ export class BillingMock implements BillingPort {
       all.sort((a, b) => b.createdAtUtc - a.createdAtUtc);
     }
     if (input.filter.provider !== 'all') {
-      all = all.filter((r) => r.provider === input.filter.provider);
+      all = all.filter((r) => r.source.provider === input.filter.provider);
     }
     if (input.filter.status !== 'all') {
       all = all.filter((r) => r.status === input.filter.status);
@@ -198,10 +206,10 @@ export class BillingMock implements BillingPort {
       all.sort((a, b) => b.occurredAtUtc - a.occurredAtUtc);
     }
     if (input.filter.productCode !== 'all') {
-      all = all.filter((r) => r.productCode === input.filter.productCode);
+      all = all.filter((r) => r.business.productCode === input.filter.productCode);
     }
     if (input.filter.subType !== 'all') {
-      all = all.filter((r) => r.subType === input.filter.subType);
+      all = all.filter((r) => r.business.subType === input.filter.subType);
     }
     if (input.filter.status !== 'all') {
       all = all.filter((r) => r.status === input.filter.status);

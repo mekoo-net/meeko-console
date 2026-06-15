@@ -170,23 +170,23 @@ watch(rechargeItems, () => {
           <template #default="{ row }: { row: RechargeRecord }">
             <el-tag
               size="small"
-              :type="isInternalProvider(row.provider) ? 'warning' : 'success'"
+              :type="isInternalProvider(row.source.provider) ? 'warning' : 'success'"
               effect="plain"
               round
             >
-              {{ RechargeProviderLabel[row.provider] }}
+              {{ RechargeProviderLabel[row.source.provider] }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="业务单号" min-width="220">
           <template #default="{ row }: { row: RechargeRecord }">
-            <span class="cell-refno">{{ row.refNo }}</span>
+            <span class="cell-refno">{{ row.source.refNo }}</span>
           </template>
         </el-table-column>
         <el-table-column label="金额" width="140" align="right">
           <template #default="{ row }: { row: RechargeRecord }">
             <span class="cell-money cell-money--in">
-              +{{ formatMoney(row.amount, { currency: row.currency }) }}
+              +{{ formatMoney(row.amount.value, { currency: row.amount.currency }) }}
             </span>
           </template>
         </el-table-column>
