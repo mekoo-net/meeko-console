@@ -22,6 +22,7 @@ import {
   type BillingEntry,
 } from '../model/billing.types';
 import { getBillingPort } from '../services';
+import { getDemuxaiLogsPort } from '@/features/demuxai/services';
 
 interface Props {
   modelValue: boolean;
@@ -34,6 +35,7 @@ const emit = defineEmits<{
 }>();
 
 const billingPort = getBillingPort();
+const demuxaiLogsPort = getDemuxaiLogsPort();
 
 const loading = ref(false);
 const errorMsg = ref<string | null>(null);
@@ -67,10 +69,28 @@ async function load(serial: string): Promise<void> {
   const r = await billingPort.getBill(serial);
   if (r.success) {
     bill.value = r.data;
+    void resolveOriginLog(r.data);
   } else {
     errorMsg.value = r.error.message;
   }
   loading.value = false;
+}
+
+/**
+ * 「业务号」跨域回填：账单域只持有 requestId（= 调用日志的 RequestId），不感知产品域日志号。
+ * 据 requestId 反查发起扣费的调用日志号（= 调用日志页的「日志编号」），异步填入。
+ * 后端已返回 originLogId 时跳过；解析失败静默（详情仍可用，仅业务号留空）。
+ */
+async function resolveOriginLog(entry: BillingEntry): Promise<void> {
+  const { requestId, originLogId } = entry.business;
+  if (originLogId || !requestId) return;
+  const r = await demuxaiLogsPort.resolveLogIds([requestId]);
+  if (!r.success) return;
+  const logId = r.data[requestId];
+  // 期间可能已切到别的账单，校验当前展示的仍是同一条再写回。
+  if (logId && bill.value?.id === entry.id) {
+    bill.value = { ...bill.value, business: { ...bill.value.business, originLogId: logId } };
+  }
 }
 
 watch(
@@ -103,6 +123,10 @@ watch(
         <el-descriptions :column="2" border size="small" class="bill-detail__summary">
           <el-descriptions-item label="流水号" :span="2">
             <span class="mono">{{ bill.id }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="业务号" :span="2">
+            <span v-if="bill.business.originLogId" class="mono">{{ bill.business.originLogId }}</span>
+            <span v-else class="muted">—</span>
           </el-descriptions-item>
           <el-descriptions-item label="状态">
             <StatusTag :label="BillStatusLabel[bill.status]" :tone="BillStatusTone[bill.status]" />
@@ -224,19 +248,6 @@ watch(
             应扣合计 {{ formatMoney(bill.deduction.total, { currency: bill.amount.currency }) }}
           </div>
         </template>
-
-        <el-divider />
-
-        <h4 class="section-title">关联业务</h4>
-        <div class="bill-detail__row">
-          <span class="label">关联业务</span>
-          <span v-if="bill.business.productCode" class="mono">{{ bill.business.productCode }}</span>
-          <span v-else class="muted">—</span>
-        </div>
-        <div v-if="bill.business.originLogId" class="bill-detail__row">
-          <span class="label">关联单号</span>
-          <span class="mono">{{ bill.business.originLogId }}</span>
-        </div>
 
         <template v-if="bill.failureCode">
           <el-divider />

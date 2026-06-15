@@ -74,7 +74,8 @@ function seedAccount(uid: string): AccountBilling {
       refType: 'hold',
       refId: 'HD-5000001',
       requestId: 'req-demux-5000001',
-      originLogId: '7300000000000001',
+      // 账单域不感知产品日志号；详情「业务号」运行时按 requestId 跨域解析回填（见 BillDetailDrawer）。
+      originLogId: null,
     },
     status: 'completed',
     amount: {

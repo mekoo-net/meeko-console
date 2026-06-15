@@ -190,7 +190,7 @@ export type BillSubType = (typeof billSubTypeValues)[number];
 
 export const BillSubTypeLabel: Readonly<Record<BillSubType, string>> = {
   prepaid: '预付费',
-  usage: '用量扣费',
+  usage: '按量付费',
 };
 
 export const billStatusValues = [

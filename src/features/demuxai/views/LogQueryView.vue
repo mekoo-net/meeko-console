@@ -494,23 +494,26 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="Conv" min-width="148">
+      <el-table-column label="日志编号" min-width="150">
         <template #default="{ row }: { row: LogEntry }">
-          <el-tooltip v-if="row.convId" :content="row.convId" placement="top" :show-after="200">
-            <el-button link type="primary" class="cell-conv mono" @click="drillByConvId(row.convId!)">
-              {{ row.convId }}
-            </el-button>
-          </el-tooltip>
-          <span v-else class="cell-muted">—</span>
+          <span class="cell-logid mono">{{ row.id }}</span>
         </template>
       </el-table-column>
 
-      <el-table-column label="来源" width="120">
+      <el-table-column label="调用" min-width="160">
         <template #default="{ row }: { row: LogEntry }">
-          <el-tag v-if="row.token?.name" size="small" effect="plain" type="info">
-            {{ sourceLabel(row) }}
-          </el-tag>
-          <span v-else class="cell-source-pg">PG</span>
+          <div class="cell-call">
+            <el-tooltip v-if="row.convId" :content="row.convId" placement="top" :show-after="200">
+              <el-button link type="primary" class="cell-conv mono" @click="drillByConvId(row.convId!)">
+                {{ row.convId }}
+              </el-button>
+            </el-tooltip>
+            <span v-else class="cell-muted">—</span>
+            <el-tag v-if="row.token?.name" size="small" effect="plain" type="info" class="cell-call__source">
+              {{ sourceLabel(row) }}
+            </el-tag>
+            <span v-else class="cell-call__source cell-source-pg">PG</span>
+          </div>
         </template>
       </el-table-column>
 
@@ -702,6 +705,22 @@ onMounted(() => {
   font-size: 12px;
   color: var(--el-text-color-regular);
   white-space: nowrap;
+}
+.cell-logid {
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+  word-break: break-all;
+  line-height: 1.35;
+}
+.cell-call {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  line-height: 1.35;
+}
+.cell-call__source {
+  align-self: flex-start;
 }
 .cell-conv {
   font-size: 12px;

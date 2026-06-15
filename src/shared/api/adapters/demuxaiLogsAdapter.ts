@@ -305,4 +305,21 @@ export class DemuxaiLogsHttpAdapter implements DemuxaiLogsPort {
       },
     };
   }
+
+  async resolveLogIds(requestIds: string[]): Promise<AppResult<Record<string, string>>> {
+    const keys = [...new Set(requestIds.filter((k) => k && k.trim()))];
+    if (keys.length === 0) return { success: true, data: {} };
+
+    const result = await requestDemuxAi<ItemsEnvelope<{ requestId: string; logId: string | number }>>(
+      `${BASE}/resolve-by-request-ids`,
+      { method: 'POST', body: { requestIds: keys } },
+    );
+    if (!result.success) return result;
+
+    const map: Record<string, string> = {};
+    for (const it of result.data.items) {
+      if (it.requestId != null && it.logId != null) map[String(it.requestId)] = String(it.logId);
+    }
+    return { success: true, data: map };
+  }
 }
