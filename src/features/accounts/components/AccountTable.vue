@@ -52,10 +52,10 @@ function openDetail(uid: string): void {
       <template #default="{ row }: { row: Account }">
         <div class="cell-contact">
           <div class="cell-contact__email">
-            <span v-if="row.ownerEmail">{{ row.ownerEmail }}</span>
+            <span v-if="row.owner.email">{{ row.owner.email }}</span>
           </div>
           <div class="cell-contact__phone">
-            <span v-if="row.ownerPhone">{{ row.ownerPhone }}</span>
+            <span v-if="row.owner.phone">{{ row.owner.phone }}</span>
           </div>
         </div>
       </template>

@@ -102,7 +102,7 @@ function badgeIcons(account: Account): string {
 }
 
 function accountEmail(a: Account): string {
-  return a.ownerEmail ?? '';
+  return a.owner.email ?? '';
 }
 
 function isSelected(uid: string): boolean {

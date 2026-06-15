@@ -119,15 +119,15 @@ function openInviter(): void {
         </div>
         <div class="info-grid__item">
           <dt>负责人</dt>
-          <dd>{{ account.ownerDisplayName || '—' }}</dd>
+          <dd>{{ account.owner.displayName || '—' }}</dd>
         </div>
         <div class="info-grid__item">
           <dt>邮箱</dt>
-          <dd>{{ account.ownerEmail || '—' }}</dd>
+          <dd>{{ account.owner.email || '—' }}</dd>
         </div>
         <div class="info-grid__item">
           <dt>手机</dt>
-          <dd>{{ account.ownerPhone || '—' }}</dd>
+          <dd>{{ account.owner.phone || '—' }}</dd>
         </div>
         <div class="info-grid__item">
           <dt>返利率</dt>

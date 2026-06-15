@@ -30,8 +30,8 @@ function listFiltered(filter: AccountListFilter): Account[] {
     if (filter.tier != null && filter.tier > 0 && a.tier !== filter.tier) return false;
     if (accountUid.length > 0 && a.uid !== accountUid) return false;
     if (contact.length > 0) {
-      const email = (a.ownerEmail ?? '').toLowerCase();
-      const phone = a.ownerPhone ?? '';
+      const email = (a.owner.email ?? '').toLowerCase();
+      const phone = a.owner.phone ?? '';
       if (!email.includes(contact) && !phone.includes(contact)) return false;
     }
     if (badge && !(a.achievements ?? []).some((m) => m.code === badge)) return false;

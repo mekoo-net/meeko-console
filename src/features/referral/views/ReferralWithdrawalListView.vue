@@ -29,7 +29,7 @@ const rejectingId = ref<string | null>(null);
 const actingId = ref<string | null>(null);
 
 function accountLabel(row: ReferralWithdrawal): string {
-  return row.accountDisplayName || row.accountEmail || row.accountUid;
+  return row.account.displayName || row.account.email || row.account.uid;
 }
 
 async function approve(row: ReferralWithdrawal): Promise<void> {
@@ -77,7 +77,7 @@ async function submitReject(): Promise<void> {
 async function markPaid(row: ReferralWithdrawal): Promise<void> {
   const ok = await confirmDanger({
     title: '确认打款',
-    message: `确认已向 ${row.accountName}（${row.accountNo}）完成打款 ${formatMoney(row.amount, { currency: row.currency })}？`,
+    message: `确认已向 ${row.payout.accountName}（${row.payout.accountNo}）完成打款 ${formatMoney(row.amount.value, { currency: row.amount.currency })}？`,
     confirmText: '标记已打款',
     type: 'warning',
   });
@@ -149,27 +149,27 @@ function statusTagType(status: ReferralWithdrawalStatus) {
           <button
             type="button"
             class="account-link"
-            @click="router.push(`/accounts/${row.accountUid}`)"
+            @click="router.push(`/accounts/${row.account.uid}`)"
           >
             {{ accountLabel(row) }}
           </button>
-          <div class="sub-text">{{ row.accountUid }}</div>
+          <div class="sub-text">{{ row.account.uid }}</div>
         </template>
       </el-table-column>
       <el-table-column label="金额" width="120" align="right">
         <template #default="{ row }: { row: ReferralWithdrawal }">
-          {{ formatMoney(row.amount, { currency: row.currency }) }}
+          {{ formatMoney(row.amount.value, { currency: row.amount.currency }) }}
         </template>
       </el-table-column>
       <el-table-column label="方式" width="90">
         <template #default="{ row }: { row: ReferralWithdrawal }">
-          {{ referralWithdrawalMethodLabel[row.method] }}
+          {{ referralWithdrawalMethodLabel[row.payout.method] }}
         </template>
       </el-table-column>
       <el-table-column label="收款信息" min-width="180">
         <template #default="{ row }: { row: ReferralWithdrawal }">
-          <div>{{ row.accountName }}</div>
-          <div class="sub-text">{{ row.accountNo }}</div>
+          <div>{{ row.payout.accountName }}</div>
+          <div class="sub-text">{{ row.payout.accountNo }}</div>
         </template>
       </el-table-column>
       <el-table-column label="状态" width="100">

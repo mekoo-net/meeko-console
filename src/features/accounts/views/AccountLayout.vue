@@ -65,7 +65,7 @@ const currentMeta = computed<SectionMeta>(() => {
 function accountLabel(): string {
   const a = account.value;
   if (!a) return props.uid;
-  return a.displayName || a.ownerEmail || a.ownerPhone || a.uid;
+  return a.displayName || a.owner.email || a.owner.phone || a.uid;
 }
 
 const avatarChar = computed(() => accountLabel().charAt(0).toUpperCase());

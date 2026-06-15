@@ -127,7 +127,7 @@ function typeLabel(account: Account): string {
       </el-table-column>
 
       <el-table-column label="邮箱" min-width="190">
-        <template #default="{ row }">{{ row.ownerEmail || '—' }}</template>
+        <template #default="{ row }: { row: Account }">{{ row.owner.email || '—' }}</template>
       </el-table-column>
 
       <el-table-column label="操作" width="96" align="center">

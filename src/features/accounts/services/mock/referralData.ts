@@ -215,12 +215,13 @@ export function getReferralWithdrawals(accountUid: string): ReferralWithdrawalAd
 export function referralRechargesForAccount(accountUid: string): RechargeRecord[] {
   return getReferralRebates(accountUid).map((r) => ({
     id: r.linkedRechargeId,
-    ownerAccountUid: accountUid,
-    provider: 'referral_rebate',
-    scene: 99,
-    refNo: `REF-${r.id}`,
-    amount: r.rebateAmount,
-    currency: r.currency,
+    owner: { accountUid },
+    source: {
+      provider: 'referral_rebate',
+      scene: 99,
+      refNo: `REF-${r.id}`,
+    },
+    amount: { value: r.rebateAmount, currency: r.currency },
     status: 'paid',
     operatorIamId: null,
     createdAtUtc: r.occurredAtUtc,

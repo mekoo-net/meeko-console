@@ -116,7 +116,7 @@ async function resolveAccounts(uids: string[]): Promise<void> {
       if (r.success) {
         accountMap[uid] = {
           displayName: r.data.displayName,
-          email: r.data.ownerEmail ?? '',
+          email: r.data.owner.email ?? '',
           type: r.data.type,
         };
       }
@@ -128,7 +128,7 @@ function onAccountPicked(account: Account): void {
   if (existingUids.value.includes(account.uid)) return;
   accountMap[account.uid] = {
     displayName: account.displayName,
-    email: account.ownerEmail ?? '',
+    email: account.owner.email ?? '',
     type: account.type,
   };
   state.overrides.unshift({ accountUid: account.uid, enabled: true, policy: { ...state.defaultPolicy } });

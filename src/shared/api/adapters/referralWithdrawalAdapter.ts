@@ -13,27 +13,41 @@ import { asEpochMillis, asEpochMillisNullable } from '@/shared/lib/epoch';
 
 const BASE = '/api/admin/referral/withdrawals';
 
+function str(...vals: unknown[]): string | undefined {
+  for (const v of vals) {
+    if (typeof v === 'string') return v;
+  }
+  return undefined;
+}
+
 function mapRow(raw: Record<string, unknown>): Record<string, unknown> {
+  // 申请账户块：兼容后端嵌套 account 对象与历史扁平 accountXxx 字段。
+  const account = (raw.account ?? raw.Account) as Record<string, unknown> | undefined;
+  const amount = (raw.amount ?? raw.Amount) as Record<string, unknown> | number | undefined;
+  const payout = (raw.payout ?? raw.Payout) as Record<string, unknown> | undefined;
+
   return {
     id: String(raw.id ?? ''),
-    accountUid: String(raw.accountUid ?? raw.account_uid ?? ''),
-    accountDisplayName:
-      typeof raw.accountDisplayName === 'string'
-        ? raw.accountDisplayName
-        : typeof raw.account_display_name === 'string'
-          ? raw.account_display_name
-          : undefined,
-    accountEmail:
-      typeof raw.accountEmail === 'string'
-        ? raw.accountEmail
-        : typeof raw.account_email === 'string'
-          ? raw.account_email
-          : undefined,
-    amount: raw.amount,
-    currency: raw.currency ?? 'CNY',
-    method: raw.method,
-    accountNo: raw.accountNo ?? raw.account_no,
-    accountName: raw.accountName ?? raw.account_name,
+    account: {
+      uid: String(account?.uid ?? raw.accountUid ?? raw.account_uid ?? ''),
+      displayName: str(account?.displayName, raw.accountDisplayName, raw.account_display_name),
+      email: str(account?.email, raw.accountEmail, raw.account_email),
+    },
+    amount: {
+      value:
+        amount != null && typeof amount === 'object'
+          ? (amount.value ?? amount.Value)
+          : (amount ?? raw.amount),
+      currency:
+        (amount != null && typeof amount === 'object'
+          ? (amount.currency ?? amount.Currency)
+          : raw.currency) ?? 'CNY',
+    },
+    payout: {
+      method: payout?.method ?? raw.method,
+      accountNo: payout?.accountNo ?? raw.accountNo ?? raw.account_no,
+      accountName: payout?.accountName ?? raw.accountName ?? raw.account_name,
+    },
     status: raw.status,
     rejectReason: raw.rejectReason ?? raw.reject_reason ?? null,
     appliedAtUtc: asEpochMillis(raw.appliedAtUtc ?? raw.applied_at_utc) ?? 0,

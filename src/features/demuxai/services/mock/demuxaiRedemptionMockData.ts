@@ -30,8 +30,8 @@ function accountRef(uid: string): RedemptionAccount | null {
   return {
     uid: acc.uid,
     owner: {
-      email: acc.ownerEmail,
-      displayName: acc.ownerDisplayName,
+      email: acc.owner.email,
+      displayName: acc.owner.displayName,
     },
   };
 }

@@ -42,10 +42,10 @@ defineProps<{ account: Account }>();
           <span>UID {{ account.uid }}</span>
         </div>
         <div class="info-card__contact">
-          <span v-if="account.ownerEmail">{{ account.ownerEmail }}</span>
+          <span v-if="account.owner.email">{{ account.owner.email }}</span>
           <span v-else class="info-card__contact--muted">未绑定邮箱</span>
           <el-divider direction="vertical" />
-          <span v-if="account.ownerPhone">{{ account.ownerPhone }}</span>
+          <span v-if="account.owner.phone">{{ account.owner.phone }}</span>
           <span v-else class="info-card__contact--muted">未绑定手机</span>
         </div>
       </div>

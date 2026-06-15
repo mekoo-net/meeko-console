@@ -67,20 +67,24 @@ function mapListItem(raw: Record<string, unknown>): Record<string, unknown> {
     ?? ownerEmail
     ?? '未命名账户';
 
+  const ownerIamUserUid =
+    owner?.iamUserUid !== undefined || owner?.iam_user_uid !== undefined
+      ? String(owner?.iamUserUid ?? owner?.iam_user_uid)
+      : raw.ownerIamUserUid !== undefined || raw.owner_iam_user_uid !== undefined
+        ? String(raw.ownerIamUserUid ?? raw.owner_iam_user_uid)
+        : undefined;
+
   return omitNullish({
     uid: String(raw.uid ?? ''),
     type: raw.type,
     displayName,
     status: raw.status,
-    ownerDisplayName,
-    ownerEmail,
-    ownerIamUserUid:
-      owner?.iamUserUid !== undefined || owner?.iam_user_uid !== undefined
-        ? String(owner?.iamUserUid ?? owner?.iam_user_uid)
-        : raw.ownerIamUserUid !== undefined || raw.owner_iam_user_uid !== undefined
-          ? String(raw.ownerIamUserUid ?? raw.owner_iam_user_uid)
-          : undefined,
-    ownerPhone: asOptionalString(owner?.phone ?? raw.ownerPhone ?? raw.owner_phone),
+    owner: omitNullish({
+      iamUserUid: ownerIamUserUid,
+      displayName: ownerDisplayName,
+      email: ownerEmail,
+      phone: asOptionalString(owner?.phone ?? raw.ownerPhone ?? raw.owner_phone),
+    }),
     iamUserCount: raw.iamUserCount ?? raw.iam_user_count ?? 0,
     createdAtUtc: asEpochMillis(raw.createdAtUtc ?? raw.created_at_utc),
     updatedAtUtc: asEpochMillis(raw.updatedAtUtc ?? raw.updated_at_utc),

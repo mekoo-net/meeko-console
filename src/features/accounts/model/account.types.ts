@@ -82,19 +82,27 @@ export const referralInviterSchema = z.object({
 
 export type ReferralInviter = z.infer<typeof referralInviterSchema>;
 
+/**
+ * 账户 owner（主体）信息：IAM 主用户 + 联系方式。
+ * BFF 不一定返回（列表投影常缺省），内部字段均可选；UI 用可选呈现。
+ */
+export const accountOwnerSchema = z.object({
+  iamUserUid: z.string().optional(),
+  displayName: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().nullish(),
+});
+
+export type AccountOwner = z.infer<typeof accountOwnerSchema>;
+
 export const accountSchema = z.object({
   uid: z.string().min(1),
   type: z.enum(accountTypeValues),
   /** Personal = 昵称；Organization = 组织名。BFF 列表可能返回空串，适配层会兜底。 */
   displayName: z.string(),
   status: z.enum(accountStatusValues),
-  /** Mock 扩展：方便平台视图列表展示，**真实 BFF 不一定返回**，UI 用可选呈现。 */
-  ownerIamUserUid: z.string().optional(),
-  ownerDisplayName: z.string().optional(),
-  /** Owner 联系邮箱（`owner.email`）。 */
-  ownerEmail: z.string().optional(),
-  /** Owner 联系手机（`owner.phone`）。 */
-  ownerPhone: z.string().nullish(),
+  /** owner（主体）信息：IAM 主用户 + 联系方式。默认空对象，便于读取免可选链。 */
+  owner: accountOwnerSchema.default({}),
   iamUserCount: z.number().int().nonnegative().optional(),
   createdAtUtc: epochMillisOptionalSchema,
   updatedAtUtc: epochMillisOptionalSchema,
