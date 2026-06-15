@@ -61,12 +61,4 @@ export interface DemuxaiLogsPort {
    * 前端拿到回执后**就地更新行**，避免重新拉列表丢失滚动 / 过滤上下文。
    */
   reverse(input: ReverseLogInput): Promise<AppResult<ReverseLogResult>>;
-
-  /**
-   * 批量把账单流水的 `requestId` 解析成调用日志号（`UsageLog.Id`）。
-   *
-   * 账单域只持有 `requestId`（= Commit 幂等键 = UsageLog.RequestId），不感知产品域日志号；
-   * 账单详情「业务号」由此跨域解析回填。返回 `requestId → logId` 映射，未命中的键不出现。
-   */
-  resolveLogIds(requestIds: string[]): Promise<AppResult<Record<string, string>>>;
 }

@@ -243,22 +243,6 @@ export class DemuxaiLogsMock implements DemuxaiLogsPort {
     });
   }
 
-  async resolveLogIds(requestIds: string[]): Promise<AppResult<Record<string, string>>> {
-    await delay();
-    const keys = [...new Set(requestIds.filter((k) => k && k.trim()))];
-    const logs = this.store.logs;
-    const map: Record<string, string> = {};
-    if (keys.length === 0 || logs.length === 0) return ok(map);
-    // Mock 没有 requestId 字段，用稳定哈希挑一条**真实存在**的日志，保证回填的日志号在日志页可查到。
-    for (const key of keys) {
-      let h = 0;
-      for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-      const log = logs[h % logs.length];
-      if (log) map[key] = log.id;
-    }
-    return ok(map);
-  }
-
   async stats(filter: ListLogsFilter): Promise<AppResult<LogStats>> {
     await delay();
     const filtered = applyFilter(this.store.logs, filter);

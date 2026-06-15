@@ -22,7 +22,6 @@ import {
   type BillingEntry,
 } from '../model/billing.types';
 import { getBillingPort } from '../services';
-import { getDemuxaiLogsPort } from '@/features/demuxai/services';
 
 interface Props {
   modelValue: boolean;
@@ -35,7 +34,6 @@ const emit = defineEmits<{
 }>();
 
 const billingPort = getBillingPort();
-const demuxaiLogsPort = getDemuxaiLogsPort();
 
 const loading = ref(false);
 const errorMsg = ref<string | null>(null);
@@ -68,29 +66,12 @@ async function load(serial: string): Promise<void> {
   bill.value = null;
   const r = await billingPort.getBill(serial);
   if (r.success) {
+    // 「业务号」(originLogId) 由 BFF 据账单号跨域组装后下发，前端只渲染。
     bill.value = r.data;
-    void resolveOriginLog(r.data);
   } else {
     errorMsg.value = r.error.message;
   }
   loading.value = false;
-}
-
-/**
- * 「业务号」跨域回填：账单域只持有 requestId（= 调用日志的 RequestId），不感知产品域日志号。
- * 据 requestId 反查发起扣费的调用日志号（= 调用日志页的「日志编号」），异步填入。
- * 后端已返回 originLogId 时跳过；解析失败静默（详情仍可用，仅业务号留空）。
- */
-async function resolveOriginLog(entry: BillingEntry): Promise<void> {
-  const { requestId, originLogId } = entry.business;
-  if (originLogId || !requestId) return;
-  const r = await demuxaiLogsPort.resolveLogIds([requestId]);
-  if (!r.success) return;
-  const logId = r.data[requestId];
-  // 期间可能已切到别的账单，校验当前展示的仍是同一条再写回。
-  if (logId && bill.value?.id === entry.id) {
-    bill.value = { ...bill.value, business: { ...bill.value.business, originLogId: logId } };
-  }
 }
 
 watch(

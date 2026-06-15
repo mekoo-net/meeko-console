@@ -148,6 +148,9 @@ const outputDims = computed<DimRow[]>(() => {
   >
     <div v-if="log" class="log-detail">
       <el-descriptions :column="2" border size="small" class="log-detail__summary">
+        <el-descriptions-item label="日志编号" :span="2">
+          <span class="mono log-id-muted">{{ log.id }}</span>
+        </el-descriptions-item>
         <el-descriptions-item label="状态">
           <StatusTag v-if="log.success" label="成功" tone="success" />
           <StatusTag
@@ -207,10 +210,6 @@ const outputDims = computed<DimRow[]>(() => {
       <div class="log-detail__row">
         <span class="label">请求 IP</span>
         <span class="mono">{{ clientIpText }}</span>
-      </div>
-      <div class="log-detail__row">
-        <span class="label">日志编号</span>
-        <span class="mono log-id-muted">{{ log.id }}</span>
       </div>
 
       <el-divider />
