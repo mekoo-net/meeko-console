@@ -74,11 +74,19 @@ function openDetail(uid: string): void {
       </template>
     </el-table-column>
 
-    <el-table-column label="邀请人" min-width="160">
+    <el-table-column label="邀请人" min-width="200">
       <template #default="{ row }: { row: Account }">
-        <template v-if="row.inviter">
-          <span class="cell-inviter">{{ row.inviter.displayName || row.inviter.email || row.inviter.uid }}</span>
-        </template>
+        <div v-if="row.inviter" class="cell-contact">
+          <div class="cell-contact__name">
+            {{ row.inviter.displayName || row.inviter.email || row.inviter.uid }}
+          </div>
+          <div v-if="row.inviter.email" class="cell-contact__email">
+            {{ row.inviter.email }}
+          </div>
+          <div v-if="row.inviter.phone" class="cell-contact__phone">
+            {{ row.inviter.phone }}
+          </div>
+        </div>
         <span v-else class="cell-muted">—</span>
       </template>
     </el-table-column>
@@ -171,9 +179,11 @@ function openDetail(uid: string): void {
   font-size: 12px;
   vertical-align: -1px;
 }
-.cell-inviter {
+.cell-contact__name {
   font-size: 13px;
+  font-weight: 500;
   color: var(--el-text-color-primary);
+  line-height: 1.35;
 }
 .cell-muted {
   color: var(--el-text-color-placeholder);

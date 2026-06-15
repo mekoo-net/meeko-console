@@ -43,6 +43,7 @@ export const referralInviteeSchema = z.object({
   accountUid: z.string().min(1),
   displayName: z.string().optional(),
   email: z.string().optional(),
+  phone: z.string().nullish(),
   registeredAtUtc: epochMillisSchema,
   hasRecharged: z.boolean(),
   contributedRebateAmount: z.number().nonnegative(),

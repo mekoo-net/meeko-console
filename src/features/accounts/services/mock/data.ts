@@ -234,6 +234,7 @@ function buildSeed(): AccountStore {
           uid: inviterUid,
           displayName: inviter.displayName,
           email: inviter.owner.email,
+          phone: inviter.owner.phone,
         },
         rebateRatePercent: inviteeUid === inviteeUid2 ? 15 : null,
         inviteCount: inviteeUid === inviteeUid1 ? 1 : 0,

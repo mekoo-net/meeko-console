@@ -133,6 +133,7 @@ function mapInviter(raw: unknown): Record<string, unknown> | null | undefined {
     uid: String(uid),
     displayName: asOptionalString(inv.displayName ?? inv.display_name),
     email: asOptionalString(inv.email),
+    phone: asOptionalString(inv.phone),
   });
 }
 

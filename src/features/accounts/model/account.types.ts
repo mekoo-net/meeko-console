@@ -78,6 +78,7 @@ export const referralInviterSchema = z.object({
   uid: z.string().min(1),
   displayName: z.string().optional(),
   email: z.string().optional(),
+  phone: z.string().nullish(),
 });
 
 export type ReferralInviter = z.infer<typeof referralInviterSchema>;

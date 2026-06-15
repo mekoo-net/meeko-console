@@ -74,11 +74,15 @@ onMounted(() => void load());
         class="compact-table"
         empty-text="暂无邀请记录"
       >
-        <el-table-column label="被邀请人" min-width="160">
+        <el-table-column label="账户" min-width="200">
           <template #default="{ row }: { row: ReferralInvitee }">
-            <button type="button" class="ref-link" @click="openInvitee(row.accountUid)">
-              {{ row.displayName || row.email || row.accountUid }}
-            </button>
+            <div class="ref-contact">
+              <button type="button" class="ref-link" @click="openInvitee(row.accountUid)">
+                {{ row.displayName || row.email || row.accountUid }}
+              </button>
+              <div v-if="row.email" class="ref-contact__email">{{ row.email }}</div>
+              <div v-if="row.phone" class="ref-contact__phone">{{ row.phone }}</div>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="UID" width="140" prop="accountUid">
@@ -130,6 +134,11 @@ onMounted(() => void load());
 </template>
 
 <style scoped>
+.ref-contact {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
 .ref-link {
   border: none;
   background: none;
@@ -138,6 +147,16 @@ onMounted(() => void load());
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
+  text-align: left;
+}
+.ref-contact__email {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.ref-contact__phone {
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+  font-variant-numeric: tabular-nums;
 }
 .cell-money--in {
   color: var(--el-color-success);

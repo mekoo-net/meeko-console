@@ -49,7 +49,7 @@ function extractRows(value: unknown): { rows: unknown[]; total: number } {
 
 function parseSummary(value: unknown): AppResult<ReferralAccountSummary> {
   if (!value || typeof value !== 'object') {
-    return fail({ code: 'validation', message: '邀请激励汇总数据格式错误' });
+    return fail({ code: 'validation', message: '返利汇总数据格式错误' });
   }
   const raw = value as Record<string, unknown>;
   const mapped = {
@@ -84,7 +84,7 @@ function parseSummary(value: unknown): AppResult<ReferralAccountSummary> {
     ? ok(r.data)
     : fail({
         code: 'validation',
-        message: '邀请激励汇总数据格式错误',
+        message: '返利汇总数据格式错误',
         details: r.error.flatten().fieldErrors as Record<string, string[]>,
       });
 }
@@ -94,6 +94,7 @@ function mapInvitee(raw: Record<string, unknown>): Record<string, unknown> {
     accountUid: String(raw.accountUid ?? raw.account_uid ?? ''),
     displayName: raw.displayName ?? raw.display_name,
     email: raw.email,
+    phone: raw.phone,
     registeredAtUtc: asEpochMillis(raw.registeredAtUtc ?? raw.registered_at_utc) ?? 0,
     hasRecharged: Boolean(raw.hasRecharged ?? raw.has_recharged),
     contributedRebateAmount:

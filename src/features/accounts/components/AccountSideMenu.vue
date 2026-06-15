@@ -45,7 +45,7 @@ const sections: readonly SectionItem[] = [
   },
   {
     key: 'referral',
-    title: '激励',
+    title: '返利',
     desc: '邀请 · 返利 · 提现',
     icon: Coin,
     children: [

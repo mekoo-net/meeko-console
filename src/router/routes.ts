@@ -321,7 +321,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'referral',
         component: () => import('@/features/accounts/views/sections/ReferralSection.vue'),
         redirect: (to) => `/accounts/${to.params.uid}/referral/invitees`,
-        meta: { title: '激励', requiresAuth: true },
+        meta: { title: '返利', requiresAuth: true },
         children: [
           {
             path: 'invitees',
