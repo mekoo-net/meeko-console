@@ -23,7 +23,7 @@
 
 | 业务动作 | Port 方法 | HTTP | REST 端点 |
 | --- | --- | --- | --- |
-| 统计聚合（KPI + 时序 + Top） | `DemuxaiLogsPort.stats(filter)` | GET | `/demuxai/api/admin/logs/stats` |
+| 统计聚合（KPI + 时序 + Top + 错误码 + 延迟） | `DemuxaiLogsPort.stats(filter)` | GET | `/demuxai/api/admin/logs/stats` 及 `…/stats/by/{model,provider,errorcode}`、`…/stats/latency` |
 | Vendor 字典（Top 渠道名映射） | `DemuxaiProviderPort.list` | GET | `/demuxai/api/admin/providers` |
 
 > DemuxAi 管理端接口统一包在 **`{ success, message?, data }` 信封**内（HTTP 200），前端经 `requestDemuxAi` 解包。详见 [`00-conventions.md`](./00-conventions.md)。
@@ -103,8 +103,11 @@
 #### 接入状态（与当前 BFF 的差异）
 | 项 | 现状 |
 | --- | --- |
-| `LogsAdminController.Stats` | 返回 `ItemsEnvelope<AiLogStatDto>`（按日分行），**尚无**上表完整 `LogStats`。 |
-| `DemuxaiLogsHttpAdapter.stats` | 临时把 `items` 透传为 `{ dailyRows: items }`，概览 KPI 在真接 BFF 时可能为空或需 Mock。 |
+| `DemuxaiLogsHttpAdapter.stats` | 并行拉 5 个端点：`stats`（分桶趋势）+ `stats/by/model` + `stats/by/provider` + `stats/by/errorcode` + `stats/latency`，在前端聚合成完整 `LogStats`。 |
+| `rpm` | 后端不下发；适配器按 `fromUtc/toUtc` 跨度（缺失时退化为分桶覆盖跨度）÷ 总调用算出。 |
+| `avgTokenLatency` / `p95TokenLatency` | 由 `stats/latency` 提供（仅 `streamed && success && latency>0` 样本入聚合）。 |
+| `errorCodes` | 由 `stats/by/errorcode` 提供；适配器把超出 Top5 的合并为 `other`。 |
+| 统计 JOIN 口径 | 后端 stat 系列查询统一 **LEFT JOIN** 定价/别名快照（与日志列表一致），快照缺失的日志不再被整段过滤掉。 |
 | Mock | `demuxaiLogsMock` 按过滤后的日志行在本地聚合，字段与上表一致。 |
 
 ### `GET /demuxai/api/admin/providers`（Vendor 字典）

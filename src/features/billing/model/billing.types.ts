@@ -142,6 +142,44 @@ export const rechargeAmountSchema = z.object({
 
 export type RechargeAmount = z.infer<typeof rechargeAmountSchema>;
 
+/** 入账确认方式（详情接口返回）。 */
+export const rechargeConfirmationModeValues = ['auto_notify', 'admin_manual', 'internal'] as const;
+export type RechargeConfirmationMode = (typeof rechargeConfirmationModeValues)[number];
+
+export const RechargeConfirmationModeLabel: Readonly<Record<RechargeConfirmationMode, string>> = {
+  auto_notify: '渠道回调',
+  admin_manual: '管理员手工确认',
+  internal: '内部入账',
+};
+
+export const rechargePaymentSchema = z.object({
+  outTradeNo: z.string(),
+  providerTradeNo: z.string().nullable().optional(),
+  paidAmount: z.number().nullable().optional(),
+  payerAccount: z.string().nullable().optional(),
+  payerName: z.string().nullable().optional(),
+  confirmationMode: z.enum(rechargeConfirmationModeValues).nullable().optional(),
+});
+
+export type RechargePayment = z.infer<typeof rechargePaymentSchema>;
+
+export const rechargeAuditSchema = z.object({
+  remark: z.string().nullable().optional(),
+  expiresAtUtc: epochMillisNullableSchema.optional(),
+  failureReason: z.string().nullable().optional(),
+  confirmedByStaffUid: idString.nullable().optional(),
+  confirmedAtUtc: epochMillisNullableSchema.optional(),
+});
+
+export type RechargeAudit = z.infer<typeof rechargeAuditSchema>;
+
+export const rechargeOperatorSchema = z.object({
+  iamUserUid: idString,
+  displayName: z.string().nullable().optional(),
+});
+
+export type RechargeOperator = z.infer<typeof rechargeOperatorSchema>;
+
 export const rechargeRecordSchema = z.object({
   /** 充值记录主键（RC + 日期 + 9 位序列，如 RC20260531000001234） */
   id: idString,
@@ -153,15 +191,27 @@ export const rechargeRecordSchema = z.object({
   amount: rechargeAmountSchema,
   status: z.enum(rechargeStatusValues),
   /**
-   * 内部操作人 IAM userId，仅 manual / cs_compensation / marketing_reward 有值。
-   * 用户自主第三方支付时为 null。
+   * 内部操作人 Staff userId，仅 manual / cs_compensation / marketing_reward 或手工确认入账时有值。
    */
+  operator: rechargeOperatorSchema.nullable().optional(),
+  /** @deprecated 使用 operator.iamUserUid */
   operatorIamId: idString.nullable().optional(),
   createdAtUtc: epochMillisSchema,
   paidAtUtc: epochMillisNullableSchema.optional(),
+  /** 支付凭证；详情接口返回。 */
+  payment: rechargePaymentSchema.nullable().optional(),
+  /** 审计信息；详情接口返回。 */
+  audit: rechargeAuditSchema.nullable().optional(),
 });
 
 export type RechargeRecord = z.infer<typeof rechargeRecordSchema>;
+
+export interface ConfirmManualRechargeInput {
+  providerTradeNo?: string | undefined;
+  payerAccount?: string | undefined;
+  payerName?: string | undefined;
+  remark?: string | undefined;
+}
 
 /**
  * 账单条目（钱包扣款流水）。

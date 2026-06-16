@@ -6,6 +6,8 @@ import { asEpochMillis, asEpochMillisNullable } from '@/shared/lib/epoch';
 import type {
   CreateInternalRechargeInput,
   CreateRechargeInput,
+  ConfirmManualRechargeInput,
+  RechargeConfirmationMode,
   RechargeIntent,
   RechargeProvider,
   RechargeRecord,
@@ -50,6 +52,8 @@ function mapRechargeDto(raw: Record<string, unknown>): RechargeRecord {
   const source = (raw.source ?? raw.Source) as Record<string, unknown> | undefined;
   const amountBlock = raw.amount ?? raw.Amount;
   const operator = (raw.operator ?? raw.Operator) as Record<string, unknown> | null | undefined;
+  const payment = (raw.payment ?? raw.Payment) as Record<string, unknown> | null | undefined;
+  const audit = (raw.audit ?? raw.Audit) as Record<string, unknown> | null | undefined;
 
   let amount = 0;
   let currency = 'CNY';
@@ -62,6 +66,8 @@ function mapRechargeDto(raw: Record<string, unknown>): RechargeRecord {
     currency = String(raw.currency ?? raw.Currency ?? 'CNY');
   }
 
+  const operatorIamId = str(operator?.iamUserUid, operator?.IamUserUid);
+
   return {
     id: String(raw.id ?? raw.Id ?? ''),
     owner: ownerParty,
@@ -72,9 +78,42 @@ function mapRechargeDto(raw: Record<string, unknown>): RechargeRecord {
     },
     amount: { value: amount, currency },
     status: String(raw.status ?? raw.Status ?? 'pending') as RechargeStatus,
-    operatorIamId: str(operator?.iamUserUid, operator?.IamUserUid),
+    operator: operatorIamId
+      ? {
+          iamUserUid: operatorIamId,
+          displayName: str(operator?.displayName, operator?.DisplayName),
+        }
+      : null,
+    operatorIamId,
     createdAtUtc: asEpochMillis(raw.createdAtUtc ?? raw.CreatedAtUtc) ?? 0,
     paidAtUtc: asEpochMillisNullable(raw.paidAtUtc ?? raw.PaidAtUtc),
+    payment: payment ? mapRechargePayment(payment) : null,
+    audit: audit ? mapRechargeAudit(audit) : null,
+  };
+}
+
+function mapRechargePayment(raw: Record<string, unknown>) {
+  const mode = str(raw.confirmationMode, raw.ConfirmationMode);
+  return {
+    outTradeNo: String(raw.outTradeNo ?? raw.OutTradeNo ?? ''),
+    providerTradeNo: str(raw.providerTradeNo, raw.ProviderTradeNo),
+    paidAmount:
+      raw.paidAmount != null || raw.PaidAmount != null
+        ? Number(raw.paidAmount ?? raw.PaidAmount)
+        : null,
+    payerAccount: str(raw.payerAccount, raw.PayerAccount),
+    payerName: str(raw.payerName, raw.PayerName),
+    confirmationMode: mode as RechargeConfirmationMode | null,
+  };
+}
+
+function mapRechargeAudit(raw: Record<string, unknown>) {
+  return {
+    remark: str(raw.remark, raw.Remark),
+    expiresAtUtc: asEpochMillisNullable(raw.expiresAtUtc ?? raw.ExpiresAtUtc),
+    failureReason: str(raw.failureReason, raw.FailureReason),
+    confirmedByStaffUid: str(raw.confirmedByStaffUid, raw.ConfirmedByStaffUid),
+    confirmedAtUtc: asEpochMillisNullable(raw.confirmedAtUtc ?? raw.ConfirmedAtUtc),
   };
 }
 
@@ -254,6 +293,34 @@ export class BillingHttpAdapter implements BillingPort {
         productCode: input.productCode,
       },
     });
+    if (!res.success) return res;
+    return { success: true, data: mapRechargeDto(res.data as unknown as Record<string, unknown>) };
+  }
+
+  async getRecharge(serial: string): Promise<AppResult<RechargeRecord>> {
+    const res = await request<RechargeDtoWire>(
+      `/api/billing/recharges/${encodeURIComponent(serial)}`,
+    );
+    if (!res.success) return res;
+    return { success: true, data: mapRechargeDto(res.data as unknown as Record<string, unknown>) };
+  }
+
+  async confirmRecharge(
+    serial: string,
+    input: ConfirmManualRechargeInput,
+  ): Promise<AppResult<RechargeRecord>> {
+    const res = await request<RechargeDtoWire>(
+      `/api/billing/recharges/${encodeURIComponent(serial)}/confirm`,
+      {
+        method: 'POST',
+        body: {
+          providerTradeNo: input.providerTradeNo,
+          payerAccount: input.payerAccount,
+          payerName: input.payerName,
+          remark: input.remark,
+        },
+      },
+    );
     if (!res.success) return res;
     return { success: true, data: mapRechargeDto(res.data as unknown as Record<string, unknown>) };
   }

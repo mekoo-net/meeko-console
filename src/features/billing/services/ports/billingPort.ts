@@ -52,6 +52,12 @@ export interface BillingPort {
 
   createInternalRecharge(input: CreateInternalRechargeInput): Promise<AppResult<RechargeRecord>>;
 
+  /** 按流水号拉取单条充值详情（含支付凭证 / 审计信息）。 */
+  getRecharge(serial: string): Promise<AppResult<RechargeRecord>>;
+
+  /** 管理员手工确认待支付充值单入账。 */
+  confirmRecharge(serial: string, input: import('../../model/billing.types').ConfirmManualRechargeInput): Promise<AppResult<RechargeRecord>>;
+
   listBills(input: {
     page: number;
     pageSize: number;

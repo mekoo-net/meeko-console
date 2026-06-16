@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from 'vue';
-import { RefreshLeft, Search } from '@element-plus/icons-vue';
+import { RefreshLeft, Search, View } from '@element-plus/icons-vue';
 
 import StatusTag from '@/shared/ui/StatusTag.vue';
 import { formatMoney } from '@/shared/lib/money';
@@ -17,6 +17,8 @@ import {
   type RechargeStatus,
 } from '../model/billing.types';
 import { getBillingPort } from '../services';
+import RechargeDetailDrawer from './RechargeDetailDrawer.vue';
+import ConfirmRechargeDialog from './ConfirmRechargeDialog.vue';
 
 const props = defineProps<{
   accountUid: string;
@@ -106,6 +108,27 @@ watch(rechargeItems, () => {
     void scrollToHighlight();
   }
 });
+
+const detailOpen = ref(false);
+const detailRechargeId = ref<string | null>(null);
+
+function openDetail(row: RechargeRecord): void {
+  detailRechargeId.value = row.id;
+  detailOpen.value = true;
+}
+
+const confirmOpen = ref(false);
+const confirmTarget = ref<RechargeRecord | null>(null);
+
+function openConfirm(row: RechargeRecord): void {
+  confirmTarget.value = row;
+  confirmOpen.value = true;
+}
+
+function onConfirmSuccess(updated: RechargeRecord): void {
+  const idx = rechargeItems.value.findIndex((r) => r.id === updated.id);
+  if (idx !== -1) rechargeItems.value[idx] = updated;
+}
 </script>
 
 <template>
@@ -118,10 +141,19 @@ watch(rechargeItems, () => {
     </div>
 
     <div class="tab-filter">
-      <el-form :inline="true" @submit.prevent>
+      <el-form
+        :inline="true"
+        @submit.prevent
+      >
         <el-form-item label="渠道">
-          <el-select v-model="rechargeProvider" style="width: 180px">
-            <el-option label="全部渠道" value="all" />
+          <el-select
+            v-model="rechargeProvider"
+            style="width: 180px"
+          >
+            <el-option
+              label="全部渠道"
+              value="all"
+            />
             <el-option
               v-for="p in rechargeProviderValues"
               :key="p"
@@ -131,8 +163,14 @@ watch(rechargeItems, () => {
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="rechargeStatus" style="width: 180px">
-            <el-option label="全部状态" value="all" />
+          <el-select
+            v-model="rechargeStatus"
+            style="width: 180px"
+          >
+            <el-option
+              label="全部状态"
+              value="all"
+            />
             <el-option
               v-for="s in rechargeStatusValues"
               :key="s"
@@ -143,10 +181,20 @@ watch(rechargeItems, () => {
         </el-form-item>
       </el-form>
       <div class="tab-filter__actions">
-        <el-button type="primary" :icon="Search" :loading="rechargeLoading" @click="fetchRecharges()">
+        <el-button
+          type="primary"
+          :icon="Search"
+          :loading="rechargeLoading"
+          @click="fetchRecharges()"
+        >
           查询
         </el-button>
-        <el-button :icon="RefreshLeft" @click="resetRecharge()">重置</el-button>
+        <el-button
+          :icon="RefreshLeft"
+          @click="resetRecharge()"
+        >
+          重置
+        </el-button>
       </div>
     </div>
 
@@ -161,12 +209,35 @@ watch(rechargeItems, () => {
         :row-class-name="rechargeRowClassName"
         empty-text="暂无充值记录"
       >
-        <el-table-column label="流水号" min-width="180" prop="id">
+        <el-table-column
+          label="详情"
+          width="52"
+          align="center"
+          fixed
+        >
+          <template #default="{ row }: { row: RechargeRecord }">
+            <el-button
+              :icon="View"
+              link
+              type="primary"
+              title="查看详情"
+              @click="openDetail(row)"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="流水号"
+          min-width="180"
+          prop="id"
+        >
           <template #default="{ row }: { row: RechargeRecord }">
             <span class="cell-uid">{{ row.id }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="渠道" width="130">
+        <el-table-column
+          label="渠道"
+          width="130"
+        >
           <template #default="{ row }: { row: RechargeRecord }">
             <el-tag
               size="small"
@@ -178,30 +249,77 @@ watch(rechargeItems, () => {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="业务单号" min-width="220">
+        <el-table-column
+          label="业务单号"
+          min-width="220"
+        >
           <template #default="{ row }: { row: RechargeRecord }">
             <span class="cell-refno">{{ row.source.refNo }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="金额" width="140" align="right">
+        <el-table-column
+          label="金额"
+          width="140"
+          align="right"
+        >
           <template #default="{ row }: { row: RechargeRecord }">
             <span class="cell-money cell-money--in">
               +{{ formatMoney(row.amount.value, { currency: row.amount.currency }) }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column
+          label="状态"
+          width="100"
+        >
           <template #default="{ row }: { row: RechargeRecord }">
-            <StatusTag :label="RechargeStatusLabel[row.status]" :tone="RechargeStatusTone[row.status]" />
+            <StatusTag
+              :label="RechargeStatusLabel[row.status]"
+              :tone="RechargeStatusTone[row.status]"
+            />
           </template>
         </el-table-column>
-        <el-table-column label="日期" width="170">
+        <el-table-column
+          label="日期"
+          width="170"
+        >
           <template #default="{ row }: { row: RechargeRecord }">
             <span class="cell-date">{{ formatDateTime(row.paidAtUtc ?? row.createdAtUtc) }}</span>
           </template>
         </el-table-column>
+        <el-table-column
+          label="操作"
+          width="84"
+          align="center"
+          fixed="right"
+        >
+          <template #default="{ row }: { row: RechargeRecord }">
+            <el-button
+              v-if="row.status === 'pending'"
+              link
+              type="primary"
+              @click="openConfirm(row)"
+            >
+              入账
+            </el-button>
+            <span
+              v-else
+              class="cell-muted"
+            >—</span>
+          </template>
+        </el-table-column>
       </el-table>
     </div>
+
+    <RechargeDetailDrawer
+      v-model="detailOpen"
+      :recharge-id="detailRechargeId"
+    />
+    <ConfirmRechargeDialog
+      v-model:visible="confirmOpen"
+      :recharge="confirmTarget"
+      @success="onConfirmSuccess"
+    />
 
     <div class="pagination-bar">
       <el-pagination
@@ -249,6 +367,9 @@ watch(rechargeItems, () => {
 }
 .cell-money--in {
   color: var(--el-color-success);
+}
+.cell-muted {
+  color: var(--el-text-color-placeholder);
 }
 :deep(.recharge-table .row-highlight > td) {
   background: var(--el-color-primary-light-9) !important;

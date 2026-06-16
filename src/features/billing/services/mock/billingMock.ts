@@ -8,6 +8,7 @@ import {
   rechargeIntentSchema,
   rechargeRecordSchema,
   type BillingEntry,
+  type ConfirmManualRechargeInput,
   type CreateRechargeInput,
   type CreateInternalRechargeInput,
   type ListBillsFilter,
@@ -244,6 +245,56 @@ export class BillingMock implements BillingPort {
       .filter((r) => r.success)
       .map((r) => withOriginLog(r.data));
     return ok({ items: parsed, total: all.length });
+  }
+
+  async getRecharge(serial: string): Promise<AppResult<RechargeRecord>> {
+    await delay();
+    for (const b of store.values()) {
+      const found = b.recharges.find((x) => x.id === serial);
+      if (found) {
+        const parsed = rechargeRecordSchema.safeParse(found);
+        if (parsed.success) return ok(parsed.data);
+      }
+    }
+    return fail({ code: 'not_found', message: `充值记录 ${serial} 不存在` });
+  }
+
+  async confirmRecharge(
+    serial: string,
+    input: ConfirmManualRechargeInput,
+  ): Promise<AppResult<RechargeRecord>> {
+    await delay();
+    for (const b of store.values()) {
+      const idx = b.recharges.findIndex((x) => x.id === serial);
+      if (idx === -1) continue;
+      const row = b.recharges[idx]!;
+      if (row.status !== 'pending') {
+        return fail({ code: 'conflict', message: `充值单 ${serial} 当前状态不可入账` });
+      }
+      const updated: RechargeRecord = {
+        ...row,
+        status: 'paid',
+        paidAtUtc: Date.now(),
+        operator: { iamUserUid: '90001', displayName: 'Mock Admin' },
+        payment: {
+          outTradeNo: row.source.refNo,
+          providerTradeNo: input.providerTradeNo ?? `manual-${serial}`,
+          paidAmount: row.amount.value,
+          payerAccount: input.payerAccount ?? null,
+          payerName: input.payerName ?? null,
+          confirmationMode: 'admin_manual',
+        },
+        audit: {
+          remark: input.remark ?? null,
+          confirmedByStaffUid: '90001',
+          confirmedAtUtc: Date.now(),
+        },
+      };
+      b.recharges[idx] = updated;
+      b.wallet.available += row.amount.value;
+      return ok(updated);
+    }
+    return fail({ code: 'not_found', message: `充值记录 ${serial} 不存在` });
   }
 
   async getBill(serial: string): Promise<AppResult<BillingEntry>> {

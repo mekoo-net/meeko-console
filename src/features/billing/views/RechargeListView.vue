@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { View } from '@element-plus/icons-vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import StatusTag from '@/shared/ui/StatusTag.vue';
@@ -23,6 +24,8 @@ import {
 } from '../model/billing.types';
 import { getBillingPort } from '../services';
 import type { ListRechargesFilter } from '../services/ports/billingPort';
+import RechargeDetailDrawer from '../components/RechargeDetailDrawer.vue';
+import ConfirmRechargeDialog from '../components/ConfirmRechargeDialog.vue';
 
 const router = useRouter();
 const billingPort = getBillingPort();
@@ -133,6 +136,27 @@ function isInternalProvider(p: RechargeProvider): boolean {
   return p === 'cs_compensation' || p === 'marketing_reward' || p === 'manual';
 }
 
+const detailOpen = ref(false);
+const detailRechargeId = ref<string | null>(null);
+
+function openDetail(row: RechargeRecord): void {
+  detailRechargeId.value = row.id;
+  detailOpen.value = true;
+}
+
+const confirmOpen = ref(false);
+const confirmTarget = ref<RechargeRecord | null>(null);
+
+function openConfirm(row: RechargeRecord): void {
+  confirmTarget.value = row;
+  confirmOpen.value = true;
+}
+
+function onConfirmSuccess(updated: RechargeRecord): void {
+  const idx = records.value.findIndex((r) => r.id === updated.id);
+  if (idx !== -1) records.value[idx] = updated;
+}
+
 onMounted(() => {
   void fetchData();
 });
@@ -158,7 +182,10 @@ onMounted(() => {
       >
         <el-form-item label="渠道">
           <el-select v-model="filter.provider">
-            <el-option label="全部渠道" value="all" />
+            <el-option
+              label="全部渠道"
+              value="all"
+            />
             <el-option
               v-for="p in rechargeProviderValues"
               :key="p"
@@ -167,18 +194,21 @@ onMounted(() => {
             />
           </el-select>
         </el-form-item>
-      <el-form-item label="状态">
-        <el-select v-model="filter.status">
-          <el-option label="全部状态" value="all" />
-          <el-option
-            v-for="s in rechargeStatusValues"
-            :key="s"
-            :label="RechargeStatusLabel[s]"
-            :value="s"
-          />
-        </el-select>
-      </el-form-item>
-    </FilterBar>
+        <el-form-item label="状态">
+          <el-select v-model="filter.status">
+            <el-option
+              label="全部状态"
+              value="all"
+            />
+            <el-option
+              v-for="s in rechargeStatusValues"
+              :key="s"
+              :label="RechargeStatusLabel[s]"
+              :value="s"
+            />
+          </el-select>
+        </el-form-item>
+      </FilterBar>
     </template>
 
     <el-table
@@ -190,13 +220,37 @@ onMounted(() => {
       height="100%"
       :empty-text="' '"
     >
-      <el-table-column label="流水号" min-width="180" prop="id">
+      <el-table-column
+        label="详情"
+        width="56"
+        align="center"
+        fixed
+      >
+        <template #default="{ row }: { row: RechargeRecord }">
+          <el-button
+            :icon="View"
+            link
+            type="primary"
+            title="查看详情"
+            @click="openDetail(row)"
+          />
+        </template>
+      </el-table-column>
+
+      <el-table-column
+        label="流水号"
+        min-width="180"
+        prop="id"
+      >
         <template #default="{ row }: { row: RechargeRecord }">
           <span class="cell-uid">{{ row.id }}</span>
         </template>
       </el-table-column>
 
-      <el-table-column label="账户" min-width="220">
+      <el-table-column
+        label="账户"
+        min-width="220"
+      >
         <template #default="{ row }: { row: RechargeRecord }">
           <div class="cell-account">
             <el-button
@@ -209,13 +263,19 @@ onMounted(() => {
             <div class="cell-account__contact">
               <span v-if="row.owner.email">{{ row.owner.email }}</span>
               <span v-else-if="row.owner.phone">{{ row.owner.phone }}</span>
-              <span v-else class="cell-muted">—</span>
+              <span
+                v-else
+                class="cell-muted"
+              >—</span>
             </div>
           </div>
         </template>
       </el-table-column>
 
-      <el-table-column label="渠道" width="120">
+      <el-table-column
+        label="渠道"
+        width="120"
+      >
         <template #default="{ row }: { row: RechargeRecord }">
           <el-tag
             size="small"
@@ -228,13 +288,19 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="业务单号" min-width="220">
+      <el-table-column
+        label="业务单号"
+        min-width="220"
+      >
         <template #default="{ row }: { row: RechargeRecord }">
           <span class="cell-refno">{{ row.source.refNo }}</span>
         </template>
       </el-table-column>
 
-      <el-table-column label="状态" width="100">
+      <el-table-column
+        label="状态"
+        width="100"
+      >
         <template #default="{ row }: { row: RechargeRecord }">
           <StatusTag
             :label="RechargeStatusLabel[row.status]"
@@ -243,7 +309,11 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="金额" width="140" align="right">
+      <el-table-column
+        label="金额"
+        width="140"
+        align="right"
+      >
         <template #default="{ row }: { row: RechargeRecord }">
           <span class="cell-money cell-money--in">
             +{{ formatMoney(row.amount.value, { currency: row.amount.currency }) }}
@@ -251,9 +321,34 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="日期" width="170">
+      <el-table-column
+        label="日期"
+        width="170"
+      >
         <template #default="{ row }: { row: RechargeRecord }">
           <span class="cell-date">{{ formatDateTime(row.paidAtUtc ?? row.createdAtUtc) }}</span>
+        </template>
+      </el-table-column>
+
+      <el-table-column
+        label="操作"
+        width="92"
+        align="center"
+        fixed="right"
+      >
+        <template #default="{ row }: { row: RechargeRecord }">
+          <el-button
+            v-if="row.status === 'pending'"
+            link
+            type="primary"
+            @click="openConfirm(row)"
+          >
+            入账
+          </el-button>
+          <span
+            v-else
+            class="cell-muted"
+          >—</span>
         </template>
       </el-table-column>
 
@@ -276,6 +371,16 @@ onMounted(() => {
       />
     </template>
   </FillListPageLayout>
+
+  <RechargeDetailDrawer
+    v-model="detailOpen"
+    :recharge-id="detailRechargeId"
+  />
+  <ConfirmRechargeDialog
+    v-model:visible="confirmOpen"
+    :recharge="confirmTarget"
+    @success="onConfirmSuccess"
+  />
 </template>
 
 <style scoped>
@@ -312,5 +417,8 @@ onMounted(() => {
 
 .cell-money--in {
   color: var(--el-color-success);
+}
+.cell-muted {
+  color: var(--el-text-color-placeholder);
 }
 </style>

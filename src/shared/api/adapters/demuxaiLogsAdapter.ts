@@ -9,6 +9,7 @@ import type {
   ListLogsFilter,
   LogEntry,
   LogStats,
+  LogStatsErrorCode,
   LogStatsTopModel,
   LogStatsTopProvider,
   ReverseLogInput,
@@ -97,6 +98,16 @@ interface ProviderRankRow {
   avgTokenLatencyMs?: number;
 }
 
+interface ErrorCodeRow {
+  code?: string;
+  count?: number;
+}
+
+interface LatencyStat {
+  avgTokenLatencyMs?: number;
+  p95TokenLatencyMs?: number;
+}
+
 /**
  * 将后端原始日志行映射为前端 LogEntry 形状：
  *  - account.iamUid 由后端 wire `iamUserUid` 映射改名；仅做防御性归一
@@ -154,11 +165,46 @@ function mapTopProviders(rows: ProviderRankRow[]): LogStatsTopProvider[] {
   }));
 }
 
-/** 将 AiLogStatDto[]（分桶序列）聚合成前端 LogStats（KPI / Top 排行由并行接口补齐）。 */
+/** 错误码分布：后端已按次数降序返回；超出 Top5 的合并为 `other`（与状态环形图口径一致）。 */
+function mapErrorCodes(rows: ErrorCodeRow[]): LogStatsErrorCode[] {
+  const all = rows
+    .map<LogStatsErrorCode>((r) => ({
+      code: typeof r.code === 'string' && r.code.trim() ? r.code.trim() : 'unknown',
+      count: num(r.count),
+    }))
+    .filter((r) => r.count > 0)
+    .sort((a, b) => b.count - a.count);
+  if (all.length <= TOP_RANK_LIMIT) return all;
+  const top = all.slice(0, TOP_RANK_LIMIT - 1);
+  const otherCount = all.slice(TOP_RANK_LIMIT - 1).reduce((s, e) => s + e.count, 0);
+  if (otherCount > 0) top.push({ code: 'other', count: otherCount });
+  return top;
+}
+
+/**
+ * 区间平均 RPM：区间总调用数 ÷ 区间分钟数。
+ * 跨度优先用 filter 的 from/to；缺失时退化为分桶覆盖的跨度（桶数 × 桶宽）。
+ */
+function computeRpm(totalCalls: number, filter: ListLogsFilter, buckets: BucketRow[]): number {
+  let spanMs = 0;
+  if (typeof filter.fromUtc === 'number' && typeof filter.toUtc === 'number') {
+    spanMs = filter.toUtc - filter.fromUtc;
+  }
+  if (spanMs <= 0 && buckets.length > 0) {
+    spanMs = buckets.length * (num(buckets[0]?.bucketSeconds) || inferBucketSizeSec(buckets)) * 1000;
+  }
+  const spanMin = Math.max(spanMs, 60_000) / 60_000;
+  return Math.round((totalCalls / spanMin) * 100) / 100;
+}
+
+/** 将 AiLogStatDto[]（分桶序列）聚合成前端 LogStats（KPI / Top 排行 / 延迟由并行接口补齐）。 */
 function aggregateBucketRows(
   rows: BucketRow[],
+  filter: ListLogsFilter,
   topModels: LogStatsTopModel[],
   topProviders: LogStatsTopProvider[],
+  errorCodes: LogStatsErrorCode[],
+  latency: LatencyStat,
 ): LogStats {
   const totalCalls    = rows.reduce((s, d) => s + num(d.requestCount), 0);
   const errorCalls    = rows.reduce((s, d) => s + num(d.errorCount), 0);
@@ -170,11 +216,11 @@ function aggregateBucketRows(
     totalCalls,
     successCalls:     Math.max(0, totalCalls - errorCalls),
     errorCalls,
-    avgTokenLatency:  0,
-    p95TokenLatency:  0,
+    avgTokenLatency:  num(latency.avgTokenLatencyMs),
+    p95TokenLatency:  num(latency.p95TokenLatencyMs),
     totalTokens,
     totalCost,
-    rpm:              0,
+    rpm:              computeRpm(totalCalls, filter, rows),
     bucketSizeSec,
     buckets: rows.map((d) => ({
       tsUtc:   bucketTs(d),
@@ -185,7 +231,7 @@ function aggregateBucketRows(
     })),
     topModels,
     topProviders,
-    errorCodes:    [],
+    errorCodes,
   };
 }
 
@@ -248,22 +294,29 @@ export class DemuxaiLogsHttpAdapter implements DemuxaiLogsPort {
       modelName:  filter.modelName  || undefined,
     };
 
-    const [bucketResult, modelResult, providerResult] = await Promise.all([
+    const [bucketResult, modelResult, providerResult, errorCodeResult, latencyResult] = await Promise.all([
       requestDemuxAi<ItemsEnvelope<BucketRow>>(`${BASE}/stats`, { query }),
       requestDemuxAi<ItemsEnvelope<ModelRankRow>>(`${BASE}/stats/by/model`, { query }),
       requestDemuxAi<ItemsEnvelope<ProviderRankRow>>(`${BASE}/stats/by/provider`, { query }),
+      requestDemuxAi<ItemsEnvelope<ErrorCodeRow>>(`${BASE}/stats/by/errorcode`, { query }),
+      requestDemuxAi<LatencyStat>(`${BASE}/stats/latency`, { query }),
     ]);
 
     if (!bucketResult.success) return bucketResult;
     if (!modelResult.success) return modelResult;
     if (!providerResult.success) return providerResult;
+    if (!errorCodeResult.success) return errorCodeResult;
+    if (!latencyResult.success) return latencyResult;
 
     return {
       success: true,
       data: aggregateBucketRows(
         bucketResult.data.items,
+        filter,
         mapTopModels(modelResult.data.items),
         mapTopProviders(providerResult.data.items),
+        mapErrorCodes(errorCodeResult.data.items),
+        latencyResult.data,
       ),
     };
   }
