@@ -13,7 +13,6 @@ import VoucherGrantRuleFormDialog from '../components/VoucherGrantRuleFormDialog
 import {
   GrantConditionKind,
   VoucherGrantRuleStatus,
-  grantConditionKindLabels,
   grantRuleStatusLabels,
   grantTriggerEventLabels,
   type CreateVoucherGrantRuleInput,
@@ -52,8 +51,9 @@ function conditionText(r: VoucherGrantRule): string {
   const base =
     r.conditionKind === GrantConditionKind.EventAmountAtLeast
       ? `满 ${r.thresholdAmount ?? '—'} 发放`
-      : (grantConditionKindLabels[r.conditionKind] ?? '—');
-  return r.scopeProductCode ? `${base} · 限 ${r.scopeProductCode}` : base;
+      : '';
+  const scope = r.scopeProductCode ? `限 ${r.scopeProductCode}` : '';
+  return [base, scope].filter(Boolean).join(' · ');
 }
 
 function voucherSummary(r: VoucherGrantRule): string {
@@ -177,6 +177,7 @@ async function setStatus(r: VoucherGrantRule, status: number, label: string): Pr
         <template #default="{ row }: { row: VoucherGrantRule }">
           <div class="cell-name">
             <el-tag
+              class="cell-trigger__tag"
               size="small"
               type="primary"
               effect="plain"
@@ -314,6 +315,11 @@ async function setStatus(r: VoucherGrantRule, status: number, label: string): Pr
 .cell-name__rule {
   font-size: 11px;
   color: var(--el-text-color-secondary);
+}
+.cell-trigger__tag {
+  width: 96px;
+  justify-content: center;
+  text-align: center;
 }
 .ops {
   white-space: nowrap;

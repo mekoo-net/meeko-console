@@ -136,9 +136,11 @@ function buildSeed(): AccountStore {
 
   const builtUids: string[] = [];
 
+  let seedIndex = 0;
   for (const seed of seeds) {
     const uid = accountUid();
     builtUids.push(uid);
+    seedIndex += 1;
     const users: IamUser[] = seed.iamUsers.map((u) => ({
       uid: iamUid(),
       accountUid: uid,
@@ -206,6 +208,7 @@ function buildSeed(): AccountStore {
       createdAtUtc: createdAt.getTime(),
       updatedAtUtc: lastActiveAt.getTime(),
       lastActiveAtUtc: lastActiveAt.getTime(),
+      lastActiveIp: `203.0.113.${seedIndex}`,
       tier: computeTier(seed.totalRechargedAmount),
       totalRechargedAmount: seed.totalRechargedAmount,
       inviteCount: 0,
@@ -232,7 +235,7 @@ function buildSeed(): AccountStore {
         ...invitee,
         inviter: {
           uid: inviterUid,
-          displayName: inviter.displayName,
+          displayName: inviter.owner.displayName ?? inviter.displayName,
           email: inviter.owner.email,
           phone: inviter.owner.phone,
         },

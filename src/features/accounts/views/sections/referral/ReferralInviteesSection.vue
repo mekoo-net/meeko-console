@@ -8,6 +8,7 @@ import { formatDateTime } from '@/shared/lib/date';
 
 import { AccountDetailKey } from '../../../composables/accountDetailContext';
 import type { ReferralInvitee } from '../../../model/referral.types';
+import { accountTypeLabel } from '../../../model/account.types';
 import { getReferralAdminPort } from '../../../services';
 
 const ctx = inject(AccountDetailKey);
@@ -57,13 +58,6 @@ onMounted(() => void load());
 
 <template>
   <div class="acc-page">
-    <div class="acc-page__head">
-      <h4 class="acc-page__title">
-        邀请列表
-        <span class="acc-page__count">共 {{ total }} 条</span>
-      </h4>
-    </div>
-
     <div class="acc-table-wrap">
       <el-table
         v-loading="loading"
@@ -74,25 +68,44 @@ onMounted(() => void load());
         class="compact-table"
         empty-text="暂无邀请记录"
       >
-        <el-table-column label="账户" min-width="200">
+        <el-table-column label="被邀请账户" min-width="240">
           <template #default="{ row }: { row: ReferralInvitee }">
             <div class="ref-contact">
-              <button type="button" class="ref-link" @click="openInvitee(row.accountUid)">
-                {{ row.displayName || row.email || row.accountUid }}
-              </button>
+              <div class="ref-contact__name">
+                <button type="button" class="ref-link" @click="openInvitee(row.accountUid)">
+                  {{ row.displayName || row.email || row.accountUid }}
+                </button>
+                <el-tag
+                  v-if="row.type"
+                  :type="row.type === 'organization' ? 'primary' : 'info'"
+                  size="small"
+                  effect="light"
+                  round
+                >
+                  {{ accountTypeLabel[row.type] }}
+                </el-tag>
+              </div>
+              <div class="ref-contact__uid">UID {{ row.accountUid }}</div>
               <div v-if="row.email" class="ref-contact__email">{{ row.email }}</div>
               <div v-if="row.phone" class="ref-contact__phone">{{ row.phone }}</div>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="UID" width="140" prop="accountUid">
-          <template #default="{ row }: { row: ReferralInvitee }">
-            <span class="cell-uid">{{ row.accountUid }}</span>
-          </template>
-        </el-table-column>
         <el-table-column label="注册时间" width="170">
           <template #default="{ row }: { row: ReferralInvitee }">
             <span class="cell-date">{{ formatDateTime(row.registeredAtUtc) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="最近登录时间" width="170">
+          <template #default="{ row }: { row: ReferralInvitee }">
+            <span class="cell-date">
+              {{ row.lastLoginAtUtc ? formatDateTime(row.lastLoginAtUtc) : '—' }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column label="最近登录 IP" width="150">
+          <template #default="{ row }: { row: ReferralInvitee }">
+            <span class="cell-ip">{{ row.lastLoginIp || '—' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="已充值" width="90" align="center">
@@ -137,7 +150,13 @@ onMounted(() => void load());
 .ref-contact {
   display: flex;
   flex-direction: column;
+  gap: 2px;
   line-height: 1.35;
+}
+.ref-contact__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .ref-link {
   border: none;
@@ -149,6 +168,11 @@ onMounted(() => void load());
   cursor: pointer;
   text-align: left;
 }
+.ref-contact__uid {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
 .ref-contact__email {
   font-size: 12px;
   color: var(--el-text-color-secondary);
@@ -157,6 +181,11 @@ onMounted(() => void load());
   font-size: 13px;
   color: var(--el-text-color-primary);
   font-variant-numeric: tabular-nums;
+}
+.cell-ip {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
 }
 .cell-money--in {
   color: var(--el-color-success);

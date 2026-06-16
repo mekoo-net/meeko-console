@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { epochMillisNullableSchema, epochMillisSchema } from '@/shared/lib/epoch';
+import { accountTypeValues } from './account.types';
 
 export const referralWithdrawalMethodValues = ['alipay', 'bank'] as const;
 export type ReferralWithdrawalMethod = (typeof referralWithdrawalMethodValues)[number];
@@ -44,9 +45,15 @@ export const referralInviteeSchema = z.object({
   displayName: z.string().optional(),
   email: z.string().optional(),
   phone: z.string().nullish(),
+  /** 账户类型（personal / organization）；来自 AccountContactDto。 */
+  type: z.enum(accountTypeValues).nullish(),
   registeredAtUtc: epochMillisSchema,
   hasRecharged: z.boolean(),
   contributedRebateAmount: z.number().nonnegative(),
+  /** 被邀请账户 Owner 最近登录时间；无记录为 null。 */
+  lastLoginAtUtc: epochMillisNullableSchema.nullish(),
+  /** 被邀请账户 Owner 最近登录 IP；无记录为 null。 */
+  lastLoginIp: z.string().nullish(),
   status: z.enum(['active', 'suspended']),
 });
 

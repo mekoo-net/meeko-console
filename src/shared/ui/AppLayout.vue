@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router';
 import RouteViewport from './RouteViewport.vue';
 import SideMenu from './SideMenu.vue';
 import TopBar from './TopBar.vue';
+import ViewSwitcher from './ViewSwitcher.vue';
 
 const route = useRoute();
 
@@ -19,9 +20,8 @@ const pageTitle = computed(() => {
 <template>
   <el-container class="app-shell">
     <el-aside :width="collapsed ? '64px' : '220px'" class="app-aside">
-      <div class="brand" :class="{ 'brand--collapsed': collapsed }">
-        <div class="brand__logo">M</div>
-        <span v-if="!collapsed" class="brand__name">Meeko Admin</span>
+      <div class="app-aside__switcher" :class="{ 'app-aside__switcher--collapsed': collapsed }">
+        <ViewSwitcher :collapsed="collapsed" />
       </div>
       <SideMenu :collapsed="collapsed" />
     </el-aside>
@@ -54,36 +54,11 @@ const pageTitle = computed(() => {
   overflow: hidden;
 }
 
-.brand {
+.app-aside__switcher {
+  height: 64px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  height: 56px;
-  padding: 0 18px;
-  font-weight: 600;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.brand__logo {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  color: #fff;
-}
-
-.brand__name {
-  font-size: 15px;
-  letter-spacing: 0.2px;
-}
-
-.brand--collapsed {
-  padding: 0;
-  justify-content: center;
 }
 
 .app-header {

@@ -40,14 +40,6 @@ function openDetail(uid: string): void {
     height="100%"
     :empty-text="' '"
   >
-    <el-table-column label="UID" width="130" prop="uid">
-      <template #default="{ row }: { row: Account }">
-        <button type="button" class="cell-uid cell-uid--link" @click="openDetail(row.uid)">
-          {{ row.uid }}
-        </button>
-      </template>
-    </el-table-column>
-
     <el-table-column label="账户" min-width="220">
       <template #default="{ row }: { row: Account }">
         <div class="cell-contact">
@@ -74,17 +66,14 @@ function openDetail(uid: string): void {
       </template>
     </el-table-column>
 
-    <el-table-column label="邀请人" min-width="200">
+    <el-table-column label="邀请人" min-width="220">
       <template #default="{ row }: { row: Account }">
         <div v-if="row.inviter" class="cell-contact">
-          <div class="cell-contact__name">
-            {{ row.inviter.displayName || row.inviter.email || row.inviter.uid }}
+          <div class="cell-contact__email">
+            <span v-if="row.inviter.email">{{ row.inviter.email }}</span>
           </div>
-          <div v-if="row.inviter.email" class="cell-contact__email">
-            {{ row.inviter.email }}
-          </div>
-          <div v-if="row.inviter.phone" class="cell-contact__phone">
-            {{ row.inviter.phone }}
+          <div class="cell-contact__phone">
+            <span v-if="row.inviter.phone">{{ row.inviter.phone }}</span>
           </div>
         </div>
         <span v-else class="cell-muted">—</span>
@@ -122,18 +111,25 @@ function openDetail(uid: string): void {
       </template>
     </el-table-column>
 
-    <el-table-column label="创建时间" width="170">
+    <el-table-column label="活跃动态" width="170">
       <template #default="{ row }: { row: Account }">
-        <span class="cell-date">{{ formatDateTime(row.createdAtUtc) }}</span>
+        <div v-if="row.lastActiveIp || row.lastActiveAtUtc" class="cell-activity">
+          <div class="cell-activity__ip">
+            <span v-if="row.lastActiveIp">{{ row.lastActiveIp }}</span>
+            <span v-else class="cell-muted">—</span>
+          </div>
+          <div class="cell-activity__date">
+            <span v-if="row.lastActiveAtUtc">{{ formatDateTime(row.lastActiveAtUtc) }}</span>
+            <span v-else class="cell-muted">—</span>
+          </div>
+        </div>
+        <span v-else class="cell-muted">—</span>
       </template>
     </el-table-column>
 
-    <el-table-column label="活跃时间" width="170">
+    <el-table-column label="创建时间" width="170">
       <template #default="{ row }: { row: Account }">
-        <span v-if="row.lastActiveAtUtc" class="cell-date">
-          {{ formatDateTime(row.lastActiveAtUtc) }}
-        </span>
-        <span v-else class="cell-muted">—</span>
+        <span class="cell-date">{{ formatDateTime(row.createdAtUtc) }}</span>
       </template>
     </el-table-column>
 
@@ -165,25 +161,27 @@ function openDetail(uid: string): void {
   color: var(--el-text-color-primary);
   font-variant-numeric: tabular-nums;
 }
-.cell-uid--link {
-  border: none;
-  background: none;
-  padding: 0;
-  cursor: pointer;
-  color: var(--el-color-primary);
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 13px;
-}
 .cell-action__icon {
   margin-left: 2px;
   font-size: 12px;
   vertical-align: -1px;
 }
-.cell-contact__name {
+.cell-activity {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+.cell-activity__ip {
   font-size: 13px;
   font-weight: 500;
   color: var(--el-text-color-primary);
-  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+.cell-activity__date {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  font-variant-numeric: tabular-nums;
 }
 .cell-muted {
   color: var(--el-text-color-placeholder);

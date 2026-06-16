@@ -67,15 +67,19 @@ function parseSummary(value: unknown): AppResult<ReferralAccountSummary> {
 function mapInvitee(raw: Record<string, unknown>): Record<string, unknown> {
   // 账户身份统一走嵌套 contact（AccountContactDto）。
   const contact = (raw.contact ?? null) as Record<string, unknown> | null;
+  const rawType = contact?.accountType ?? contact?.type;
   return {
     accountUid: String(raw.accountUid ?? contact?.uid ?? ''),
     displayName: contact?.displayName,
     email: contact?.email,
     phone: contact?.phone,
+    type: rawType === 'personal' || rawType === 'organization' ? rawType : undefined,
     registeredAtUtc: asEpochMillis(raw.registeredAtUtc) ?? 0,
     hasRecharged: Boolean(raw.hasRecharged),
     contributedRebateAmount:
       typeof raw.contributedRebateAmount === 'number' ? raw.contributedRebateAmount : 0,
+    lastLoginAtUtc: asEpochMillisNullable(raw.lastLoginAtUtc),
+    lastLoginIp: typeof raw.lastLoginIp === 'string' ? raw.lastLoginIp : undefined,
     status: raw.status ?? 'active',
   };
 }

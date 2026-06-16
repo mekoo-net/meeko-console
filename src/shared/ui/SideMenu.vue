@@ -1,31 +1,19 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import {
-  Bell,
-  ChatLineRound,
-  CreditCard,
-  Coin,
-  DataAnalysis,
-  DataLine,
-  Document,
-  Link,
-  MagicStick,
-  Message,
-  Money,
-  Operation,
-  PriceTag,
-  Lock,
-  Discount,
-  Setting,
-  Ticket,
-  Tickets,
-  User,
-} from '@element-plus/icons-vue';
 
 import { prefetchRoute } from '@/router/prefetch';
 import type { AppRole } from '@/stores/auth';
 import { useAuthStore } from '@/stores/auth';
+import {
+  collectAncestors,
+  collectLeaves,
+  filterTree,
+  matchView,
+  navViews,
+  type MenuNode,
+  type NavView,
+} from './nav';
 
 defineProps<{ collapsed: boolean }>();
 
@@ -33,164 +21,7 @@ const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 
-interface LeafItem {
-  type: 'leaf';
-  index: string;
-  title: string;
-  icon?: unknown;
-  disabled?: boolean;
-  badge?: string;
-  roles?: ReadonlyArray<AppRole>;
-  /** 可见所需权限码（任一即可）；优先于 roles。 */
-  perm?: string;
-}
-
-interface GroupItem {
-  type: 'group';
-  index: string;
-  title: string;
-  icon?: unknown;
-  roles?: ReadonlyArray<AppRole>;
-  perm?: string;
-  children: Array<LeafItem | GroupItem>;
-}
-
-type MenuNode = LeafItem | GroupItem;
-
-const tree: readonly MenuNode[] = [
-  { type: 'leaf', index: '/accounts', title: '账户管理', icon: User },
-  {
-    type: 'group',
-    index: '/billing',
-    title: '财务管理',
-    icon: CreditCard,
-    children: [
-      { type: 'leaf', index: '/billing/recharges', title: '充值记录', icon: Document },
-      { type: 'leaf', index: '/billing/bills', title: '账单流水', icon: Money },
-      { type: 'leaf', index: '/billing/withdrawals', title: '提现审核', icon: Coin },
-      { type: 'leaf', index: '/billing/channels', title: '充值渠道', icon: Link, roles: ['Admin'] },
-      { type: 'leaf', index: '/billing/products', title: '计费产品', icon: PriceTag, roles: ['Admin'] },
-      {
-        type: 'group',
-        index: '/billing/voucher',
-        title: '券务管理',
-        icon: Discount,
-        roles: ['Admin'],
-        children: [
-          { type: 'leaf', index: '/billing/vouchers', title: '券务生成', icon: Discount },
-          { type: 'leaf', index: '/billing/voucher-activities', title: '领券活动', icon: Ticket },
-          { type: 'leaf', index: '/billing/voucher-grants', title: '自动发券', icon: MagicStick },
-        ],
-      },
-    ],
-  },
-  {
-    type: 'group',
-    index: '/demuxai',
-    title: 'DemuxAI 管理',
-    icon: MagicStick,
-    roles: ['Admin'],
-    children: [
-      { type: 'leaf', index: '/demuxai/overview', title: '概览', icon: DataAnalysis },
-      { type: 'leaf', index: '/demuxai/redemption', title: '激活码', icon: Tickets },
-      { type: 'leaf', index: '/demuxai/providers', title: '供应商组', icon: Link },
-      { type: 'leaf', index: '/demuxai/pricing', title: '模型定价', icon: PriceTag },
-      { type: 'leaf', index: '/demuxai/logs', title: '调用日志', icon: DataLine },
-      {
-        type: 'group',
-        index: '/demuxai/settings',
-        title: '系统设置',
-        icon: Setting,
-        children: [
-          { type: 'leaf', index: '/demuxai/settings/rate', title: '速率设置', icon: Operation },
-        ],
-      },
-    ],
-  },
-  {
-    type: 'group',
-    index: '/settings',
-    title: '系统设置',
-    icon: Setting,
-    children: [
-      {
-        type: 'group',
-        index: '/settings/account',
-        title: '账户设置',
-        icon: User,
-        children: [
-          { type: 'leaf', index: '/settings/auth', title: '注册与登录', icon: Setting, perm: 'platform.settings.read' },
-          { type: 'leaf', index: '/settings/email', title: '邮箱策略', icon: Message, perm: 'platform.settings.read' },
-        ],
-      },
-      {
-        type: 'group',
-        index: '/settings/finance',
-        title: '财务设置',
-        icon: CreditCard,
-        children: [
-          { type: 'leaf', index: '/settings/referral', title: '返利设置', icon: Coin, perm: 'platform.settings.read' },
-        ],
-      },
-      {
-        type: 'group',
-        index: '/settings/platform',
-        title: '平台设置',
-        icon: Operation,
-        children: [
-          { type: 'leaf', index: '/settings/staff', title: '管理账户', icon: User, perm: 'platform.staff.read' },
-          { type: 'leaf', index: '/settings/roles', title: '角色权限', icon: Lock, perm: 'platform.role.read' },
-        ],
-      },
-    ],
-  },
-  {
-    type: 'group',
-    index: '/notices',
-    title: '通知中心',
-    icon: Bell,
-    roles: ['Admin'],
-    children: [
-      {
-        type: 'group',
-        index: '/notices/email',
-        title: '邮件通知',
-        icon: Message,
-        children: [
-          { type: 'leaf', index: '/notices/email/channels', title: '渠道', icon: Link },
-          { type: 'leaf', index: '/notices/email/templates', title: '模板', icon: Tickets },
-        ],
-      },
-      {
-        type: 'group',
-        index: '/notices/sms',
-        title: '短信通知',
-        icon: ChatLineRound,
-        children: [
-          {
-            type: 'leaf',
-            index: '/notices/sms/channels',
-            title: '渠道',
-            icon: Link,
-            disabled: true,
-            badge: '即将支持',
-          },
-          {
-            type: 'leaf',
-            index: '/notices/sms/templates',
-            title: '模板',
-            icon: Tickets,
-            disabled: true,
-            badge: '即将支持',
-          },
-        ],
-      },
-      { type: 'leaf', index: '/notices/debug', title: '通知调试', icon: Operation },
-    ],
-  },
-];
-
-function isVisible(node: MenuNode): boolean {
+function isVisible(node: { roles?: ReadonlyArray<AppRole>; perm?: string }): boolean {
   if (node.perm) {
     return auth.hasPermission(node.perm);
   }
@@ -200,55 +31,25 @@ function isVisible(node: MenuNode): boolean {
   return true;
 }
 
-function filterTree(nodes: readonly MenuNode[]): MenuNode[] {
-  return nodes
-    .map((n) =>
-      n.type === 'group'
-        ? ({ ...n, children: filterTree(n.children) } satisfies GroupItem)
-        : n,
-    )
-    .filter((n) => {
-      if (n.type === 'group') {
-        return isVisible(n) && n.children.length > 0;
-      }
-      return isVisible(n);
-    });
-}
+/** 当前路径所属的业务视图；无匹配时回退到第一个可见视图。 */
+const currentView = computed<NavView>(() => {
+  const matched = matchView(route.path);
+  if (matched) return matched;
+  const fallback = navViews.find((v) => isVisible(v) && filterTree(v.menu, isVisible).length > 0);
+  return fallback ?? (navViews[0] as NavView);
+});
 
-const visible = computed<MenuNode[]>(() => filterTree(tree));
-
-/** 收集所有可点击的叶子节点 index（用于路由 → active 匹配） */
-function collectLeaves(nodes: readonly MenuNode[]): LeafItem[] {
-  const out: LeafItem[] = [];
-  for (const n of nodes) {
-    if (n.type === 'leaf') out.push(n);
-    else out.push(...collectLeaves(n.children));
-  }
-  return out;
-}
+/** 只渲染「当前视图」的菜单。 */
+const visible = computed<MenuNode[]>(() => filterTree(currentView.value.menu, isVisible));
 
 const allLeaves = computed(() => collectLeaves(visible.value));
 
 const active = computed(() => {
   const path = route.path;
-  // 优先匹配最长的 leaf index，确保 `/notices/email/templates/welcome/zh` 命中模板叶子
   const sorted = [...allLeaves.value].sort((a, b) => b.index.length - a.index.length);
   const matched = sorted.find((l) => path === l.index || path.startsWith(l.index + '/'));
-  return matched?.index ?? '/accounts';
+  return matched?.index ?? allLeaves.value[0]?.index ?? '';
 });
-
-/** 根据当前激活叶子，反推出需要展开的所有父级 sub-menu index */
-function collectAncestors(nodes: readonly MenuNode[], targetIndex: string, trail: string[] = []): string[] | null {
-  for (const n of nodes) {
-    if (n.type === 'leaf') {
-      if (n.index === targetIndex) return trail;
-    } else {
-      const found = collectAncestors(n.children, targetIndex, [...trail, n.index]);
-      if (found) return found;
-    }
-  }
-  return null;
-}
 
 const opens = computed<string[]>(() => collectAncestors(visible.value, active.value) ?? []);
 
@@ -285,6 +86,7 @@ function onMenuHover(index: string): void {
 <template>
   <el-menu
     ref="menuRef"
+    :key="currentView.id"
     :collapse="collapsed"
     :default-active="active"
     :default-openeds="opens"

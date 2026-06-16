@@ -89,6 +89,7 @@ function mapListItem(raw: Record<string, unknown>): Record<string, unknown> {
     createdAtUtc: asEpochMillis(raw.createdAtUtc ?? raw.created_at_utc),
     updatedAtUtc: asEpochMillis(raw.updatedAtUtc ?? raw.updated_at_utc),
     lastActiveAtUtc: asEpochMillisNullable(raw.lastActiveAtUtc ?? raw.last_active_at_utc),
+    lastActiveIp: asOptionalString(raw.lastActiveIp ?? raw.last_active_ip),
     tier: typeof raw.tier === 'number' ? raw.tier : 1,
     totalRechargedAmount:
       typeof raw.totalRechargedAmount === 'number'

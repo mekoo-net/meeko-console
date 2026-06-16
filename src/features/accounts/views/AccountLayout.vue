@@ -51,7 +51,7 @@ const sectionMeta: Record<string, SectionMeta> = {
   overview: overviewMeta,
   business: { title: '业务', desc: '该账户已开通的业务实例' },
   billing: { title: '账单', desc: '充值订单与钱包扣款流水' },
-  referral: { title: '返利', desc: '邀请关系、返利流水与提现记录' },
+  referral: { title: '返利', desc: '邀请与返利明细' },
   achievements: { title: '徽章', desc: '账户已授予的成就勋章' },
   iam: { title: 'IAM', desc: '账户下的子账号与角色权限' },
   settings: { title: '设置', desc: '返利率等账户级配置' },

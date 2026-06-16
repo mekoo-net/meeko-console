@@ -109,6 +109,8 @@ export const accountSchema = z.object({
   updatedAtUtc: epochMillisOptionalSchema,
   /** 最近活跃时间（任一 IAM 用户登录、API 调用、计费操作）；无记录时 API 可返回 null。 */
   lastActiveAtUtc: epochMillisNullableSchema.optional(),
+  /** 最近活跃 IP（最后一次登录的来源 IP）；无记录时 API 可返回 null。 */
+  lastActiveIp: z.string().nullish(),
   /** 账户等级；列表 API 可能不返回，默认 1。 */
   tier: z.number().int().min(1).default(1),
   /** 累积充值金额（元）；列表 API 可能不返回，默认 0。 */
