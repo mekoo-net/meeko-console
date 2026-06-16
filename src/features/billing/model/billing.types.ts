@@ -14,7 +14,8 @@ export type RechargeStatus = (typeof rechargeStatusValues)[number];
 export const RechargeStatusLabel: Readonly<Record<RechargeStatus, string>> = {
   pending: '待支付',
   paid: '已支付',
-  expired: '已过期',
+  // 支付超时未付款 → 关闭废单（与大厂「交易关闭」一致）。后端枚举仍为 expired。
+  expired: '已关闭',
   cancelled: '已取消',
   failed: '已失败',
 };
@@ -130,6 +131,8 @@ export const rechargeSourceSchema = z.object({
    * 必填（每种 provider 都应有结构化业务关联）。
    */
   refNo: z.string(),
+  /** 充值归属产品代码（如 demux）；用户自助充值未指定业务时为空。 */
+  productCode: z.string().nullable().optional(),
 });
 
 export type RechargeSource = z.infer<typeof rechargeSourceSchema>;

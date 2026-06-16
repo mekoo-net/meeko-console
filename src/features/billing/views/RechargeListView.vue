@@ -180,10 +180,10 @@ onMounted(() => {
         @refresh="fetchData()"
         @reset="resetFilter()"
       >
-        <el-form-item label="渠道">
+        <el-form-item label="付款方式">
           <el-select v-model="filter.provider">
             <el-option
-              label="全部渠道"
+              label="全部付款方式"
               value="all"
             />
             <el-option
@@ -273,7 +273,7 @@ onMounted(() => {
       </el-table-column>
 
       <el-table-column
-        label="渠道"
+        label="付款方式"
         width="120"
       >
         <template #default="{ row }: { row: RechargeRecord }">
@@ -293,7 +293,17 @@ onMounted(() => {
         min-width="220"
       >
         <template #default="{ row }: { row: RechargeRecord }">
-          <span class="cell-refno">{{ row.source.refNo }}</span>
+          <div class="cell-biz">
+            <span
+              v-if="row.source.productCode"
+              class="cell-biz__product"
+            >{{ row.source.productCode }}</span>
+            <span
+              v-else
+              class="cell-biz__product cell-muted"
+            >—</span>
+            <span class="cell-refno">{{ row.source.refNo }}</span>
+          </div>
         </template>
       </el-table-column>
 
@@ -338,7 +348,7 @@ onMounted(() => {
       >
         <template #default="{ row }: { row: RechargeRecord }">
           <el-button
-            v-if="row.status === 'pending'"
+            v-if="row.status === 'pending' || row.status === 'expired'"
             link
             type="primary"
             @click="openConfirm(row)"
@@ -409,10 +419,21 @@ onMounted(() => {
   margin-top: 2px;
 }
 
+.cell-biz {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.35;
+  gap: 2px;
+}
+.cell-biz__product {
+  font-size: 12.5px;
+  color: var(--el-text-color-primary);
+}
 .cell-refno {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12.5px;
-  color: var(--el-text-color-primary);
+  color: var(--el-text-color-secondary);
 }
 
 .cell-money--in {

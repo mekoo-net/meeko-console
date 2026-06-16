@@ -39,7 +39,7 @@ interface RechargeListWire {
 interface RechargeDtoWire {
   id: string;
   owner: { accountUid: string | number };
-  source: { provider: string; scene: number; refNo: string };
+  source: { provider: string; scene: number; refNo: string; productCode?: string | null };
   amount: { value: number; currency: string };
   status: string;
   operator?: { iamUserUid?: string | number | null } | null;
@@ -75,6 +75,7 @@ function mapRechargeDto(raw: Record<string, unknown>): RechargeRecord {
       provider: String(source?.provider ?? source?.Provider ?? 'manual') as RechargeProvider,
       scene: Number(source?.scene ?? source?.Scene ?? 0),
       refNo: String(source?.refNo ?? source?.RefNo ?? ''),
+      productCode: str(source?.productCode, source?.ProductCode),
     },
     amount: { value: amount, currency },
     status: String(raw.status ?? raw.Status ?? 'pending') as RechargeStatus,

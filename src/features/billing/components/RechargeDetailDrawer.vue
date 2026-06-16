@@ -122,13 +122,23 @@ watch(
               :tone="RechargeStatusTone[record.status]"
             />
           </el-descriptions-item>
-          <el-descriptions-item label="入账渠道">
+          <el-descriptions-item label="付款方式">
             {{ providerLabel(record.source.provider) }}
           </el-descriptions-item>
           <el-descriptions-item label="到账金额">
             <span class="amount-in">
               +{{ formatMoney(record.amount.value, { currency: record.amount.currency }) }}
             </span>
+          </el-descriptions-item>
+          <el-descriptions-item label="产品">
+            <span
+              v-if="record.source.productCode"
+              class="mono"
+            >{{ record.source.productCode }}</span>
+            <span
+              v-else
+              class="muted"
+            >—</span>
           </el-descriptions-item>
           <el-descriptions-item :label="refNoLabel(record.source.provider)">
             <span class="mono">{{ record.source.refNo || '—' }}</span>

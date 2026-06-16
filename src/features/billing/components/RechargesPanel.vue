@@ -145,13 +145,13 @@ function onConfirmSuccess(updated: RechargeRecord): void {
         :inline="true"
         @submit.prevent
       >
-        <el-form-item label="渠道">
+        <el-form-item label="付款方式">
           <el-select
             v-model="rechargeProvider"
             style="width: 180px"
           >
             <el-option
-              label="全部渠道"
+              label="全部付款方式"
               value="all"
             />
             <el-option
@@ -235,7 +235,7 @@ function onConfirmSuccess(updated: RechargeRecord): void {
           </template>
         </el-table-column>
         <el-table-column
-          label="渠道"
+          label="付款方式"
           width="130"
         >
           <template #default="{ row }: { row: RechargeRecord }">
@@ -254,7 +254,17 @@ function onConfirmSuccess(updated: RechargeRecord): void {
           min-width="220"
         >
           <template #default="{ row }: { row: RechargeRecord }">
-            <span class="cell-refno">{{ row.source.refNo }}</span>
+            <div class="cell-biz">
+              <span
+                v-if="row.source.productCode"
+                class="cell-biz__product"
+              >{{ row.source.productCode }}</span>
+              <span
+                v-else
+                class="cell-biz__product cell-muted"
+              >—</span>
+              <span class="cell-refno">{{ row.source.refNo }}</span>
+            </div>
           </template>
         </el-table-column>
         <el-table-column
@@ -295,7 +305,7 @@ function onConfirmSuccess(updated: RechargeRecord): void {
         >
           <template #default="{ row }: { row: RechargeRecord }">
             <el-button
-              v-if="row.status === 'pending'"
+              v-if="row.status === 'pending' || row.status === 'expired'"
               link
               type="primary"
               @click="openConfirm(row)"
@@ -360,10 +370,21 @@ function onConfirmSuccess(updated: RechargeRecord): void {
   gap: 10px;
   margin-left: auto;
 }
+.cell-biz {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.35;
+  gap: 2px;
+}
+.cell-biz__product {
+  font-size: 12.5px;
+  color: var(--el-text-color-primary);
+}
 .cell-refno {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12.5px;
-  color: var(--el-text-color-primary);
+  color: var(--el-text-color-secondary);
 }
 .cell-money--in {
   color: var(--el-color-success);

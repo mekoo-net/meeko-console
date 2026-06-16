@@ -54,6 +54,13 @@ const amountText = computed(() => {
   return formatMoney(r.amount.value, { currency: r.amount.currency });
 });
 
+/** 已过期单为迟到支付补录入账，文案区别于普通待支付确认。 */
+const alertText = computed(() =>
+  props.recharge?.status === 'expired'
+    ? '该充值单已超时关闭。如用户实际已付款成功，确认后将补录入账并给账户钱包加余额，操作不可撤销。'
+    : '确认后该充值单将由「待支付」变为「已支付」并给账户钱包加余额，操作不可撤销。',
+);
+
 function resetForm(): void {
   providerTradeNo.value = '';
   payerName.value = '';
@@ -74,7 +81,7 @@ async function handleSubmit(): Promise<void> {
     ElMessage.warning('缺少充值单');
     return;
   }
-  if (r.status !== 'pending') {
+  if (r.status !== 'pending' && r.status !== 'expired') {
     ElMessage.warning('该充值单当前状态不可入账');
     return;
   }
@@ -115,7 +122,7 @@ async function handleSubmit(): Promise<void> {
         type="warning"
         :closable="false"
         show-icon
-        title="确认后该充值单将由「待支付」变为「已支付」并给账户钱包加余额，操作不可撤销。"
+        :title="alertText"
         class="confirm-recharge__alert"
       />
 
@@ -128,7 +135,7 @@ async function handleSubmit(): Promise<void> {
         <el-descriptions-item label="充值单号">
           <span class="mono">{{ recharge.id }}</span>
         </el-descriptions-item>
-        <el-descriptions-item label="入账渠道">
+        <el-descriptions-item label="付款方式">
           {{ providerLabel(recharge.source.provider) }}
         </el-descriptions-item>
         <el-descriptions-item label="到账账户">

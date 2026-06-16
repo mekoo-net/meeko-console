@@ -73,6 +73,23 @@ function genRechargeSerial(at: Date = new Date()): string {
 
 const now = Date.now();
 
+/** 待支付超时阈值：与后端 ExpireStalePendingRechargesHandler.PendingTtlMinutes 保持一致。 */
+const PENDING_TTL_MS = 15 * 60_000;
+
+/**
+ * 关闭超时未支付的充值单（mock 端模拟后端定时任务）：待支付且创建超过 15 分钟的置为「已过期」。
+ * 超时只关闭待支付窗口、不代表资金失败；用户若迟到付款，管理员仍可对「已过期」单补录入账。
+ */
+function sweepStalePending(recharges: RechargeRecord[]): void {
+  const cutoff = Date.now() - PENDING_TTL_MS;
+  for (const r of recharges) {
+    if (r.status === 'pending' && r.createdAtUtc < cutoff) {
+      r.status = 'expired';
+      r.audit = { ...(r.audit ?? {}), failureReason: '支付超时未付款，订单已自动关闭' };
+    }
+  }
+}
+
 function seedAccount(uid: string): AccountBilling {
   const recharge: RechargeRecord = {
     id: genRechargeSerial(),
@@ -81,11 +98,32 @@ function seedAccount(uid: string): AccountBilling {
       provider: 'alipay',
       scene: 0,
       refNo: '202605310001',
+      productCode: 'demux',
     },
     amount: { value: 100, currency: 'CNY' },
     status: 'paid',
     createdAtUtc: now - 86_400_000,
     paidAtUtc: now - 86_000_000,
+  };
+
+  // 演示数据：一条超过 15 分钟的待支付单（列表会自动关闭为「已过期」，可演示迟到入账），
+  // 一条 5 分钟内的待支付单（仍为「待支付」，可直接入账）。
+  const stalePending: RechargeRecord = {
+    id: genRechargeSerial(),
+    owner: { accountUid: uid },
+    source: { provider: 'alipay', scene: 0, refNo: `OUT-${uid}-STALE` },
+    amount: { value: 50, currency: 'CNY' },
+    status: 'pending',
+    createdAtUtc: now - 20 * 60_000,
+  };
+
+  const freshPending: RechargeRecord = {
+    id: genRechargeSerial(),
+    owner: { accountUid: uid },
+    source: { provider: 'wechat_pay', scene: 0, refNo: `OUT-${uid}-FRESH` },
+    amount: { value: 30, currency: 'CNY' },
+    status: 'pending',
+    createdAtUtc: now - 5 * 60_000,
   };
 
   const bill: BillingEntry = {
@@ -137,7 +175,7 @@ function seedAccount(uid: string): AccountBilling {
       currency: 'CNY',
       updatedAtUtc: now,
     },
-    recharges: [recharge, ...referralRechargesForAccount(uid)],
+    recharges: [freshPending, stalePending, recharge, ...referralRechargesForAccount(uid)],
     bills: [bill],
   };
 }
@@ -178,6 +216,7 @@ export class BillingMock implements BillingPort {
         provider: input.source,
         scene: 99,
         refNo: input.idempotencyKey ?? `INT-${Date.now()}`,
+        productCode: input.productCode ?? null,
       },
       amount: { value: input.amount, currency: 'CNY' },
       status: 'paid',
@@ -198,9 +237,14 @@ export class BillingMock implements BillingPort {
     await delay();
     let all: RechargeRecord[] = [];
     if (input.filter.accountUid) {
-      all = [...ensure(input.filter.accountUid).recharges];
+      const acc = ensure(input.filter.accountUid);
+      sweepStalePending(acc.recharges);
+      all = [...acc.recharges];
     } else {
-      for (const b of store.values()) all.push(...b.recharges);
+      for (const b of store.values()) {
+        sweepStalePending(b.recharges);
+        all.push(...b.recharges);
+      }
       all.sort((a, b) => b.createdAtUtc - a.createdAtUtc);
     }
     if (input.filter.provider !== 'all') {
@@ -250,6 +294,7 @@ export class BillingMock implements BillingPort {
   async getRecharge(serial: string): Promise<AppResult<RechargeRecord>> {
     await delay();
     for (const b of store.values()) {
+      sweepStalePending(b.recharges);
       const found = b.recharges.find((x) => x.id === serial);
       if (found) {
         const parsed = rechargeRecordSchema.safeParse(found);
@@ -268,7 +313,8 @@ export class BillingMock implements BillingPort {
       const idx = b.recharges.findIndex((x) => x.id === serial);
       if (idx === -1) continue;
       const row = b.recharges[idx]!;
-      if (row.status !== 'pending') {
+      // 允许「待支付」入账，以及「已过期」单的迟到支付补录入账（超时关单后用户又付款成功）。
+      if (row.status !== 'pending' && row.status !== 'expired') {
         return fail({ code: 'conflict', message: `充值单 ${serial} 当前状态不可入账` });
       }
       const updated: RechargeRecord = {
@@ -288,6 +334,7 @@ export class BillingMock implements BillingPort {
           remark: input.remark ?? null,
           confirmedByStaffUid: '90001',
           confirmedAtUtc: Date.now(),
+          failureReason: null,
         },
       };
       b.recharges[idx] = updated;
