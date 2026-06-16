@@ -57,6 +57,8 @@ function mapAccountWallet(raw: unknown): Record<string, unknown> | null | undefi
 
 function mapListItem(raw: Record<string, unknown>): Record<string, unknown> {
   const owner = raw.owner as Record<string, unknown> | undefined;
+  // 最近活跃信息后端归入嵌套 active 对象；保留对旧扁平字段的兜底兼容。
+  const active = raw.active as Record<string, unknown> | undefined;
   const ownerDisplayName = asOptionalString(
     owner?.displayName ?? owner?.display_name ?? raw.ownerDisplayName ?? raw.owner_display_name,
   );
@@ -88,8 +90,12 @@ function mapListItem(raw: Record<string, unknown>): Record<string, unknown> {
     iamUserCount: raw.iamUserCount ?? raw.iam_user_count ?? 0,
     createdAtUtc: asEpochMillis(raw.createdAtUtc ?? raw.created_at_utc),
     updatedAtUtc: asEpochMillis(raw.updatedAtUtc ?? raw.updated_at_utc),
-    lastActiveAtUtc: asEpochMillisNullable(raw.lastActiveAtUtc ?? raw.last_active_at_utc),
-    lastActiveIp: asOptionalString(raw.lastActiveIp ?? raw.last_active_ip),
+    lastActiveAtUtc: asEpochMillisNullable(
+      active?.lastActiveAtUtc ?? active?.last_active_at_utc ?? raw.lastActiveAtUtc ?? raw.last_active_at_utc,
+    ),
+    lastActiveIp: asOptionalString(
+      active?.lastActiveIp ?? active?.last_active_ip ?? raw.lastActiveIp ?? raw.last_active_ip,
+    ),
     tier: typeof raw.tier === 'number' ? raw.tier : 1,
     totalRechargedAmount:
       typeof raw.totalRechargedAmount === 'number'
