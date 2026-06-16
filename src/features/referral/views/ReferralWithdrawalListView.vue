@@ -96,10 +96,33 @@ async function markPaid(row: ReferralWithdrawal): Promise<void> {
   }
 }
 
+async function markFailed(row: ReferralWithdrawal): Promise<void> {
+  const ok = await confirmDanger({
+    title: '确认打款失败',
+    message: `确认向 ${row.payout.accountName}（${row.payout.accountNo}）打款失败？冻结金额 ${formatMoney(row.amount.value, { currency: row.amount.currency })} 将退回用户可提现余额，用户可重新申请。`,
+    confirmText: '标记打款失败',
+    type: 'warning',
+  });
+  if (!ok) return;
+  actingId.value = row.id;
+  try {
+    const r = await port.markFailed(row.id);
+    if (r.success) {
+      ElMessage.success('已标记打款失败，金额已退回');
+      list.refresh();
+    } else {
+      ElMessage.error(r.error.message);
+    }
+  } finally {
+    actingId.value = null;
+  }
+}
+
 function statusTagType(status: ReferralWithdrawalStatus) {
   if (status === 'pending') return 'warning';
   if (status === 'approved') return 'primary';
-  if (status === 'rejected') return 'danger';
+  if (status === 'rejected' || status === 'failed') return 'danger';
+  if (status === 'canceled') return 'info';
   return 'success';
 }
 </script>
@@ -200,19 +223,30 @@ function statusTagType(status: ReferralWithdrawalStatus) {
               驳回
             </el-button>
           </template>
-          <el-button
-            v-else-if="row.status === 'approved'"
-            link
-            type="success"
-            size="small"
-            :loading="actingId === row.id"
-            @click="markPaid(row)"
-          >
-            标记已打款
-          </el-button>
-          <span v-else-if="row.status === 'rejected'" class="sub-text">
-            {{ row.rejectReason || '已驳回' }}
+          <template v-else-if="row.status === 'approved'">
+            <el-button
+              link
+              type="success"
+              size="small"
+              :loading="actingId === row.id"
+              @click="markPaid(row)"
+            >
+              标记已打款
+            </el-button>
+            <el-button
+              link
+              type="danger"
+              size="small"
+              :loading="actingId === row.id"
+              @click="markFailed(row)"
+            >
+              打款失败
+            </el-button>
+          </template>
+          <span v-else-if="row.status === 'rejected' || row.status === 'failed'" class="sub-text">
+            {{ row.rejectReason || (row.status === 'failed' ? '打款失败' : '已驳回') }}
           </span>
+          <span v-else-if="row.status === 'canceled'" class="sub-text">用户已撤销</span>
           <span v-else class="sub-text">
             {{ row.paidAtUtc ? formatDateTime(row.paidAtUtc) : '—' }}
           </span>

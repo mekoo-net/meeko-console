@@ -11,7 +11,14 @@ export const ReferralWithdrawalMethodLabel: Readonly<Record<ReferralWithdrawalMe
   bank: '银行卡',
 };
 
-export const referralWithdrawalStatusValues = ['pending', 'approved', 'rejected', 'paid'] as const;
+export const referralWithdrawalStatusValues = [
+  'pending',
+  'approved',
+  'rejected',
+  'paid',
+  'canceled',
+  'failed',
+] as const;
 export type ReferralWithdrawalStatus = (typeof referralWithdrawalStatusValues)[number];
 
 export const ReferralWithdrawalStatusLabel: Readonly<Record<ReferralWithdrawalStatus, string>> = {
@@ -19,6 +26,8 @@ export const ReferralWithdrawalStatusLabel: Readonly<Record<ReferralWithdrawalSt
   approved: '已通过',
   rejected: '已驳回',
   paid: '已打款',
+  canceled: '已取消',
+  failed: '打款失败',
 };
 
 export const ReferralWithdrawalStatusTone: Readonly<
@@ -28,6 +37,8 @@ export const ReferralWithdrawalStatusTone: Readonly<
   approved: 'info',
   rejected: 'danger',
   paid: 'success',
+  canceled: 'info',
+  failed: 'danger',
 };
 
 export const referralAccountSummarySchema = z.object({

@@ -85,4 +85,23 @@ export class ReferralWithdrawalMock implements ReferralWithdrawalPort {
     store[idx] = next;
     return parse(next);
   }
+
+  async markFailed(id: string, reason?: string): Promise<AppResult<ReferralWithdrawal>> {
+    await delay();
+    const store = getWithdrawalStore();
+    const idx = store.findIndex((w) => w.id === id);
+    if (idx < 0) return fail({ code: 'not_found', message: '提现申请不存在' });
+    const current = store[idx];
+    if (!current || current.status !== 'approved') {
+      return fail({ code: 'validation', message: '仅已通过申请可标记打款失败' });
+    }
+    const next: ReferralWithdrawal = {
+      ...current,
+      status: 'failed',
+      rejectReason: reason ?? null,
+      reviewedAtUtc: Date.now(),
+    };
+    store[idx] = next;
+    return parse(next);
+  }
 }

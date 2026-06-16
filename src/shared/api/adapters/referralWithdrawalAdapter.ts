@@ -111,4 +111,13 @@ export class ReferralWithdrawalHttpAdapter implements ReferralWithdrawalPort {
     if (!res.success) return res;
     return parseWithdrawal(res.data);
   }
+
+  async markFailed(id: string, reason?: string): Promise<AppResult<ReferralWithdrawal>> {
+    const res = await apiFetch<unknown>(`${BASE}/${encodeURIComponent(id)}/mark/failed`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: reason ?? null }),
+    });
+    if (!res.success) return res;
+    return parseWithdrawal(res.data);
+  }
 }

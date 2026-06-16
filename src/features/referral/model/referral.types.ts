@@ -7,6 +7,8 @@ export const referralWithdrawalStatusValues = [
   'approved',
   'rejected',
   'paid',
+  'canceled',
+  'failed',
 ] as const;
 
 export type ReferralWithdrawalStatus = (typeof referralWithdrawalStatusValues)[number];
@@ -64,6 +66,8 @@ export const referralWithdrawalStatusLabel: Readonly<Record<ReferralWithdrawalSt
   approved: '已通过',
   rejected: '已驳回',
   paid: '已打款',
+  canceled: '已取消',
+  failed: '打款失败',
 };
 
 export const referralWithdrawalMethodLabel: Readonly<Record<ReferralWithdrawalMethod, string>> = {

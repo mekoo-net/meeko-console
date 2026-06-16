@@ -18,4 +18,5 @@ export interface ReferralWithdrawalPort {
   approve(id: string): Promise<AppResult<ReferralWithdrawal>>;
   reject(id: string, reason: string): Promise<AppResult<ReferralWithdrawal>>;
   markPaid(id: string): Promise<AppResult<ReferralWithdrawal>>;
+  markFailed(id: string, reason?: string): Promise<AppResult<ReferralWithdrawal>>;
 }
