@@ -37,7 +37,7 @@ const drawerTitle = computed(() => {
   return `${props.channel.name} 配置`;
 });
 
-const accentColor = computed(() => (props.channel ? channelColor(props.channel.code) : '#595959'));
+const accentColor = computed(() => (props.channel ? channelColor(props.channel.driverCode) : '#595959'));
 
 watch(
   () => props.visible,
@@ -49,8 +49,8 @@ watch(
     showSecret.value = {};
     try {
       const [schemaRes, configRes] = await Promise.all([
-        port.getChannelSchema(props.channel.code),
-        port.getChannelConfig(props.channel.code),
+        port.getChannelSchema(props.channel.id),
+        port.getChannelConfig(props.channel.id),
       ]);
       if (schemaRes.success) schema.value = schemaRes.data;
       if (configRes.success && configRes.data) {
@@ -79,7 +79,7 @@ async function handleSave(): Promise<void> {
   if (!props.channel) return;
   saving.value = true;
   try {
-    const r = await port.saveChannelConfig(props.channel.code, values.value);
+    const r = await port.saveChannelConfig(props.channel.id, values.value);
     if (r.success) {
       ElMessage.success('配置已保存');
       emit('saved');
@@ -108,7 +108,7 @@ async function handleSave(): Promise<void> {
         </div>
         <div>
           <h3 :id="titleId" class="drawer-header__title">{{ drawerTitle }}</h3>
-          <p class="drawer-header__sub">code: {{ channel?.code }}</p>
+          <p class="drawer-header__sub">类型: {{ channel?.driverName ?? channel?.driverCode }}</p>
         </div>
       </div>
     </template>

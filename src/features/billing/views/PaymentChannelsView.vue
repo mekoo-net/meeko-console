@@ -1,45 +1,61 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { ElMessage } from 'element-plus';
-import { Refresh, Setting } from '@element-plus/icons-vue';
+import { computed, onMounted, ref } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { Refresh, Setting, Plus, Delete } from '@element-plus/icons-vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import ChannelConfigDrawer from '../components/ChannelConfigDrawer.vue';
-import { channelBg, channelColor, type PaymentChannel } from '../model/paymentChannel.types';
+import { channelBg, channelColor, type ChannelType, type PaymentChannel } from '../model/paymentChannel.types';
 import { getPaymentChannelPort } from '../services';
 
 const port = getPaymentChannelPort();
 const channels = ref<PaymentChannel[]>([]);
+const types = ref<ChannelType[]>([]);
 const loading = ref(false);
-const togglingCode = ref<string | null>(null);
+const togglingId = ref<number | null>(null);
 
 const configDrawerVisible = ref(false);
 const configTarget = ref<PaymentChannel | null>(null);
 
+// 新建渠道对话框
+const createVisible = ref(false);
+const createDriver = ref<string>('');
+const createName = ref<string>('');
+const creating = ref(false);
+
+const allowMultipleByDriver = computed<Record<string, boolean>>(() =>
+  Object.fromEntries(types.value.map((t) => [t.code, t.allowMultiple])),
+);
+
+function canDelete(ch: PaymentChannel): boolean {
+  return allowMultipleByDriver.value[ch.driverCode] !== false;
+}
+
 async function load(): Promise<void> {
   loading.value = true;
   try {
-    const r = await port.listChannels();
-    if (r.success) channels.value = r.data;
+    const [chRes, typeRes] = await Promise.all([port.listChannels(), port.listChannelTypes()]);
+    if (chRes.success) channels.value = chRes.data;
+    if (typeRes.success) types.value = typeRes.data;
   } finally {
     loading.value = false;
   }
 }
 
 async function toggle(ch: PaymentChannel): Promise<void> {
-  togglingCode.value = ch.code;
+  togglingId.value = ch.id;
   try {
-    const r = await port.setActive(ch.code, !ch.isActive);
+    const r = await port.setActive(ch.id, !ch.isActive);
     if (r.success) {
-      const idx = channels.value.findIndex((c) => c.code === ch.code);
+      const idx = channels.value.findIndex((c) => c.id === ch.id);
       if (idx >= 0) channels.value[idx] = r.data;
       ElMessage.success(`渠道「${ch.name}」已${r.data.isActive ? '启用' : '停用'}`);
     } else {
       ElMessage.error(r.error.message);
     }
   } finally {
-    togglingCode.value = null;
+    togglingId.value = null;
   }
 }
 
@@ -52,6 +68,55 @@ function onConfigSaved(): void {
   void load();
 }
 
+function openCreate(): void {
+  createDriver.value = types.value[0]?.code ?? '';
+  createName.value = '';
+  createVisible.value = true;
+}
+
+async function submitCreate(): Promise<void> {
+  if (!createDriver.value) {
+    ElMessage.warning('请选择支付类型');
+    return;
+  }
+  if (!createName.value.trim()) {
+    ElMessage.warning('请输入渠道名称');
+    return;
+  }
+  creating.value = true;
+  try {
+    const r = await port.createChannel(createDriver.value, createName.value.trim());
+    if (r.success) {
+      ElMessage.success(`渠道「${r.data.name}」已创建`);
+      createVisible.value = false;
+      await load();
+    } else {
+      ElMessage.error(r.error.message);
+    }
+  } finally {
+    creating.value = false;
+  }
+}
+
+async function remove(ch: PaymentChannel): Promise<void> {
+  try {
+    await ElMessageBox.confirm(`确定删除渠道「${ch.name}」吗？此操作不可恢复。`, '删除渠道', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    });
+  } catch {
+    return;
+  }
+  const r = await port.deleteChannel(ch.id);
+  if (r.success) {
+    ElMessage.success(`渠道「${ch.name}」已删除`);
+    await load();
+  } else {
+    ElMessage.error(r.error.message);
+  }
+}
+
 onMounted(() => void load());
 </script>
 
@@ -59,23 +124,24 @@ onMounted(() => void load());
   <div class="page">
     <PageHeader
       title="充值渠道"
-      description="支付渠道由插件自动注册；配置密钥后启用，用户即可在充值时选择。"
+      description="为支付类型创建渠道实例（同一类型可建多套），配置密钥并启用后，用户充值时即可选择。"
     >
       <template #actions>
         <el-button :icon="Refresh" :loading="loading" @click="load()">刷新</el-button>
+        <el-button type="primary" :icon="Plus" @click="openCreate()">新建渠道</el-button>
       </template>
     </PageHeader>
 
     <EmptyState
       v-if="!loading && channels.length === 0"
       title="暂无充值渠道"
-      description="未检测到已注册的支付渠道插件。"
+      description="点击「新建渠道」选择支付类型并创建一个实例。"
     />
 
     <div v-else v-loading="loading" class="channel-grid">
       <el-card
         v-for="ch in channels"
-        :key="ch.code"
+        :key="ch.id"
         shadow="never"
         class="channel-card"
         :class="{ 'channel-card--inactive': !ch.isActive }"
@@ -83,13 +149,13 @@ onMounted(() => void load());
         <div class="channel-card__header">
           <div
             class="channel-card__logo"
-            :style="{ background: channelBg(ch.code), color: channelColor(ch.code) }"
+            :style="{ background: channelBg(ch.driverCode), color: channelColor(ch.driverCode) }"
           >
             <span class="channel-card__logo-text">{{ ch.name.charAt(0) }}</span>
           </div>
           <div class="channel-card__meta">
             <div class="channel-card__name">{{ ch.name }}</div>
-            <div class="channel-card__code">code: {{ ch.code }}</div>
+            <div class="channel-card__code">{{ ch.driverName ?? ch.driverCode }} · #{{ ch.id }}</div>
           </div>
           <div class="channel-card__badges">
             <el-tag :type="ch.isActive ? 'success' : 'info'" size="small" effect="light" round>
@@ -122,6 +188,17 @@ onMounted(() => void load());
         </div>
 
         <div class="channel-card__footer">
+          <el-button
+            v-if="canDelete(ch)"
+            :icon="Delete"
+            type="danger"
+            plain
+            size="small"
+            @click="remove(ch)"
+          >
+            删除
+          </el-button>
+          <div style="flex: 1" />
           <el-button :icon="Setting" type="primary" plain size="small" @click="openConfig(ch)">
             配置
           </el-button>
@@ -129,7 +206,7 @@ onMounted(() => void load());
             :type="ch.isActive ? 'warning' : 'success'"
             plain
             size="small"
-            :loading="togglingCode === ch.code"
+            :loading="togglingId === ch.id"
             @click="toggle(ch)"
           >
             {{ ch.isActive ? '停用' : '启用' }}
@@ -143,6 +220,34 @@ onMounted(() => void load());
       :channel="configTarget"
       @saved="onConfigSaved"
     />
+
+    <el-dialog v-model="createVisible" title="新建充值渠道" width="460px">
+      <el-form label-position="top">
+        <el-form-item label="支付类型" required>
+          <el-select v-model="createDriver" placeholder="选择支付类型" style="width: 100%">
+            <el-option
+              v-for="t in types"
+              :key="t.code"
+              :label="t.displayName"
+              :value="t.code"
+              :disabled="!t.allowMultiple && t.instanceCount > 0"
+            >
+              <span>{{ t.displayName }}</span>
+              <span v-if="!t.allowMultiple && t.instanceCount > 0" class="cell-muted" style="float: right">
+                单例（已创建）
+              </span>
+            </el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="渠道名称" required>
+          <el-input v-model="createName" placeholder="如：支付宝-主账户" maxlength="64" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createVisible = false">取消</el-button>
+        <el-button type="primary" :loading="creating" @click="submitCreate()">创建</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -216,6 +321,7 @@ onMounted(() => void load());
 }
 .channel-card__footer {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
   border-top: 1px solid var(--el-border-color-lighter);

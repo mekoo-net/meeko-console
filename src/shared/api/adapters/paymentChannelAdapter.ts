@@ -4,6 +4,7 @@ import { request } from '@/shared/api/httpClient';
 import type {
   ChannelConfigSchema,
   ChannelConfigValues,
+  ChannelType,
   PaymentChannel,
 } from '@/features/billing/model/paymentChannel.types';
 import type { PaymentChannelPort } from '@/features/billing/services/ports/paymentChannelPort';
@@ -11,20 +12,44 @@ import type { PaymentChannelPort } from '@/features/billing/services/ports/payme
 const BASE = '/api/admin/billing/channels';
 
 type ApiChannelDto = {
-  code: string;
+  id: number;
+  driverCode: string;
   displayName: string;
+  driverDisplayName?: string | null;
   isActive: boolean;
   isConfigured: boolean;
   supportedScenes: string[];
 };
 
+type ApiChannelTypeDto = {
+  code: string;
+  displayName: string;
+  allowMultiple: boolean;
+  instanceCount: number;
+  supportedScenes: string[];
+  fields: ChannelType['fields'];
+};
+
 function mapChannel(dto: ApiChannelDto): PaymentChannel {
   return {
-    code: dto.code,
+    id: dto.id,
+    driverCode: dto.driverCode,
     name: dto.displayName,
+    driverName: dto.driverDisplayName ?? undefined,
     isActive: dto.isActive,
     isConfigured: dto.isConfigured,
     supportedScenes: dto.supportedScenes ?? [],
+  };
+}
+
+function mapType(dto: ApiChannelTypeDto): ChannelType {
+  return {
+    code: dto.code,
+    displayName: dto.displayName,
+    allowMultiple: dto.allowMultiple,
+    instanceCount: dto.instanceCount,
+    supportedScenes: dto.supportedScenes ?? [],
+    fields: dto.fields ?? [],
   };
 }
 
@@ -35,8 +60,27 @@ export class PaymentChannelHttpAdapter implements PaymentChannelPort {
     return { success: true, data: (r.data ?? []).map(mapChannel) };
   }
 
-  async setActive(code: string, active: boolean): Promise<AppResult<PaymentChannel>> {
-    const r = await request<ApiChannelDto>(`${BASE}/${encodeURIComponent(code)}/active`, {
+  async listChannelTypes(): Promise<AppResult<ChannelType[]>> {
+    const r = await request<ApiChannelTypeDto[]>(`${BASE}/types`);
+    if (!r.success) return r;
+    return { success: true, data: (r.data ?? []).map(mapType) };
+  }
+
+  async createChannel(driverCode: string, displayName: string): Promise<AppResult<PaymentChannel>> {
+    const r = await request<ApiChannelDto>(BASE, {
+      method: 'POST',
+      body: { driverCode, displayName },
+    });
+    if (!r.success) return r;
+    return { success: true, data: mapChannel(r.data) };
+  }
+
+  async deleteChannel(id: number): Promise<AppResult<void>> {
+    return request<void>(`${BASE}/${id}`, { method: 'DELETE' });
+  }
+
+  async setActive(id: number, active: boolean): Promise<AppResult<PaymentChannel>> {
+    const r = await request<ApiChannelDto>(`${BASE}/${id}/active`, {
       method: 'PATCH',
       body: { active },
     });
@@ -44,20 +88,20 @@ export class PaymentChannelHttpAdapter implements PaymentChannelPort {
     return { success: true, data: mapChannel(r.data) };
   }
 
-  async getChannelSchema(code: string): Promise<AppResult<ChannelConfigSchema | null>> {
-    const r = await request<ChannelConfigSchema | null>(`${BASE}/${encodeURIComponent(code)}/schema`);
+  async getChannelSchema(id: number): Promise<AppResult<ChannelConfigSchema | null>> {
+    const r = await request<ChannelConfigSchema | null>(`${BASE}/${id}/schema`);
     if (!r.success) return r;
     return { success: true, data: r.data };
   }
 
-  async getChannelConfig(code: string): Promise<AppResult<ChannelConfigValues | null>> {
-    const r = await request<ChannelConfigValues | null>(`${BASE}/${encodeURIComponent(code)}/config`);
+  async getChannelConfig(id: number): Promise<AppResult<ChannelConfigValues | null>> {
+    const r = await request<ChannelConfigValues | null>(`${BASE}/${id}/config`);
     if (!r.success) return r;
     return { success: true, data: r.data };
   }
 
-  async saveChannelConfig(code: string, values: Record<string, string>): Promise<AppResult<void>> {
-    return request<void>(`${BASE}/${encodeURIComponent(code)}/config`, {
+  async saveChannelConfig(id: number, values: Record<string, string>): Promise<AppResult<void>> {
+    return request<void>(`${BASE}/${id}/config`, {
       method: 'PUT',
       body: values,
     });
