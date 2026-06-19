@@ -1,53 +1,42 @@
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { delay } from '@/shared/lib/delay';
 
-import {
-  draftPaymentChannel,
-  type AlipayConfig,
-  type PaymentChannel,
-  type PaymentProviderCode,
-  type WechatPayConfig,
+import type {
+  ChannelConfigSchema,
+  ChannelConfigValues,
+  PaymentChannel,
 } from '../../model/paymentChannel.types';
 import type { PaymentChannelPort } from '../ports/paymentChannelPort';
 
 const seedChannels: PaymentChannel[] = [
-  {
-    id: 'PC-001',
-    code: 'alipay',
-    name: '支付宝',
-    description: '支付宝扫码（Native）/ H5 / PC 网站支付，实时到账。需要在支付宝开放平台创建应用并完成签约。',
-    isActive: true,
-    supportedScenes: [0, 1, 4],
-    isConfigured: false,
-    createdAtUtc: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'PC-002',
-    code: 'wechat_pay',
-    name: '微信支付',
-    description: '微信 Native / JsApi / H5 支付，需商户平台开通对应支付类型。',
-    isActive: true,
-    supportedScenes: [0, 1, 2],
-    isConfigured: false,
-    createdAtUtc: '2026-01-01T00:00:00Z',
-  },
+  { code: 'alipay', name: '支付宝', isActive: false, isConfigured: false, supportedScenes: ['native', 'h5', 'pc'] },
+  { code: 'wechat_pay', name: '微信支付', isActive: false, isConfigured: false, supportedScenes: ['native', 'h5', 'jsapi'] },
+  { code: 'fkpay', name: '发卡付', isActive: false, isConfigured: false, supportedScenes: ['redirect'] },
+  { code: 'manual', name: '手工入账', isActive: true, isConfigured: true, supportedScenes: ['manual'] },
 ];
 
-const channelStore = new Map<string, PaymentChannel>(seedChannels.map((c) => [c.code, c]));
-let alipayConfig: AlipayConfig | null = null;
-let wechatPayConfig: WechatPayConfig | null = null;
+const schemas: Record<string, ChannelConfigSchema> = {
+  alipay: {
+    code: 'alipay',
+    displayName: '支付宝',
+    fields: [
+      { key: 'appId', label: 'AppId', type: 'Text', isSecret: false, required: true },
+      { key: 'appPrivateKey', label: '应用私钥', type: 'TextArea', isSecret: true, required: true },
+    ],
+  },
+  fkpay: {
+    code: 'fkpay',
+    displayName: '发卡付',
+    fields: [
+      { key: 'baseUrl', label: '网关地址', type: 'Url', isSecret: false, required: true },
+      { key: 'appId', label: 'AppId', type: 'Text', isSecret: false, required: true },
+      { key: 'appSecret', label: 'AppSecret', type: 'Password', isSecret: true, required: true },
+    ],
+  },
+};
 
-function ensureChannel(code: PaymentProviderCode): PaymentChannel {
-  const existing = channelStore.get(code);
-  if (existing) return existing;
-  const draft = draftPaymentChannel(code);
-  const ch: PaymentChannel = {
-    ...draft,
-    id: code === 'alipay' ? 'PC-001' : 'PC-002',
-  };
-  channelStore.set(code, ch);
-  return ch;
-}
+const channelStore = new Map(seedChannels.map((c) => [c.code, { ...c }]));
+const configStore = new Map<string, Record<string, string>>();
 
 export class PaymentChannelMock implements PaymentChannelPort {
   async listChannels(): Promise<AppResult<PaymentChannel[]>> {
@@ -55,62 +44,30 @@ export class PaymentChannelMock implements PaymentChannelPort {
     return ok(Array.from(channelStore.values()));
   }
 
-  async setActive(code: PaymentProviderCode, active: boolean): Promise<AppResult<PaymentChannel>> {
+  async setActive(code: string, active: boolean): Promise<AppResult<PaymentChannel>> {
     await delay();
     const ch = channelStore.get(code);
     if (!ch) return fail({ code: 'not_found', message: `渠道 ${code} 不存在` });
-    const next: PaymentChannel = { ...ch, isActive: active };
+    const next = { ...ch, isActive: active };
     channelStore.set(code, next);
     return ok(next);
   }
 
-  async getAlipayConfig(): Promise<AppResult<AlipayConfig | null>> {
+  async getChannelSchema(code: string): Promise<AppResult<ChannelConfigSchema | null>> {
+    await delay(100);
+    return ok(schemas[code] ?? { code, displayName: code, fields: [] });
+  }
+
+  async getChannelConfig(code: string): Promise<AppResult<ChannelConfigValues | null>> {
+    await delay(100);
+    return ok({ code, values: { ...(configStore.get(code) ?? {}) } });
+  }
+
+  async saveChannelConfig(code: string, values: Record<string, string>): Promise<AppResult<void>> {
     await delay(200);
-    return ok(alipayConfig);
-  }
-
-  async saveAlipayConfig(config: AlipayConfig): Promise<AppResult<void>> {
-    await delay(400);
-    if (!config.appId.trim()) {
-      return fail({ code: 'validation', message: '应用 ID 不能为空' });
-    }
-    if (!config.privateKey.trim()) {
-      return fail({ code: 'validation', message: '应用私钥不能为空' });
-    }
-    if (!config.alipayPublicKey.trim()) {
-      return fail({ code: 'validation', message: '支付宝公钥不能为空' });
-    }
-    alipayConfig = { ...config };
-    const ch = ensureChannel('alipay');
-    channelStore.set('alipay', { ...ch, isConfigured: true });
-    return ok(undefined);
-  }
-
-  async getWechatPayConfig(): Promise<AppResult<WechatPayConfig | null>> {
-    await delay(200);
-    return ok(wechatPayConfig);
-  }
-
-  async saveWechatPayConfig(config: WechatPayConfig): Promise<AppResult<void>> {
-    await delay(400);
-    if (!config.appId.trim()) {
-      return fail({ code: 'validation', message: 'AppId 不能为空' });
-    }
-    if (!config.mchId.trim()) {
-      return fail({ code: 'validation', message: '商户号不能为空' });
-    }
-    if (config.apiV3Key.trim().length !== 32) {
-      return fail({ code: 'validation', message: 'APIv3 密钥必须为 32 字符' });
-    }
-    if (!config.certSerialNo.trim()) {
-      return fail({ code: 'validation', message: '证书序列号不能为空' });
-    }
-    if (!config.privateKey.trim()) {
-      return fail({ code: 'validation', message: '商户私钥不能为空' });
-    }
-    wechatPayConfig = { ...config };
-    const ch = ensureChannel('wechat_pay');
-    channelStore.set('wechat_pay', { ...ch, isConfigured: true });
+    configStore.set(code, { ...values });
+    const ch = channelStore.get(code);
+    if (ch) channelStore.set(code, { ...ch, isConfigured: true });
     return ok(undefined);
   }
 }

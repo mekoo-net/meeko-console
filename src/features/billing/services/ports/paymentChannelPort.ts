@@ -1,19 +1,16 @@
 import type { AppResult } from '@/shared/api/httpTypes';
 
 import type {
-  AlipayConfig,
+  ChannelConfigSchema,
+  ChannelConfigValues,
   PaymentChannel,
-  PaymentProviderCode,
-  WechatPayConfig,
 } from '../../model/paymentChannel.types';
 
 export interface PaymentChannelPort {
   listChannels(): Promise<AppResult<PaymentChannel[]>>;
-  setActive(code: PaymentProviderCode, active: boolean): Promise<AppResult<PaymentChannel>>;
+  setActive(code: string, active: boolean): Promise<AppResult<PaymentChannel>>;
 
-  getAlipayConfig(): Promise<AppResult<AlipayConfig | null>>;
-  saveAlipayConfig(config: AlipayConfig): Promise<AppResult<void>>;
-
-  getWechatPayConfig(): Promise<AppResult<WechatPayConfig | null>>;
-  saveWechatPayConfig(config: WechatPayConfig): Promise<AppResult<void>>;
+  getChannelSchema(code: string): Promise<AppResult<ChannelConfigSchema | null>>;
+  getChannelConfig(code: string): Promise<AppResult<ChannelConfigValues | null>>;
+  saveChannelConfig(code: string, values: Record<string, string>): Promise<AppResult<void>>;
 }
