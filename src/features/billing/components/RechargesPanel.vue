@@ -245,7 +245,7 @@ function onConfirmSuccess(updated: RechargeRecord): void {
               effect="plain"
               round
             >
-              {{ RechargeProviderLabel[row.source.provider] }}
+              {{ RechargeProviderLabel[row.source.provider] ?? row.source.provider }}
             </el-tag>
           </template>
         </el-table-column>
