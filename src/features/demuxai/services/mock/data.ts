@@ -806,6 +806,7 @@ function seedLogs(providers: Provider[]): LogEntry[] {
 
     out.push({
       id: genLogUid(),
+      traceId: `${occurred.getTime().toString(16)}${i.toString(16).padStart(8, '0')}`.padEnd(32, '0').slice(0, 32),
       createAt: occurred.getTime(),
       account: {
         uid: accountUid,

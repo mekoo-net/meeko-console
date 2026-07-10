@@ -31,15 +31,32 @@ function applyFilter(rows: LogEntry[], f: ListLogsFilter): LogEntry[] {
     if (f.providerId != null && r.providerId !== f.providerId) return false;
     if (f.apiType && r.apiType !== f.apiType) return false;
     if (f.convId && r.convId !== f.convId) return false;
+    if (f.logId && r.id !== f.logId.trim()) return false;
+    if (f.traceId) {
+      const trace = f.traceId.trim();
+      if ((r.traceId ?? '') !== trace) return false;
+    }
+    if (f.billUid) {
+      const uid = f.billUid.trim();
+      if (!r.bill || r.bill.id !== uid) return false;
+    }
+    if (f.contactKeyword?.trim()) {
+      const kw = f.contactKeyword.trim().toLowerCase();
+      const email = (r.account.email ?? '').toLowerCase();
+      const phone = r.account.phone ?? '';
+      const name = (r.account.displayName ?? '').toLowerCase();
+      if (!email.includes(kw) && !phone.includes(kw) && !name.includes(kw)) return false;
+    }
     if (f.errorOnly && r.success) return false;
     if (f.errorCode) {
       if (r.success) return false;
       if (r.error?.code !== f.errorCode) return false;
     }
-    if (f.fromUtc != null) {
+    const skipTime = Boolean(f.logId?.trim() || f.traceId?.trim() || f.billUid?.trim());
+    if (!skipTime && f.fromUtc != null) {
       if (r.createAt < f.fromUtc) return false;
     }
-    if (f.toUtc != null) {
+    if (!skipTime && f.toUtc != null) {
       if (r.createAt > f.toUtc) return false;
     }
     return true;

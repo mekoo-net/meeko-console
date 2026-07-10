@@ -162,9 +162,28 @@ export const routes: RouteRecordRaw[] = [
           },
           {
             path: 'settings/rate',
-            name: 'demuxai-settings-rate',
-            component: () => import('@/features/demuxai/views/SettingsView.vue'),
+            component: () => import('@/features/demuxai/views/RateSettingsLayout.vue'),
             meta: { title: '速率设置', requiresAuth: true, roles: ['Admin'] },
+            children: [
+              {
+                path: '',
+                name: 'demuxai-settings-rate',
+                component: () => import('@/features/demuxai/views/RateSwitchesView.vue'),
+                meta: { title: '速率设置', requiresAuth: true, roles: ['Admin'] },
+              },
+              {
+                path: 'accounts',
+                name: 'demuxai-settings-rate-accounts',
+                component: () => import('@/features/demuxai/views/RateAccountSettingsView.vue'),
+                meta: { title: '账户限速', requiresAuth: true, roles: ['Admin'] },
+              },
+              {
+                path: 'ip',
+                name: 'demuxai-settings-rate-ip',
+                component: () => import('@/features/demuxai/views/RateIpSettingsView.vue'),
+                meta: { title: 'IP 限速', requiresAuth: true, roles: ['Admin'] },
+              },
+            ],
           },
         ],
       },

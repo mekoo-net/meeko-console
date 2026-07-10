@@ -4,6 +4,7 @@
  *
  * 行 1：账户 UID  +  邮箱 / 手机
  * 行 2：业务 slot（类型 / 状态 等，由父组件用 <el-form-item> 注入）
+ * 行 2b（可选）：#extra-row —— 字段较多时追加一行业务筛选
  * 行 3：时间范围  +  最近 24 小时 / 7 天 / 30 天 快捷按钮  ··········  查询 / 重置
  *
  * 用法：
@@ -144,6 +145,10 @@ function onReset(): void {
         </el-button>
         <el-button :icon="RefreshLeft" @click="onReset">重置</el-button>
       </div>
+    </div>
+
+    <div v-if="$slots['extra-row']" class="filter-bar__row">
+      <slot name="extra-row" />
     </div>
 
     <div v-if="dateRange !== undefined" class="filter-bar__row filter-bar__row--date">

@@ -4,12 +4,12 @@
  *
  * 注意事项：
  *  - **必须传时间范围**：UI 默认填最近 24h；用户清空 dateRange 时按钮置灰
- *  - 账户列展示日志 API enrich 的邮箱 / 手机；昵称在详情抽屉
+ *  - 邮箱 / 手机：服务端经 Keystone 解析 account_uid 后筛日志（全量分页，非当前页本地过滤）
  *  - 渠道筛选走 `modelName` 前缀，不在此页拉渠道组字典
  *  - 错误日志一键过滤 → 排障常用
  *  - KPI 汇总卡片已迁移至「概览」页（OverviewView）
  */
-import { computed, onMounted, ref, watch } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { Right, RefreshLeft, Search, View, Warning } from '@element-plus/icons-vue';
@@ -58,6 +58,10 @@ interface PageFilter {
   vendorKey: string;
   /** 会话 ID 精确匹配（点击 Conv 列钻取） */
   convId: string;
+  /** TraceId 精确匹配 */
+  traceId: string;
+  /** 账单 UID 精确匹配（= `LogEntry.bill.id`） */
+  billUid: string;
   /** 仅看失败调用（success === false） */
   errorOnly: boolean;
 }
@@ -75,6 +79,8 @@ const defaultFilter = (): PageFilter => ({
   modelName: '',
   vendorKey: '',
   convId: '',
+  traceId: '',
+  billUid: '',
   errorOnly: false,
 });
 
@@ -92,20 +98,33 @@ function buildPortFilter(): ListLogsFilter {
     errorOnly: filter.value.errorOnly,
   };
   if (filter.value.accountUid.trim()) f.accountUid = filter.value.accountUid.trim();
+  const contact = filter.value.contactKeyword.trim();
+  if (contact) f.contactKeyword = contact;
   if (filter.value.modelName.trim()) f.modelName = filter.value.modelName.trim();
   const qg = filter.value.vendorKey.trim();
   if (qg) f.vendorKey = qg;
+  const traceId = filter.value.traceId.trim();
+  if (traceId) f.traceId = traceId;
+  const billUid = filter.value.billUid.trim();
+  if (billUid) f.billUid = billUid;
+  const hasExactLookup = Boolean(traceId || billUid);
   if (filter.value.dateRange?.[0] && filter.value.dateRange[1]) {
     Object.assign(f, dateRangeToEpochMillis(filter.value.dateRange));
   }
   const conv = filter.value.convId.trim();
   if (conv) f.convId = conv;
+  // 精确 TraceId / billUid 检索时后端会忽略时间窗；此处仍允许不传时间范围。
+  if (!hasExactLookup && (f.fromUtc == null || f.toUtc == null)) {
+    throw new Error('missing_time_range');
+  }
   return f;
 }
 
 async function fetchData(): Promise<void> {
-  if (!filter.value.dateRange || !filter.value.dateRange[0]) {
-    ElMessage.warning('请先选择时间范围（最长 7 天）');
+  try {
+    buildPortFilter();
+  } catch {
+    ElMessage.warning('请先选择时间范围（最长 7 天），或输入 TraceId / 账单 UID');
     return;
   }
   loading.value = true;
@@ -135,10 +154,13 @@ watch(
   () =>
     [
       filter.value.accountUid,
+      filter.value.contactKeyword,
       filter.value.dateRange,
       filter.value.modelName,
       filter.value.vendorKey,
       filter.value.convId,
+      filter.value.traceId,
+      filter.value.billUid,
       filter.value.errorOnly,
     ] as const,
   () => {
@@ -157,18 +179,6 @@ function resetFilter(): void {
   filter.value = defaultFilter();
   page.value = 1;
 }
-
-/** 邮箱 / 手机关键字：在当前页结果上过滤（数据来自日志 API 的 account enrich）。 */
-const displayRecords = computed(() => {
-  const kw = filter.value.contactKeyword.trim().toLowerCase();
-  if (!kw) return records.value;
-  return records.value.filter((r) => {
-    const email = (r.account.email ?? '').toLowerCase();
-    const phone = r.account.phone ?? '';
-    const name = (r.account.displayName ?? '').toLowerCase();
-    return email.includes(kw) || phone.includes(kw) || name.includes(kw);
-  });
-});
 
 function openDetail(row: LogEntry): void {
   detailLog.value = row;
@@ -432,21 +442,23 @@ onMounted(() => {
         @refresh="fetchData"
         @reset="resetFilter"
       >
-        <el-form-item label="渠道">
+        <el-form-item label="TraceId">
           <el-input
-            v-model="filter.vendorKey"
+            v-model="filter.traceId"
             :prefix-icon="Search"
-            placeholder="供应商组，如 gemini"
+            placeholder="精确匹配"
             clearable
+            class="mono-input"
             style="width: 220px"
           />
         </el-form-item>
-        <el-form-item label="模型名">
+        <el-form-item label="账单 UID">
           <el-input
-            v-model="filter.modelName"
+            v-model="filter.billUid"
             :prefix-icon="Search"
-            placeholder="模糊匹配 modelName"
+            placeholder="精确匹配"
             clearable
+            class="mono-input"
             style="width: 220px"
           />
         </el-form-item>
@@ -463,12 +475,33 @@ onMounted(() => {
             {{ filter.convId }}
           </el-tag>
         </el-form-item>
+
+        <template #extra-row>
+          <el-form-item label="渠道">
+            <el-input
+              v-model="filter.vendorKey"
+              :prefix-icon="Search"
+              placeholder="供应商组，如 gemini"
+              clearable
+              style="width: 220px"
+            />
+          </el-form-item>
+          <el-form-item label="模型名">
+            <el-input
+              v-model="filter.modelName"
+              :prefix-icon="Search"
+              placeholder="模糊匹配 modelName"
+              clearable
+              style="width: 220px"
+            />
+          </el-form-item>
+        </template>
       </FilterBar>
     </template>
 
     <el-table
       v-loading="loading"
-      :data="displayRecords"
+      :data="records"
       row-key="id"
       size="small"
       stripe
@@ -494,9 +527,12 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <el-table-column label="日志编号" min-width="150">
+      <el-table-column label="日志编号" min-width="190">
         <template #default="{ row }: { row: LogEntry }">
-          <span class="cell-logid mono">{{ row.id }}</span>
+          <div class="cell-ids">
+            <span class="cell-logid mono">{{ row.id }}</span>
+            <span class="cell-trace mono">{{ row.traceId || '—' }}</span>
+          </div>
         </template>
       </el-table-column>
 
@@ -697,6 +733,9 @@ onMounted(() => {
 .mono {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
+.mono-input :deep(.el-input__inner) {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
 .num {
   font-variant-numeric: tabular-nums;
 }
@@ -708,9 +747,20 @@ onMounted(() => {
 }
 .cell-logid {
   font-size: 12px;
-  color: var(--el-text-color-regular);
+  color: var(--el-text-color-primary);
   word-break: break-all;
   line-height: 1.35;
+}
+.cell-ids {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  line-height: 1.35;
+}
+.cell-trace {
+  font-size: 11.5px;
+  color: var(--el-text-color-secondary);
+  word-break: break-all;
 }
 .cell-call {
   display: flex;
