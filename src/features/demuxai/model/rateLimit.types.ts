@@ -32,12 +32,44 @@ export const accountRateLimitOverrideSchema = z.object({
 
 export type AccountRateLimitOverride = z.infer<typeof accountRateLimitOverrideSchema>;
 
+/**
+ * 针对具体 IP / CIDR 的覆盖。ip 为精确 IP（1.2.3.4）或 CIDR 网段（10.0.0.0/8）。
+ * enabled 关闭后该 IP 回退到默认策略（而非不限）；命中最具体的覆盖优先。
+ */
+export const ipRateOverrideSchema = z.object({
+  ip: z.string().min(1),
+  enabled: z.boolean(),
+  windowValue: z.number().int().positive(),
+  windowUnit: windowUnitSchema,
+  maxRequests: z.number().int().nonnegative(),
+  maxConcurrency: z.number().int().nonnegative(),
+});
+
+export type IpRateOverride = z.infer<typeof ipRateOverrideSchema>;
+
+/**
+ * 平台级 IP 限速（与账户无关）。网关在 sk- 鉴权之前按客户端 IP 执行，
+ * 用于抵御洪水与 key 爆破。enabled 关闭或上限为 0 表示不限；
+ * overrides 为针对具体 IP / CIDR 的覆盖，命中且启用时优先于默认策略。
+ */
+export const ipRateLimitSettingsSchema = z.object({
+  enabled: z.boolean(),
+  windowValue: z.number().int().positive(),
+  windowUnit: windowUnitSchema,
+  maxRequests: z.number().int().nonnegative(),
+  maxConcurrency: z.number().int().nonnegative(),
+  overrides: z.array(ipRateOverrideSchema),
+});
+
+export type IpRateLimitSettings = z.infer<typeof ipRateLimitSettingsSchema>;
+
 /** DemuxAI 产品速率限制设置（GET/PUT /demuxai/api/admin/rate/setting）。 */
 export const rateLimitSettingsSchema = z.object({
-  /** 速率限制总开关；关闭后不下发任何限制。 */
+  /** 速率限制总开关；关闭后不下发任何限制（不含 IP 限速，其有独立开关）。 */
   enabled: z.boolean(),
   defaultPolicy: rateLimitPolicySchema,
   overrides: z.array(accountRateLimitOverrideSchema),
+  ip: ipRateLimitSettingsSchema,
   /** 最近一次保存时间（Unix 毫秒）；从未配置时为 0。 */
   updatedAtUtc: z.number().int(),
 });
@@ -48,6 +80,7 @@ export const updateRateLimitSettingsSchema = z.object({
   enabled: z.boolean(),
   defaultPolicy: rateLimitPolicySchema,
   overrides: z.array(accountRateLimitOverrideSchema),
+  ip: ipRateLimitSettingsSchema,
 });
 
 export type UpdateRateLimitSettingsInput = z.infer<typeof updateRateLimitSettingsSchema>;

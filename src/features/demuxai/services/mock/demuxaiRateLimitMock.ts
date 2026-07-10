@@ -24,6 +24,17 @@ let state: RateLimitSettings = {
       policy: { windowValue: 10, windowUnit: 'second', maxRequests: 50, maxSuccesses: 0, maxConcurrency: 5 },
     },
   ],
+  ip: {
+    enabled: false,
+    windowValue: 1,
+    windowUnit: 'minute',
+    maxRequests: 120,
+    maxConcurrency: 10,
+    overrides: [
+      { ip: '203.0.113.7', enabled: true, windowValue: 1, windowUnit: 'minute', maxRequests: 600, maxConcurrency: 30 },
+      { ip: '10.0.0.0/8', enabled: false, windowValue: 1, windowUnit: 'minute', maxRequests: 0, maxConcurrency: 0 },
+    ],
+  },
   updatedAtUtc: Date.now(),
 };
 
@@ -32,6 +43,7 @@ function clone(s: RateLimitSettings): RateLimitSettings {
     ...s,
     defaultPolicy: { ...s.defaultPolicy },
     overrides: s.overrides.map((o) => ({ accountUid: o.accountUid, enabled: o.enabled, policy: { ...o.policy } })),
+    ip: { ...s.ip, overrides: s.ip.overrides.map((o) => ({ ...o })) },
   };
 }
 
@@ -47,6 +59,7 @@ export class DemuxaiRateLimitMock implements DemuxaiRateLimitPort {
       enabled: input.enabled,
       defaultPolicy: { ...input.defaultPolicy },
       overrides: input.overrides.map((o) => ({ accountUid: o.accountUid, enabled: o.enabled, policy: { ...o.policy } })),
+      ip: { ...input.ip, overrides: input.ip.overrides.map((o) => ({ ...o })) },
       updatedAtUtc: Date.now(),
     };
     return ok(clone(state));

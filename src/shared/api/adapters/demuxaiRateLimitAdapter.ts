@@ -1,5 +1,6 @@
 import {
   rateLimitSettingsSchema,
+  type IpRateLimitSettings,
   type RateLimitPolicy,
   type RateLimitSettings,
   type UpdateRateLimitSettingsInput,
@@ -47,6 +48,31 @@ function mapPolicyWire(raw: unknown): RateLimitPolicy {
   };
 }
 
+function mapIpWire(raw: unknown): IpRateLimitSettings {
+  const w = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const { windowValue, windowUnit } = splitWindow(toInt(w.windowSeconds ?? w.window_seconds, 60));
+  const overridesRaw = Array.isArray(w.overrides) ? w.overrides : [];
+  return {
+    enabled: typeof w.enabled === 'boolean' ? w.enabled : false,
+    windowValue,
+    windowUnit,
+    maxRequests: toInt(w.maxRequests ?? w.max_requests, 0),
+    maxConcurrency: toInt(w.maxConcurrency ?? w.max_concurrency, 0),
+    overrides: overridesRaw.map((o) => {
+      const r = (o && typeof o === 'object' ? o : {}) as Record<string, unknown>;
+      const win = splitWindow(toInt(r.windowSeconds ?? r.window_seconds, 60));
+      return {
+        ip: String(r.ip ?? ''),
+        enabled: typeof r.enabled === 'boolean' ? r.enabled : true,
+        windowValue: win.windowValue,
+        windowUnit: win.windowUnit,
+        maxRequests: toInt(r.maxRequests ?? r.max_requests, 0),
+        maxConcurrency: toInt(r.maxConcurrency ?? r.max_concurrency, 0),
+      };
+    }),
+  };
+}
+
 function mapWire(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object') return raw;
   const w = raw as Record<string, unknown>;
@@ -62,6 +88,7 @@ function mapWire(raw: unknown): unknown {
         policy: mapPolicyWire(r.policy),
       };
     }),
+    ip: mapIpWire(w.ip),
     updatedAtUtc: asEpochMillis(w.updatedAtUtc ?? w.updated_at_utc) ?? 0,
   };
 }
@@ -96,6 +123,19 @@ export class DemuxaiRateLimitHttpAdapter implements DemuxaiRateLimitPort {
         enabled: o.enabled,
         policy: policyToWire(o.policy),
       })),
+      ip: {
+        enabled: input.ip.enabled,
+        windowSeconds: toSeconds(input.ip.windowValue, input.ip.windowUnit),
+        maxRequests: input.ip.maxRequests,
+        maxConcurrency: input.ip.maxConcurrency,
+        overrides: input.ip.overrides.map((o) => ({
+          ip: o.ip,
+          enabled: o.enabled,
+          windowSeconds: toSeconds(o.windowValue, o.windowUnit),
+          maxRequests: o.maxRequests,
+          maxConcurrency: o.maxConcurrency,
+        })),
+      },
     };
     const res = await requestDemuxAi<unknown>(BASE, { method: 'PUT', body });
     if (!res.success) return res;
