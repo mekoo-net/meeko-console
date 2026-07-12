@@ -232,6 +232,12 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: 'AI 平台', requiresAuth: true, permissions: ['platform.settings.read'] },
           },
           {
+            path: 'storage',
+            name: 'settings-storage',
+            component: () => import('@/features/storage/views/StorageBackendsView.vue'),
+            meta: { title: '存储设置', requiresAuth: true, permissions: ['storage.backend.read'] },
+          },
+          {
             path: 'staff',
             name: 'settings-staff',
             component: () => import('@/features/staff/views/StaffListView.vue'),

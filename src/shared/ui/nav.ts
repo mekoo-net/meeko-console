@@ -5,7 +5,7 @@ import {
   Coin,
   DataAnalysis,
   DataLine,
-  Document,
+  Folder,
   Link,
   MagicStick,
   Message,
@@ -139,6 +139,7 @@ export const navViews: readonly NavView[] = [
         children: [
           { type: 'leaf', index: '/settings/staff', title: '管理账户', icon: User, perm: 'platform.staff.read' },
           { type: 'leaf', index: '/settings/roles', title: '角色权限', icon: Lock, perm: 'platform.role.read' },
+          { type: 'leaf', index: '/settings/storage', title: '存储设置', icon: Folder, perm: 'storage.backend.read' },
         ],
       },
     ],
