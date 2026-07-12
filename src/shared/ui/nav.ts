@@ -133,13 +133,35 @@ export const navViews: readonly NavView[] = [
       },
       {
         type: 'group',
+        index: '/settings/storage',
+        title: '存储设置',
+        icon: Folder,
+        perm: 'storage.backend.read',
+        children: [
+          {
+            type: 'leaf',
+            index: '/settings/storage/overview',
+            title: '概览',
+            icon: DataAnalysis,
+            perm: 'storage.backend.read',
+          },
+          {
+            type: 'leaf',
+            index: '/settings/storage/backends',
+            title: '存储后端',
+            icon: Folder,
+            perm: 'storage.backend.read',
+          },
+        ],
+      },
+      {
+        type: 'group',
         index: '/settings/platform',
         title: '平台设置',
         icon: Operation,
         children: [
           { type: 'leaf', index: '/settings/staff', title: '管理账户', icon: User, perm: 'platform.staff.read' },
           { type: 'leaf', index: '/settings/roles', title: '角色权限', icon: Lock, perm: 'platform.role.read' },
-          { type: 'leaf', index: '/settings/storage', title: '存储设置', icon: Folder, perm: 'storage.backend.read' },
         ],
       },
     ],

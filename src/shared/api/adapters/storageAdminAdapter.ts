@@ -8,6 +8,7 @@ import type {
   TestStorageBackendResult,
   UpdateStorageBackendPayload,
 } from '@/features/storage/model/storageBackend.types';
+import type { StorageOverview } from '@/features/storage/model/storageOverview.types';
 import type { StorageAdminPort } from '@/features/storage/services/ports/storageAdminPort';
 
 const BASE = '/api/admin/storage/backends';
@@ -15,6 +16,10 @@ const BASE = '/api/admin/storage/backends';
 export class StorageAdminHttpAdapter implements StorageAdminPort {
   async listBackends(): Promise<AppResult<StorageBackendDto[]>> {
     return request<StorageBackendDto[]>(BASE);
+  }
+
+  async getOverview(): Promise<AppResult<StorageOverview>> {
+    return request<StorageOverview>('/api/admin/storage/overview');
   }
 
   async getBackend(id: string): Promise<AppResult<StorageBackendDto | null>> {

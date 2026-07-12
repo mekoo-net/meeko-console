@@ -7,10 +7,12 @@ import type {
   TestStorageBackendResult,
   UpdateStorageBackendPayload,
 } from '../../model/storageBackend.types';
+import type { StorageOverview } from '../../model/storageOverview.types';
 
 export interface StorageAdminPort {
   listBackends(): Promise<AppResult<StorageBackendDto[]>>;
   getBackend(id: string): Promise<AppResult<StorageBackendDto | null>>;
+  getOverview(): Promise<AppResult<StorageOverview>>;
   createBackend(payload: CreateStorageBackendPayload): Promise<AppResult<AdminCommandResult>>;
   updateBackend(id: string, payload: UpdateStorageBackendPayload): Promise<AppResult<AdminCommandResult>>;
   deleteBackend(id: string): Promise<AppResult<AdminCommandResult>>;

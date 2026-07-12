@@ -233,9 +233,19 @@ export const routes: RouteRecordRaw[] = [
           },
           {
             path: 'storage',
-            name: 'settings-storage',
+            redirect: { name: 'settings-storage-overview' },
+          },
+          {
+            path: 'storage/overview',
+            name: 'settings-storage-overview',
+            component: () => import('@/features/storage/views/StorageOverviewView.vue'),
+            meta: { title: '存储概览', requiresAuth: true, permissions: ['storage.backend.read'] },
+          },
+          {
+            path: 'storage/backends',
+            name: 'settings-storage-backends',
             component: () => import('@/features/storage/views/StorageBackendsView.vue'),
-            meta: { title: '存储设置', requiresAuth: true, permissions: ['storage.backend.read'] },
+            meta: { title: '存储后端', requiresAuth: true, permissions: ['storage.backend.read'] },
           },
           {
             path: 'staff',

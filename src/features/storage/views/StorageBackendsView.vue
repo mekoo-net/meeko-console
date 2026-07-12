@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus';
-import { computed, nextTick, ref, unref } from 'vue';
+import { computed, nextTick, ref, unref, watch } from 'vue';
+import { Plus, Refresh } from '@element-plus/icons-vue';
 
-import DataTableShell from '@/shared/ui/DataTableShell.vue';
-import PageHeader from '@/shared/ui/PageHeader.vue';
+import EmptyState from '@/shared/ui/EmptyState.vue';
+import SettingsPanelShell from '@/shared/ui/SettingsPanelShell.vue';
 import { confirmDanger } from '@/shared/composables/useConfirm';
+import { clientPaginate, usePagination } from '@/shared/composables/usePagination';
 import { formatDateTime } from '@/shared/lib/date';
 
 import StorageBackendForm from '../components/StorageBackendForm.vue';
@@ -13,10 +15,13 @@ import type { CreateStorageBackendPayload, UpdateStorageBackendPayload } from '.
 import { getStorageAdminPort } from '../services';
 
 const list = useStorageBackends();
+const pagination = usePagination({ pageSize: 20 });
 
 const rows = computed(() => list.data.value ?? []);
+const displayRows = computed(() =>
+  clientPaginate(rows.value, pagination.state.page, pagination.state.pageSize),
+);
 const loading = computed(() => unref(list.loading));
-const error = computed(() => unref(list.error));
 
 const drawer = ref(false);
 const drawerMode = ref<'create' | 'edit'>('create');
@@ -92,65 +97,101 @@ async function onTest(id: string): Promise<void> {
     ElMessage.error(r.error.message);
   }
 }
+
+async function refresh(): Promise<void> {
+  await list.run();
+}
+
+watch(rows, (v) => pagination.setTotal(v.length), { immediate: true });
 </script>
 
 <template>
-  <div>
-    <PageHeader title="存储设置" description="管理平台对象存储后端（密钥仅存服务端）">
-      <template #actions>
-        <el-button type="primary" @click="openCreate">新建</el-button>
-        <el-button @click="list.run()">刷新</el-button>
-      </template>
-    </PageHeader>
+  <SettingsPanelShell
+    title="存储后端"
+    description="管理平台对象存储后端（密钥仅存服务端）"
+  >
+    <template #actions>
+      <el-button :icon="Refresh" text @click="refresh">刷新</el-button>
+      <el-button type="primary" :icon="Plus" @click="openCreate">新建</el-button>
+    </template>
 
-    <DataTableShell
-      :loading="loading"
-      :error="error"
-      :items="rows"
-      empty-title="暂无存储后端"
-    >
-      <el-table :data="rows" stripe style="width: 100%">
-        <el-table-column prop="name" label="名称" min-width="140" />
-        <el-table-column label="类型" min-width="120">
-          <template #default="{ row }">{{ providerLabel(row.providerType) }}</template>
-        </el-table-column>
-        <el-table-column prop="bucket" label="Bucket" min-width="140" />
-        <el-table-column label="默认" width="88">
+    <div class="settings-panel__table-wrap">
+      <el-table
+        v-loading="loading"
+        :data="displayRows"
+        row-key="id"
+        size="small"
+        class="compact-table"
+        height="100%"
+        :empty-text="' '"
+      >
+        <el-table-column label="名称" min-width="140">
           <template #default="{ row }">
-            <el-tag v-if="row.isDefault" type="success" round>是</el-tag>
+            <div class="cell-product">
+              <span class="cell-product__name">{{ row.name }}</span>
+              <span class="cell-product__code">{{ providerLabel(row.providerType) }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="bucket" label="Bucket" min-width="120" />
+        <el-table-column label="默认" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.isDefault" type="success" size="small" round>是</el-tag>
             <span v-else>否</span>
           </template>
         </el-table-column>
-        <el-table-column label="启用" width="88">
+        <el-table-column label="启用" width="80" align="center">
           <template #default="{ row }">
-            <el-tag v-if="row.isActive" type="success" round>是</el-tag>
+            <el-tag v-if="row.isActive" type="success" size="small" round>是</el-tag>
             <span v-else>否</span>
           </template>
         </el-table-column>
-        <el-table-column label="更新时间">
+        <el-table-column label="更新时间" min-width="160">
           <template #default="{ row }">{{ formatDateTime(row.updatedAtUtc) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openEdit(row.id)">编辑</el-button>
             <el-button link @click="onTest(row.id)">测试</el-button>
             <el-button link type="danger" @click="onDelete(row.id)">删除</el-button>
           </template>
         </el-table-column>
-      </el-table>
-    </DataTableShell>
 
-    <el-drawer
-      v-model="drawer"
-      :title="drawerMode === 'create' ? '新建存储后端' : '编辑存储后端'"
-      size="560px"
-    >
-      <StorageBackendForm
-        ref="formRef"
-        :mode="drawerMode"
-        :initial="editingRow"
-        @submit="onSubmit"
+        <template #empty>
+          <EmptyState
+            title="暂无存储后端"
+            description="点击右上角「新建」添加本地磁盘或阿里云 OSS 后端。"
+          >
+            <el-button type="primary" :icon="Plus" @click="openCreate">新建后端</el-button>
+          </EmptyState>
+        </template>
+      </el-table>
+    </div>
+
+    <div class="settings-panel__pagination">
+      <el-pagination
+        v-model:current-page="pagination.state.page"
+        v-model:page-size="pagination.state.pageSize"
+        :total="pagination.state.total"
+        :page-sizes="pagination.pageSizes"
+        layout="total, sizes, prev, pager, next"
+        background
       />
-    </el-drawer>
-  </div>
+    </div>
+  </SettingsPanelShell>
+
+  <el-drawer
+    v-model="drawer"
+    :title="drawerMode === 'create' ? '新建存储后端' : '编辑存储后端'"
+    size="560px"
+  >
+    <StorageBackendForm
+      ref="formRef"
+      :mode="drawerMode"
+      :initial="editingRow"
+      @submit="onSubmit"
+    />
+  </el-drawer>
 </template>
+
+<style scoped src="@/shared/ui/settings-panel.css"></style>

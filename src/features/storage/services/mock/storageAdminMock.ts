@@ -12,6 +12,7 @@ import {
   type TestStorageBackendResult,
   type UpdateStorageBackendPayload,
 } from '../../model/storageBackend.types';
+import type { StorageOverview } from '../../model/storageOverview.types';
 import type { StorageAdminPort } from '../ports/storageAdminPort';
 
 const genId = createUidSeq(9_200_000);
@@ -90,6 +91,33 @@ export class StorageAdminMock implements StorageAdminPort {
     }
     out.sort((a, b) => a.name.localeCompare(b.name));
     return ok(out);
+  }
+
+  async getOverview(): Promise<AppResult<StorageOverview>> {
+    await delay();
+    const backends = [...this.rows.values()];
+    const rows = backends.map((b) => ({
+      backendId: b.id,
+      name: b.name,
+      providerType: b.providerType,
+      isActive: b.isActive,
+      isDefault: b.isDefault,
+      objectCount: b.isActive ? 128 : 0,
+      totalBytes: b.isActive ? 52_428_800 : 0,
+      orphanedCount: b.isActive ? 2 : 0,
+      activeRefCount: b.isActive ? 96 : 0,
+      pendingUploadCount: b.isDefault ? 3 : 0,
+    }));
+    return ok({
+      backendCount: backends.length,
+      activeBackendCount: backends.filter((b) => b.isActive).length,
+      totalObjectCount: rows.reduce((s, r) => s + r.objectCount, 0),
+      totalBytes: rows.reduce((s, r) => s + r.totalBytes, 0),
+      orphanedObjectCount: rows.reduce((s, r) => s + r.orphanedCount, 0),
+      pendingUploadCount: rows.reduce((s, r) => s + r.pendingUploadCount, 0),
+      activeRefCount: rows.reduce((s, r) => s + r.activeRefCount, 0),
+      backends: rows,
+    });
   }
 
   async getBackend(id: string): Promise<AppResult<StorageBackendDto | null>> {
