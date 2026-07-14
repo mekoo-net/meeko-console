@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue';
 
+import { formatCdnHostForInput, normalizeCdnHost } from '../lib/cdnBaseUrl';
 import type {
   CreateStorageBackendPayload,
   StorageBackendDto,
@@ -37,28 +38,35 @@ const form = reactive({
 const isLocal = computed(() => form.providerType === 'local');
 const isOss = computed(() => form.providerType === 'aliyun-oss');
 
+function applyInitial(row: StorageBackendDto): void {
+  form.name = row.name;
+  form.providerType = row.providerType;
+  form.endpoint = row.endpoint;
+  form.region = row.region;
+  form.bucket = row.bucket;
+  form.publicEndpoint = row.publicEndpoint ?? '';
+  form.cdnStaticBaseUrl = formatCdnHostForInput(row.cdnStaticBaseUrl);
+  form.cdnStoreBaseUrl = formatCdnHostForInput(row.cdnStoreBaseUrl);
+  form.accessKeyId = row.accessKeyId;
+  form.accessKeySecret = '';
+  form.localRoot = row.localRoot ?? 'data/storage';
+  form.isActive = row.isActive;
+  form.isDefault = row.isDefault;
+}
+
 watch(
   () => props.initial,
   (row) => {
     if (!row) return;
-    form.name = row.name;
-    form.providerType = row.providerType;
-    form.endpoint = row.endpoint;
-    form.region = row.region;
-    form.bucket = row.bucket;
-    form.publicEndpoint = row.publicEndpoint ?? '';
-    form.cdnStaticBaseUrl = row.cdnStaticBaseUrl ?? '';
-    form.cdnStoreBaseUrl = row.cdnStoreBaseUrl ?? '';
-    form.accessKeyId = row.accessKeyId;
-    form.accessKeySecret = '';
-    form.localRoot = row.localRoot ?? 'data/storage';
-    form.isActive = row.isActive;
-    form.isDefault = row.isDefault;
+    applyInitial(row);
   },
   { immediate: true },
 );
 
 function onSubmit(): void {
+  const cdnStaticBaseUrl = normalizeCdnHost(form.cdnStaticBaseUrl) || undefined;
+  const cdnStoreBaseUrl = normalizeCdnHost(form.cdnStoreBaseUrl) || undefined;
+
   const base = {
     name: form.name,
     providerType: form.providerType,
@@ -66,8 +74,8 @@ function onSubmit(): void {
     region: isLocal.value ? 'local' : form.region,
     bucket: isLocal.value ? 'local' : form.bucket,
     publicEndpoint: form.publicEndpoint || undefined,
-    cdnStaticBaseUrl: form.cdnStaticBaseUrl || undefined,
-    cdnStoreBaseUrl: form.cdnStoreBaseUrl || undefined,
+    cdnStaticBaseUrl,
+    cdnStoreBaseUrl,
     accessKeyId: isLocal.value ? 'local' : form.accessKeyId,
     localRoot: isLocal.value ? form.localRoot || undefined : undefined,
     isActive: form.isActive,
@@ -150,18 +158,12 @@ defineExpose({
         <el-input v-model="form.publicEndpoint" placeholder="Platform AP 外网 endpoint" />
       </el-form-item>
       <el-form-item label="Static CDN">
-        <el-input
-          v-model="form.cdnStaticBaseUrl"
-          placeholder="https://static.oss.meeyo.org"
-        />
-        <div class="hint">头像等 static 资源，对应 OSS <code>static/</code> 前缀</div>
+        <el-input v-model="form.cdnStaticBaseUrl" placeholder="static.oss.meeyo.org" />
+        <div class="hint">头像等 static 资源，对应 OSS <code>static/</code> 前缀；不含协议，由客户端自行选择 http/https</div>
       </el-form-item>
       <el-form-item label="Store CDN">
-        <el-input
-          v-model="form.cdnStoreBaseUrl"
-          placeholder="https://store.oss.meeyo.org"
-        />
-        <div class="hint">聊天媒体等 store 资源，对应 OSS <code>store/</code> 前缀，需 URL 鉴权</div>
+        <el-input v-model="form.cdnStoreBaseUrl" placeholder="store.oss.meeyo.org" />
+        <div class="hint">聊天媒体等 store 资源，对应 OSS <code>store/</code> 前缀，需 URL 鉴权；不含协议</div>
       </el-form-item>
     </template>
 
@@ -172,7 +174,7 @@ defineExpose({
       <el-form-item label="Static 基址" required>
         <el-input
           v-model="form.cdnStaticBaseUrl"
-          placeholder="http://localhost:7000/api/storage/files"
+          placeholder="localhost:7000/api/storage/files"
         />
       </el-form-item>
       <el-form-item label="Store 基址">
