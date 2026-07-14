@@ -5,6 +5,7 @@ import {
   Coin,
   DataAnalysis,
   DataLine,
+  Document,
   Folder,
   Link,
   MagicStick,
