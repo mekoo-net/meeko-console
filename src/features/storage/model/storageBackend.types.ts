@@ -10,7 +10,8 @@ export const storageBackendDtoSchema = z.object({
   region: z.string(),
   bucket: z.string(),
   publicEndpoint: z.string().nullable().optional(),
-  cdnBaseUrl: z.string().nullable().optional(),
+  cdnStaticBaseUrl: z.string().nullable().optional(),
+  cdnStoreBaseUrl: z.string().nullable().optional(),
   accessKeyId: z.string(),
   accessKeySecretConfigured: z.boolean(),
   localRoot: z.string().nullable().optional(),
@@ -29,7 +30,8 @@ export interface CreateStorageBackendPayload {
   region: string;
   bucket: string;
   publicEndpoint?: string | undefined;
-  cdnBaseUrl?: string | undefined;
+  cdnStaticBaseUrl?: string | undefined;
+  cdnStoreBaseUrl?: string | undefined;
   accessKeyId: string;
   accessKeySecret?: string | undefined;
   localRoot?: string | undefined;
@@ -44,7 +46,8 @@ export interface UpdateStorageBackendPayload {
   region: string;
   bucket: string;
   publicEndpoint?: string | undefined;
-  cdnBaseUrl?: string | undefined;
+  cdnStaticBaseUrl?: string | undefined;
+  cdnStoreBaseUrl?: string | undefined;
   accessKeyId: string;
   /** 非空则更新密钥；undefined 表示表单未填写（保留）。 */
   accessKeySecret?: string | undefined;

@@ -25,7 +25,8 @@ const form = reactive({
   region: '',
   bucket: '',
   publicEndpoint: '',
-  cdnBaseUrl: '',
+  cdnStaticBaseUrl: '',
+  cdnStoreBaseUrl: '',
   accessKeyId: '',
   accessKeySecret: '',
   localRoot: 'data/storage',
@@ -46,7 +47,8 @@ watch(
     form.region = row.region;
     form.bucket = row.bucket;
     form.publicEndpoint = row.publicEndpoint ?? '';
-    form.cdnBaseUrl = row.cdnBaseUrl ?? '';
+    form.cdnStaticBaseUrl = row.cdnStaticBaseUrl ?? '';
+    form.cdnStoreBaseUrl = row.cdnStoreBaseUrl ?? '';
     form.accessKeyId = row.accessKeyId;
     form.accessKeySecret = '';
     form.localRoot = row.localRoot ?? 'data/storage';
@@ -64,7 +66,8 @@ function onSubmit(): void {
     region: isLocal.value ? 'local' : form.region,
     bucket: isLocal.value ? 'local' : form.bucket,
     publicEndpoint: form.publicEndpoint || undefined,
-    cdnBaseUrl: form.cdnBaseUrl || undefined,
+    cdnStaticBaseUrl: form.cdnStaticBaseUrl || undefined,
+    cdnStoreBaseUrl: form.cdnStoreBaseUrl || undefined,
     accessKeyId: isLocal.value ? 'local' : form.accessKeyId,
     localRoot: isLocal.value ? form.localRoot || undefined : undefined,
     isActive: form.isActive,
@@ -95,7 +98,8 @@ defineExpose({
     form.region = '';
     form.bucket = '';
     form.publicEndpoint = '';
-    form.cdnBaseUrl = '';
+    form.cdnStaticBaseUrl = '';
+    form.cdnStoreBaseUrl = '';
     form.accessKeyId = '';
     form.accessKeySecret = '';
     form.localRoot = 'data/storage';
@@ -143,10 +147,21 @@ defineExpose({
         </div>
       </el-form-item>
       <el-form-item label="公网 Endpoint">
-        <el-input v-model="form.publicEndpoint" placeholder="可选" />
+        <el-input v-model="form.publicEndpoint" placeholder="Platform AP 外网 endpoint" />
       </el-form-item>
-      <el-form-item label="CDN 基址">
-        <el-input v-model="form.cdnBaseUrl" placeholder="https://cdn.example.com" />
+      <el-form-item label="Static CDN">
+        <el-input
+          v-model="form.cdnStaticBaseUrl"
+          placeholder="https://static.oss.meeyo.org"
+        />
+        <div class="hint">头像等 static 资源，对应 OSS <code>static/</code> 前缀</div>
+      </el-form-item>
+      <el-form-item label="Store CDN">
+        <el-input
+          v-model="form.cdnStoreBaseUrl"
+          placeholder="https://store.oss.meeyo.org"
+        />
+        <div class="hint">聊天媒体等 store 资源，对应 OSS <code>store/</code> 前缀，需 URL 鉴权</div>
       </el-form-item>
     </template>
 
@@ -154,10 +169,16 @@ defineExpose({
       <el-form-item label="本地根目录" required>
         <el-input v-model="form.localRoot" placeholder="data/storage" />
       </el-form-item>
-      <el-form-item label="公网基址" required>
+      <el-form-item label="Static 基址" required>
         <el-input
-          v-model="form.cdnBaseUrl"
+          v-model="form.cdnStaticBaseUrl"
           placeholder="http://localhost:7000/api/storage/files"
+        />
+      </el-form-item>
+      <el-form-item label="Store 基址">
+        <el-input
+          v-model="form.cdnStoreBaseUrl"
+          placeholder="留空则与 Static 基址相同"
         />
       </el-form-item>
     </template>
