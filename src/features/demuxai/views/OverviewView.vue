@@ -4,10 +4,10 @@
  *
  * 关注点：
  *  - 仅维护「过滤状态 + 远程数据」，所有图表/卡片由子组件渲染
- *  - 时间范围变化即触发 `fetchStats`，所有下游组件随 `stats` 重渲染
+ *  - 进入页、点「查询」「重置」或快捷区间（24h/7d/30d）时拉取 `stats`；手动调整时间选择器不自动请求
  *  - 子组件均位于 `components/overview/*`
  */
-import { onMounted, ref, watch } from 'vue';
+import { onMounted, ref } from 'vue';
 
 import { ElMessage } from 'element-plus';
 
@@ -62,8 +62,6 @@ async function fetchStats(): Promise<void> {
     loading.value = false;
   }
 }
-
-watch(dateRange, () => void fetchStats(), { deep: true });
 
 function onReset(): void {
   dateRange.value = last24h();

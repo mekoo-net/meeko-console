@@ -9,6 +9,13 @@ import type {
   UpdateStorageBackendPayload,
 } from '@/features/storage/model/storageBackend.types';
 import type { StorageOverview } from '@/features/storage/model/storageOverview.types';
+import type {
+  BrowseStorageObjectsParams,
+  ListStorageObjectsParams,
+  StorageBrowseResult,
+  StorageObjectList,
+  StorageObjectRefsResult,
+} from '@/features/storage/model/storageObject.types';
 import type { StorageAdminPort } from '@/features/storage/services/ports/storageAdminPort';
 
 const BASE = '/api/admin/storage/backends';
@@ -20,6 +27,39 @@ export class StorageAdminHttpAdapter implements StorageAdminPort {
 
   async getOverview(): Promise<AppResult<StorageOverview>> {
     return request<StorageOverview>('/api/admin/storage/overview');
+  }
+
+  async listObjects(params: ListStorageObjectsParams): Promise<AppResult<StorageObjectList>> {
+    return request<StorageObjectList>('/api/admin/storage/objects', {
+      query: {
+        page: params.page,
+        pageSize: params.pageSize,
+        accountUid: params.accountUid,
+        product: params.product,
+        purpose: params.purpose,
+        sha256: params.sha256,
+        mimePrefix: params.mimePrefix,
+        status: params.status,
+        backendId: params.backendId,
+      },
+    });
+  }
+
+  async browseObjects(params: BrowseStorageObjectsParams): Promise<AppResult<StorageBrowseResult>> {
+    return request<StorageBrowseResult>('/api/admin/storage/browse', {
+      query: {
+        prefix: params.prefix,
+        page: params.page,
+        pageSize: params.pageSize,
+        backendId: params.backendId,
+      },
+    });
+  }
+
+  async getObjectRefs(storageKey: string): Promise<AppResult<StorageObjectRefsResult>> {
+    return request<StorageObjectRefsResult>('/api/admin/storage/objects/refs', {
+      query: { storageKey },
+    });
   }
 
   async getBackend(id: string): Promise<AppResult<StorageBackendDto | null>> {

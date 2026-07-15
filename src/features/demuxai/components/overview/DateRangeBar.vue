@@ -58,6 +58,7 @@ function pickQuick(key: QuickKey): void {
   activeQuick.value = key;
   suppressNextWatch = true;
   dateRange.value = [toLocalDateTimeValue(from), toLocalDateTimeValue(now)];
+  emit('refresh');
 }
 
 watch(dateRange, (val) => {
@@ -71,8 +72,7 @@ watch(dateRange, (val) => {
 /**
  * 点「查询」刷新：若当前是快捷区间（近 24h / 7d / 30d），把结束时间刷新到「现在」，
  * 否则相对区间会冻结在进页那一刻，刷新拉不到最新数据。
- * dateRange 变化会触发父级 watch 重新查询，故此处不再额外 emit('refresh') 以免重复请求；
- * 仅在区间未变化（同一秒内）或自定义区间时直接 emit。
+ * 概览页不在 dateRange 变化时自动请求，故此处统一 emit('refresh')。
  */
 function onRefresh(): void {
   const key = activeQuick.value;
@@ -84,7 +84,6 @@ function onRefresh(): void {
     if (!cur || cur[0] !== next[0] || cur[1] !== next[1]) {
       suppressNextWatch = true;
       dateRange.value = next;
-      return;
     }
   }
   emit('refresh');
@@ -93,6 +92,7 @@ function onRefresh(): void {
 function onReset(): void {
   activeQuick.value = '24h';
   emit('reset');
+  emit('refresh');
 }
 </script>
 

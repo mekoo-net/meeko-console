@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { Plus, Refresh } from '@element-plus/icons-vue';
+import { FolderOpened, Picture, Plus, Refresh } from '@element-plus/icons-vue';
 
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import SettingsPanelShell from '@/shared/ui/SettingsPanelShell.vue';
@@ -51,7 +51,24 @@ async function load(): Promise<void> {
 }
 
 function goCreateBackend(): void {
-  void router.push('/settings/storage/backends');
+  void router.push('/storage/backends');
+}
+
+function goBrowser(prefix?: string): void {
+  void router.push(prefix ? { path: '/storage/browser', query: { prefix } } : '/storage/browser');
+}
+
+function goContents(opts?: { status?: string; backendId?: string }): void {
+  const query: Record<string, string> = {};
+  if (opts?.status) query.status = opts.status;
+  if (opts?.backendId) query.backendId = opts.backendId;
+  void router.push(
+    Object.keys(query).length > 0 ? { path: '/storage/contents', query } : '/storage/contents',
+  );
+}
+
+function goBackends(): void {
+  void router.push('/storage/backends');
 }
 
 onMounted(() => load());
@@ -64,29 +81,34 @@ onMounted(() => load());
   >
     <template #actions>
       <el-button :icon="Refresh" text @click="load">刷新</el-button>
+      <el-button :icon="FolderOpened" @click="goBrowser()">文件浏览</el-button>
+      <el-button :icon="Picture" @click="goContents()">对象检索</el-button>
       <el-button type="primary" :icon="Plus" @click="goCreateBackend">新建后端</el-button>
     </template>
 
     <div v-loading="loading" class="settings-panel__stats">
-      <div class="settings-panel__stat">
+      <div class="settings-panel__stat settings-panel__stat--clickable" @click="goBackends">
         <div class="settings-panel__stat-label">存储后端</div>
         <div class="settings-panel__stat-value">
           {{ overview?.activeBackendCount ?? 0 }} / {{ overview?.backendCount ?? 0 }}
         </div>
       </div>
-      <div class="settings-panel__stat">
+      <div class="settings-panel__stat settings-panel__stat--clickable" @click="goContents()">
         <div class="settings-panel__stat-label">对象数</div>
         <div class="settings-panel__stat-value">{{ overview?.totalObjectCount ?? 0 }}</div>
       </div>
-      <div class="settings-panel__stat">
+      <div class="settings-panel__stat settings-panel__stat--clickable" @click="goContents()">
         <div class="settings-panel__stat-label">总用量</div>
         <div class="settings-panel__stat-value">{{ formatBytes(overview?.totalBytes ?? 0) }}</div>
       </div>
-      <div class="settings-panel__stat">
+      <div class="settings-panel__stat settings-panel__stat--clickable" @click="goContents()">
         <div class="settings-panel__stat-label">活跃引用</div>
         <div class="settings-panel__stat-value">{{ overview?.activeRefCount ?? 0 }}</div>
       </div>
-      <div class="settings-panel__stat">
+      <div
+        class="settings-panel__stat settings-panel__stat--clickable"
+        @click="goContents({ status: 'orphaned' })"
+      >
         <div class="settings-panel__stat-label">孤儿对象</div>
         <div class="settings-panel__stat-value">{{ overview?.orphanedObjectCount ?? 0 }}</div>
       </div>
@@ -145,6 +167,14 @@ onMounted(() => load());
         <el-table-column label="待确认" width="90" align="right">
           <template #default="{ row }: { row: StorageBackendUsage }">{{ row.pendingUploadCount }}</template>
         </el-table-column>
+        <el-table-column label="操作" width="120" fixed="right">
+          <template #default="{ row }: { row: StorageBackendUsage }">
+            <el-button link type="primary" @click="goContents({ backendId: row.backendId })">
+              对象
+            </el-button>
+            <el-button link @click="goBackends">配置</el-button>
+          </template>
+        </el-table-column>
 
         <template #empty>
           <EmptyState
@@ -177,5 +207,15 @@ onMounted(() => load());
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.settings-panel__stat--clickable {
+  cursor: pointer;
+  transition: background-color 0.15s;
+  border-radius: 6px;
+}
+
+.settings-panel__stat--clickable:hover {
+  background: var(--el-fill-color-light);
 }
 </style>

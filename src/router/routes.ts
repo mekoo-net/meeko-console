@@ -188,6 +188,38 @@ export const routes: RouteRecordRaw[] = [
         ],
       },
       {
+        path: 'storage',
+        component: () => import('@/features/storage/views/StorageLayout.vue'),
+        redirect: { name: 'storage-overview' },
+        meta: { title: '存储管理', requiresAuth: true, permissions: ['storage.backend.read'] },
+        children: [
+          {
+            path: 'overview',
+            name: 'storage-overview',
+            component: () => import('@/features/storage/views/StorageOverviewView.vue'),
+            meta: { title: '存储概览', requiresAuth: true, permissions: ['storage.backend.read'] },
+          },
+          {
+            path: 'browser',
+            name: 'storage-browser',
+            component: () => import('@/features/storage/views/StorageBrowserView.vue'),
+            meta: { title: '文件浏览', requiresAuth: true, permissions: ['storage.backend.read'] },
+          },
+          {
+            path: 'contents',
+            name: 'storage-contents',
+            component: () => import('@/features/storage/views/StorageContentsView.vue'),
+            meta: { title: '对象检索', requiresAuth: true, permissions: ['storage.backend.read'] },
+          },
+          {
+            path: 'backends',
+            name: 'storage-backends',
+            component: () => import('@/features/storage/views/StorageBackendsView.vue'),
+            meta: { title: '存储后端', requiresAuth: true, permissions: ['storage.backend.read'] },
+          },
+        ],
+      },
+      {
         path: 'settings',
         component: () => import('@/features/settings/views/SettingsLayout.vue'),
         redirect: { name: 'settings-auth' },
@@ -233,19 +265,19 @@ export const routes: RouteRecordRaw[] = [
           },
           {
             path: 'storage',
-            redirect: { name: 'settings-storage-overview' },
+            redirect: { name: 'storage-overview' },
           },
           {
             path: 'storage/overview',
-            name: 'settings-storage-overview',
-            component: () => import('@/features/storage/views/StorageOverviewView.vue'),
-            meta: { title: '存储概览', requiresAuth: true, permissions: ['storage.backend.read'] },
+            redirect: { name: 'storage-overview' },
+          },
+          {
+            path: 'storage/contents',
+            redirect: { name: 'storage-contents' },
           },
           {
             path: 'storage/backends',
-            name: 'settings-storage-backends',
-            component: () => import('@/features/storage/views/StorageBackendsView.vue'),
-            meta: { title: '存储后端', requiresAuth: true, permissions: ['storage.backend.read'] },
+            redirect: { name: 'storage-backends' },
           },
           {
             path: 'staff',
