@@ -21,6 +21,7 @@ import { formatDateTime } from '@/shared/lib/date';
 
 import type { StorageObjectItem, StorageObjectRef } from '../model/storageObject.types';
 import { productLabel, purposeLabel } from '../model/storageObject.types';
+import { resolvePublicUrl } from '../lib/resolvePublicUrl';
 import { getStorageAdminPort } from '../services';
 
 const route = useRoute();
@@ -165,7 +166,7 @@ async function openRefs(item: StorageObjectItem): Promise<void> {
 const drawerPreviewUrl = computed(() => {
   const item = refsResult.value.item;
   if (!item?.publicUrl || !isImage(item)) return null;
-  return item.publicUrl;
+  return resolvePublicUrl(item.publicUrl);
 });
 
 function refStatusLabel(status: string): string {
@@ -268,7 +269,7 @@ onMounted(() => {
               >
                 <el-image
                   v-if="row.item.publicUrl && isImage(row.item)"
-                  :src="row.item.publicUrl"
+                  :src="resolvePublicUrl(row.item.publicUrl)!"
                   fit="cover"
                   class="browser-name__thumb"
                 />
@@ -328,7 +329,7 @@ onMounted(() => {
         >
           <el-image
             v-if="item.publicUrl && isImage(item)"
-            :src="item.publicUrl"
+            :src="resolvePublicUrl(item.publicUrl)!"
             fit="cover"
             class="browser-grid__thumb"
           />
@@ -391,7 +392,7 @@ onMounted(() => {
               <span class="meta-value">{{ formatBytes(refsResult.item.size) }}</span>
             </div>
             <div class="meta-row">
-              <span class="meta-label">首传者</span>
+              <span class="meta-label">用户</span>
               <span class="meta-value">{{ refsResult.item.createdByUid }}</span>
             </div>
             <div class="meta-row">

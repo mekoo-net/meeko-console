@@ -12,6 +12,7 @@ import { formatDateTime } from '@/shared/lib/date';
 
 import type { StorageObjectItem, StorageObjectRef } from '../model/storageObject.types';
 import { productLabel, purposeLabel } from '../model/storageObject.types';
+import { resolvePublicUrl } from '../lib/resolvePublicUrl';
 import { getStorageAdminPort } from '../services';
 
 const route = useRoute();
@@ -177,7 +178,7 @@ async function openRefs(row: StorageObjectItem): Promise<void> {
 const drawerPreviewUrl = computed(() => {
   const item = refsResult.value.item;
   if (!item?.publicUrl || !isImage(item)) return null;
-  return item.publicUrl;
+  return resolvePublicUrl(item.publicUrl);
 });
 
 watch(
@@ -273,8 +274,8 @@ watch(
             <div class="preview-cell" @click="openRefs(row)">
               <el-image
                 v-if="row.publicUrl && isImage(row)"
-                :src="row.publicUrl"
-                :preview-src-list="[row.publicUrl]"
+                :src="resolvePublicUrl(row.publicUrl)!"
+                :preview-src-list="[resolvePublicUrl(row.publicUrl)!]"
                 :preview-teleported="true"
                 fit="cover"
                 lazy
@@ -317,7 +318,7 @@ watch(
           </template>
         </el-table-column>
 
-        <el-table-column label="首传者" width="100">
+        <el-table-column label="用户" width="100">
           <template #default="{ row }: { row: StorageObjectItem }">
             {{ row.createdByUid }}
           </template>
@@ -441,7 +442,7 @@ watch(
               <span class="meta-value">{{ formatBytes(refsResult.item.size) }}</span>
             </div>
             <div class="meta-row">
-              <span class="meta-label">首传者</span>
+              <span class="meta-label">用户</span>
               <span class="meta-value">{{ refsResult.item.createdByUid }}</span>
             </div>
             <div class="meta-row">
