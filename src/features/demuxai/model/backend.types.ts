@@ -8,7 +8,7 @@ export const issueBackendInputSchema = z.object({
 export type IssueBackendInput = z.infer<typeof issueBackendInputSchema>;
 
 export const issuedBackendCredentialsSchema = z.object({
-  backendId: z.union([z.string(), z.number()]).transform(String),
+  backendId: z.union([z.string(), z.number()]).transform(String).optional(),
   clientId: z.string(),
   clientSecret: z.string(),
 });

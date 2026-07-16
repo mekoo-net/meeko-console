@@ -151,6 +151,12 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '调用日志', requiresAuth: true, roles: ['Admin'] },
           },
           {
+            path: 'backends',
+            name: 'demuxai-backends',
+            component: () => import('@/features/demuxai/views/GatewayCredentialsView.vue'),
+            meta: { title: '网关凭据', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
             path: 'redemption',
             name: 'demuxai-redemption',
             component: () => import('@/features/demuxai/views/RedemptionCodesView.vue'),
@@ -184,6 +190,20 @@ export const routes: RouteRecordRaw[] = [
                 meta: { title: 'IP 限速', requiresAuth: true, roles: ['Admin'] },
               },
             ],
+          },
+        ],
+      },
+      {
+        path: 'tavern',
+        component: () => import('@/features/tavern/views/TavernLayout.vue'),
+        redirect: { name: 'tavern-backends' },
+        meta: { title: 'Tavern 管理', requiresAuth: true, roles: ['Admin'] },
+        children: [
+          {
+            path: 'backends',
+            name: 'tavern-backends',
+            component: () => import('@/features/tavern/views/GatewayCredentialsView.vue'),
+            meta: { title: '网关凭据', requiresAuth: true, roles: ['Admin'] },
           },
         ],
       },

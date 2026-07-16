@@ -7,6 +7,7 @@ import {
   DataLine,
   Document,
   Folder,
+  Key,
   Link,
   MagicStick,
   Message,
@@ -99,6 +100,7 @@ export const navViews: readonly NavView[] = [
       { type: 'leaf', index: '/demuxai/providers', title: '供应商组', icon: Link },
       { type: 'leaf', index: '/demuxai/pricing', title: '模型定价', icon: PriceTag },
       { type: 'leaf', index: '/demuxai/logs', title: '调用日志', icon: DataLine },
+      { type: 'leaf', index: '/demuxai/backends', title: '网关凭据', icon: Key },
       {
         type: 'group',
         index: '/demuxai/settings',
@@ -107,6 +109,13 @@ export const navViews: readonly NavView[] = [
         children: [{ type: 'leaf', index: '/demuxai/settings/rate', title: '速率设置', icon: Operation }],
       },
     ],
+  },
+  {
+    id: 'tavern',
+    title: 'Tavern',
+    icon: ChatLineRound,
+    roles: ['Admin'],
+    menu: [{ type: 'leaf', index: '/tavern/backends', title: '网关凭据', icon: Key }],
   },
   {
     id: 'storage',

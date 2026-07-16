@@ -156,3 +156,11 @@ export async function requestDemuxAi<T>(
   }
   return ok(envelope.data);
 }
+
+/** Tavern 管理端：与 DemuxAi 相同 `{ success, message?, data }` 信封。 */
+export async function requestTavern<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<AppResult<T>> {
+  return requestDemuxAi<T>(path, options);
+}
