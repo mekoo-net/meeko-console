@@ -121,7 +121,7 @@ Authorization: Bearer <accessToken>
 - `accessToken` / `refreshToken` 在 `auth` store + `localStorage` 持久化（key：`meeko.admin.session.v1`）。
 - 管理端 `AppRole`（`Admin` / `Owner` / `Member`）来自 **Staff 角色映射**（见 4.0）；Mock 模式下由用户名模拟。
 - 401 → 前端清空 session 并跳 `/login`。
-- 受 `meta.roles` 保护的路由（如 `/notices/*`、`/demuxai/*`、`/billing/channels`）需要 `Admin` 角色；不满足会被路由守卫重定向到 `/accounts`。
+- 受 `meta.roles` 保护的路由（如 `/notices/*`、`/demux/*`、`/billing/channels`）需要 `Admin` 角色；不满足会被路由守卫重定向到 `/accounts`。
 详见 `src/stores/auth.ts`：
 
 ```ts
@@ -148,7 +148,7 @@ type AppRole = 'Admin' | 'Owner' | 'Member';
 ## 7. 时间范围参数 `fromUtc` / `toUtc`
 - 列表接口涉及时间过滤时统一使用 `fromUtc`（inclusive）与 `toUtc`（inclusive）。
 - **Wire 格式：Unix 毫秒**（JSON number，对齐 JS `Date.now()`），**不是** ISO8601 字符串。
-- 日志类（`/demuxai/logs`）**必传时间范围且最长 7 天**，BFF 在缺省时应拒绝（避免全表扫）。
+- 日志类（`/demux/logs`）**必传时间范围且最长 7 天**，BFF 在缺省时应拒绝（避免全表扫）。
 
 ## 8. 幂等
 - 充值 / OTP / 通知发送等"会产生副作用"的接口接受可选 `idempotencyKey`，前端在表单层生成 nanoid。
@@ -213,7 +213,7 @@ type ApiError = {
 
 | 概念 | 全局命名 | 反例（已禁用） |
 | --- | --- | --- |
-| 时间字段 | `*AtUtc` 后缀；JSON **Unix 毫秒 number** | ISO8601 字符串；`createAt` 作为 wire 字段名（DemuxAi 日志除外，见 11-demuxai-logs） |
+| 时间字段 | `*AtUtc` 后缀；JSON **Unix 毫秒 number** | ISO8601 字符串；`createAt` 作为 wire 字段名（Demux 日志除外，见 11-demuxai-logs） |
 | IAM 用户主键（wire / API 契约） | `iamUserUid` | `iamId` |
 | IAM 用户主键（前端 demux-common 规范字段） | `iamUid`（adapter 由 wire `iamUserUid` 映射） | `iamId` |
 | 字段风格 | camelCase | snake_case（`avatar_url` / `is_account_owner`） |

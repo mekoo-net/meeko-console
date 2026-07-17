@@ -4,11 +4,11 @@
 
 | 项 | 值 |
 | --- | --- |
-| 路由 | `/demuxai/pricing` |
+| 路由 | `/demux/pricing` |
 | 角色 | **Admin** |
-| 视图 | `src/features/demuxai/views/PricingView.vue`（Tab：**已配置** / **未配置**） |
+| 视图 | `src/features/demux/views/PricingView.vue`（Tab：**已配置** / **未配置**） |
 | 布局 | 与供应商组相同的左右分栏：`ProviderGroupSidebar` + 定价表 |
-| 对话框 | `src/features/demuxai/components/PricingEditDialog.vue` |
+| 对话框 | `src/features/demux/components/PricingEditDialog.vue` |
 | Port | `DemuxaiPricingPort` + `DemuxaiCatalogPort` + `DemuxaiModelRoutePort` + `DemuxaiModelPort`（过渡） |
 
 ## 标识约定
@@ -49,19 +49,19 @@
 ## 接口清单
 | 业务动作 | Port 方法 | HTTP | REST 端点 | 投影 |
 | --- | --- | --- | --- | --- |
-| 列表 | `list(input)` | GET | `/demuxai/api/admin/pricing` | 行级（含 `summary` 或完整 `pricing`，以实现为准） |
-| 按 modelId 取现行价 | `get(modelId)` | GET | `/demuxai/api/admin/pricing/{modelId}` | 全字段 |
-| 历史价 | `listHistory` | GET | `/demuxai/api/admin/model-routes/{modelId}/history` 等 | **前端 Port 有定义；BFF 待接** |
-| upsert | `upsert(input)` | PUT | `/demuxai/api/admin/pricing/{groupCode}/{modelId}` | 全字段；单段 `/{modelId}` 时 group=default |
-| 删除 | `delete(modelId)` | DELETE | `/demuxai/api/admin/pricing/{groupCode}/{modelId}` | — |
+| 列表 | `list(input)` | GET | `/demux/api/admin/pricing` | 行级（含 `summary` 或完整 `pricing`，以实现为准） |
+| 按 modelId 取现行价 | `get(modelId)` | GET | `/demux/api/admin/pricing/{modelId}` | 全字段 |
+| 历史价 | `listHistory` | GET | `/demux/api/admin/model-routes/{modelId}/history` 等 | **前端 Port 有定义；BFF 待接** |
+| upsert | `upsert(input)` | PUT | `/demux/api/admin/pricing/{groupCode}/{modelId}` | 全字段；单段 `/{modelId}` 时 group=default |
+| 删除 | `delete(modelId)` | DELETE | `/demux/api/admin/pricing/{groupCode}/{modelId}` | — |
 | 供应商组字典 | `DemuxaiCatalogPort.listProviderGroups` | GET | 见 [`08`](./08-demuxai-providers.md) | 左侧栏 |
 | 别名列表 | `DemuxaiModelRoutePort.list` | GET | 见 [`08`](./08-demuxai-providers.md) | 筛选 / 未配置 |
 
-> DemuxAi 响应经 **`requestDemuxAi`** 解包 `{ success, data }`。
+> Demux 响应经 **`requestDemuxAi`** 解包 `{ success, data }`。
 查询参数（列表）：`p`、`pageSize`、`keyword`（HttpAdapter）。
 
 ## 请求 / 响应
-### 列表 `GET /demuxai/api/admin/pricing`
+### 列表 `GET /demux/api/admin/pricing`
 参数：
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -113,15 +113,15 @@
 | `per_character` | `{ pricePerKChar }` |
 
 ### `billingType` 与 `pricing` 形状
-六种计费类型、`per_token` input/output 嵌套、cache 5m/1h、计费公式、厂家 usage 对齐等**不变**，详见 `src/features/demuxai/model/pricing.types.ts` 与 git 历史版本；BFF 校验规则：
+六种计费类型、`per_token` input/output 嵌套、cache 5m/1h、计费公式、厂家 usage 对齐等**不变**，详见 `src/features/demux/model/pricing.types.ts` 与 git 历史版本；BFF 校验规则：
 - `pricing` 形状必须严格匹配 `billingType`；
 - `per_image` 唯一键 `(size, quality)`；`per_video` 唯一键 `resolution`；
 - `multiplier > 0`；`tierMultipliers` 值均 > 0。
 
-### 现行价 `GET /demuxai/api/admin/pricing/{modelId}`
+### 现行价 `GET /demux/api/admin/pricing/{modelId}`
 返回 `effectiveFromUtc <= now()` 的最新一条（BFF 约定）。
 
-### upsert `PUT /demuxai/api/admin/pricing/{groupCode}/{modelId}`
+### upsert `PUT /demux/api/admin/pricing/{groupCode}/{modelId}`
 
 `groupCode` 与 Chat 请求体 `model=帕米/gemini-2.5-pro` 的前缀一致（如 `帕米`、`default`）。
 
@@ -145,7 +145,7 @@ Body 为 `UpsertPricingInput`（含 `modelId`、`billingType`、`pricing`、`mul
 
 ```
 
-### 删除 `DELETE /demuxai/api/admin/pricing/{modelId}`
+### 删除 `DELETE /demux/api/admin/pricing/{modelId}`
 Query：`groupCode`（HttpAdapter 默认 `default`）。
 
 ## 交互流程

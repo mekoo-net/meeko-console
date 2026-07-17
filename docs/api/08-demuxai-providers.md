@@ -4,11 +4,11 @@
 
 | 项 | 值 |
 | --- | --- |
-| 路由（已接入） | `/demuxai/providers`（主入口） |
-| 路由（接入流程） | `/demuxai/catalog/import` |
-| 重定向 | `/demuxai/models`、`/demuxai/model-routes`、`/demuxai/channels` → 已接入 |
+| 路由（已接入） | `/demux/providers`（主入口） |
+| 路由（接入流程） | `/demux/catalog/import` |
+| 重定向 | `/demux/models`、`/demux/model-routes`、`/demux/channels` → 已接入 |
 | 角色 | **Admin** |
-| 视图 | `src/features/demuxai/views/ProviderGroupListView.vue`、`CatalogImportView.vue` |
+| 视图 | `src/features/demux/views/ProviderGroupListView.vue`、`CatalogImportView.vue` |
 | 布局 | `ProviderWorkspaceLayout` + `ProviderGroupSidebar` + `ProviderDetailPanel` |
 | Port | `DemuxaiCatalogPort` + `DemuxaiModelRoutePort` |
 
@@ -37,7 +37,7 @@ REST 路径参数写 `{queueGroup}` / `{id}`；前端 Port 方法参数名可能
 ### 双向 pull，无 push
 
 ```
-[Admin Console] ── admin 点「拉取」 ──▶ [DemuxAi 控制面] ── HTTP GET ──▶ [LLM 网关] (报告 catalog)
+[Admin Console] ── admin 点「拉取」 ──▶ [Demux 控制面] ── HTTP GET ──▶ [LLM 网关] (报告 catalog)
                                           │                                                                                 
                                           │ ← admin 勾选模型「创建」 ──── HTTP POST ──── [Admin Console]                       
                                           │                                                                                 
@@ -48,7 +48,7 @@ REST 路径参数写 `{queueGroup}` / `{id}`；前端 Port 方法参数名可能
 
 两条 pull、零 push：
 
-- **DemuxAi ← Gateway**：admin 触发时拉取，**不**轮询、**不**心跳。
+- **Demux ← Gateway**：admin 触发时拉取，**不**轮询、**不**心跳。
 - **Gateway → DemuxAi**：网关按 `ILlmCatalogService.GetRatioSnapshotAsync` / `GetModelSnapshotAsync` 增量拉路由 + 倍率。
 
 ### 调用门控（fail-closed 三态机）
@@ -58,7 +58,7 @@ REST 路径参数写 `{queueGroup}` / `{id}`；前端 Port 方法参数名可能
 （不可调用）                                            （不可调用：ratio_missing）         （可调用）
 ```
 
-- 用户请求传入 `alias` → DemuxAi 路由表查 `alias → (queueGroup, upstreamModelId)`，缺失返 `alias_not_found`。
+- 用户请求传入 `alias` → Demux 路由表查 `alias → (queueGroup, upstreamModelId)`，缺失返 `alias_not_found`。
 - 检查目标模型已入库（在 `model_meta` 表），缺失返 `model_unavailable`。
 - 检查 (token.groupCode, alias) 有 `RatioEntry`，缺失返 `ratio_missing`。
 - 三个都过才进入 `QuotaMeter.Reserve`。
@@ -69,12 +69,12 @@ REST 路径参数写 `{queueGroup}` / `{id}`；前端 Port 方法参数名可能
 
 | 业务动作 | Port 方法 | HTTP | 说明 |
 | --- | --- | --- | --- |
-| 列出已入库组 | `listProviderGroups()` | `GET /demuxai/api/admin/providers` | 左侧栏数据源 |
-| 列出组内已入库模型 | `listUpstreamModels(queueGroup)` | `GET /demuxai/api/admin/providers/{queueGroup}/models` | 右侧主表 |
-| 从网关拉取发现源 | `discoverFromGateway()` | `GET /demuxai/api/admin/providers/discovery` | 接入页拉取；返回 `groups[]` 含 `alreadyImported` |
-| 批量入库 | `importProviderGroup(input)` | `POST /demuxai/api/admin/providers/import` | 幂等：组已存在则追加模型 |
-| 删除供应商组 | `deleteProviderGroup(qg)` | `DELETE /demuxai/api/admin/providers/{queueGroup}` | v1 无 ModelRoute 引用检查 |
-| 删除单上游模型 | `deleteUpstreamModel(qg, id)` | `DELETE /demuxai/api/admin/providers/{queueGroup}/models/{upstreamModelId}` | v1 无 ModelRoute 引用检查 |
+| 列出已入库组 | `listProviderGroups()` | `GET /demux/api/admin/providers` | 左侧栏数据源 |
+| 列出组内已入库模型 | `listUpstreamModels(queueGroup)` | `GET /demux/api/admin/providers/{queueGroup}/models` | 右侧主表 |
+| 从网关拉取发现源 | `discoverFromGateway()` | `GET /demux/api/admin/providers/discovery` | 接入页拉取；返回 `groups[]` 含 `alreadyImported` |
+| 批量入库 | `importProviderGroup(input)` | `POST /demux/api/admin/providers/import` | 幂等：组已存在则追加模型 |
+| 删除供应商组 | `deleteProviderGroup(qg)` | `DELETE /demux/api/admin/providers/{queueGroup}` | v1 无 ModelRoute 引用检查 |
+| 删除单上游模型 | `deleteUpstreamModel(qg, id)` | `DELETE /demux/api/admin/providers/{queueGroup}/models/{upstreamModelId}` | v1 无 ModelRoute 引用检查 |
 
 > **接入状态**：后端 Phase 3 落地中；开发期可用 **`VITE_USE_MOCK=true`** 预览 UI。
 
@@ -82,14 +82,14 @@ REST 路径参数写 `{queueGroup}` / `{id}`；前端 Port 方法参数名可能
 
 | 业务动作 | Port 方法 | HTTP（规划） | 说明 |
 | --- | --- | --- | --- |
-| 列表 | `list({ page, pageSize, filter })` | `GET /demuxai/api/admin/routes` | `filter.channelKey` = `queueGroup` |
-| 详情 | `get(id)` | `GET /demuxai/api/admin/routes/{id}` | 编辑回填 |
-| 新建 | `create(input)` | `POST /demuxai/api/admin/routes` |  |
-| 更新 | `update(id, input)` | `PUT /demuxai/api/admin/routes/{id}` |  |
-| 删除 | `delete(id)` | `DELETE /demuxai/api/admin/routes/{id}` |  |
-| 启停 | `setStatus(id, status)` | `PATCH /demuxai/api/admin/routes/{id}/status` | `enabled` / `disabled` / `hidden` |
+| 列表 | `list({ page, pageSize, filter })` | `GET /demux/api/admin/routes` | `filter.channelKey` = `queueGroup` |
+| 详情 | `get(id)` | `GET /demux/api/admin/routes/{id}` | 编辑回填 |
+| 新建 | `create(input)` | `POST /demux/api/admin/routes` |  |
+| 更新 | `update(id, input)` | `PUT /demux/api/admin/routes/{id}` |  |
+| 删除 | `delete(id)` | `DELETE /demux/api/admin/routes/{id}` |  |
+| 启停 | `setStatus(id, status)` | `PATCH /demux/api/admin/routes/{id}/status` | `enabled` / `disabled` / `hidden` |
 
-> **接入状态**：`DemuxaiModelRouteHttpAdapter` 已对接 `/demuxai/api/admin/routes`。
+> **接入状态**：`DemuxaiModelRouteHttpAdapter` 已对接 `/demux/api/admin/routes`。
 
 ## 请求 / 响应
 
@@ -116,7 +116,7 @@ REST 路径参数写 `{queueGroup}` / `{id}`；前端 Port 方法参数名可能
 | `upstreamModelCount` | 组内已入库的上游模型数。 |
 | `importedAtUtc` | 首次入库时间。 |
 
-枚举：`providerGroupStatusValues`（`src/features/demuxai/model/enums.ts`）。
+枚举：`providerGroupStatusValues`（`src/features/demux/model/enums.ts`）。
 
 ### `ProviderUpstreamModel`（已入库）
 
@@ -134,7 +134,7 @@ REST 路径参数写 `{queueGroup}` / `{id}`；前端 Port 方法参数名可能
 | `upstreamModelId` | 上游 HTTP 请求体 `model` 技术名（与 LLM 网关报告值一致）。 |
 | `label` | 可选展示名。 |
 
-### `GET /demuxai/api/admin/providers/discovery` → `DiscoverCatalogResult`
+### `GET /demux/api/admin/providers/discovery` → `DiscoverCatalogResult`
 
 ```json
 {
@@ -166,9 +166,9 @@ REST 路径参数写 `{queueGroup}` / `{id}`；前端 Port 方法参数名可能
 1. 直接调 LLM 网关侧 Consul：`KV.List("gateway/providers/")` 反序列化每个 ProviderCatalog；
 2. 与 `model_meta` 表 join 计算每条 `alreadyImported`；
 3. 不缓存（admin 触发频率低，每次都拿最新视图）；
-4. 若 `Meeko:DemuxAi:GatewayConsul:Address` 未配置或不可达，返回 `upstream` envelope 失败。
+4. 若 `Meeko:Demux:GatewayConsul:Address` 未配置或不可达，返回 `upstream` envelope 失败。
 
-### `POST /demuxai/api/admin/providers/import` → `ImportProviderGroupResult`
+### `POST /demux/api/admin/providers/import` → `ImportProviderGroupResult`
 
 入参：
 
@@ -250,15 +250,15 @@ REST 路径参数写 `{queueGroup}` / `{id}`；前端 Port 方法参数名可能
 
 ## 遗留 Vendor（`DemuxaiProviderPort`）
 
-> 路径前缀：`/demuxai/api/admin/providers`。BFF 实体为 **Vendor**（`VendorDto`），前端类型仍称 `Provider` 以兼容日志 `providerId`。
+> 路径前缀：`/demux/api/admin/providers`。BFF 实体为 **Vendor**（`VendorDto`），前端类型仍称 `Provider` 以兼容日志 `providerId`。
 
 | 业务动作 | Port 方法 | HTTP | 说明 |
 | --- | --- | --- | --- |
-| 列表 | `list` | `GET /demuxai/api/admin/providers` | 无查询过滤；返回全量 |
-| 详情 | `get(id)` | `GET /demuxai/api/admin/providers/{id}` |  |
-| 新建 | `create` | `POST /demuxai/api/admin/providers` | body `{ name, status? }` |
-| 更新 | `update` | `PUT /demuxai/api/admin/providers/{id}` | 当前仅 `name` |
-| 删除 | `delete` | `DELETE /demuxai/api/admin/providers/{id}` |  |
+| 列表 | `list` | `GET /demux/api/admin/providers` | 无查询过滤；返回全量 |
+| 详情 | `get(id)` | `GET /demux/api/admin/providers/{id}` |  |
+| 新建 | `create` | `POST /demux/api/admin/providers` | body `{ name, status? }` |
+| 更新 | `update` | `PUT /demux/api/admin/providers/{id}` | 当前仅 `name` |
+| 删除 | `delete` | `DELETE /demux/api/admin/providers/{id}` |  |
 | 启停 | `setStatus` | `PUT`（复用 upsert） | BFF：`PATCH .../status` **未实现** |
 | 连通测试 | `test` | `POST .../test` | **未实现** |
 
@@ -284,7 +284,7 @@ REST 路径参数写 `{queueGroup}` / `{id}`；前端 Port 方法参数名可能
 ## 交互流程
 
 ```
-[/demuxai/catalog/import]                  接入流程
+[/demux/catalog/import]                  接入流程
   onMounted → discoverFromGateway (silent)
   admin 点「重新拉取」 → discoverFromGateway
   左栏选 QueueGroup → 右栏列模型（带 alreadyImported tag）
@@ -292,9 +292,9 @@ REST 路径参数写 `{queueGroup}` / `{id}`；前端 Port 方法参数名可能
     └─ 不退出页面；刷新后已勾选模型变成「已入库」
   反复操作可一次接入多组
 
-[/demuxai/providers]                       已接入维护
+[/demux/providers]                       已接入维护
   onMounted → listProviderGroups + listUpstreamModels(selected) + ModelRoutes(selected)
-  「补充模型」/ 「去接入」 → 跳 /demuxai/catalog/import
+  「补充模型」/ 「去接入」 → 跳 /demux/catalog/import
   行「编辑」 → ProviderUpstreamModelEditDrawer → 别名 CRUD（ModelRoute port）
   行「移除」 → deleteUpstreamModel（先解除别名）
   「删除供应商组」 → deleteProviderGroup（先解除全部别名）
@@ -310,10 +310,10 @@ REST 路径参数写 `{queueGroup}` / `{id}`；前端 Port 方法参数名可能
 | `validation` | 别名 / 上游 ID 为空；导入了网关未报告的模型；QueueGroup 格式不合法 |
 | `not_found` | `queueGroup` / `id` 不存在 |
 | `conflict` | `alias` 唯一性冲突；删除时仍有 ModelRoute 引用 |
-| `upstream` | LLM 网关 Consul (`Meeko:DemuxAi:GatewayConsul:Address`) 未配置 / 不可达 / KV 反序列化失败 |
+| `upstream` | LLM 网关 Consul (`Meeko:Demux:GatewayConsul:Address`) 未配置 / 不可达 / KV 反序列化失败 |
 
 ## 备注
 
 - 模型元数据（`ModelMeta`）与旧版「平台 Model 列表」见 [`09-demuxai-models.md`](./09-demuxai-models.md)。
-- 激活码见路由 `/demuxai/redemption`（`DemuxaiRedemptionPort`，`/demuxai/api/redemption`）。
-- 网关 catalog 来源：DemuxAi 直接读 **LLM 网关侧 Consul KV** `gateway/providers/{providerId}/catalog`，无 HTTP / 无 HMAC。配置见 `Meeko:DemuxAi:GatewayConsul`，详见 [`phase3-catalog-pull.md`](../../../product/Meeko.DemuxAi/docs/phase3-catalog-pull.md)。
+- 激活码见路由 `/demux/redemption`（`DemuxaiRedemptionPort`，`/demux/api/redemption`）。
+- 网关 catalog 来源：Demux 直接读 **LLM 网关侧 Consul KV** `gateway/providers/{providerId}/catalog`，无 HTTP / 无 HMAC。配置见 `Meeko:Demux:GatewayConsul`，详见 [`phase3-catalog-pull.md`](../../../product/Meeko.Demux/docs/phase3-catalog-pull.md)。

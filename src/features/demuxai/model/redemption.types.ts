@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-/** 与 Meeko.Contracts.DemuxAi.Common.RedemptionStatus 数值一致。 */
+/** 与 Meeko.Contracts.Demux.Common.RedemptionStatus 数值一致。 */
 export const redemptionStatusSchema = z.union([
   z.literal(1),
   z.literal(2),

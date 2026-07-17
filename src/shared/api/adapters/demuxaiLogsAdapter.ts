@@ -18,9 +18,9 @@ import type {
 import type {
   DemuxaiLogsPort,
   ListLogsPage,
-} from '@/features/demuxai/services/ports/demuxaiLogsPort';
+} from '@/features/demux/services/ports/demuxaiLogsPort';
 
-const BASE = '/demuxai/api/admin/logs';
+const BASE = '/demux/api/admin/logs';
 
 function mapFailureCode(code: string | null | undefined): ErrorCode {
   switch (code) {

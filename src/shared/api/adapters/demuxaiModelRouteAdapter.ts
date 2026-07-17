@@ -5,16 +5,16 @@ import {
   type ModelRoute,
   type ModelRouteStats,
   type UpdateModelRouteInput,
-} from '@/features/demuxai/model/modelRoute.types';
+} from '@/features/demux/model/modelRoute.types';
 import type {
   DemuxaiModelRoutePort,
   ListModelRoutesPage,
-} from '@/features/demuxai/services/ports/demuxaiModelRoutePort';
+} from '@/features/demux/services/ports/demuxaiModelRoutePort';
 import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import type { Uid } from '@/shared/lib/id';
 
-const BASE = '/demuxai/api/admin/routes';
+const BASE = '/demux/api/admin/routes';
 
 function parseRoute(value: unknown): AppResult<ModelRoute> {
   const r = modelRouteSchema.safeParse(value);

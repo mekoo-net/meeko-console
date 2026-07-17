@@ -5,8 +5,8 @@ import type {
   IpRateOverride,
   RateLimitPolicy,
   RateLimitSettings,
-} from '@/features/demuxai/model/rateLimit.types';
-import { getDemuxaiRateLimitPort } from '@/features/demuxai/services';
+} from '@/features/demux/model/rateLimit.types';
+import { getDemuxaiRateLimitPort } from '@/features/demux/services';
 
 export const windowUnits = [
   { value: 'second', label: '秒' },

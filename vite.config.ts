@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
   //   /auth/**    → Keystone（匿名登录/注册/刷新）
   //   /staff/**   → Keystone（staff 登录）
   //   /me/**      → Keystone（当前用户自助）
-  //   /demuxai/** → DemuxAi 产品门面
+  //   /demux/** → Demux 产品门面
   //   /tavern/**  → Tavern 产品门面
   // 旧的 /accounts、/iam 已并入 /api/admin/**，不再需要独立 proxy 条目。
   const proxyRules = {
@@ -30,7 +30,7 @@ export default defineConfig(({ mode }) => {
     '/auth':    { target: gatewayTarget, changeOrigin: true },
     '/staff':   { target: gatewayTarget, changeOrigin: true },
     '/me':      { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
-    '/demuxai': { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
+    '/demux':  { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
     '/tavern': { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
   };
 

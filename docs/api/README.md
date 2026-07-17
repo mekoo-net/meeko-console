@@ -20,12 +20,12 @@
 | 04 | 充值记录 `/billing/recharges` | 已登录 | [`04-billing-recharges.md`](./04-billing-recharges.md) |
 | 05 | 账单流水 `/billing/bills` | 已登录 | [`05-billing-bills.md`](./05-billing-bills.md) |
 | 06 | 充值渠道 `/billing/channels` | Admin | [`06-billing-channels.md`](./06-billing-channels.md) |
-| 07 | DemuxAI 概览 `/demuxai/overview` | Admin | [`07-demuxai-overview.md`](./07-demuxai-overview.md) |
-| 08 | 供应商组 `/demuxai/providers` | Admin | [`08-demuxai-providers.md`](./08-demuxai-providers.md) |
-| 09 | 模型别名与元数据 `/demuxai/models`（重定向至 providers） | Admin | [`09-demuxai-models.md`](./09-demuxai-models.md) |
-| 10 | 模型定价 `/demuxai/pricing` | Admin | [`10-demuxai-pricing.md`](./10-demuxai-pricing.md) |
-| 11 | 调用日志 `/demuxai/logs` | Admin | [`11-demuxai-logs.md`](./11-demuxai-logs.md) |
-| — | 激活码 `/demuxai/redemption` | Admin | 见 `DemuxaiRedemptionPort` · `/demuxai/api/redemption`（待补专篇） |
+| 07 | DemuxAI 概览 `/demux/overview` | Admin | [`07-demuxai-overview.md`](./07-demuxai-overview.md) |
+| 08 | 供应商组 `/demux/providers` | Admin | [`08-demuxai-providers.md`](./08-demuxai-providers.md) |
+| 09 | 模型别名与元数据 `/demux/models`（重定向至 providers） | Admin | [`09-demuxai-models.md`](./09-demuxai-models.md) |
+| 10 | 模型定价 `/demux/pricing` | Admin | [`10-demuxai-pricing.md`](./10-demuxai-pricing.md) |
+| 11 | 调用日志 `/demux/logs` | Admin | [`11-demuxai-logs.md`](./11-demuxai-logs.md) |
+| — | 激活码 `/demux/redemption` | Admin | 见 `DemuxaiRedemptionPort` · `/demux/api/redemption`（待补专篇） |
 | 12 | 邮件渠道 `/notices/email/channels` | Admin | [`12-notices-email-channels.md`](./12-notices-email-channels.md) |
 | 13 | 邮件模板列表 `/notices/email/templates` | Admin | [`13-notices-email-templates.md`](./13-notices-email-templates.md) |
 | 14 | 编辑邮件模板 `/notices/email/templates/:code/:locale` | Admin | [`14-notices-email-template-edit.md`](./14-notices-email-template-edit.md) |
@@ -38,9 +38,9 @@
 | 账户 / IAM 后台 | `/api/admin/accounts`、`/api/admin/iam/users` | BFF 聚合，底层调 Keystone |
 | 计费 | `/api/billing` | 钱包 / 充值；账单流水见 `/api/admin/billing/bills` |
 | 充值渠道（平台配置） | `/api/admin/billing/channels` | 仅 Admin |
-| DemuxAI 控制面 | `/demuxai/api/admin/*` | 供应商组目录、模型路由、Vendor、ModelMeta、Pricing |
-| DemuxAI 激活码 | `/demuxai/api/redemption` | CDK 批量生成 / 列表 / 删除 |
-| DemuxAI 数据面（日志） | `/demuxai/api/admin/logs` | 用量查询 + 日聚合 stats（KPI 扩展中） |
+| DemuxAI 控制面 | `/demux/api/admin/*` | 供应商组目录、模型路由、Vendor、ModelMeta、Pricing |
+| DemuxAI 激活码 | `/demux/api/redemption` | CDK 批量生成 / 列表 / 删除 |
+| DemuxAI 数据面（日志） | `/demux/api/admin/logs` | 用量查询 + 日聚合 stats（KPI 扩展中） |
 | 通知后台 | `/api/admin/notice/templates/email`、`/api/admin/notice/channels/smtp` | 仅 Admin |
 | 通知端点（含 OTP） | `/api/notifications`、`/api/notifications/otp` | 业务端通用 |
 

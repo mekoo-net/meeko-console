@@ -3,8 +3,8 @@
  * 统计窗口输入：数值 + 单位（秒 / 分钟 / 小时）。
  * 用法：<RateWindowInput v-model:value="p.windowValue" v-model:unit="p.windowUnit" />
  */
-import { windowUnits } from '@/features/demuxai/composables/useRateLimitSettings';
-import type { WindowUnit } from '@/features/demuxai/model/rateLimit.types';
+import { windowUnits } from '@/features/demux/composables/useRateLimitSettings';
+import type { WindowUnit } from '@/features/demux/model/rateLimit.types';
 
 defineProps<{ disabled?: boolean }>();
 

@@ -17,7 +17,7 @@ import {
   type WalletSnapshot,
 } from '../../model/billing.types';
 import { referralRechargesForAccount } from '@/features/accounts/services/mock/referralData';
-import { getDemuxaiStore } from '@/features/demuxai/services/mock/data';
+import { getDemuxaiStore } from '@/features/demux/services/mock/data';
 
 import type {
   BillingPort,
@@ -43,7 +43,7 @@ function formatSerial(prefix: string, at: Date, seq: number | string): string {
 
 /**
  * Mock 里扮演 BFF 的「业务号」组装：据账单号反查发起它的调用日志号（UsageLog.Id）。
- * 真实后端是 BFF 调 DemuxAi 的 resolve-by-bill-serials（依赖 UsageLog.BillSerialNo）。
+ * 真实后端是 BFF 调 Demux 的 resolve-by-bill-serials（依赖 UsageLog.BillSerialNo）。
  * Mock 日志的 `bill.id` 即账单号：优先精确匹配；跨 store 对不上时按账单号稳定哈希挑一条
  * **真实存在**的日志，保证业务号在调用日志页可查到。无产品扣费关联时返回 null。
  */

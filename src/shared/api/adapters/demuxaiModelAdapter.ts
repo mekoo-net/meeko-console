@@ -12,9 +12,9 @@ import type {
 import type {
   DemuxaiModelPort,
   ListModelsPage,
-} from '@/features/demuxai/services/ports/demuxaiModelPort';
+} from '@/features/demux/services/ports/demuxaiModelPort';
 
-const BASE = '/demuxai/api/admin/models';
+const BASE = '/demux/api/admin/models';
 
 /** 后端 ModelMetaWireDto（camelCase）。 */
 interface ModelMetaWireRaw {

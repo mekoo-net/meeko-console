@@ -10,9 +10,9 @@ import PageHeader from '@/shared/ui/PageHeader.vue';
 const route = useRoute();
 
 const tabs = [
-  { name: 'demuxai-settings-rate', label: '总开关', to: '/demuxai/settings/rate' },
-  { name: 'demuxai-settings-rate-accounts', label: '账户设置', to: '/demuxai/settings/rate/accounts' },
-  { name: 'demuxai-settings-rate-ip', label: 'IP 设置', to: '/demuxai/settings/rate/ip' },
+  { name: 'demuxai-settings-rate', label: '总开关', to: '/demux/settings/rate' },
+  { name: 'demuxai-settings-rate-accounts', label: '账户设置', to: '/demux/settings/rate/accounts' },
+  { name: 'demuxai-settings-rate-ip', label: 'IP 设置', to: '/demux/settings/rate/ip' },
 ] as const;
 </script>
 

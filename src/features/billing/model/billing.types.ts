@@ -383,7 +383,7 @@ export const billBusinessSchema = z.object({
   refType: z.enum(billRefTypeValues).nullable().optional(),
   refId: idString.nullable().optional(),
   /**
-   * 产品域请求幂等键（= commit idempotencyKey，等于 DemuxAi UsageLog.RequestId）。
+   * 产品域请求幂等键（= commit idempotencyKey，等于 Demux UsageLog.RequestId）。
    * 用于跨域把账单流水反查回发起它的调用日志。
    */
   requestId: z.string().nullable().optional(),

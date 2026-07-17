@@ -8,12 +8,12 @@ import {
   type ImportProviderGroupResult,
   type ProviderGroup,
   type ProviderUpstreamModel,
-} from '@/features/demuxai/model/catalog.types';
-import type { DemuxaiCatalogPort } from '@/features/demuxai/services/ports/demuxaiCatalogPort';
+} from '@/features/demux/model/catalog.types';
+import type { DemuxaiCatalogPort } from '@/features/demux/services/ports/demuxaiCatalogPort';
 import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 
-const BASE = '/demuxai/api/admin/providers';
+const BASE = '/demux/api/admin/providers';
 
 function parseGroups(value: unknown): AppResult<ProviderGroup[]> {
   const envelope = value as ItemsEnvelope<unknown>;

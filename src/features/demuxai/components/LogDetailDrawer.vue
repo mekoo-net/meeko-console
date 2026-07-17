@@ -478,7 +478,7 @@ const outputDims = computed<DimRow[]>(() => {
           该账单已驳回
         </el-tag>
         <el-tag v-else-if="hasCharge" type="warning" effect="plain">
-          已扣费，暂未关联钱包流水（请刷新；仍无则核对 DemuxAi 与 Billing 同库）
+          已扣费，暂未关联钱包流水（请刷新；仍无则核对 Demux 与 Billing 同库）
         </el-tag>
         <el-tag v-else type="info" effect="plain">未扣费，无法驳回</el-tag>
       </div>

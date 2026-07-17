@@ -16,11 +16,11 @@ import type {
 import type {
   DemuxaiProviderPort,
   ListProvidersPage,
-} from '@/features/demuxai/services/ports/demuxaiProviderPort';
+} from '@/features/demux/services/ports/demuxaiProviderPort';
 
-const BASE = '/demuxai/api/admin/providers';
+const BASE = '/demux/api/admin/providers';
 
-/** DemuxAi VendorWireDto（camelCase JSON）。 */
+/** Demux VendorWireDto（camelCase JSON）。 */
 interface VendorDtoRaw {
   id: number | string;
   uid?: number | string;

@@ -4,10 +4,10 @@
 
 | 项 | 值 |
 | --- | --- |
-| 路由（独立页） | `/demuxai/models` → **重定向**至 [`/demuxai/providers`](./08-demuxai-providers.md) |
+| 路由（独立页） | `/demux/models` → **重定向**至 [`/demux/providers`](./08-demuxai-providers.md) |
 | 运营主路径 | 在 **供应商组** 页的上游模型抽屉内维护 **对外别名**（`ModelRoute`） |
 | 定价 / 未配置 | [`10-demuxai-pricing.md`](./10-demuxai-pricing.md) 按 `alias` 管理 |
-| Port（遗留） | `DemuxaiModelPort` → `/demuxai/api/admin/models` |
+| Port（遗留） | `DemuxaiModelPort` → `/demux/api/admin/models` |
 | Port（主） | `DemuxaiModelRoutePort` → 见 [`08-demuxai-providers.md`](./08-demuxai-providers.md) § 模型路由 |
 
 > **标识**：`ModelMeta` / 过渡 `Model` 行主键 JSON 字段为 **`id`**；`uid` 仅用于账户 / IAM（见 [`11-demuxai-logs.md`](./11-demuxai-logs.md)）。
@@ -35,7 +35,7 @@
 
 完整 CRUD 见 [`08-demuxai-providers.md`](./08-demuxai-providers.md)。
 
-核心类型：`src/features/demuxai/model/modelRoute.types.ts`。
+核心类型：`src/features/demux/model/modelRoute.types.ts`。
 
 ```ts
 // 用户请求体 model 字段 / 计费主键
@@ -51,14 +51,14 @@ status: 'enabled' | 'disabled' | 'hidden';
 同一 `alias` 可有多条记录（不同上游或权重）；启用态路由参与定价页「未配置」推导。
 ---
 ## 二、平台 Model 元数据（遗留 Port）
-> BFF：`ModelAdminController`，`/demuxai/api/admin/models`。契约见 `Meeko.Contracts` / `ModelMetaAdminDto`。
+> BFF：`ModelAdminController`，`/demux/api/admin/models`。契约见 `Meeko.Contracts` / `ModelMetaAdminDto`。
 
 ### 接口清单
 | 业务动作 | Port 方法 | HTTP | REST 端点 |
 | --- | --- | --- | --- |
-| 列表 | `list(input)` | GET | `/demuxai/api/admin/models` 或 `.../search?keyword=` |
-| 详情 | `get(id)` | GET | `/demuxai/api/admin/models/{id}` |
-| 编辑 | `update(id, payload)` | PUT | `/demuxai/api/admin/models`（body 含 `id`） |
+| 列表 | `list(input)` | GET | `/demux/api/admin/models` 或 `.../search?keyword=` |
+| 详情 | `get(id)` | GET | `/demux/api/admin/models/{id}` |
+| 编辑 | `update(id, payload)` | PUT | `/demux/api/admin/models`（body 含 `id`） |
 查询参数（BFF）：`p`、`size`；可选 `vendorId` 过滤。
 
 ### 列表项（BFF 目标形状 · `ModelMetaAdminDto`）
@@ -88,7 +88,7 @@ status: 'enabled' | 'disabled' | 'hidden';
 | `status` | `active` / `disabled` 等。 |
 
 ### 前端 `Model` 类型（Mock / 适配层）
-控制台 zod 仍使用简化 `Model`（`src/features/demuxai/model/model.types.ts`），供定价页与日志字典：
+控制台 zod 仍使用简化 `Model`（`src/features/demux/model/model.types.ts`），供定价页与日志字典：
 
 ```json
 {
@@ -124,8 +124,8 @@ provider.modelMappings[].displayName === model.modelId
 
 ```
 
-主路径：/demuxai/providers → 选组 → 编辑上游模型 → 别名表（ModelRoute）
-定价：/demuxai/pricing → 未配置 Tab 来自 enabled routes 的 alias \ priced modelIds
+主路径：/demux/providers → 选组 → 编辑上游模型 → 别名表（ModelRoute）
+定价：/demux/pricing → 未配置 Tab 来自 enabled routes 的 alias \ priced modelIds
 日志/概览：modelName 显示 alias；字典可仍用 DemuxaiModelPort.list（过渡）
 
 ```

@@ -2,12 +2,12 @@ import {
   issuedBackendCredentialsSchema,
   type IssueBackendInput,
   type IssuedBackendCredentials,
-} from '@/features/demuxai/model/backend.types';
-import type { DemuxaiBackendPort } from '@/features/demuxai/services/ports/demuxaiBackendPort';
-import { requestDemuxAi } from '@/shared/api/httpClient';
+} from '@/features/demux/model/backend.types';
+import type { DemuxaiBackendPort } from '@/features/demux/services/ports/demuxaiBackendPort';
+import { requestDemux } from '@/shared/api/httpClient';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 
-const ISSUE_PATH = '/demuxai/api/admin/backends';
+const ISSUE_PATH = '/demux/api/admin/backends';
 
 function parseIssued(value: unknown): AppResult<IssuedBackendCredentials> {
   const r = issuedBackendCredentialsSchema.safeParse(value);

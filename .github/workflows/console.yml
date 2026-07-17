@@ -42,10 +42,16 @@ jobs:
       - run: bun run lint
         continue-on-error: true
       - run: bun run test
-      - run: bun run build
+
+      - name: Production build
+        env:
+          NODE_ENV: production
+          VITE_USE_MOCK: 'false'
+          VITE_API_BASE: ${{ vars.VITE_API_BASE || 'https://api.platform.meeyo.org' }}
+        run: bun run build
 
   # 仅在打 tag 或手动触发时执行：构建并推送 ghcr.io/<repo>/meeko-console
-  # VITE_API_BASE 在此通过 build-args 注入（编译期内联进 SPA）
+  # VITE_API_BASE → Meeko 平台 Gateway（/api、/auth、/demux 等产品控制面）
   docker:
     needs: verify
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'

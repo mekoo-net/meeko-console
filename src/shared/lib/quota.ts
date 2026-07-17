@@ -1,6 +1,6 @@
 import { formatMoney } from './money';
 
-/** 与 DemuxAi 控制台一致：500_000 quota = 1 美元展示单位；账单兑换码按人民币录入。 */
+/** 与 Demux 控制台一致：500_000 quota = 1 美元展示单位；账单兑换码按人民币录入。 */
 export const QUOTA_PER_UNIT = 500_000;
 const CNY_RATE = 7;
 

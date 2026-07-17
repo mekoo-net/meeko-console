@@ -2,10 +2,10 @@
 import { onMounted } from 'vue';
 import { Delete, Plus } from '@element-plus/icons-vue';
 
-import RateSettingsPanel from '@/features/demuxai/components/RateSettingsPanel.vue';
-import RateWindowInput from '@/features/demuxai/components/RateWindowInput.vue';
-import { emptyIpOverride, useRateLimitSettings } from '@/features/demuxai/composables/useRateLimitSettings';
-import type { IpRateOverride } from '@/features/demuxai/model/rateLimit.types';
+import RateSettingsPanel from '@/features/demux/components/RateSettingsPanel.vue';
+import RateWindowInput from '@/features/demux/components/RateWindowInput.vue';
+import { emptyIpOverride, useRateLimitSettings } from '@/features/demux/composables/useRateLimitSettings';
+import type { IpRateOverride } from '@/features/demux/model/rateLimit.types';
 
 const { draft, loading, saving, loaded, updatedAtUtc, isDirty, isDirtyIp, load, save, resetIp } =
   useRateLimitSettings();

@@ -106,20 +106,20 @@ export const routes: RouteRecordRaw[] = [
       },
       {
         path: 'demuxai',
-        component: () => import('@/features/demuxai/views/DemuxaiLayout.vue'),
+        component: () => import('@/features/demux/views/DemuxaiLayout.vue'),
         redirect: { name: 'demuxai-overview' },
         meta: { title: 'DemuxAI 管理', requiresAuth: true, roles: ['Admin'] },
         children: [
           {
             path: 'overview',
             name: 'demuxai-overview',
-            component: () => import('@/features/demuxai/views/OverviewView.vue'),
+            component: () => import('@/features/demux/views/OverviewView.vue'),
             meta: { title: '概览', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'providers',
             name: 'demuxai-providers',
-            component: () => import('@/features/demuxai/views/ProviderGroupListView.vue'),
+            component: () => import('@/features/demux/views/ProviderGroupListView.vue'),
             meta: { title: '供应商组', requiresAuth: true, roles: ['Admin'] },
           },
           {
@@ -141,25 +141,25 @@ export const routes: RouteRecordRaw[] = [
           {
             path: 'pricing',
             name: 'demuxai-pricing',
-            component: () => import('@/features/demuxai/views/PricingView.vue'),
+            component: () => import('@/features/demux/views/PricingView.vue'),
             meta: { title: '模型定价', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'logs',
             name: 'demuxai-logs',
-            component: () => import('@/features/demuxai/views/LogQueryView.vue'),
+            component: () => import('@/features/demux/views/LogQueryView.vue'),
             meta: { title: '调用日志', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'backends',
             name: 'demuxai-backends',
-            component: () => import('@/features/demuxai/views/GatewayCredentialsView.vue'),
+            component: () => import('@/features/demux/views/GatewayCredentialsView.vue'),
             meta: { title: '网关凭据', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'redemption',
             name: 'demuxai-redemption',
-            component: () => import('@/features/demuxai/views/RedemptionCodesView.vue'),
+            component: () => import('@/features/demux/views/RedemptionCodesView.vue'),
             meta: { title: '激活码', requiresAuth: true, roles: ['Admin'] },
           },
           {
@@ -168,25 +168,25 @@ export const routes: RouteRecordRaw[] = [
           },
           {
             path: 'settings/rate',
-            component: () => import('@/features/demuxai/views/RateSettingsLayout.vue'),
+            component: () => import('@/features/demux/views/RateSettingsLayout.vue'),
             meta: { title: '速率设置', requiresAuth: true, roles: ['Admin'] },
             children: [
               {
                 path: '',
                 name: 'demuxai-settings-rate',
-                component: () => import('@/features/demuxai/views/RateSwitchesView.vue'),
+                component: () => import('@/features/demux/views/RateSwitchesView.vue'),
                 meta: { title: '速率设置', requiresAuth: true, roles: ['Admin'] },
               },
               {
                 path: 'accounts',
                 name: 'demuxai-settings-rate-accounts',
-                component: () => import('@/features/demuxai/views/RateAccountSettingsView.vue'),
+                component: () => import('@/features/demux/views/RateAccountSettingsView.vue'),
                 meta: { title: '账户限速', requiresAuth: true, roles: ['Admin'] },
               },
               {
                 path: 'ip',
                 name: 'demuxai-settings-rate-ip',
-                component: () => import('@/features/demuxai/views/RateIpSettingsView.vue'),
+                component: () => import('@/features/demux/views/RateIpSettingsView.vue'),
                 meta: { title: 'IP 限速', requiresAuth: true, roles: ['Admin'] },
               },
             ],

@@ -4,9 +4,9 @@
 
 | 项 | 值 |
 | --- | --- |
-| 路由 | `/demuxai/logs` |
+| 路由 | `/demux/logs` |
 | 角色 | **Admin** |
-| 视图 | `src/features/demuxai/views/LogQueryView.vue` |
+| 视图 | `src/features/demux/views/LogQueryView.vue` |
 | 抽屉 | `LogDetailDrawer.vue` · `LogReverseDialog.vue` |
 | Port | `DemuxaiLogsPort` + 字典：`DemuxaiModelPort` · `DemuxaiProviderPort` · `AccountAdminPort` |
 
@@ -14,7 +14,7 @@
 
 > 调用日志属于**数据面**（ClickHouse / PG 用量表 / 独立聚合），与控制面目录解耦。
 >
-> 设计要点（与 `src/features/demuxai/model/log.types.ts` 一致）：
+> 设计要点（与 `src/features/demux/model/log.types.ts` 一致）：
 >
 > - `id`：本条日志主键（snowflake）。**`uid` 在本系统专指 userId**（见 `account.uid` / `account.iamUserUid`），不用于日志行主键。
 > - **`createAt`**：调用发生时间（Unix 毫秒 UTC）。类型注释中保留与 `occurredAtUtc` 的对应关系。
@@ -22,7 +22,7 @@
 > - **`providerId`**：Vendor **int 主键**（非 string UID）；展示名由前端 join `DemuxaiProviderPort.list`。
 > - **`modelName`**：用户请求体 `model`（通常 = 模型路由 `alias`）。
 > - **`convId`**：多轮会话 ID；列表页点击 Conv 可钻取过滤同会话调用（不归组）。
-> - **`token`**：调用来源令牌快照 `{ id, name }`；sk- 后端调用时有值，PG 页面直发（`/demuxai/api/pg`）时为 `null`，UI 显示 **PG**。
+> - **`token`**：调用来源令牌快照 `{ id, name }`；sk- 后端调用时有值，PG 页面直发（`/demux/api/pg`）时为 `null`，UI 显示 **PG**。
 > - **`billingType`**：判别字段；`usage` / `cost` 形状见下表。
 > - **`tokenLatency`**（ms，`null` 表示失败）：`streamed: true` → TTFT；`streamed: false` → 端到端总耗时。
 > - **`success` + `error`**：二元成败；失败必有 `error: { code, message, httpStatus }`。
@@ -33,18 +33,18 @@
 
 | 业务动作 | Port 方法 | HTTP | REST 端点 |
 | --- | --- | --- | --- |
-| 列表 | `list(input)` | GET | `/demuxai/api/admin/logs` |
-| 统计（与 list 同 filter 子集） | `stats(filter)` | GET | `/demuxai/api/admin/logs/stats` |
-| 驳回账单 | `reverse(input)` | POST | `/demuxai/api/admin/logs/{logId}/reverse`（**规划，适配器未实现**） |
-| Model 字典 | `DemuxaiModelPort.list` | GET | `/demuxai/api/admin/models` |
-| Vendor 字典 | `DemuxaiProviderPort.list` | GET | `/demuxai/api/admin/providers` |
+| 列表 | `list(input)` | GET | `/demux/api/admin/logs` |
+| 统计（与 list 同 filter 子集） | `stats(filter)` | GET | `/demux/api/admin/logs/stats` |
+| 驳回账单 | `reverse(input)` | POST | `/demux/api/admin/logs/{logId}/reverse`（**规划，适配器未实现**） |
+| Model 字典 | `DemuxaiModelPort.list` | GET | `/demux/api/admin/models` |
+| Vendor 字典 | `DemuxaiProviderPort.list` | GET | `/demux/api/admin/providers` |
 | Account 字典 | `AccountAdminPort.listAccounts` | GET | `/accounts` |
 
 > 响应经 **`requestDemuxAi`** → `{ success, data }`。
 
 ## 请求 / 响应
 
-### `GET /demuxai/api/admin/logs`
+### `GET /demux/api/admin/logs`
 参数：
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -185,12 +185,12 @@
 
 > 旧版文档中的 `occurredAtUtc`、`provider: { id, name }`、`latency: { ms, kind }`、`request: { apiType, ip, streamed }` 嵌套尚未在控制台 zod 落地；若 BFF 返回嵌套形，应在 **HttpAdapter 映射**为当前扁平字段。
 
-### `GET /demuxai/api/admin/logs/stats`
+### `GET /demux/api/admin/logs/stats`
 见 [`07-demuxai-overview.md`](./07-demuxai-overview.md)。
 **目标**：`LogStats`（`totalCalls`、`buckets`、`topModels`、`topProviders`、`errorCodes` 等）。
 **当前 BFF**：返回按日聚合的 `AiLogStatDto` 列表；HttpAdapter 临时包装为 `{ dailyRows }`，概览完整 KPI 需 BFF 扩展或 Mock。
 
-### `POST /demuxai/api/admin/logs/{logId}/reverse`（规划）
+### `POST /demux/api/admin/logs/{logId}/reverse`（规划）
 Body（`ReverseLogInput`）：
 
 ```json

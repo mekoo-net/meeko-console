@@ -93,7 +93,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   }
 }
 
-/** DemuxAi / BFF 列表分页体（`ApiEnvelope.data` 内层）。 */
+/** Demux / BFF 列表分页体（`ApiEnvelope.data` 内层）。 */
 export interface ItemsEnvelope<T> {
   items: T[];
   total: number;
@@ -137,7 +137,7 @@ interface DemuxAiEnvelope<T> {
 }
 
 /**
- * DemuxAi 管理端：`HTTP 200` + `{ success, message?, data }`。
+ * Demux 管理端：`HTTP 200` + `{ success, message?, data }`。
  * 业务失败时 `success === false`，仍可能是 200。
  */
 export async function requestDemuxAi<T>(
@@ -157,7 +157,7 @@ export async function requestDemuxAi<T>(
   return ok(envelope.data);
 }
 
-/** Tavern 管理端：与 DemuxAi 相同 `{ success, message?, data }` 信封。 */
+/** Tavern 管理端：与 Demux 相同 `{ success, message?, data }` 信封。 */
 export async function requestTavern<T>(
   path: string,
   options: RequestOptions = {},

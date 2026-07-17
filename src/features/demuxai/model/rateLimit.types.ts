@@ -63,7 +63,7 @@ export const ipRateLimitSettingsSchema = z.object({
 
 export type IpRateLimitSettings = z.infer<typeof ipRateLimitSettingsSchema>;
 
-/** DemuxAI 产品速率限制设置（GET/PUT /demuxai/api/admin/rate/setting）。 */
+/** DemuxAI 产品速率限制设置（GET/PUT /demux/api/admin/rate/setting）。 */
 export const rateLimitSettingsSchema = z.object({
   /** 速率限制总开关；关闭后不下发任何限制（不含 IP 限速，其有独立开关）。 */
   enabled: z.boolean(),

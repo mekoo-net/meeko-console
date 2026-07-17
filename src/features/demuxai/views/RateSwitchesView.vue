@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
 
-import RateSettingsPanel from '@/features/demuxai/components/RateSettingsPanel.vue';
-import RateWindowInput from '@/features/demuxai/components/RateWindowInput.vue';
-import { useRateLimitSettings } from '@/features/demuxai/composables/useRateLimitSettings';
+import RateSettingsPanel from '@/features/demux/components/RateSettingsPanel.vue';
+import RateWindowInput from '@/features/demux/components/RateWindowInput.vue';
+import { useRateLimitSettings } from '@/features/demux/composables/useRateLimitSettings';
 
 const { draft, loading, saving, loaded, updatedAtUtc, isDirty, isDirtySwitches, load, save, resetSwitches } =
   useRateLimitSettings();
