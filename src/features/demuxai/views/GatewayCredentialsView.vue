@@ -11,7 +11,6 @@ const port = getDemuxaiBackendPort();
     <PageHeader title="网关凭据" description="签发 Demux.Gateway 接入 Meeko.Demux 7072 RPC 的 ClientId / ClientSecret" />
     <GatewayCredentialIssuePanel
       product-label="DemuxAi"
-      client-id-prefix="cl-"
       require-name
       config-hint="写入 Demux.Gateway 配置 DemuxAi:ClientId / DemuxAi:ClientSecret；主密钥 Meeko:Demux:LlmBackend:HmacKeyBase64 需在平台侧单独配置。"
       :issue="(input) => port.issue(input)"

@@ -8,7 +8,6 @@ import type { IssueBackendInput, IssuedBackendCredentials } from '@/features/dem
 
 const props = defineProps<{
   productLabel: string;
-  clientIdPrefix: string;
   configHint: string;
   requireName?: boolean;
   issue: (input: IssueBackendInput) => Promise<AppResult<IssuedBackendCredentials>>;
@@ -68,8 +67,8 @@ async function copyPair(): Promise<void> {
     <el-alert type="info" show-icon :closable="false" class="gateway-panel__alert">
       <template #title>签发说明</template>
       <p>
-        此处签发的是 <strong>{{ productLabel }}</strong> 网关 RPC 接入凭据（<code>{{ clientIdPrefix }}</code> /
-        <code>cs-</code>）。凭据<strong>只显示一次</strong>，请写入网关配置；服务端
+        此处签发的是 <strong>{{ productLabel }}</strong> 网关 RPC 接入凭据（ClientId + <code>cs-</code> Secret）。
+        凭据<strong>只显示一次</strong>，请写入网关配置；服务端
         <code>HmacKeyBase64</code> 需在 yaml / secrets 中单独配置。
       </p>
       <p class="gateway-panel__hint">{{ configHint }}</p>

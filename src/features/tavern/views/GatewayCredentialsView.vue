@@ -14,7 +14,6 @@ const port = getTavernBackendPort();
     />
     <GatewayCredentialIssuePanel
       product-label="Tavern"
-      client-id-prefix="ta-"
       config-hint="写入 Tavern.Gateway 配置 Meeko:Tavern:Platform:ClientId / ClientSecret；主密钥 Meeko:Tavern:LlmBackend:HmacKeyBase64 需在平台侧单独配置。"
       :issue="(input) => port.issue(input)"
     />
