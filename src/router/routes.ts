@@ -105,7 +105,7 @@ export const routes: RouteRecordRaw[] = [
         ],
       },
       {
-        path: 'demuxai',
+        path: 'demux',
         component: () => import('@/features/demuxai/views/DemuxaiLayout.vue'),
         redirect: { name: 'demuxai-overview' },
         meta: { title: 'DemuxAI 管理', requiresAuth: true, roles: ['Admin'] },
@@ -192,6 +192,14 @@ export const routes: RouteRecordRaw[] = [
             ],
           },
         ],
+      },
+      {
+        path: 'demuxai',
+        redirect: { name: 'demuxai-overview' },
+      },
+      {
+        path: 'demuxai/:pathMatch(.*)+',
+        redirect: (to) => `/demux/${String(to.params.pathMatch)}`,
       },
       {
         path: 'tavern',
