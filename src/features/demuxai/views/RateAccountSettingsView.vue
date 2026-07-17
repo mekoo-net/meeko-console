@@ -2,11 +2,11 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { Delete, Plus } from '@element-plus/icons-vue';
 
-import RateLimitAccountDialog from '@/features/demux/components/RateLimitAccountDialog.vue';
-import RateSettingsPanel from '@/features/demux/components/RateSettingsPanel.vue';
-import RateWindowInput from '@/features/demux/components/RateWindowInput.vue';
-import { useRateLimitSettings } from '@/features/demux/composables/useRateLimitSettings';
-import type { AccountRateLimitOverride } from '@/features/demux/model/rateLimit.types';
+import RateLimitAccountDialog from '@/features/demuxai/components/RateLimitAccountDialog.vue';
+import RateSettingsPanel from '@/features/demuxai/components/RateSettingsPanel.vue';
+import RateWindowInput from '@/features/demuxai/components/RateWindowInput.vue';
+import { useRateLimitSettings } from '@/features/demuxai/composables/useRateLimitSettings';
+import type { AccountRateLimitOverride } from '@/features/demuxai/model/rateLimit.types';
 import { getAccountAdminPort } from '@/features/accounts/services';
 import { accountTypeLabel, type Account, type AccountType } from '@/features/accounts/model/account.types';
 

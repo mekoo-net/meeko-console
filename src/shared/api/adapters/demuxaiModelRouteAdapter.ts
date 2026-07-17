@@ -5,11 +5,11 @@ import {
   type ModelRoute,
   type ModelRouteStats,
   type UpdateModelRouteInput,
-} from '@/features/demux/model/modelRoute.types';
+} from '@/features/demuxai/model/modelRoute.types';
 import type {
   DemuxaiModelRoutePort,
   ListModelRoutesPage,
-} from '@/features/demux/services/ports/demuxaiModelRoutePort';
+} from '@/features/demuxai/services/ports/demuxaiModelRoutePort';
 import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import type { Uid } from '@/shared/lib/id';

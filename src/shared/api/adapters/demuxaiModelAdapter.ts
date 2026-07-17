@@ -12,7 +12,7 @@ import type {
 import type {
   DemuxaiModelPort,
   ListModelsPage,
-} from '@/features/demux/services/ports/demuxaiModelPort';
+} from '@/features/demuxai/services/ports/demuxaiModelPort';
 
 const BASE = '/demux/api/admin/models';
 

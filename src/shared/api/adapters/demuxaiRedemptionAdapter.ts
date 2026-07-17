@@ -3,7 +3,7 @@ import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
 import { toUid } from '@/shared/lib/id';
 import { displayAmountToQuota, quotaToDisplayAmount } from '@/shared/lib/quota';
 
-import type { RedemptionStats } from '@/features/demux/model/redemptionDisplay';
+import type { RedemptionStats } from '@/features/demuxai/model/redemptionDisplay';
 import type {
   CreateRedemptionCodesInput,
   CreateRedemptionCodesResult,
@@ -13,11 +13,11 @@ import type {
   RedemptionCode,
   RedemptionStaff,
   RedemptionStatus,
-} from '@/features/demux/model/redemption.types';
+} from '@/features/demuxai/model/redemption.types';
 import type {
   DemuxaiRedemptionPort,
   ListRedemptionCodesPage,
-} from '@/features/demux/services/ports/demuxaiRedemptionPort';
+} from '@/features/demuxai/services/ports/demuxaiRedemptionPort';
 
 const BASE = '/demux/api/redemption';
 

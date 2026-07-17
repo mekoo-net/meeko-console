@@ -18,7 +18,7 @@ import type {
 import type {
   DemuxaiLogsPort,
   ListLogsPage,
-} from '@/features/demux/services/ports/demuxaiLogsPort';
+} from '@/features/demuxai/services/ports/demuxaiLogsPort';
 
 const BASE = '/demux/api/admin/logs';
 

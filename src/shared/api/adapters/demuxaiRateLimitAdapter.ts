@@ -5,9 +5,9 @@ import {
   type RateLimitSettings,
   type UpdateRateLimitSettingsInput,
   type WindowUnit,
-} from '@/features/demux/model/rateLimit.types';
-import type { DemuxaiRateLimitPort } from '@/features/demux/services/ports/demuxaiRateLimitPort';
-import { requestDemux } from '@/shared/api/httpClient';
+} from '@/features/demuxai/model/rateLimit.types';
+import type { DemuxaiRateLimitPort } from '@/features/demuxai/services/ports/demuxaiRateLimitPort';
+import { requestDemuxAi } from '@/shared/api/httpClient';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { asEpochMillis } from '@/shared/lib/epoch';
 

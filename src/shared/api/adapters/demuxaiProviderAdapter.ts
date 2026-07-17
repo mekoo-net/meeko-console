@@ -16,7 +16,7 @@ import type {
 import type {
   DemuxaiProviderPort,
   ListProvidersPage,
-} from '@/features/demux/services/ports/demuxaiProviderPort';
+} from '@/features/demuxai/services/ports/demuxaiProviderPort';
 
 const BASE = '/demux/api/admin/providers';
 

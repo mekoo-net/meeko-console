@@ -13,7 +13,7 @@ import {
 import type {
   DemuxaiPricingPort,
   ListPricingPage,
-} from '@/features/demux/services/ports/demuxaiPricingPort';
+} from '@/features/demuxai/services/ports/demuxaiPricingPort';
 import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 

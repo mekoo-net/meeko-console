@@ -5,7 +5,7 @@ export {
   issuedBackendCredentialsSchema,
   type IssueBackendInput,
   type IssuedBackendCredentials,
-} from '@/features/demux/model/backend.types';
+} from '@/features/demuxai/model/backend.types';
 
 export const issueTavernBackendInputSchema = z.object({
   name: z.string().optional(),

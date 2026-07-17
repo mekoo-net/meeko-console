@@ -4,7 +4,7 @@ import { ElMessage } from 'element-plus';
 import { CopyDocument, Key, WarningFilled } from '@element-plus/icons-vue';
 
 import type { AppResult } from '@/shared/api/httpTypes';
-import type { IssueBackendInput, IssuedBackendCredentials } from '@/features/demux/model/backend.types';
+import type { IssueBackendInput, IssuedBackendCredentials } from '@/features/demuxai/model/backend.types';
 
 const props = defineProps<{
   productLabel: string;

@@ -17,7 +17,7 @@ import {
   type WalletSnapshot,
 } from '../../model/billing.types';
 import { referralRechargesForAccount } from '@/features/accounts/services/mock/referralData';
-import { getDemuxaiStore } from '@/features/demux/services/mock/data';
+import { getDemuxaiStore } from '@/features/demuxai/services/mock/data';
 
 import type {
   BillingPort,
