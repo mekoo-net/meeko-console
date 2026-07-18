@@ -2,9 +2,9 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 
 import {
-  ALL_STAFF_PERMISSIONS,
-  READ_ONLY_STAFF_PERMISSIONS,
-} from '@/features/staff/model/staff.types';
+  MOCK_ALL_STAFF_PERMISSIONS,
+  MOCK_READ_ONLY_STAFF_PERMISSIONS,
+} from '@/features/staff/services/mock/mockPermissions';
 import { apiUrl } from '@/shared/api/apiBase';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { isMockMode } from '@/shared/runtime';
@@ -110,8 +110,8 @@ function buildMockSession(username: string): AuthSession {
   const mockStaffRole = lower === 'admin' || lower === 'admin2fa' ? 'SuperAdmin' : 'ReadOnly';
   const mockPermissions =
     lower === 'admin' || lower === 'admin2fa'
-      ? [...ALL_STAFF_PERMISSIONS]
-      : [...READ_ONLY_STAFF_PERMISSIONS];
+      ? [...MOCK_ALL_STAFF_PERMISSIONS]
+      : [...MOCK_READ_ONLY_STAFF_PERMISSIONS];
 
   return {
     accessToken: `mock-access-${Date.now()}`,

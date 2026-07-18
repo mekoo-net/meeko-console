@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ElMessage } from 'element-plus';
-import { Plus, Refresh } from '@element-plus/icons-vue';
-import { computed, nextTick, reactive, ref } from 'vue';
+import { ElMessage, type ElTree } from 'element-plus';
+import { Plus, Refresh, Search } from '@element-plus/icons-vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import { confirmDanger } from '@/shared/composables/useConfirm';
@@ -10,7 +10,9 @@ import { useAuthStore } from '@/stores/auth';
 
 import { useStaffRoleList } from '../composables/useStaffRoleList';
 import {
-  PERMISSION_GROUPS,
+  buildPermissionTree,
+  type PermissionCatalogItem,
+  type PermissionTreeNode,
   type StaffRoleListItem,
 } from '../model/staff.types';
 import { getStaffPort } from '../services';
@@ -39,6 +41,100 @@ const permissionsReadonly = computed(
   () => drawerMode.value === 'edit' && editingIsSystem.value,
 );
 
+// ---- 权限树 ----------------------------------------------------------------
+
+const treeRef = ref<InstanceType<typeof ElTree>>();
+const permSearch = ref('');
+/**
+ * 权限目录（码 + 产品自注册的描述）。唯一来源是 Keystone staff_permissions 表
+ * （经 BFF 透传），前端不维护任何硬编码全集。
+ */
+const catalogItems = ref<PermissionCatalogItem[]>([]);
+const catalogLoading = ref(false);
+
+async function loadCatalog(): Promise<void> {
+  catalogLoading.value = true;
+  try {
+    const res = await getStaffPort().listPermissionCatalog();
+    if (res.success) {
+      catalogItems.value = res.data;
+    } else {
+      ElMessage.error(`权限目录加载失败：${res.error.message}`);
+    }
+  } finally {
+    catalogLoading.value = false;
+  }
+}
+
+onMounted(loadCatalog);
+
+/** 目录 ∪ 角色已有码：即使出现目录之外的历史码也不丢勾选。 */
+const treeData = computed<PermissionTreeNode[]>(() => {
+  const known = new Set(catalogItems.value.map((p) => p.code));
+  const extra = form.permissionCodes.filter((code) => !known.has(code));
+  return buildPermissionTree([...catalogItems.value, ...extra]);
+});
+
+const allLeafCodes = computed(() => {
+  const acc: string[] = [];
+  const walk = (nodes: PermissionTreeNode[]): void => {
+    for (const n of nodes) {
+      if (n.code) acc.push(n.code);
+      if (n.children) walk(n.children);
+    }
+  };
+  walk(treeData.value);
+  return acc;
+});
+
+const domainKeys = computed(() => treeData.value.map((n) => n.key));
+
+function syncTreeChecked(): void {
+  treeRef.value?.setCheckedKeys(form.permissionCodes, false);
+}
+
+function onTreeCheck(): void {
+  if (permissionsReadonly.value) {
+    // 只读态下把勾选还原，避免误操作
+    syncTreeChecked();
+    return;
+  }
+  const leaves = (treeRef.value?.getCheckedNodes(true) ?? []) as PermissionTreeNode[];
+  form.permissionCodes = leaves.filter((n) => n.code).map((n) => n.code as string);
+}
+
+function checkAllPermissions(): void {
+  form.permissionCodes = [...allLeafCodes.value];
+  syncTreeChecked();
+}
+
+function clearPermissions(): void {
+  form.permissionCodes = [];
+  syncTreeChecked();
+}
+
+function filterTreeNode(query: string, data: Record<string, unknown>): boolean {
+  if (!query) return true;
+  const node = data as unknown as PermissionTreeNode;
+  const q = query.trim().toLowerCase();
+  return node.label.toLowerCase().includes(q) || (node.code ?? '').toLowerCase().includes(q);
+}
+
+function countLeaves(node: PermissionTreeNode): number {
+  if (node.code) return 1;
+  return (node.children ?? []).reduce((sum, child) => sum + countLeaves(child), 0);
+}
+
+const treeProps = computed(() => ({
+  label: 'label',
+  children: 'children',
+  disabled: () => permissionsReadonly.value,
+}));
+
+watch(permSearch, (q) => treeRef.value?.filter(q));
+
+// ---- 抽屉 ------------------------------------------------------------------
+
 function resetForm(): void {
   form.name = '';
   form.description = '';
@@ -49,9 +145,11 @@ async function openCreate(): Promise<void> {
   drawerMode.value = 'create';
   editingId.value = null;
   editingIsSystem.value = false;
+  permSearch.value = '';
   resetForm();
   drawer.value = true;
   await nextTick();
+  syncTreeChecked();
 }
 
 async function openEdit(row: StaffRoleListItem): Promise<void> {
@@ -69,36 +167,13 @@ async function openEdit(row: StaffRoleListItem): Promise<void> {
     form.name = detail.name;
     form.description = detail.description ?? '';
     form.permissionCodes = [...detail.permissionCodes];
+    permSearch.value = '';
     drawer.value = true;
+    await nextTick();
+    syncTreeChecked();
   } finally {
     loadingDetail.value = false;
   }
-}
-
-function isGroupChecked(groupKey: string): boolean {
-  const group = PERMISSION_GROUPS.find((g) => g.key === groupKey);
-  if (!group || group.items.length === 0) return false;
-  return group.items.every((i) => form.permissionCodes.includes(i.code));
-}
-
-function isGroupIndeterminate(groupKey: string): boolean {
-  const group = PERMISSION_GROUPS.find((g) => g.key === groupKey);
-  if (!group || group.items.length === 0) return false;
-  const checked = group.items.filter((i) => form.permissionCodes.includes(i.code)).length;
-  return checked > 0 && checked < group.items.length;
-}
-
-function toggleGroup(groupKey: string, checked: boolean | string | number): void {
-  if (permissionsReadonly.value) return;
-  const group = PERMISSION_GROUPS.find((g) => g.key === groupKey);
-  if (!group) return;
-  const set = new Set(form.permissionCodes);
-  const on = checked === true;
-  for (const item of group.items) {
-    if (on) set.add(item.code);
-    else set.delete(item.code);
-  }
-  form.permissionCodes = [...set];
 }
 
 async function submitDrawer(): Promise<void> {
@@ -257,7 +332,7 @@ async function onDelete(row: StaffRoleListItem): Promise<void> {
     <el-drawer
       v-model="drawer"
       :title="drawerMode === 'create' ? '新建角色' : (permissionsReadonly ? '查看角色' : '编辑角色')"
-      size="520px"
+      size="560px"
       destroy-on-close
     >
       <el-form label-width="72px" @submit.prevent="submitDrawer">
@@ -268,28 +343,47 @@ async function onDelete(row: StaffRoleListItem): Promise<void> {
           <el-input v-model="form.description" type="textarea" :rows="2" />
         </el-form-item>
         <el-form-item label="权限">
-          <div class="perm-groups">
-            <div v-for="group in PERMISSION_GROUPS" :key="group.key" class="perm-group">
-              <div class="perm-group__head">
-                <el-checkbox
-                  :model-value="isGroupChecked(group.key)"
-                  :indeterminate="isGroupIndeterminate(group.key)"
-                  :disabled="permissionsReadonly"
-                  @change="(v: boolean | string | number) => toggleGroup(group.key, v)"
-                >
-                  {{ group.title }}
-                </el-checkbox>
+          <div class="perm-tree" v-loading="catalogLoading">
+            <div class="perm-tree__toolbar">
+              <el-input
+                v-model="permSearch"
+                :prefix-icon="Search"
+                placeholder="搜索权限名称或权限码"
+                clearable
+                size="small"
+                class="perm-tree__search"
+              />
+              <div class="perm-tree__toolbar-actions">
+                <span class="perm-tree__count">
+                  已选 {{ form.permissionCodes.length }} / {{ allLeafCodes.length }}
+                </span>
+                <template v-if="!permissionsReadonly">
+                  <el-button link type="primary" size="small" @click="checkAllPermissions">全选</el-button>
+                  <el-button link size="small" @click="clearPermissions">清空</el-button>
+                </template>
               </div>
-              <el-checkbox-group v-model="form.permissionCodes" class="perm-group__items" :disabled="permissionsReadonly">
-                <el-checkbox
-                  v-for="item in group.items"
-                  :key="item.code"
-                  :label="item.code"
-                >
-                  {{ item.label }}
-                </el-checkbox>
-              </el-checkbox-group>
             </div>
+            <el-tree
+              ref="treeRef"
+              :data="treeData"
+              node-key="key"
+              show-checkbox
+              :check-strictly="false"
+              :default-expanded-keys="domainKeys"
+              :expand-on-click-node="true"
+              :filter-node-method="filterTreeNode"
+              :props="treeProps"
+              class="perm-tree__tree"
+              @check="onTreeCheck"
+            >
+              <template #default="{ data }">
+                <span class="perm-node" :class="{ 'perm-node--leaf': !!data.code }">
+                  <span class="perm-node__label">{{ data.label }}</span>
+                  <span v-if="data.code" class="perm-node__code">{{ data.code }}</span>
+                  <span v-else-if="data.children" class="perm-node__badge">{{ countLeaves(data) }}</span>
+                </span>
+              </template>
+            </el-tree>
           </div>
           <p v-if="permissionsReadonly" class="perm-hint">系统内置角色的权限集合不可修改，仅可调整描述。</p>
         </el-form-item>
@@ -390,28 +484,73 @@ async function onDelete(row: StaffRoleListItem): Promise<void> {
   border-top: 1px solid var(--el-border-color-lighter);
 }
 
-.perm-groups {
+.perm-tree {
   width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.perm-group {
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 8px;
-  padding: 12px;
+  overflow: hidden;
 }
 
-.perm-group__head {
-  margin-bottom: 8px;
-  font-weight: 600;
+.perm-tree__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-lighter);
 }
 
-.perm-group__items {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 12px;
+.perm-tree__search {
+  max-width: 240px;
+}
+
+.perm-tree__toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.perm-tree__count {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-right: 8px;
+}
+
+.perm-tree__tree {
+  max-height: 420px;
+  overflow: auto;
+  padding: 8px 4px;
+}
+
+.perm-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.perm-node__label {
+  white-space: nowrap;
+}
+
+.perm-node__code {
+  font-family: var(--el-font-family-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.perm-node__badge {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-light);
+  border-radius: 8px;
+  padding: 0 8px;
 }
 
 .perm-hint {

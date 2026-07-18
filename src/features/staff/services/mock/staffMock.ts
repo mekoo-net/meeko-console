@@ -1,8 +1,6 @@
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 
 import {
-  ALL_STAFF_PERMISSIONS,
-  READ_ONLY_STAFF_PERMISSIONS,
   staffRoleListItemSchema,
   staffRoleSchema,
   staffUserSchema,
@@ -11,6 +9,10 @@ import {
   type StaffRole,
   type StaffUser,
 } from '../../model/staff.types';
+import {
+  MOCK_ALL_STAFF_PERMISSIONS,
+  MOCK_READ_ONLY_STAFF_PERMISSIONS,
+} from './mockPermissions';
 import type {
   CreateRoleInput,
   CreateStaffInput,
@@ -33,7 +35,7 @@ const roles: StaffRole[] = [
     name: 'SuperAdmin',
     description: '系统内置超级管理员',
     isSystem: true,
-    permissionCodes: [...ALL_STAFF_PERMISSIONS],
+    permissionCodes: [...MOCK_ALL_STAFF_PERMISSIONS],
     memberCount: 1,
     createdAtUtc: Date.parse('2024-01-01T00:00:00.000Z'),
   },
@@ -42,7 +44,7 @@ const roles: StaffRole[] = [
     name: 'ReadOnly',
     description: '系统内置只读角色',
     isSystem: true,
-    permissionCodes: [...READ_ONLY_STAFF_PERMISSIONS],
+    permissionCodes: [...MOCK_READ_ONLY_STAFF_PERMISSIONS],
     memberCount: 0,
     createdAtUtc: Date.parse('2024-01-01T00:00:00.000Z'),
   },
@@ -77,10 +79,10 @@ const staffUsers: StaffUser[] = [
   },
 ];
 
-const permissionCatalog: PermissionCatalogItem[] = ALL_STAFF_PERMISSIONS.map((code, i) => ({
+const permissionCatalog: PermissionCatalogItem[] = MOCK_ALL_STAFF_PERMISSIONS.map((code, i) => ({
   id: String(i + 1),
   code,
-  description: code,
+  description: null,
 }));
 
 function syncRoleMemberCounts(): void {
