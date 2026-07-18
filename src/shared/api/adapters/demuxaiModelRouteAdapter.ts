@@ -11,10 +11,11 @@ import type {
   ListModelRoutesPage,
 } from '@/features/demuxai/services/ports/demuxaiModelRoutePort';
 import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
+import { demuxPlatformPaths } from '@/shared/api/demuxRoutes';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import type { Uid } from '@/shared/lib/id';
 
-const BASE = '/demux/api/admin/routes';
+const BASE = demuxPlatformPaths.adminRoutes;
 
 function parseRoute(value: unknown): AppResult<ModelRoute> {
   const r = modelRouteSchema.safeParse(value);

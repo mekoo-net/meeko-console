@@ -1,5 +1,6 @@
 import type { AppResult } from '@/shared/api/httpTypes';
 import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
+import { demuxPlatformPaths } from '@/shared/api/demuxRoutes';
 import type { Uid } from '@/shared/lib/id';
 
 import type {
@@ -14,7 +15,7 @@ import type {
   ListModelsPage,
 } from '@/features/demuxai/services/ports/demuxaiModelPort';
 
-const BASE = '/demux/api/admin/models';
+const BASE = demuxPlatformPaths.adminModels;
 
 /** 后端 ModelMetaWireDto（camelCase）。 */
 interface ModelMetaWireRaw {

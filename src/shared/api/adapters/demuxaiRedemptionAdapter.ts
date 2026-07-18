@@ -1,5 +1,6 @@
 import type { AppResult } from '@/shared/api/httpTypes';
 import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
+import { demuxPlatformPaths } from '@/shared/api/demuxRoutes';
 import { toUid } from '@/shared/lib/id';
 import { displayAmountToQuota, quotaToDisplayAmount } from '@/shared/lib/quota';
 
@@ -19,7 +20,7 @@ import type {
   ListRedemptionCodesPage,
 } from '@/features/demuxai/services/ports/demuxaiRedemptionPort';
 
-const BASE = '/demux/api/redemption';
+const BASE = demuxPlatformPaths.redemption;
 
 interface RedemptionAccountRaw {
   uid: string | number;

@@ -5,6 +5,7 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 import type { ProviderGroup } from '../../model/catalog.types';
 import { isValidVendorSlug, normalizeVendorSlug } from '../../model/vendorSlug';
 import { getDemuxaiCatalogPort } from '../../services';
+import { demuxPlatformPaths } from '@/shared/api/demuxRoutes';
 
 interface Props {
   modelValue: boolean;
@@ -106,7 +107,7 @@ watch(
     <template v-if="group">
       <p class="drawer-desc">
         对外通道 slug 用于公开定价页分组展示。未设置时该组不会出现在
-        <code>/demux/api/pricing</code>。
+        <code>{{ demuxPlatformPaths.publicPricing }}</code>。
       </p>
 
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">

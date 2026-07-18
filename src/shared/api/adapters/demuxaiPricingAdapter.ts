@@ -15,10 +15,11 @@ import type {
   ListPricingPage,
 } from '@/features/demuxai/services/ports/demuxaiPricingPort';
 import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
+import { demuxPlatformPaths } from '@/shared/api/demuxRoutes';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 
-const BASE = '/demux/api/admin/pricing';
-const VENDOR_MODEL_BASE = '/demux/api/admin/vendor/model';
+const BASE = demuxPlatformPaths.adminPricing;
+const VENDOR_MODEL_BASE = demuxPlatformPaths.adminVendorModel;
 
 /** 新表 model_pricings 响应 */
 interface PricingWire {

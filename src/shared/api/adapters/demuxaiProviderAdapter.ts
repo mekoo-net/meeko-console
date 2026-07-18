@@ -1,6 +1,7 @@
 import type { AppResult } from '@/shared/api/httpTypes';
 import { fail } from '@/shared/api/httpTypes';
 import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
+import { demuxPlatformPaths } from '@/shared/api/demuxRoutes';
 import type { Uid } from '@/shared/lib/id';
 import { asEpochMillis } from '@/shared/lib/epoch';
 
@@ -18,7 +19,7 @@ import type {
   ListProvidersPage,
 } from '@/features/demuxai/services/ports/demuxaiProviderPort';
 
-const BASE = '/demux/api/admin/providers';
+const BASE = demuxPlatformPaths.adminProviders;
 
 /** Demux VendorWireDto（camelCase JSON）。 */
 interface VendorDtoRaw {

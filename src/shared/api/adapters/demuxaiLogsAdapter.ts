@@ -1,6 +1,7 @@
 import type { AppResult, ErrorCode } from '@/shared/api/httpTypes';
 import { fail } from '@/shared/api/httpTypes';
 import { requestDemuxAi, type ItemsEnvelope } from '@/shared/api/httpClient';
+import { demuxPlatformPaths } from '@/shared/api/demuxRoutes';
 import { asEpochMillis } from '@/shared/lib/epoch';
 
 import { logEntrySchema } from '@demux/common';
@@ -20,7 +21,7 @@ import type {
   ListLogsPage,
 } from '@/features/demuxai/services/ports/demuxaiLogsPort';
 
-const BASE = '/demux/api/admin/logs';
+const BASE = demuxPlatformPaths.adminLogs;
 
 function mapFailureCode(code: string | null | undefined): ErrorCode {
   switch (code) {

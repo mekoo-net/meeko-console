@@ -5,9 +5,10 @@ import {
 } from '@/features/demuxai/model/backend.types';
 import type { DemuxaiBackendPort } from '@/features/demuxai/services/ports/demuxaiBackendPort';
 import { requestDemuxAi } from '@/shared/api/httpClient';
+import { demuxPlatformPaths } from '@/shared/api/demuxRoutes';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 
-const ISSUE_PATH = '/demux/api/admin/backends';
+const ISSUE_PATH = demuxPlatformPaths.adminBackends;
 
 function parseIssued(value: unknown): AppResult<IssuedBackendCredentials> {
   const r = issuedBackendCredentialsSchema.safeParse(value);
