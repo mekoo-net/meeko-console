@@ -135,7 +135,8 @@ type AppRole = 'Admin' | 'Owner' | 'Member';
 | --- | --- | --- |
 | `VITE_USE_MOCK` | `true` | `false` 时各 `get*Port()` 返回 HttpAdapter；当前未实现会抛出错误提示。 |
 | `VITE_MOCK_DELAY_MS` | `220` | Mock 延迟（毫秒），便于感受 loading。 |
-| `VITE_API_BASE` | — | 真接 BFF 时的 baseUrl；与 Vite dev proxy 配合。 |
+| `VITE_API_BASE` | — | Meeko 平台 Gateway（`/api`、`/demux/api/*` 控制面）。 |
+| `VITE_DEMUX_API_BASE` | 生产默认 `https://demux-api.meeyo.org` | Demux.Gateway 业务 API（`/api/*` 速率限制等；见 `demuxRoutes.ts`）。 |
 要接入真 BFF，仅需新增 `src/features/*/services/bff/Http*Adapter.ts` 并在工厂 `getXxxPort()` 中按 flag 注册，**不修改** Port 接口与视图代码。
 
 ## 6. 字段级 zod 校验

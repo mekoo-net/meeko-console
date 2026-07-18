@@ -6,9 +6,11 @@ WORKDIR /app
 
 # Vite 在构建期把 VITE_* 变量内联进产物，需在 build 之前注入
 ARG VITE_API_BASE=https://api.platform.meeyo.org
+ARG VITE_DEMUX_API_BASE=https://demux-api.meeyo.org
 ARG VITE_USE_MOCK=false
 
 ENV VITE_API_BASE=$VITE_API_BASE \
+    VITE_DEMUX_API_BASE=$VITE_DEMUX_API_BASE \
     VITE_USE_MOCK=$VITE_USE_MOCK \
     NODE_ENV=production
 
