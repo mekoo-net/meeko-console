@@ -1,6 +1,6 @@
 import { useAuthStore } from '@/stores/auth';
 
-import { apiUrl } from './apiBase';
+import { apiUrl, demuxApiUrl } from './apiBase';
 import { fail, ok, type AppError, type AppResult, type ErrorCode } from './httpTypes';
 import { problemDetailsSchema, problemToAppError } from './problemDetails';
 
@@ -136,25 +136,70 @@ interface DemuxAiEnvelope<T> {
   data?: T | null;
 }
 
+async function requestDemuxEnvelope<T>(
+  resolveUrl: (path: string) => string,
+  path: string,
+  options: RequestOptions = {},
+): Promise<AppResult<T>> {
+  const { method = 'GET', body, query } = options;
+  const init: RequestInit = { method };
+  if (body !== undefined) {
+    init.body = JSON.stringify(body);
+  }
+
+  const headers = new Headers(init.headers);
+  const token = readAccessToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  if (init.body !== undefined && init.body !== null && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  try {
+    const res = await fetch(resolveUrl(withQuery(path, query)), { ...init, headers });
+    if (res.status === 401) {
+      handleUnauthorized();
+      return fail({ code: 'unauthorized', message: '登录已过期，请重新登录' });
+    }
+    if (!res.ok) {
+      return fail(await parseFailure(res));
+    }
+    const envelope = (await res.json()) as DemuxAiEnvelope<T>;
+    if (!envelope.success) {
+      return fail({ code: 'unknown', message: envelope.message || '请求失败' });
+    }
+    if (envelope.data === undefined || envelope.data === null) {
+      return ok(undefined as T);
+    }
+    return ok(envelope.data);
+  } catch (err) {
+    return fail({
+      code: 'unknown',
+      message: err instanceof Error ? err.message : '网络错误',
+    });
+  }
+}
+
 /**
- * Demux 管理端：`HTTP 200` + `{ success, message?, data }`。
- * 业务失败时 `success === false`，仍可能是 200。
+ * Meeko.Demux 控制面（经平台 Gateway：`/demux/api/*`）。
+ * `HTTP 200` + `{ success, message?, data }`。
  */
 export async function requestDemuxAi<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<AppResult<T>> {
-  const result = await request<DemuxAiEnvelope<T>>(path, options);
-  if (!result.success) return result;
+  return requestDemuxEnvelope(apiUrl, path, options);
+}
 
-  const envelope = result.data;
-  if (!envelope.success) {
-    return fail({ code: 'unknown', message: envelope.message || '请求失败' });
-  }
-  if (envelope.data === undefined || envelope.data === null) {
-    return ok(undefined as T);
-  }
-  return ok(envelope.data);
+/**
+ * Demux.Gateway 业务面（独立域名：`/api/*`）。
+ */
+export async function requestDemuxGateway<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<AppResult<T>> {
+  return requestDemuxEnvelope(demuxApiUrl, path, options);
 }
 
 /** Tavern 管理端：与 Demux 相同 `{ success, message?, data }` 信封。 */
