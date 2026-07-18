@@ -7,11 +7,12 @@ import {
   type WindowUnit,
 } from '@/features/demuxai/model/rateLimit.types';
 import type { DemuxaiRateLimitPort } from '@/features/demuxai/services/ports/demuxaiRateLimitPort';
-import { requestDemuxAi } from '@/shared/api/httpClient';
+import { demuxGatewayPaths } from '@/shared/api/demuxRoutes';
+import { requestDemuxGateway } from '@/shared/api/httpClient';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { asEpochMillis } from '@/shared/lib/epoch';
 
-const BASE = '/demux/api/admin/rate/setting';
+const BASE = demuxGatewayPaths.adminRateLimitSetting;
 
 const UNIT_SECONDS: Record<WindowUnit, number> = { second: 1, minute: 60, hour: 3600 };
 
@@ -109,7 +110,7 @@ function parse(value: unknown): AppResult<RateLimitSettings> {
 
 export class DemuxaiRateLimitHttpAdapter implements DemuxaiRateLimitPort {
   async get(): Promise<AppResult<RateLimitSettings>> {
-    const res = await requestDemuxAi<unknown>(BASE);
+    const res = await requestDemuxGateway<unknown>(BASE);
     if (!res.success) return res;
     return parse(res.data);
   }
@@ -137,7 +138,7 @@ export class DemuxaiRateLimitHttpAdapter implements DemuxaiRateLimitPort {
         })),
       },
     };
-    const res = await requestDemuxAi<unknown>(BASE, { method: 'PUT', body });
+    const res = await requestDemuxGateway<unknown>(BASE, { method: 'PUT', body });
     if (!res.success) return res;
     return parse(res.data);
   }
