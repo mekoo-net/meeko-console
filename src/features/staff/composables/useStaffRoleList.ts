@@ -26,8 +26,6 @@ export function useStaffRoleList() {
     filter.value = { keyword: '' };
   }
 
-  void list.refresh();
-
   return {
     filter,
     items,

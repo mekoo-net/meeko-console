@@ -27,8 +27,6 @@ export function useReferralWithdrawalList() {
   const items = computed(() => list.items.value?.items ?? []);
   const total = computed(() => list.items.value?.total ?? 0);
 
-  void list.refresh();
-
   return {
     filter,
     items,

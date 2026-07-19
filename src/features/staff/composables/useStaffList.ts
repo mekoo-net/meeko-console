@@ -23,8 +23,6 @@ export function useStaffList() {
     filter.value = defaultStaffListFilter();
   }
 
-  void list.refresh();
-
   return {
     filter,
     items,

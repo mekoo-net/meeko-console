@@ -33,8 +33,6 @@ export function useEmailTemplateList() {
 
   const items = computed(() => list.items.value?.items ?? []);
 
-  void list.refresh();
-
   return {
     items,
     loading: list.loading,

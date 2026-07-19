@@ -36,8 +36,6 @@ export function useAccountList() {
     filter.value = defaultFilter();
   }
 
-  void list.refresh();
-
   return {
     filter,
     items,
