@@ -10,7 +10,7 @@ const port = getTavernBackendPort();
   <div class="gateway-page">
     <PageHeader
       title="网关凭据"
-      description="签发 Tavern.Gateway 接入 Meeko.Tavern 7081 RPC 的 ClientId / ClientSecret"
+      description="签发 Tavern.Gateway 接入 Meeko.Tavern 7082 BackendRpc 的 ClientId / ClientSecret"
     />
     <GatewayCredentialIssuePanel
       product-label="Tavern"
