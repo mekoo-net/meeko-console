@@ -6,8 +6,8 @@ import type {
   ChannelConfigValues,
   ChannelType,
   PaymentChannel,
-} from '@/features/billing/model/paymentChannel.types';
-import type { PaymentChannelPort } from '@/features/billing/services/ports/paymentChannelPort';
+} from '@/features/platform/billing/model/paymentChannel.types';
+import type { PaymentChannelPort } from '@/features/platform/billing/services/ports/paymentChannelPort';
 
 const BASE = '/api/admin/billing/channels';
 

@@ -25,7 +25,7 @@ import {
   type VoucherRule,
   type VoucherTemplate,
   type VoucherValidity,
-} from '@/features/vouchers/model/voucher.types';
+} from '@/features/platform/vouchers/model/voucher.types';
 import type {
   ListActivityClaimersInput,
   ListUserVouchersInput,
@@ -33,7 +33,7 @@ import type {
   ListVoucherGrantRulesInput,
   ListVoucherTemplatesInput,
   VoucherPort,
-} from '@/features/vouchers/services/ports/voucherPort';
+} from '@/features/platform/vouchers/services/ports/voucherPort';
 import type { ListPage } from '@/shared/composables/useListQuery';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { request } from '@/shared/api/httpClient';

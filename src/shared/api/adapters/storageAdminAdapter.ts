@@ -7,16 +7,16 @@ import type {
   StorageBackendDto,
   TestStorageBackendResult,
   UpdateStorageBackendPayload,
-} from '@/features/storage/model/storageBackend.types';
-import type { StorageOverview } from '@/features/storage/model/storageOverview.types';
+} from '@/features/platform/storage/model/storageBackend.types';
+import type { StorageOverview } from '@/features/platform/storage/model/storageOverview.types';
 import type {
   BrowseStorageObjectsParams,
   ListStorageObjectsParams,
   StorageBrowseResult,
   StorageObjectList,
   StorageObjectRefsResult,
-} from '@/features/storage/model/storageObject.types';
-import type { StorageAdminPort } from '@/features/storage/services/ports/storageAdminPort';
+} from '@/features/platform/storage/model/storageObject.types';
+import type { StorageAdminPort } from '@/features/platform/storage/services/ports/storageAdminPort';
 
 const BASE = '/api/admin/storage/backends';
 

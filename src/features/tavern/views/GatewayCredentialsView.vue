@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import PageHeader from '@/shared/ui/PageHeader.vue';
-import GatewayCredentialIssuePanel from '@/features/gateway/components/GatewayCredentialIssuePanel.vue';
+import GatewayCredentialIssuePanel from '@/features/platform/gateway/components/GatewayCredentialIssuePanel.vue';
 import { getTavernBackendPort } from '../services';
 
 const port = getTavernBackendPort();

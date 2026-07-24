@@ -1,6 +1,6 @@
 import { useAuthStore } from '@/stores/auth';
 
-import { apiUrl, demuxApiUrl } from './apiBase';
+import { apiUrl } from './apiBase';
 import { fail, ok, type AppError, type AppResult, type ErrorCode } from './httpTypes';
 import { problemDetailsSchema, problemToAppError } from './problemDetails';
 
@@ -130,13 +130,13 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   return apiFetch<T>(withQuery(path, query), init);
 }
 
-interface DemuxAiEnvelope<T> {
+interface ApiEnvelope<T> {
   success: boolean;
   message?: string;
   data?: T | null;
 }
 
-async function requestDemuxEnvelope<T>(
+export async function requestApiEnvelope<T>(
   resolveUrl: (path: string) => string,
   path: string,
   options: RequestOptions = {},
@@ -165,7 +165,7 @@ async function requestDemuxEnvelope<T>(
     if (!res.ok) {
       return fail(await parseFailure(res));
     }
-    const envelope = (await res.json()) as DemuxAiEnvelope<T>;
+    const envelope = (await res.json()) as ApiEnvelope<T>;
     if (!envelope.success) {
       return fail({ code: 'unknown', message: envelope.message || '请求失败' });
     }
@@ -179,33 +179,4 @@ async function requestDemuxEnvelope<T>(
       message: err instanceof Error ? err.message : '网络错误',
     });
   }
-}
-
-/**
- * Meeko.Demux 控制面（经平台 Gateway：`/demux/api/*`）。
- * `HTTP 200` + `{ success, message?, data }`。
- */
-export async function requestDemuxAi<T>(
-  path: string,
-  options: RequestOptions = {},
-): Promise<AppResult<T>> {
-  return requestDemuxEnvelope(apiUrl, path, options);
-}
-
-/**
- * Demux.Gateway 业务面（独立域名：`/api/*`）。
- */
-export async function requestDemuxGateway<T>(
-  path: string,
-  options: RequestOptions = {},
-): Promise<AppResult<T>> {
-  return requestDemuxEnvelope(demuxApiUrl, path, options);
-}
-
-/** Tavern 管理端：与 Demux 相同 `{ success, message?, data }` 信封。 */
-export async function requestTavern<T>(
-  path: string,
-  options: RequestOptions = {},
-): Promise<AppResult<T>> {
-  return requestDemuxAi<T>(path, options);
 }

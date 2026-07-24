@@ -8,7 +8,7 @@ import {
   type StaffRole,
   type StaffRoleListItem,
   type StaffUser,
-} from '@/features/staff/model/staff.types';
+} from '@/features/platform/staff/model/staff.types';
 import type {
   CreateRoleInput,
   CreateStaffInput,
@@ -18,7 +18,7 @@ import type {
   StaffPort,
   UpdateRoleInput,
   UpdateStaffInput,
-} from '@/features/staff/services/ports/staffPort';
+} from '@/features/platform/staff/services/ports/staffPort';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { request } from '@/shared/api/httpClient';
 

@@ -1,12 +1,12 @@
 import {
   referralWithdrawalSchema,
   type ReferralWithdrawal,
-} from '@/features/referral/model/referral.types';
+} from '@/features/platform/referral/model/referral.types';
 import type {
   ListReferralWithdrawalsInput,
   ListReferralWithdrawalsOutput,
   ReferralWithdrawalPort,
-} from '@/features/referral/services/ports/referralWithdrawalPort';
+} from '@/features/platform/referral/services/ports/referralWithdrawalPort';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { apiFetch } from '@/shared/api/httpClient';
 import { asEpochMillis, asEpochMillisNullable } from '@/shared/lib/epoch';

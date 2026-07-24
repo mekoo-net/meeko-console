@@ -3,8 +3,8 @@ import type {
   DiscoveredProduct,
   RegisterProductInput,
   UpdateProductInput,
-} from '@/features/products/model/product.types';
-import type { ProductPort } from '@/features/products/services/ports/productPort';
+} from '@/features/platform/products/model/product.types';
+import type { ProductPort } from '@/features/platform/products/services/ports/productPort';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { request } from '@/shared/api/httpClient';
 import { asEpochMillis } from '@/shared/lib/epoch';

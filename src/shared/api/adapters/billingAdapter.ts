@@ -12,7 +12,7 @@ import type {
   RechargeProvider,
   RechargeRecord,
   RechargeStatus,
-} from '@/features/billing/model/billing.types';
+} from '@/features/platform/billing/model/billing.types';
 import type {
   BillDeduction,
   BillingEntry,
@@ -22,14 +22,14 @@ import type {
   BillStatus,
   BillSubType,
   VoucherDeductKind,
-} from '@/features/billing/model/billing.types';
+} from '@/features/platform/billing/model/billing.types';
 import type {
   BillingPort,
   ListBillsFilter,
   ListBillsPage,
   ListRechargesFilter,
   ListRechargesPage,
-} from '@/features/billing/services/ports/billingPort';
+} from '@/features/platform/billing/services/ports/billingPort';
 
 interface RechargeListWire {
   items: RechargeDtoWire[];

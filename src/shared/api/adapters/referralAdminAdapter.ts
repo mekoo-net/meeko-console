@@ -7,13 +7,13 @@ import {
   type ReferralInvitee,
   type ReferralRebate,
   type ReferralWithdrawalAdmin,
-} from '@/features/accounts/model/referral.types';
+} from '@/features/platform/accounts/model/referral.types';
 import type {
   ListReferralInviteesPage,
   ListReferralRebatesPage,
   ListReferralWithdrawalsPage,
   ReferralAdminPort,
-} from '@/features/accounts/services/ports/referralAdminPort';
+} from '@/features/platform/accounts/services/ports/referralAdminPort';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { request } from '@/shared/api/httpClient';
 import { asEpochMillis, asEpochMillisNullable } from '@/shared/lib/epoch';

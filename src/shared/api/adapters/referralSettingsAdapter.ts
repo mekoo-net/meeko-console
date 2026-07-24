@@ -3,8 +3,8 @@ import {
   type ReferralProductRate,
   type ReferralSettingsAdmin,
   type UpdateReferralSettingsInput,
-} from '@/features/settings/model/settings.types';
-import type { ReferralSettingsPort } from '@/features/settings/services/ports/referralSettingsPort';
+} from '@/features/platform/settings/model/settings.types';
+import type { ReferralSettingsPort } from '@/features/platform/settings/services/ports/referralSettingsPort';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { request } from '@/shared/api/httpClient';
 import { asEpochMillis } from '@/shared/lib/epoch';

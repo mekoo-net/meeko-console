@@ -90,8 +90,8 @@ export const navViews: readonly NavView[] = [
     ],
   },
   {
-    id: 'demuxai',
-    title: 'DemuxAI',
+    id: 'demux',
+    title: 'Demux',
     icon: MagicStick,
     roles: ['Admin'],
     menu: [
@@ -115,7 +115,11 @@ export const navViews: readonly NavView[] = [
     title: 'Tavern',
     icon: ChatLineRound,
     roles: ['Admin'],
-    menu: [{ type: 'leaf', index: '/tavern/backends', title: '网关凭据', icon: Key }],
+    menu: [
+      { type: 'leaf', index: '/tavern/overview', title: '概览', icon: DataAnalysis },
+      { type: 'leaf', index: '/tavern/pipeline', title: '管线设置', icon: MagicStick },
+      { type: 'leaf', index: '/tavern/backends', title: '网关凭据', icon: Key },
+    ],
   },
   {
     id: 'storage',

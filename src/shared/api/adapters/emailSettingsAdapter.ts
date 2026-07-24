@@ -2,8 +2,8 @@ import {
   emailSettingsAdminSchema,
   type EmailSettingsAdmin,
   type UpdateEmailSettingsInput,
-} from '@/features/settings/model/settings.types';
-import type { EmailSettingsPort } from '@/features/settings/services/ports/emailSettingsPort';
+} from '@/features/platform/settings/model/settings.types';
+import type { EmailSettingsPort } from '@/features/platform/settings/services/ports/emailSettingsPort';
 import { request } from '@/shared/api/httpClient';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 

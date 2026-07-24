@@ -4,7 +4,7 @@ import { defineStore } from 'pinia';
 import {
   MOCK_ALL_STAFF_PERMISSIONS,
   MOCK_READ_ONLY_STAFF_PERMISSIONS,
-} from '@/features/staff/services/mock/mockPermissions';
+} from '@/features/platform/staff/services/mock/mockPermissions';
 import { apiUrl } from '@/shared/api/apiBase';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { isMockMode } from '@/shared/runtime';

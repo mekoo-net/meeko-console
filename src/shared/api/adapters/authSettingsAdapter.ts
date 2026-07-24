@@ -2,8 +2,8 @@ import {
   authSettingsAdminSchema,
   type AuthSettingsAdmin,
   type UpdateAuthSettingsInput,
-} from '@/features/settings/model/settings.types';
-import type { AuthSettingsPort } from '@/features/settings/services/ports/authSettingsPort';
+} from '@/features/platform/settings/model/settings.types';
+import type { AuthSettingsPort } from '@/features/platform/settings/services/ports/authSettingsPort';
 import { request } from '@/shared/api/httpClient';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { asEpochMillis } from '@/shared/lib/epoch';

@@ -8,8 +8,8 @@ import type {
   SendOtpResponse,
   VerifyOtpPayload,
   VerifyOtpResponse,
-} from '@/features/notices/model/sendNotification.types';
-import type { NotificationsPort } from '@/features/notices/services/ports/notificationsPort';
+} from '@/features/platform/notices/model/sendNotification.types';
+import type { NotificationsPort } from '@/features/platform/notices/services/ports/notificationsPort';
 
 export class NotificationsHttpAdapter implements NotificationsPort {
   async sendNotification(payload: SendNotificationPayload): Promise<AppResult<SendNotificationResponse>> {

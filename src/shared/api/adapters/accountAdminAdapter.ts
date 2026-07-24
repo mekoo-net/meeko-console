@@ -1,11 +1,11 @@
-import { accountSchema, type Account, type AccountStatus } from '@/features/accounts/model/account.types';
-import { iamUserSchema, type IamUser } from '@/features/accounts/model/iamUser.types';
+import { accountSchema, type Account, type AccountStatus } from '@/features/platform/accounts/model/account.types';
+import { iamUserSchema, type IamUser } from '@/features/platform/accounts/model/iamUser.types';
 import type {
   AccountAdminPort,
   ListAccountsInput,
   ListAccountsOutput,
-} from '@/features/accounts/services/ports/accountAdminPort';
-import type { CreateIamUserPayload } from '@/features/accounts/model/validators';
+} from '@/features/platform/accounts/services/ports/accountAdminPort';
+import type { CreateIamUserPayload } from '@/features/platform/accounts/model/validators';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { apiFetch } from '@/shared/api/httpClient';
 import { asEpochMillis, asEpochMillisNullable } from '@/shared/lib/epoch';

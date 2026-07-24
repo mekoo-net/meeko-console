@@ -6,7 +6,7 @@ import type {
   EmailTemplateDto,
   EmailTemplateRevisionDto,
   UpdateEmailTemplatePayload,
-} from '@/features/notices/model/emailTemplate.types';
+} from '@/features/platform/notices/model/emailTemplate.types';
 import type {
   AdminCommandResult,
   CreateSmtpPayload,
@@ -14,8 +14,8 @@ import type {
   TestSmtpPayload,
   TestSmtpProviderResult,
   UpdateSmtpPayload,
-} from '@/features/notices/model/smtpProvider.types';
-import type { NoticeAdminPort } from '@/features/notices/services/ports/noticeAdminPort';
+} from '@/features/platform/notices/model/smtpProvider.types';
+import type { NoticeAdminPort } from '@/features/platform/notices/services/ports/noticeAdminPort';
 
 const SMTP = '/api/admin/notice/channels/smtp';
 const TPL = '/api/admin/notice/templates/email';
