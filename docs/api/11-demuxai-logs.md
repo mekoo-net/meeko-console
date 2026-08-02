@@ -24,8 +24,12 @@
 > - **`convId`**：多轮会话 ID；列表页点击 Conv 可钻取过滤同会话调用（不归组）。
 > - **`token`**：调用来源令牌快照 `{ id, name }`；sk- 后端调用时有值，PG 页面直发（`/demux/api/pg`）时为 `null`，UI 显示 **PG**。
 > - **`billingType`**：判别字段；`usage` / `cost` 形状见下表。
-> - **`tokenLatency`**（ms，`null` 表示失败）：`streamed: true` → TTFT；`streamed: false` → 端到端总耗时。
-> - **`success` + `error`**：二元成败；失败必有 `error: { code, message, httpStatus }`。
+> - **`content`**：请求上下文，后端 `usage_logs.content`（jsonb）的下发镜像，与 `usage` / `cost` 平级
+>   —— `{ protocol, statusCode, streamed, convId, latencyMs, clientIp, error }`。
+> - **`content.latencyMs`**（ms）：`streamed: true` → TTFT；`streamed: false` → 端到端总耗时；`null` = 未知。
+>   失败行也会带值（失败前耗了多久），要区分请看 `status`。
+> - **`status`**：成败的唯一真源（`pending` / `success` / `failure` / `cancelled` / `unknown`），
+>   没有单独的 `success` 布尔；失败原因见 `content.error: { code, message }`，HTTP 码只在 `content.statusCode` 一处。
 > - **`bill`**（可选）：关联钱包账单快照；`status === 'reversed'` 时展示已驳回；支持 `DemuxaiLogsPort.reverse`（BFF **待接**）。
 > - 不存 prompt / completion 原文。
 
@@ -77,18 +81,25 @@
 | --- | --- | --- |
 | `id` | string | 日志主键 |
 | `createAt` | number | 调用时间（Unix 毫秒 UTC） |
+| `traceId` | string \| null | 请求链路 TraceId（幂等键 / 账单 idempotency_key） |
 | `account` | `{ uid, iamUserUid }` | 主账户 `uid` + IAM `iamUserUid`（均为 userId） |
-| `convId` | string | 多轮会话 ID；点击可钻取过滤 |
 | `token` | `{ id, name }` \| null | sk- 令牌快照；PG 直发时为 null |
 | `modelName` | string | 对外模型名 |
 | `providerId` | int | Vendor 主键 |
-| `protocol` | enum | 协议族（旧名 `apiType`） |
-| `tokenLatency` | int \| null | 见上文 |
-| `success` | boolean | |
-| `error` | object \| null | 失败时必填 |
-| `clientIpV4` | int \| null | 调用方 IPv4，**网络字节序 uint32**（非点分字符串）；展示时格式化为 `a.b.c.d` |
-| `streamed` | boolean | 是否流式请求 |
+| `status` | enum | 结算状态，成败唯一真源 |
+| `content` | object | 请求上下文，见下 |
 | `bill` | object \| null | 见下 |
+
+#### `content` 请求上下文（= `usage_logs.content` jsonb）
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `protocol` | enum \| null | 协议族（旧名 `apiType`） |
+| `statusCode` | int \| null | 上游 HTTP 响应码；null = 未抵达上游。**失败详情不再重复此码** |
+| `streamed` | boolean | 是否流式请求 |
+| `convId` | string \| null | 多轮会话 ID；点击可钻取过滤 |
+| `latencyMs` | int \| null | 见上文；语义随 `streamed` 切换 |
+| `clientIp` | string \| null | 调用方来源 IP，**点分字符串**（与 jsonb 原文一致） |
+| `error` | `{ code, message }` \| null | 失败原因；`status === 'success'` 时为 null |
 
 `bill` 快照（按状态多态）：
 
@@ -131,15 +142,18 @@
   "id": "LG-1700000000001",
   "createAt": 1757677201000,
   "account": { "uid": "100000001", "iamUserUid": "200000050" },
-  "convId": "CV-050-a3",
   "modelName": "demux-gpt-4o",
   "providerId": 1001,
-  "protocol": "openai",
-  "tokenLatency": 320,
-  "streamed": true,
-  "clientIpV4": 3401195783,
-  "success": true,
-  "error": null,
+  "status": "success",
+  "content": {
+    "protocol": "openai",
+    "statusCode": 200,
+    "streamed": true,
+    "convId": "CV-050-a3",
+    "latencyMs": 320,
+    "clientIp": "203.0.113.7",
+    "error": null
+  },
   "billingType": "per_token",
   "usage": {
     "totalTokens": 787,
@@ -181,9 +195,7 @@
 
 ```
 
-失败行：`tokenLatency: null`，`success: false`，`error` 含 `httpStatus`（无上游时为 `0`）。
-
-> 旧版文档中的 `occurredAtUtc`、`provider: { id, name }`、`latency: { ms, kind }`、`request: { apiType, ip, streamed }` 嵌套尚未在控制台 zod 落地；若 BFF 返回嵌套形，应在 **HttpAdapter 映射**为当前扁平字段。
+失败行：`status: "failure"`，`content.error` 有值，HTTP 码看 `content.statusCode`（未抵达上游时为 `null`）。
 
 ### `GET /demux/api/admin/logs/stats`
 见 [`07-demuxai-overview.md`](./07-demuxai-overview.md)。
@@ -235,15 +247,10 @@ KPI 卡片已迁至概览页（`OverviewView`）。
 | `timeout` | 大查询超时 |
 | `dependency_down` | 日志存储不可用 |
 
-## `clientIpV4` 存储（推荐）
-| 层 | 建议 |
-| --- | --- |
-| 列类型 | PostgreSQL `integer`（4 字节）或 `bigint`；勿用 `varchar` 存点分串 |
-| 编码 | **网络字节序** uint32：`203.0.113.7` → `3401195783`（`(a<<24)\|(b<<16)\|(c<<8)\|d`） |
-| 查询 | 网段 `203.0.113.0/24` → `WHERE client_ip_v4 BETWEEN lo AND hi`；索引友好 |
-| API | JSON number；控制台展示再 `formatIpv4` |
-| IPv6 | 另列 `client_ip_v6`（`bytea` / `inet`）或仅存 v4；勿强行塞进 uint32 |
-当前 DemuxAI 表 `client_ip varchar(64)`、`AiUsageLogDto.ClientIp` 仍为字符串；BFF 映射到 `clientIpV4` 时由服务端 `parse` 一次即可。
+## `content.clientIp`
+存在 `usage_logs.content` jsonb 的 `clientIp` 键里，点分字符串，网关经 ForwardedHeaders 还原为真实用户 IP，
+下发时原样透传。前端不再做 uint32 ↔ 点分转换——旧的 `clientIpV4` 与 `formatIpv4` 已随本次折叠一并移除，
+IPv6 也照字符串存放，不必另设列。
 
 ## 备注
 - 概览与日志共用时间过滤；`stats` 应与 `list` 过滤语义一致。

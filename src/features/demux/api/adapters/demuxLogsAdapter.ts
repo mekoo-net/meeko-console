@@ -112,6 +112,7 @@ interface LatencyStat {
 /**
  * 将后端原始日志行映射为前端 LogEntry 形状：
  *  - account.iamUid 由后端 wire `iamUserUid` 映射改名；仅做防御性归一
+ *  - 其余字段（含 `content` 折叠对象）与 wire 同名同形，直接透传给 zod
  *  - 对 logEntrySchema 做 safeParse；解析失败时返回原始对象（兜底显示，不崩页面）
  */
 function mapRawItem(raw: unknown): LogEntry {

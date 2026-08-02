@@ -24,6 +24,7 @@ import { formatDateTime, toLocalDateTimeValue } from '@/shared/lib/date';
 import { BILLING_FRACTION_DIGITS, formatMoney } from '@/shared/lib/money';
 
 import {
+  AiUsageStatusLabel,
   BillingTypeLabel,
   BillReverseCodeLabel,
   LogErrorCodeLabel,
@@ -62,7 +63,7 @@ interface PageFilter {
   traceId: string;
   /** 账单 UID 精确匹配（= `LogEntry.bill.id`） */
   billUid: string;
-  /** 仅看失败调用（success === false） */
+  /** 仅看失败调用（status !== 'success'） */
   errorOnly: boolean;
 }
 
@@ -539,9 +540,9 @@ onMounted(() => {
       <el-table-column label="调用" min-width="160">
         <template #default="{ row }: { row: LogEntry }">
           <div class="cell-call">
-            <el-tooltip v-if="row.convId" :content="row.convId" placement="top" :show-after="200">
-              <el-button link type="primary" class="cell-conv mono" @click="drillByConvId(row.convId!)">
-                {{ row.convId }}
+            <el-tooltip v-if="row.content.convId" :content="row.content.convId" placement="top" :show-after="200">
+              <el-button link type="primary" class="cell-conv mono" @click="drillByConvId(row.content.convId!)">
+                {{ row.content.convId }}
               </el-button>
             </el-tooltip>
             <span v-else class="cell-muted">—</span>
@@ -556,10 +557,10 @@ onMounted(() => {
       <el-table-column label="状态" width="88" align="center">
         <template #default="{ row }: { row: LogEntry }">
           <StatusTag v-if="row.status === 'pending'" label="调用中" tone="warning" />
-          <StatusTag v-else-if="row.success" label="成功" tone="success" />
+          <StatusTag v-else-if="row.status === 'success'" label="成功" tone="success" />
           <StatusTag
             v-else
-            :label="row.error ? errorCodeText(row.error.code) : '失败'"
+            :label="row.content.error ? errorCodeText(row.content.error.code) : AiUsageStatusLabel[row.status]"
             tone="danger"
           />
         </template>
@@ -648,8 +649,8 @@ onMounted(() => {
 
       <el-table-column label="耗时" width="100" align="right">
         <template #default="{ row }: { row: LogEntry }">
-          <span v-if="row.tokenLatency != null" class="cell-latency num">
-            {{ row.tokenLatency.toLocaleString() }} ms
+          <span v-if="row.content.latencyMs != null" class="cell-latency num">
+            {{ row.content.latencyMs.toLocaleString() }} ms
           </span>
           <span v-else class="cell-muted">—</span>
         </template>

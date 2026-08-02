@@ -777,17 +777,17 @@ function seedLogs(providers: Provider[]): LogEntry[] {
     const outputAmount = Math.round((outputTokens / 1_000_000) * outputPerMToken * 10000) / 10000;
     const total = Math.round((inputAmount + outputAmount) * 10000) / 10000;
 
-    // tokenLatency:
+    // latencyMs:
     //  - 失败 → null
     //  - 流式且成功 → 首字延迟 TTFT (80~580 ms)
     //  - 非流式且成功 → 端到端总耗时 (500~3000 ms，跟 completion 长度大致正相关)
-    let tokenLatency: number | null;
+    let latencyMs: number | null;
     if (!success) {
-      tokenLatency = null;
+      latencyMs = null;
     } else if (streamed) {
-      tokenLatency = 80 + ((i * 7) % 500);
+      latencyMs = 80 + ((i * 7) % 500);
     } else {
-      tokenLatency = 500 + ((i * 13) % 2500);
+      latencyMs = 500 + ((i * 13) % 2500);
     }
 
     // 每 ~6 条调用聚合到同一个 convId 模拟多轮对话
@@ -815,11 +815,21 @@ function seedLogs(providers: Provider[]): LogEntry[] {
         email: accountContact.email,
         phone: accountContact.phone,
       },
-      convId,
       token,
       modelName: pair.displayName,
       providerId: p.id,
-      protocol: p.apiType,
+      status: success ? 'success' : 'failure',
+      content: {
+        protocol: p.apiType,
+        statusCode: httpStatus,
+        streamed,
+        convId,
+        latencyMs,
+        clientIp: `203.0.113.${(i % 250) + 1}`,
+        error: errorCode
+          ? { code: errorCode, message: `${errorCode}: upstream returned ${httpStatus}` }
+          : null,
+      },
       billingType: 'per_token',
       usage: {
         totalTokens,
@@ -851,17 +861,6 @@ function seedLogs(providers: Provider[]): LogEntry[] {
         },
         total,
       },
-      tokenLatency,
-      success,
-      error: errorCode
-        ? {
-            code: errorCode,
-            message: `${errorCode}: upstream returned ${httpStatus}`,
-            httpStatus,
-          }
-        : null,
-      clientIpV4: ((203 << 24) | (0 << 16) | (113 << 8) | ((i % 250) + 1)) >>> 0,
-      streamed,
       bill: hasBill
         ? preReversed
           ? {

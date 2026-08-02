@@ -4,6 +4,7 @@ import { delay } from '@/shared/lib/delay';
 
 import {
   logEntrySchema,
+  logIsSuccess,
   type VendorConsumptionRow,
   type ListLogsFilter,
   type LogEntry,
@@ -29,8 +30,8 @@ function applyFilter(rows: LogEntry[], f: ListLogsFilter): LogEntry[] {
     if (f.modelName && !r.modelName.toLowerCase().includes(f.modelName.toLowerCase())) return false;
     if (f.vendorKey && vendorOf(r).toLowerCase() !== f.vendorKey.toLowerCase()) return false;
     if (f.providerId != null && r.providerId !== f.providerId) return false;
-    if (f.protocol && r.protocol !== f.protocol) return false;
-    if (f.convId && r.convId !== f.convId) return false;
+    if (f.protocol && r.content.protocol !== f.protocol) return false;
+    if (f.convId && r.content.convId !== f.convId) return false;
     if (f.logId && r.id !== f.logId.trim()) return false;
     if (f.traceId) {
       const trace = f.traceId.trim();
@@ -47,10 +48,10 @@ function applyFilter(rows: LogEntry[], f: ListLogsFilter): LogEntry[] {
       const name = (r.account.displayName ?? '').toLowerCase();
       if (!email.includes(kw) && !phone.includes(kw) && !name.includes(kw)) return false;
     }
-    if (f.errorOnly && r.success) return false;
+    if (f.errorOnly && logIsSuccess(r)) return false;
     if (f.errorCode) {
-      if (r.success) return false;
-      if (r.error?.code !== f.errorCode) return false;
+      if (logIsSuccess(r)) return false;
+      if (r.content.error?.code !== f.errorCode) return false;
     }
     const skipTime = Boolean(f.logId?.trim() || f.traceId?.trim() || f.billUid?.trim());
     if (!skipTime && f.fromUtc != null) {
@@ -119,7 +120,7 @@ function buildBuckets(
     const b = buckets[idx];
     if (!b) continue;
     b.calls += 1;
-    if (!r.success) b.errors += 1;
+    if (!logIsSuccess(r)) b.errors += 1;
     b.cost += r.cost.total;
     b.tokens += tokenCountOf(r);
   }
@@ -134,7 +135,7 @@ function buildTopModels(rows: LogEntry[], limit = 5): LogStatsTopModel[] {
     const a = m.get(r.modelName) ?? { calls: 0, cost: 0, errors: 0 };
     a.calls += 1;
     a.cost += r.cost.total;
-    if (!r.success) a.errors += 1;
+    if (!logIsSuccess(r)) a.errors += 1;
     m.set(r.modelName, a);
   }
   return [...m.entries()]
@@ -155,10 +156,11 @@ function buildTopProviders(rows: LogEntry[], limit = 5): LogStatsTopProvider[] {
     if (r.providerId == null) continue;
     const a = m.get(r.providerId) ?? { calls: 0, errors: 0, ttftSum: 0, ttftSamples: 0 };
     a.calls += 1;
-    if (!r.success) a.errors += 1;
-    // 仅 streamed && success 的样本进入 TTFT 聚合（与 LogStats 口径一致）
-    if (r.success && r.streamed && r.tokenLatency != null) {
-      a.ttftSum += r.tokenLatency;
+    const success = logIsSuccess(r);
+    if (!success) a.errors += 1;
+    // 仅流式成功样本进入 TTFT 聚合（与 LogStats 口径一致）
+    if (success && r.content.streamed && r.content.latencyMs != null) {
+      a.ttftSum += r.content.latencyMs;
       a.ttftSamples += 1;
     }
     m.set(r.providerId, a);
@@ -182,8 +184,8 @@ function buildTopProviders(rows: LogEntry[], limit = 5): LogStatsTopProvider[] {
 function buildErrorCodes(rows: LogEntry[], limit = 5): LogStatsErrorCode[] {
   const m = new Map<string, number>();
   for (const r of rows) {
-    if (r.success) continue;
-    const code = r.error?.code.trim() || 'unknown';
+    if (logIsSuccess(r)) continue;
+    const code = r.content.error?.code.trim() || 'unknown';
     m.set(code, (m.get(code) ?? 0) + 1);
   }
   const all = [...m.entries()]
@@ -299,14 +301,15 @@ export class DemuxLogsMock implements DemuxLogsPort {
     let ttftSum = 0;
     const ttftSamples: number[] = [];
     for (const r of filtered) {
-      if (r.success) successCalls += 1;
+      const success = logIsSuccess(r);
+      if (success) successCalls += 1;
       else errorCalls += 1;
       totalTokens += tokenCountOf(r);
       totalCost += r.cost.total;
-      // 仅 streamed && success 的 tokenLatency 是 TTFT 语义；非流式 / 失败不入聚合
-      if (r.success && r.streamed && r.tokenLatency != null) {
-        ttftSum += r.tokenLatency;
-        ttftSamples.push(r.tokenLatency);
+      // 只有流式成功样本的 latencyMs 是 TTFT 语义；非流式 / 失败不入聚合
+      if (success && r.content.streamed && r.content.latencyMs != null) {
+        ttftSum += r.content.latencyMs;
+        ttftSamples.push(r.content.latencyMs);
       }
     }
 
@@ -333,7 +336,7 @@ export class DemuxLogsMock implements DemuxLogsPort {
   async statByVendor(filter: ListLogsFilter): Promise<AppResult<VendorConsumptionRow[]>> {
     await delay();
     // 只统计成功调用，与后端 StatByVendorAsync 口径一致。
-    const filtered = applyFilter(this.store.logs, filter).filter((r) => r.success);
+    const filtered = applyFilter(this.store.logs, filter).filter(logIsSuccess);
 
     type Agg = {
       requestCount: number;

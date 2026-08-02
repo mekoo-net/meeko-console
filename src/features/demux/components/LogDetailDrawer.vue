@@ -14,15 +14,16 @@ import { computed } from 'vue';
 import { RefreshLeft } from '@element-plus/icons-vue';
 
 import { formatDateTime } from '@/shared/lib/date';
-import { formatIpv4 } from '@/shared/lib/ipv4';
 import { BILLING_FRACTION_DIGITS, formatMoney } from '@/shared/lib/money';
 import StatusTag from '@/shared/ui/StatusTag.vue';
 
 import {
+  AiUsageStatusLabel,
   ApiTypeLabel,
   BillingTypeLabel,
   BillReverseCodeLabel,
   LogErrorCodeLabel,
+  logIsSuccess,
 } from '@demux/common';
 import type { LogEntry } from '@demux/common';
 
@@ -63,14 +64,15 @@ const upstreamModelText = computed(() => props.log?.vendorModel?.trim() || '—'
 
 const hasCharge = computed(() => {
   const l = props.log;
-  return l != null && l.success && Number(l.cost.total) > 0;
+  return l != null && logIsSuccess(l) && Number(l.cost.total) > 0;
 });
 
-const clientIpText = computed(() => {
-  const ip = props.log?.clientIpV4;
-  if (ip == null) return '—';
-  return formatIpv4(ip);
-});
+const clientIpText = computed(() => props.log?.content.clientIp?.trim() || '—');
+
+/** 耗时语义随流式切换：流式是首字延迟，非流式是端到端总耗时。 */
+const latencyHint = computed(() =>
+  props.log?.content.streamed ? '首字延迟（TTFT）' : '端到端总耗时',
+);
 
 const sourceText = computed(() => {
   const name = props.log?.token?.name?.trim();
@@ -152,24 +154,22 @@ const outputDims = computed<DimRow[]>(() => {
           <span class="mono log-id-muted">{{ log.id }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="状态">
-          <StatusTag v-if="log.success" label="成功" tone="success" />
+          <StatusTag v-if="log.status === 'pending'" label="调用中" tone="warning" />
+          <StatusTag v-else-if="log.status === 'success'" label="成功" tone="success" />
           <StatusTag
             v-else
-            :label="log.error ? errorCodeText(log.error.code) : '失败'"
+            :label="log.content.error ? errorCodeText(log.content.error.code) : AiUsageStatusLabel[log.status]"
             tone="danger"
           />
         </el-descriptions-item>
         <el-descriptions-item label="耗时">
-          <span v-if="log.tokenLatency != null" class="num">
-            {{ log.tokenLatency.toLocaleString() }} ms
+          <span v-if="log.content.latencyMs != null" class="num" :title="latencyHint">
+            {{ log.content.latencyMs.toLocaleString() }} ms
           </span>
           <span v-else>—</span>
         </el-descriptions-item>
         <el-descriptions-item label="发生时间" :span="2">
           {{ formatDateTime(log.createAt, 'YYYY-MM-DD HH:mm:ss') }}
-        </el-descriptions-item>
-        <el-descriptions-item label="Conv" :span="2">
-          <span class="mono conv-id">{{ log.convId ?? '—' }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="模型" :span="2">
           <div class="model-cell">
@@ -207,23 +207,43 @@ const outputDims = computed<DimRow[]>(() => {
         <span class="label">IAM 用户</span>
         <span class="mono">{{ log.account.iamUid ?? '—' }}</span>
       </div>
+
+      <el-divider />
+
+      <!-- 后端 usage_logs.content jsonb 的逐字展开，含失败原因；HTTP 码只此一处。 -->
+      <h4 class="section-title">请求上下文</h4>
+      <div class="log-detail__row">
+        <span class="label">协议</span>
+        <span>{{ log.content.protocol ? ApiTypeLabel[log.content.protocol] : '—' }}</span>
+      </div>
+      <div class="log-detail__row">
+        <span class="label">流式</span>
+        <el-tag v-if="log.content.streamed" size="small" type="success" effect="plain">是</el-tag>
+        <el-tag v-else size="small" type="info" effect="plain">否</el-tag>
+      </div>
+      <div class="log-detail__row">
+        <span class="label">会话</span>
+        <span class="mono conv-id">{{ log.content.convId ?? '—' }}</span>
+      </div>
+      <div class="log-detail__row">
+        <span class="label">HTTP 状态</span>
+        <span class="num">{{ log.content.statusCode ?? '—' }}</span>
+      </div>
       <div class="log-detail__row">
         <span class="label">请求 IP</span>
         <span class="mono">{{ clientIpText }}</span>
       </div>
+      <template v-if="log.content.error">
+        <div class="log-detail__row">
+          <span class="label">错误码</span>
+          <el-tag size="small" type="danger" effect="plain">{{ log.content.error.code }}</el-tag>
+        </div>
+        <div v-if="log.content.error.message" class="log-detail__row log-detail__row--col">
+          <span class="label">错误摘要</span>
+          <pre class="error-msg">{{ log.content.error.message }}</pre>
+        </div>
+      </template>
 
-      <el-divider />
-
-      <h4 class="section-title">链路</h4>
-      <div class="log-detail__row">
-        <span class="label">协议</span>
-        <span>{{ log.protocol ? ApiTypeLabel[log.protocol] : '—' }}</span>
-      </div>
-      <div class="log-detail__row">
-        <span class="label">流式</span>
-        <el-tag v-if="log.streamed" size="small" type="success" effect="plain">是</el-tag>
-        <el-tag v-else size="small" type="info" effect="plain">否</el-tag>
-      </div>
       <el-divider />
 
       <h4 class="section-title">计费明细</h4>
@@ -446,22 +466,6 @@ const outputDims = computed<DimRow[]>(() => {
         </template>
       </template>
 
-      <template v-if="log.error">
-        <el-divider />
-        <h4 class="section-title">错误信息</h4>
-        <div class="log-detail__row">
-          <span class="label">错误码</span>
-          <el-tag size="small" type="danger" effect="plain">{{ log.error.code }}</el-tag>
-        </div>
-        <div class="log-detail__row">
-          <span class="label">HTTP 状态</span>
-          <span class="num">{{ log.error.httpStatus || '—' }}</span>
-        </div>
-        <div class="log-detail__row log-detail__row--col">
-          <span class="label">错误摘要</span>
-          <pre class="error-msg">{{ log.error.message }}</pre>
-        </div>
-      </template>
     </div>
 
     <template #footer>

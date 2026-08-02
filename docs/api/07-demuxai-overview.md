@@ -89,23 +89,23 @@
 字段说明：
 | 字段 | 说明 |
 | --- | --- |
-| `totalCalls` / `successCalls` / `errorCalls` | 区间内调用量；`errorCalls` = `success === false`。 |
+| `totalCalls` / `successCalls` / `errorCalls` | 区间内调用量；`errorCalls` = `status !== 'success'`。 |
 | `rpm` | 平均每分钟调用数（按 `fromUtc`–`toUtc` 跨度归一）。 |
-| `avgTokenLatency` / `p95TokenLatency` | **仅统计** `streamed === true && success === true` 的 `tokenLatency`（TTFT，单位 ms）。 |
+| `avgTokenLatency` / `p95TokenLatency` | **仅统计** `content.streamed === true` 且成功的 `content.latencyMs`（TTFT，单位 ms）。 |
 | `totalTokens` | 仅累加 `billingType === 'per_token'` 的 `usage.totalTokens`。 |
 | `totalCost` | 区间内 `cost.total` 求和（元）。 |
 | `bucketSizeSec` | 时序桶宽（秒）；由 BFF 按跨度自适应，前端只读。 |
 | `buckets[]` | 时序点；`tokens` 同样只累计 token 类型。 |
 | `topModels[]` | 最多 5 条；`modelName` 为对外别名快照。 |
 | `topProviders[]` | 最多 5 条；`providerId` 为 Vendor int 主键；展示名由前端 join Vendor 字典。 |
-| `errorCodes[]` | 失败调用按 `error.code` 聚合；超出 Top5 合并为 `other`。 |
+| `errorCodes[]` | 失败调用按 `content.error.code` 聚合；超出 Top5 合并为 `other`。 |
 
 #### 接入状态（与当前 BFF 的差异）
 | 项 | 现状 |
 | --- | --- |
 | `DemuxaiLogsHttpAdapter.stats` | 并行拉 5 个端点：`stats`（分桶趋势）+ `stats/by/model` + `stats/by/provider` + `stats/by/errorcode` + `stats/latency`，在前端聚合成完整 `LogStats`。 |
 | `rpm` | 后端不下发；适配器按 `fromUtc/toUtc` 跨度（缺失时退化为分桶覆盖跨度）÷ 总调用算出。 |
-| `avgTokenLatency` / `p95TokenLatency` | 由 `stats/latency` 提供（仅 `streamed && success && latency>0` 样本入聚合）。 |
+| `avgTokenLatency` / `p95TokenLatency` | 由 `stats/latency` 提供（仅流式、成功且耗时 > 0 的样本入聚合）。 |
 | `errorCodes` | 由 `stats/by/errorcode` 提供；适配器把超出 Top5 的合并为 `other`。 |
 | 统计 JOIN 口径 | 后端 stat 系列查询统一 **LEFT JOIN** 定价/别名快照（与日志列表一致），快照缺失的日志不再被整段过滤掉。 |
 | Mock | `demuxaiLogsMock` 按过滤后的日志行在本地聚合，字段与上表一致。 |
