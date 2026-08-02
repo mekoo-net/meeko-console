@@ -250,7 +250,7 @@ export class DemuxLogsHttpAdapter implements DemuxLogsPort {
         accountUid: filter.accountUid || undefined,
         iamUserUid: filter.iamUid || undefined,
         providerId: filter.providerId,
-        apiType:    filter.apiType    || undefined,
+        protocol:   filter.protocol   || undefined,
         convId:     filter.convId     || undefined,
         modelName:  filter.modelName  || undefined,
         vendorKey: filter.vendorKey || undefined,

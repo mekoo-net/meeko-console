@@ -139,9 +139,9 @@ export const routes: RouteRecordRaw[] = [
             redirect: { name: 'demux-providers' },
           },
           {
-            path: 'pricing',
-            name: 'demux-pricing',
-            component: () => import('@/features/demux/views/PricingView.vue'),
+            path: 'rate',
+            name: 'demux-rate',
+            component: () => import('@/features/demux/views/RateView.vue'),
             meta: { title: '模型定价', requiresAuth: true, roles: ['Admin'] },
           },
           {

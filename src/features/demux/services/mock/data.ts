@@ -12,34 +12,34 @@ import type {
   ProviderModelMapping,
 } from '@demux/common';
 import type { ProviderGroup, ProviderUpstreamModel } from '../../model/catalog.types';
-import type { ModelRoute } from '../../model/modelRoute.types';
+import type { VendorRoute } from '../../model/vendorRoute.types';
 import type { Model } from '@demux/common';
-import type { Pricing } from '@demux/common';
+import type { Rate } from '@demux/common';
 import type { LogEntry } from '@demux/common';
 
 /**
  * demuxai 域共享内存仓。多个 Mock 类共享同一份引用，
- * 这样在 ProviderMock 里 reconcile 时，ModelMock / PricingMock 也能看到级联结果。
+ * 这样在 ProviderMock 里 reconcile 时，ModelMock / RateMock 也能看到级联结果。
  *
  * 注意：这是模块单例，热重载会重置；这是符合预期的（Mock 数据本就为预览用）。
  */
 export interface DemuxStore {
   providers: Provider[];
   models: Model[];
-  pricing: Pricing[];
+  rate: Rate[];
   logs: LogEntry[];
   providerGroups: ProviderGroup[];
   upstreamModels: ProviderUpstreamModel[];
-  modelRoutes: ModelRoute[];
+  vendorRoutes: VendorRoute[];
 }
 
 export const genProviderUid = createUidSeq(12_000_000);
 export const genProviderModelUid = createUidSeq(15_000_000);
 export const genMappingUid = createUidSeq(16_000_000);
 export const genModelUid = createUidSeq(13_000_000);
-export const genPricingUid = createUidSeq(14_000_000);
+export const genRateUid = createUidSeq(14_000_000);
 export const genLogUid = createSnowflakeIdSeq();
-export const genModelRouteUid = createUidSeq(17_000_000);
+export const genVendorRouteUid = createUidSeq(17_000_000);
 export const genVendorModelUid = createUidSeq(18_000_000);
 export const genProviderGroupUid = createUidSeq(19_000_000);
 /** 生成日期+序列风格账单流水号，如 BL20260531000001234 */
@@ -523,7 +523,7 @@ function seedProviders(): Provider[] {
  * - 元数据取**首个**承载它的 `ProviderModel`（在 BFF 端应是冲突校验
  *   或运营选定，前端 Mock 简化为"先到先得"）
  *
- * 当某 displayName 不再被任何 Provider 映射 → 自动 delete Model 行 + 级联 Pricing
+ * 当某 displayName 不再被任何 Provider 映射 → 自动 delete Model 行 + 级联 Rate
  */
 function seedModels(providers: Provider[]): Model[] {
   const t = epochMs(now);
@@ -542,20 +542,20 @@ function seedModels(providers: Provider[]): Model[] {
 /**
  * 价格表种子。新模型主键 = displayName。
  *
- * 形状跟随 `docs/api/10-demux-pricing.md` 的 discriminated union：
- *  - `billingType` 顶层判别，`pricing` 嵌套对象按类型决定形状
+ * 形状跟随 `docs/api/10-demux-rate.md` 的 discriminated union：
+ *  - `billingType` 顶层判别，`rate` 嵌套对象按类型决定形状
  *  - 当前种子里全部是文本 / embedding 模型 → 全部 `per_token`；
  *    GPT-4o / Claude 3.5 Sonnet 多带 cachedRead/cachedWrite 字段，作为缓存价示例
  */
-function seedPricing(models: Model[]): Pricing[] {
+function seedRate(models: Model[]): Rate[] {
   const t = epochMs(now);
-  type PricingBase = Omit<Pricing, 'id' | 'modelId' | 'updatedAtUtc' | 'effectiveFromUtc'>;
-  const map = new Map<string, PricingBase>([
+  type RateBase = Omit<Rate, 'id' | 'modelId' | 'updatedAtUtc' | 'effectiveFromUtc'>;
+  const map = new Map<string, RateBase>([
     [
       'GPT-4o',
       {
         billingType: 'per_token',
-        pricing: {
+        rate: {
           input: { perMToken: 18, cachedRead: 4.5 },
           output: { perMToken: 72 },
         },
@@ -568,7 +568,7 @@ function seedPricing(models: Model[]): Pricing[] {
       'GPT-4o mini',
       {
         billingType: 'per_token',
-        pricing: {
+        rate: {
           input: { perMToken: 1 },
           output: { perMToken: 4 },
         },
@@ -581,7 +581,7 @@ function seedPricing(models: Model[]): Pricing[] {
       'Claude 3.5 Sonnet',
       {
         billingType: 'per_token',
-        pricing: {
+        rate: {
           input: {
             perMToken: 22,
             cachedRead: 2.2,
@@ -598,7 +598,7 @@ function seedPricing(models: Model[]): Pricing[] {
       'DeepSeek-V3',
       {
         billingType: 'per_token',
-        pricing: {
+        rate: {
           input: { perMToken: 0.7 },
           output: { perMToken: 2 },
         },
@@ -611,7 +611,7 @@ function seedPricing(models: Model[]): Pricing[] {
       'DeepSeek-R1 (推理)',
       {
         billingType: 'per_token',
-        pricing: {
+        rate: {
           input: { perMToken: 4.5 },
           output: { perMToken: 18, reasoning: 18 },
         },
@@ -624,7 +624,7 @@ function seedPricing(models: Model[]): Pricing[] {
       'Qwen-Max',
       {
         billingType: 'per_token',
-        pricing: {
+        rate: {
           input: { perMToken: 20 },
           output: { perMToken: 60 },
         },
@@ -637,7 +637,7 @@ function seedPricing(models: Model[]): Pricing[] {
       'Llama 3.1 70B (自建)',
       {
         billingType: 'per_token',
-        pricing: {
+        rate: {
           input: { perMToken: 2 },
           output: { perMToken: 2 },
         },
@@ -650,7 +650,7 @@ function seedPricing(models: Model[]): Pricing[] {
       'Text-Embedding-3-Large',
       {
         billingType: 'per_token',
-        pricing: {
+        rate: {
           input: { perMToken: 0.9 },
           output: { perMToken: 0 },
         },
@@ -667,13 +667,13 @@ function seedPricing(models: Model[]): Pricing[] {
       if (!base) return null;
       return {
         ...base,
-        id: genPricingUid(),
+        id: genRateUid(),
         modelId: m.modelId,
         effectiveFromUtc: epochMs(new Date(now.getTime() - 7 * 86400000)),
         updatedAtUtc: t,
-      } as Pricing;
+      } as Rate;
     })
-    .filter((p): p is Pricing => p !== null);
+    .filter((p): p is Rate => p !== null);
 }
 
 const SEED_ACCOUNTS = ['100000001', '100000002', '100000003'] as const;
@@ -819,7 +819,7 @@ function seedLogs(providers: Provider[]): LogEntry[] {
       token,
       modelName: pair.displayName,
       providerId: p.id,
-      apiType: p.apiType,
+      protocol: p.apiType,
       billingType: 'per_token',
       usage: {
         totalTokens,
@@ -960,7 +960,7 @@ export function recomputeGroupModelCounts(
   }
 }
 
-function toAlias(displayName: string): string {
+function toRouteKey(displayName: string): string {
   const slug = displayName
     .trim()
     .toLowerCase()
@@ -969,9 +969,9 @@ function toAlias(displayName: string): string {
   return slug.length >= 2 ? `demux-${slug}` : `demux-m-${Date.now().toString(36)}`;
 }
 
-function seedModelRoutes(providers: Provider[]): ModelRoute[] {
+function seedVendorRoutes(providers: Provider[]): VendorRoute[] {
   const t = epochMs(now);
-  const routes: ModelRoute[] = [];
+  const routes: VendorRoute[] = [];
   for (const p of providers) {
     const vendorKey = apiTypeToVendorKey(p.apiType); // = queueGroup
     for (const mapping of p.modelMappings) {
@@ -979,8 +979,8 @@ function seedModelRoutes(providers: Provider[]): ModelRoute[] {
       const pmRef = p.providerModels.find((x) => x.uid === mapping.providerModelUid);
       if (!pmRef) continue;
       routes.push({
-        uid: genModelRouteUid(),
-        alias: toAlias(mapping.displayName),
+        uid: genVendorRouteUid(),
+        routeKey: toRouteKey(mapping.displayName),
         vendorKey,
         vendorModel: pmRef.modelName,
         isPublished: true,
@@ -994,24 +994,24 @@ function seedModelRoutes(providers: Provider[]): ModelRoute[] {
 }
 
 /** 与 providerGroups / upstreamModels 对齐的演示别名（供应商组页展开可见） */
-function seedCatalogModelRoutes(
+function seedCatalogVendorRoutes(
   upstream: ProviderUpstreamModel[],
-): ModelRoute[] {
+): VendorRoute[] {
   const t = epochMs(now);
   const has = (qg: string, id: string) =>
     upstream.some((m) => m.queueGroup === qg && m.vendorModel === id);
-  const routes: ModelRoute[] = [];
+  const routes: VendorRoute[] = [];
   const add = (
     queueGroup: string,
     vendorModel: string,
-    alias: string,
+    routeKey: string,
     isPublished = true,
     notes: string | null = null,
   ) => {
     if (!has(queueGroup, vendorModel)) return;
     routes.push({
-      uid: genModelRouteUid(),
-      alias,
+      uid: genVendorRouteUid(),
+      routeKey,
       vendorKey: queueGroup,
       vendorModel,
       isPublished,
@@ -1037,16 +1037,16 @@ export function getDemuxStore(): DemuxStore {
   if (cached !== null) return cached;
   const providers = seedProviders();
   const models = seedModels(providers);
-  const pricing = seedPricing(models);
+  const rate = seedRate(models);
   const logs = seedLogs(providers);
   const providerGroups = seedImportedProviderGroups();
   const upstreamModels = seedImportedUpstreamModels(providerGroups);
   recomputeGroupModelCounts(providerGroups, upstreamModels);
-  const modelRoutes = [
-    ...seedCatalogModelRoutes(upstreamModels),
-    ...seedModelRoutes(providers),
+  const vendorRoutes = [
+    ...seedCatalogVendorRoutes(upstreamModels),
+    ...seedVendorRoutes(providers),
   ];
-  cached = { providers, models, pricing, logs, providerGroups, upstreamModels, modelRoutes };
+  cached = { providers, models, rate, logs, providerGroups, upstreamModels, vendorRoutes };
   return cached;
 }
 
@@ -1060,7 +1060,7 @@ export function _resetDemuxStore(): void {
  * 应存活的 Model 集合。
  *
  *  - 新增 displayName → 自动 create Model（从首个承载它的 ProviderModel 取元数据）
- *  - 不再被引用的 displayName → 自动 delete Model + 级联 Pricing
+ *  - 不再被引用的 displayName → 自动 delete Model + 级联 Rate
  *
  * BFF 真实实现时模型走软删保留 join；前端 Mock 硬删。
  */
@@ -1102,7 +1102,7 @@ export function reconcilePlatformModels(store: DemuxStore): ReconcileDiff {
   });
   if (deleted.length > 0) {
     const deletedSet = new Set(deleted);
-    store.pricing = store.pricing.filter((p) => !deletedSet.has(p.modelId));
+    store.rate = store.rate.filter((p) => !deletedSet.has(p.modelId));
   }
   return { created, deleted };
 }

@@ -107,7 +107,7 @@ watch(
     <template v-if="group">
       <p class="drawer-desc">
         对外通道 slug 用于公开定价页分组展示。未设置时该组不会出现在
-        <code>{{ demuxPlatformPaths.publicPricing }}</code>。
+        <code>{{ demuxPlatformPaths.publicRate }}</code>。
       </p>
 
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">

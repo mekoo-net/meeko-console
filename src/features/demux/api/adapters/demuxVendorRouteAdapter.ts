@@ -1,15 +1,15 @@
 import {
-  modelRouteSchema,
-  type CreateModelRouteInput,
-  type ListModelRoutesFilter,
-  type ModelRoute,
-  type ModelRouteStats,
-  type UpdateModelRouteInput,
-} from '@/features/demux/model/modelRoute.types';
+  vendorRouteSchema,
+  type CreateVendorRouteInput,
+  type ListVendorRoutesFilter,
+  type VendorRoute,
+  type VendorRouteStats,
+  type UpdateVendorRouteInput,
+} from '@/features/demux/model/vendorRoute.types';
 import type {
-  DemuxModelRoutePort,
-  ListModelRoutesPage,
-} from '@/features/demux/services/ports/demuxModelRoutePort';
+  DemuxVendorRoutePort,
+  ListVendorRoutesPage,
+} from '@/features/demux/services/ports/demuxVendorRoutePort';
 import { requestDemux, type ItemsEnvelope } from '@/features/demux/api/http';
 import { demuxPlatformPaths } from '@/features/demux/api/routes';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
@@ -17,14 +17,14 @@ import type { Uid } from '@/shared/lib/id';
 
 const BASE = demuxPlatformPaths.adminRoutes;
 
-function parseRoute(value: unknown): AppResult<ModelRoute> {
-  const r = modelRouteSchema.safeParse(value);
+function parseRoute(value: unknown): AppResult<VendorRoute> {
+  const r = vendorRouteSchema.safeParse(value);
   return r.success ? ok(r.data) : fail({ code: 'validation', message: '模型路由格式错误' });
 }
 
-function parseRoutes(value: unknown): AppResult<ModelRoute[]> {
+function parseRoutes(value: unknown): AppResult<VendorRoute[]> {
   const envelope = value as ItemsEnvelope<unknown>;
-  const parsed: ModelRoute[] = [];
+  const parsed: VendorRoute[] = [];
   for (const row of envelope.items ?? []) {
     const r = parseRoute(row);
     if (!r.success) return r;
@@ -33,12 +33,12 @@ function parseRoutes(value: unknown): AppResult<ModelRoute[]> {
   return ok(parsed);
 }
 
-export class DemuxModelRouteHttpAdapter implements DemuxModelRoutePort {
+export class DemuxVendorRouteHttpAdapter implements DemuxVendorRoutePort {
   async list(input: {
     page: number;
     pageSize: number;
-    filter: ListModelRoutesFilter;
-  }): Promise<AppResult<ListModelRoutesPage>> {
+    filter: ListVendorRoutesFilter;
+  }): Promise<AppResult<ListVendorRoutesPage>> {
     const res = await requestDemux<ItemsEnvelope<unknown>>(BASE, {
       query: {
         page: input.page,
@@ -59,17 +59,17 @@ export class DemuxModelRouteHttpAdapter implements DemuxModelRoutePort {
     });
   }
 
-  async get(uid: Uid): Promise<AppResult<ModelRoute>> {
+  async get(uid: Uid): Promise<AppResult<VendorRoute>> {
     const res = await requestDemux<unknown>(`${BASE}/${encodeURIComponent(uid)}`);
     if (!res.success) return res;
     return parseRoute(res.data);
   }
 
-  async create(input: CreateModelRouteInput): Promise<AppResult<ModelRoute>> {
+  async create(input: CreateVendorRouteInput): Promise<AppResult<VendorRoute>> {
     const res = await requestDemux<unknown>(BASE, {
       method: 'POST',
       body: {
-        alias: input.alias.trim(),
+        routeKey: input.routeKey.trim(),
         vendorKey: input.vendorKey.trim(),
         vendorModel: input.vendorModel.trim(),
         isPublished: input.isPublished ?? true,
@@ -80,11 +80,11 @@ export class DemuxModelRouteHttpAdapter implements DemuxModelRoutePort {
     return parseRoute(res.data);
   }
 
-  async update(uid: Uid, input: UpdateModelRouteInput): Promise<AppResult<ModelRoute>> {
+  async update(uid: Uid, input: UpdateVendorRouteInput): Promise<AppResult<VendorRoute>> {
     const res = await requestDemux<unknown>(`${BASE}/${encodeURIComponent(uid)}`, {
       method: 'PUT',
       body: {
-        ...(input.alias !== undefined ? { alias: input.alias.trim() } : {}),
+        ...(input.routeKey !== undefined ? { routeKey: input.routeKey.trim() } : {}),
         ...(input.vendorKey !== undefined ? { vendorKey: input.vendorKey.trim() } : {}),
         ...(input.vendorModel !== undefined
           ? { vendorModel: input.vendorModel.trim() }
@@ -101,7 +101,7 @@ export class DemuxModelRouteHttpAdapter implements DemuxModelRoutePort {
     return requestDemux<void>(`${BASE}/${encodeURIComponent(uid)}`, { method: 'DELETE' });
   }
 
-  async setPublished(uid: Uid, isPublished: boolean): Promise<AppResult<ModelRoute>> {
+  async setPublished(uid: Uid, isPublished: boolean): Promise<AppResult<VendorRoute>> {
     const res = await requestDemux<unknown>(`${BASE}/${encodeURIComponent(uid)}/published`, {
       method: 'PATCH',
       body: { isPublished },
@@ -110,7 +110,7 @@ export class DemuxModelRouteHttpAdapter implements DemuxModelRoutePort {
     return parseRoute(res.data);
   }
 
-  async stats(vendorKey: string): Promise<AppResult<ModelRouteStats>> {
+  async stats(vendorKey: string): Promise<AppResult<VendorRouteStats>> {
     const res = await requestDemux<{
       vendorKey?: string;
       total?: number;

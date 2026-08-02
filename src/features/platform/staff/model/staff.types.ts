@@ -104,7 +104,7 @@ export const PERMISSION_RESOURCE_LABELS: Record<string, string> = {
   'demux.redemption': '兑换码',
   'demux.models': '模型目录',
   'demux.providers': '模型通道',
-  'demux.pricing': '定价',
+  'demux.rate': '定价',
   'demux.routes': '路由',
   'demux.backends': '接入后端',
   'demux.usage': '用量日志',

@@ -22,11 +22,11 @@ export const demuxGatewayPaths = {
 export const demuxPlatformPaths = {
   adminProviders: '/demux/api/admin/providers',
   adminModels: '/demux/api/admin/models',
-  adminPricing: '/demux/api/admin/pricing',
+  adminRate: '/demux/api/admin/rate',
   adminVendorModel: '/demux/api/admin/vendor/model',
   adminRoutes: '/demux/api/admin/routes',
   adminLogs: '/demux/api/admin/logs',
   adminBackends: '/demux/api/admin/backends',
   redemption: '/demux/api/redemption',
-  publicPricing: '/demux/api/pricing',
+  publicRate: '/demux/api/rate',
 } as const;

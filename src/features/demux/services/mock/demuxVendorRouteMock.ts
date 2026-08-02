@@ -4,23 +4,23 @@ import type { Uid } from '@/shared/lib/id';
 import { delay } from '@/shared/lib/delay';
 
 import {
-  modelRouteSchema,
-  type CreateModelRouteInput,
-  type ListModelRoutesFilter,
-  type ModelRoute,
-  type ModelRouteStats,
-  type UpdateModelRouteInput,
-} from '../../model/modelRoute.types';
-import type { DemuxModelRoutePort, ListModelRoutesPage } from '../ports/demuxModelRoutePort';
+  vendorRouteSchema,
+  type CreateVendorRouteInput,
+  type ListVendorRoutesFilter,
+  type VendorRoute,
+  type VendorRouteStats,
+  type UpdateVendorRouteInput,
+} from '../../model/vendorRoute.types';
+import type { DemuxVendorRoutePort, ListVendorRoutesPage } from '../ports/demuxVendorRoutePort';
 
-import { genModelRouteUid, getDemuxStore } from './data';
+import { genVendorRouteUid, getDemuxStore } from './data';
 
-function parseRoute(v: unknown): AppResult<ModelRoute> {
-  const r = modelRouteSchema.safeParse(v);
+function parseRoute(v: unknown): AppResult<VendorRoute> {
+  const r = vendorRouteSchema.safeParse(v);
   return r.success ? ok(r.data) : fail({ code: 'validation', message: '模型路由格式错误' });
 }
 
-function applyFilter(rows: ModelRoute[], f: ListModelRoutesFilter): ModelRoute[] {
+function applyFilter(rows: VendorRoute[], f: ListVendorRoutesFilter): VendorRoute[] {
   const kw = f.keyword.trim().toLowerCase();
   return rows.filter((r) => {
     if (f.vendorKey !== 'all' && r.vendorKey !== f.vendorKey) return false;
@@ -28,7 +28,7 @@ function applyFilter(rows: ModelRoute[], f: ListModelRoutesFilter): ModelRoute[]
     if (f.vendorModel && r.vendorModel !== f.vendorModel) return false;
     if (
       kw &&
-      !r.alias.toLowerCase().includes(kw) &&
+      !r.routeKey.toLowerCase().includes(kw) &&
       !r.vendorModel.toLowerCase().includes(kw) &&
       !r.vendorKey.toLowerCase().includes(kw)
     ) {
@@ -38,7 +38,7 @@ function applyFilter(rows: ModelRoute[], f: ListModelRoutesFilter): ModelRoute[]
   });
 }
 
-export class DemuxModelRouteMock implements DemuxModelRoutePort {
+export class DemuxVendorRouteMock implements DemuxVendorRoutePort {
   private get store() {
     return getDemuxStore();
   }
@@ -46,15 +46,15 @@ export class DemuxModelRouteMock implements DemuxModelRoutePort {
   async list(input: {
     page: number;
     pageSize: number;
-    filter: ListModelRoutesFilter;
-  }): Promise<AppResult<ListModelRoutesPage>> {
+    filter: ListVendorRoutesFilter;
+  }): Promise<AppResult<ListVendorRoutesPage>> {
     await delay();
-    const sorted = [...this.store.modelRoutes].sort((a, b) =>
-      a.alias.localeCompare(b.alias),
+    const sorted = [...this.store.vendorRoutes].sort((a, b) =>
+      a.routeKey.localeCompare(b.routeKey),
     );
     const filtered = applyFilter(sorted, input.filter);
     const slice = clientPaginate(filtered, input.page, input.pageSize);
-    const parsed: ModelRoute[] = [];
+    const parsed: VendorRoute[] = [];
     for (const it of slice) {
       const r = parseRoute(it);
       if (!r.success) return r;
@@ -63,25 +63,25 @@ export class DemuxModelRouteMock implements DemuxModelRoutePort {
     return ok({ items: parsed, total: filtered.length });
   }
 
-  async get(uid: Uid): Promise<AppResult<ModelRoute>> {
+  async get(uid: Uid): Promise<AppResult<VendorRoute>> {
     await delay();
-    const row = this.store.modelRoutes.find((r) => r.uid === uid);
+    const row = this.store.vendorRoutes.find((r) => r.uid === uid);
     if (!row) return fail({ code: 'not_found', message: `路由 ${uid} 不存在` });
     return parseRoute(row);
   }
 
-  async create(input: CreateModelRouteInput): Promise<AppResult<ModelRoute>> {
+  async create(input: CreateVendorRouteInput): Promise<AppResult<VendorRoute>> {
     await delay();
-    const alias = input.alias.trim();
-    if (!alias) return fail({ code: 'validation', message: '请填写对外别名' });
-    const taken = this.store.modelRoutes.some((r) => r.alias === alias);
+    const routeKey = input.routeKey.trim();
+    if (!routeKey) return fail({ code: 'validation', message: '请填写对外别名' });
+    const taken = this.store.vendorRoutes.some((r) => r.routeKey === routeKey);
     if (taken) {
-      return fail({ code: 'conflict', message: `别名「${alias}」已存在` });
+      return fail({ code: 'conflict', message: `别名「${routeKey}」已存在` });
     }
     const t = Date.now();
-    const row: ModelRoute = {
-      uid: genModelRouteUid(),
-      alias,
+    const row: VendorRoute = {
+      uid: genVendorRouteUid(),
+      routeKey,
       vendorKey: input.vendorKey.trim(),
       vendorModel: input.vendorModel.trim(),
       isPublished: input.isPublished ?? true,
@@ -91,18 +91,18 @@ export class DemuxModelRouteMock implements DemuxModelRoutePort {
     };
     const p = parseRoute(row);
     if (!p.success) return p;
-    this.store.modelRoutes.unshift(p.data);
+    this.store.vendorRoutes.unshift(p.data);
     return ok(p.data);
   }
 
-  async update(uid: Uid, input: UpdateModelRouteInput): Promise<AppResult<ModelRoute>> {
+  async update(uid: Uid, input: UpdateVendorRouteInput): Promise<AppResult<VendorRoute>> {
     await delay();
-    const idx = this.store.modelRoutes.findIndex((r) => r.uid === uid);
+    const idx = this.store.vendorRoutes.findIndex((r) => r.uid === uid);
     if (idx < 0) return fail({ code: 'not_found', message: `路由 ${uid} 不存在` });
-    const cur = this.store.modelRoutes[idx]!;
-    const next: ModelRoute = {
+    const cur = this.store.vendorRoutes[idx]!;
+    const next: VendorRoute = {
       ...cur,
-      ...(input.alias !== undefined ? { alias: input.alias.trim() } : {}),
+      ...(input.routeKey !== undefined ? { routeKey: input.routeKey.trim() } : {}),
       ...(input.vendorKey !== undefined ? { vendorKey: input.vendorKey.trim() } : {}),
       ...(input.vendorModel !== undefined
         ? { vendorModel: input.vendorModel.trim() }
@@ -113,28 +113,28 @@ export class DemuxModelRouteMock implements DemuxModelRoutePort {
     };
     const p = parseRoute(next);
     if (!p.success) return p;
-    this.store.modelRoutes[idx] = p.data;
+    this.store.vendorRoutes[idx] = p.data;
     return ok(p.data);
   }
 
   async delete(uid: Uid): Promise<AppResult<void>> {
     await delay();
-    const idx = this.store.modelRoutes.findIndex((r) => r.uid === uid);
+    const idx = this.store.vendorRoutes.findIndex((r) => r.uid === uid);
     if (idx < 0) return fail({ code: 'not_found', message: `路由 ${uid} 不存在` });
-    this.store.modelRoutes.splice(idx, 1);
+    this.store.vendorRoutes.splice(idx, 1);
     return ok(undefined);
   }
 
-  async setPublished(uid: Uid, isPublished: boolean): Promise<AppResult<ModelRoute>> {
+  async setPublished(uid: Uid, isPublished: boolean): Promise<AppResult<VendorRoute>> {
     return this.update(uid, { isPublished });
   }
 
-  async stats(vendorKey: string): Promise<AppResult<ModelRouteStats>> {
+  async stats(vendorKey: string): Promise<AppResult<VendorRouteStats>> {
     await delay();
     const ck = vendorKey.trim();
     const byVendorModel: Record<string, number> = {};
     let total = 0;
-    for (const route of this.store.modelRoutes) {
+    for (const route of this.store.vendorRoutes) {
       if (route.vendorKey !== ck) continue;
       byVendorModel[route.vendorModel] = (byVendorModel[route.vendorModel] ?? 0) + 1;
       total += 1;

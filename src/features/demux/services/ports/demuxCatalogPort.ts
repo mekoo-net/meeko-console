@@ -41,13 +41,13 @@ export interface DemuxCatalogPort {
   ): Promise<AppResult<ImportProviderGroupResult>>;
 
   /**
-   * 删除已入库的供应商组，级联删除其下全部上游模型与对外别名（ModelRoute）。
+   * 删除已入库的供应商组，级联删除其下全部上游模型与对外别名（VendorRoute）。
    * 前端在调用前需向用户确认将要级联移除的模型 / 别名数量。
    */
   deleteProviderGroup(id: string): Promise<AppResult<void>>;
 
   /**
-   * 删除单个已入库的上游模型，级联删除指向该模型的对外别名（ModelRoute）。
+   * 删除单个已入库的上游模型，级联删除指向该模型的对外别名（VendorRoute）。
    * 前端在调用前需向用户确认将要级联移除的别名数量。
    */
   deleteUpstreamModel(queueGroup: string, modelId: string): Promise<AppResult<void>>;

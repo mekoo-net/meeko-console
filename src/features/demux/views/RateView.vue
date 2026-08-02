@@ -21,17 +21,17 @@ import {
   BillingTypeLabel,
   type BillingType,
 } from '@demux/common';
-import type { Pricing, UpsertPricingInput, VendorModelGroup } from '@demux/common';
+import type { Rate, UpsertRateInput, VendorModelGroup } from '@demux/common';
 import type { Model } from '@demux/common';
-import type { UnconfiguredAlias, VendorPricingStatsMap } from '@demux/common';
+import type { UnconfiguredRoute, VendorRateStatsMap } from '@demux/common';
 import type { ProviderGroup } from '../model/catalog.types';
-import { getDemuxCatalogPort, getDemuxPricingPort } from '../services';
+import { getDemuxCatalogPort, getDemuxRatePort } from '../services';
 import ProviderWorkspaceLayout from '../components/provider/ProviderWorkspaceLayout.vue';
 import ProviderGroupSidebar from '../components/provider/ProviderGroupSidebar.vue';
 import ProviderDetailPanel from '../components/provider/ProviderDetailPanel.vue';
-import PricingEditDialog from '../components/PricingEditDialog.vue';
+import RateEditDialog from '../components/RateEditDialog.vue';
 
-const pricingPort = getDemuxPricingPort();
+const ratePort = getDemuxRatePort();
 const catalogPort = getDemuxCatalogPort();
 
 const groups = ref<ProviderGroup[]>([]);
@@ -40,8 +40,8 @@ const selectedVendor = ref<string>('');
 
 const pricedGroups = ref<VendorModelGroup[]>([]);
 const pricedGroupsLoading = ref(false);
-const vendorPricingCounts = ref<VendorPricingStatsMap>({});
-const unconfiguredItems = ref<UnconfiguredAlias[]>([]);
+const vendorRateCounts = ref<VendorRateStatsMap>({});
+const unconfiguredItems = ref<UnconfiguredRoute[]>([]);
 const unconfiguredLoading = ref(false);
 
 const pricedPagination = usePagination({ pageSize: 20, pageSizes: [10, 20, 50, 100] });
@@ -61,7 +61,7 @@ const filter = ref<PageFilter>(defaultFilter());
 
 const dialogOpen = ref(false);
 const dialogLoading = ref(false);
-const editingPricing = ref<Pricing | null>(null);
+const editingRate = ref<Rate | null>(null);
 const editingModel = ref<Model | null>(null);
 
 type TabName = 'priced' | 'unconfigured';
@@ -86,19 +86,19 @@ function ensureVendorSelected(): void {
 }
 
 const selectedVendorUnconfiguredCount = computed(
-  () => vendorPricingCounts.value[selectedVendor.value]?.unconfigured ?? 0,
+  () => vendorRateCounts.value[selectedVendor.value]?.unconfigured ?? 0,
 );
 
 function groupRowKey(row: VendorModelGroup): string {
   return `${row.vendorKey}|${row.vendorModel}`;
 }
 
-function modelFromAlias(alias: string): Model {
+function modelFromRouteKey(routeKey: string): Model {
   const t = Date.now();
   return {
-    uid: alias,
-    modelId: alias,
-    displayName: alias,
+    uid: routeKey,
+    modelId: routeKey,
+    displayName: routeKey,
     family: 'other',
     capabilities: ['chat'],
     visibleMinTier: 1,
@@ -113,7 +113,7 @@ function modelFromAlias(alias: string): Model {
 }
 
 const pagedUnconfigured = computed<Model[]>(() =>
-  unconfiguredItems.value.map((row) => modelFromAlias(row.alias)),
+  unconfiguredItems.value.map((row) => modelFromRouteKey(row.routeKey)),
 );
 
 async function loadGroups(): Promise<void> {
@@ -129,17 +129,17 @@ async function loadGroups(): Promise<void> {
   }
 }
 
-async function loadVendorPricingStats(): Promise<void> {
-  const r = await pricingPort.vendorPricingStats();
-  if (r.success) vendorPricingCounts.value = r.data;
+async function loadVendorRateStats(): Promise<void> {
+  const r = await ratePort.vendorRateStats();
+  if (r.success) vendorRateCounts.value = r.data;
   else ElMessage.error(r.error.message);
 }
 
-async function loadUnconfiguredAliases(): Promise<void> {
+async function loadUnconfiguredRoutes(): Promise<void> {
   if (!selectedVendor.value) return;
   unconfiguredLoading.value = true;
   try {
-    const r = await pricingPort.listUnconfiguredAliases({
+    const r = await ratePort.listUnconfiguredRoutes({
       page: unconfiguredPagination.state.page,
       pageSize: unconfiguredPagination.state.pageSize,
       vendorKey: selectedVendor.value,
@@ -159,7 +159,7 @@ async function loadPricedGroups(): Promise<void> {
   if (!selectedVendor.value) return;
   pricedGroupsLoading.value = true;
   try {
-    const r = await pricingPort.listVendorModelGroups({
+    const r = await ratePort.listVendorModelGroups({
       page: pricedPagination.state.page,
       pageSize: pricedPagination.state.pageSize,
       filter: {
@@ -184,27 +184,27 @@ function resetFilter(): void {
   pricedPagination.setPage(1);
 }
 
-function openEdit(p: Pricing): void {
-  editingPricing.value = p;
-  editingModel.value = modelFromAlias(p.modelId);
+function openEdit(p: Rate): void {
+  editingRate.value = p;
+  editingModel.value = modelFromRouteKey(p.modelId);
   dialogOpen.value = true;
 }
 
 function openCreateFor(m: Model): void {
-  editingPricing.value = null;
+  editingRate.value = null;
   editingModel.value = m;
   dialogOpen.value = true;
 }
 
-async function onSubmit(payload: UpsertPricingInput): Promise<void> {
+async function onSubmit(payload: UpsertRateInput): Promise<void> {
   dialogLoading.value = true;
   try {
-    const r = await pricingPort.upsert(payload);
+    const r = await ratePort.upsert(payload);
     if (r.success) {
       ElMessage.success('定价已保存');
       dialogOpen.value = false;
-      await Promise.all([loadPricedGroups(), loadVendorPricingStats()]);
-      if (activeTab.value === 'unconfigured') await loadUnconfiguredAliases();
+      await Promise.all([loadPricedGroups(), loadVendorRateStats()]);
+      if (activeTab.value === 'unconfigured') await loadUnconfiguredRoutes();
     } else {
       ElMessage.error(r.error.message);
     }
@@ -213,7 +213,7 @@ async function onSubmit(payload: UpsertPricingInput): Promise<void> {
   }
 }
 
-async function onDelete(row: Pricing): Promise<void> {
+async function onDelete(row: Rate): Promise<void> {
   const okp = await confirmDanger({
     title: '删除定价',
     message: `确认删除 "${row.modelId}" 的定价？`,
@@ -221,20 +221,20 @@ async function onDelete(row: Pricing): Promise<void> {
     type: 'warning',
   });
   if (!okp) return;
-  const r = await pricingPort.delete(String(row.id));
+  const r = await ratePort.delete(String(row.id));
   if (r.success) {
     ElMessage.success('已删除');
-    await Promise.all([loadPricedGroups(), loadVendorPricingStats()]);
-    if (activeTab.value === 'unconfigured') await loadUnconfiguredAliases();
+    await Promise.all([loadPricedGroups(), loadVendorRateStats()]);
+    if (activeTab.value === 'unconfigured') await loadUnconfiguredRoutes();
   } else {
     ElMessage.error(r.error.message);
   }
 }
 
-function priceSummary(row: Pricing): string {
+function priceSummary(row: Rate): string {
   switch (row.billingType) {
     case 'per_token': {
-      const p = row.pricing;
+      const p = row.rate;
       const extras: string[] = [];
       if (p.input.cachedRead != null) {
         extras.push(`cR ${formatMoney(p.input.cachedRead, { fractionDigits: 2 })}`);
@@ -259,7 +259,7 @@ function priceSummary(row: Pricing): string {
       return extras.length ? `${main} · ${extras.join(' · ')}` : main;
     }
     case 'per_call': {
-      const p = row.pricing;
+      const p = row.rate;
       const cached =
         p.cachedPricePerCall != null
           ? ` · cached ${formatMoney(p.cachedPricePerCall, { fractionDigits: 4 })}`
@@ -267,29 +267,29 @@ function priceSummary(row: Pricing): string {
       return `${formatMoney(p.pricePerCall, { fractionDigits: 4 })} / 次${cached}`;
     }
     case 'per_image': {
-      const prices = row.pricing.tiers.map((t) => t.pricePerImage);
+      const prices = row.rate.tiers.map((t) => t.pricePerImage);
       const min = Math.min(...prices);
       const max = Math.max(...prices);
       const range =
         min === max
           ? formatMoney(min, { fractionDigits: 4 })
           : `${formatMoney(min, { fractionDigits: 4 }) }-${formatMoney(max, { fractionDigits: 4 })}`;
-      return `${row.pricing.tiers.length} 档 / ${range} / 张`;
+      return `${row.rate.tiers.length} 档 / ${range} / 张`;
     }
     case 'per_video': {
-      const prices = row.pricing.tiers.map((t) => t.pricePerSecond);
+      const prices = row.rate.tiers.map((t) => t.pricePerSecond);
       const min = Math.min(...prices);
       const max = Math.max(...prices);
       const range =
         min === max
           ? formatMoney(min, { fractionDigits: 4 })
           : `${formatMoney(min, { fractionDigits: 4 }) }-${formatMoney(max, { fractionDigits: 4 })}`;
-      return `${row.pricing.tiers.length} 档 / ${range} / 秒`;
+      return `${row.rate.tiers.length} 档 / ${range} / 秒`;
     }
     case 'per_audio_minute':
-      return `${formatMoney(row.pricing.pricePerMinute, { fractionDigits: 4 })} / 分钟`;
+      return `${formatMoney(row.rate.pricePerMinute, { fractionDigits: 4 })} / 分钟`;
     case 'per_character':
-      return `${formatMoney(row.pricing.pricePerKChar, { fractionDigits: 4 })} / 1K 字符`;
+      return `${formatMoney(row.rate.pricePerKChar, { fractionDigits: 4 })} / 1K 字符`;
   }
 }
 
@@ -337,7 +337,7 @@ watch(
       activeTab.value,
     ] as const,
   () => {
-    if (activeTab.value === 'unconfigured') void loadUnconfiguredAliases();
+    if (activeTab.value === 'unconfigured') void loadUnconfiguredRoutes();
   },
 );
 
@@ -349,7 +349,7 @@ watch(activeTab, (tab) => {
 
 onMounted(async () => {
   await loadGroups();
-  await loadVendorPricingStats();
+  await loadVendorRateStats();
 });
 </script>
 
@@ -358,7 +358,7 @@ onMounted(async () => {
     <template #header>
       <PageHeader
         title="模型定价"
-        description="仅对已配置对外别名（模型路由 alias）定价。左侧按 QueueGroup 筛选；未配置列表只展示「有 alias、尚未定价」的条目，上游模型需先在供应商组建别名。"
+        description="仅对已配置对外别名（模型路由 routeKey）定价。左侧按 QueueGroup 筛选；未配置列表只展示「有 routeKey、尚未定价」的条目，上游模型需先在供应商组建别名。"
       />
     </template>
 
@@ -366,7 +366,7 @@ onMounted(async () => {
       v-model="selectedVendor"
       :groups="groups"
       :loading="groupsLoading"
-      :counts="vendorPricingCounts"
+      :counts="vendorRateCounts"
       search-placeholder="搜索渠道 / QueueGroup"
       empty-description="请先在「供应商组」页从网关同步 Provider。"
     />
@@ -384,7 +384,7 @@ onMounted(async () => {
       </template>
 
       <template #toolbar>
-        <el-tabs v-model="activeTab" class="pricing-tabs">
+        <el-tabs v-model="activeTab" class="rate-tabs">
           <el-tab-pane name="priced">
             <template #label>
               <span class="tab-label">
@@ -459,35 +459,35 @@ onMounted(async () => {
           <el-table-column type="expand">
             <template #default="{ row }: { row: VendorModelGroup }">
               <el-table
-                :data="row.aliases"
-                row-key="alias"
+                :data="row.routeKeys"
+                row-key="routeKey"
                 size="small"
                 class="inner-table"
               >
                 <el-table-column label="对外别名" min-width="200">
-                  <template #default="{ row: aliasRow }">
+                  <template #default="{ row: routeRow }">
                     <div class="cell-model">
-                      <div class="cell-model__name">{{ aliasRow.alias }}</div>
+                      <div class="cell-model__name">{{ routeRow.routeKey }}</div>
                     </div>
                   </template>
                 </el-table-column>
                 <el-table-column label="计费类型" width="120">
-                  <template #default="{ row: aliasRow }">
+                  <template #default="{ row: routeRow }">
                     <el-tag size="small" type="primary" effect="plain" round>
-                      {{ BillingTypeLabel[aliasRow.pricing.billingType as BillingType] }}
+                      {{ BillingTypeLabel[routeRow.rate.billingType as BillingType] }}
                     </el-tag>
                   </template>
                 </el-table-column>
                 <el-table-column label="基础单价" min-width="280">
-                  <template #default="{ row: aliasRow }">
-                    <span class="cell-price">{{ priceSummary(aliasRow.pricing) }}</span>
+                  <template #default="{ row: routeRow }">
+                    <span class="cell-price">{{ priceSummary(routeRow.rate) }}</span>
                   </template>
                 </el-table-column>
                 <el-table-column label="LV 倍率" min-width="180">
-                  <template #default="{ row: aliasRow }">
+                  <template #default="{ row: routeRow }">
                     <div class="tier-badges">
                       <el-tag
-                        v-for="[lv, mult] in Object.entries(aliasRow.pricing.tierMultipliers)"
+                        v-for="[lv, mult] in Object.entries(routeRow.rate.tierMultipliers)"
                         :key="lv"
                         size="small"
                         effect="plain"
@@ -496,7 +496,7 @@ onMounted(async () => {
                         {{ tierBadgeLabel(Number(lv), Number(mult)) }}
                       </el-tag>
                       <span
-                        v-if="Object.keys(aliasRow.pricing.tierMultipliers).length === 0"
+                        v-if="Object.keys(routeRow.rate.tierMultipliers).length === 0"
                         class="cell-muted"
                       >
                         —
@@ -505,22 +505,22 @@ onMounted(async () => {
                   </template>
                 </el-table-column>
                 <el-table-column label="生效" width="150">
-                  <template #default="{ row: aliasRow }">
+                  <template #default="{ row: routeRow }">
                     <span class="cell-date">{{
-                      formatDateTime(aliasRow.pricing.effectiveFromUtc)
+                      formatDateTime(routeRow.rate.effectiveFromUtc)
                     }}</span>
                   </template>
                 </el-table-column>
                 <el-table-column label="操作" width="140" align="right">
-                  <template #default="{ row: aliasRow }">
-                    <el-button :icon="Edit" link type="primary" @click="openEdit(aliasRow.pricing)">
+                  <template #default="{ row: routeRow }">
+                    <el-button :icon="Edit" link type="primary" @click="openEdit(routeRow.rate)">
                       编辑
                     </el-button>
                     <el-button
                       :icon="Delete"
                       link
                       type="danger"
-                      @click="onDelete(aliasRow.pricing)"
+                      @click="onDelete(routeRow.rate)"
                     >
                       删除
                     </el-button>
@@ -543,7 +543,7 @@ onMounted(async () => {
           </el-table-column>
           <el-table-column label="别名数" width="100">
             <template #default="{ row }: { row: VendorModelGroup }">
-              {{ row.aliases.length }} 个
+              {{ row.routeKeys.length }} 个
             </template>
           </el-table-column>
           <template #empty>
@@ -619,9 +619,9 @@ onMounted(async () => {
       </div>
     </ProviderDetailPanel>
 
-    <PricingEditDialog
+    <RateEditDialog
       v-model="dialogOpen"
-      :pricing="editingPricing"
+      :rate="editingRate"
       :model="editingModel"
       :loading="dialogLoading"
       @submit="onSubmit"
@@ -634,13 +634,13 @@ onMounted(async () => {
   flex: 1;
   min-width: 0;
 }
-.pricing-tabs {
+.rate-tabs {
   margin-bottom: 4px;
 }
-.pricing-tabs :deep(.el-tabs__header) {
+.rate-tabs :deep(.el-tabs__header) {
   margin-bottom: 0;
 }
-.pricing-tabs :deep(.el-tabs__nav-wrap)::after {
+.rate-tabs :deep(.el-tabs__nav-wrap)::after {
   height: 1px;
 }
 .tab-label {

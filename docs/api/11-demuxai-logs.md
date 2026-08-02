@@ -53,12 +53,12 @@
 | `fromUtc` | number | **是** | Unix 毫秒；UI 必传，最长 7 天 |
 | `toUtc` | number | **是** | Unix 毫秒 |
 | `accountUid` | string | 否 | = `account.uid`（主账户 userId） |
-| `tokenId` / `iamUserUid` | string | 否 | `tokenId` = sk- 令牌实体主键；`iamUserUid` = `account.iamUserUid`（IAM userId）。BFF 过渡期可能仍接受 `tokenUid` 查询参数名。 |
+| `accessTokenId` / `iamUserUid` | string | 否 | `accessTokenId` = sk- 令牌实体主键（0 = 账户级直发）；`iamUserUid` = `account.iamUserUid`（IAM userId）。 |
 | `modelName` | string | 否 | 模糊匹配 |
 | `groupCode` | string | 否 | BFF 已有；可对应模型组 / 路由分组（接入约定） |
 | `status` | string | 否 | BFF 用量状态过滤 |
 | `providerId` | int | 否 | 前端 filter 有；BFF 待扩展 |
-| `apiType` | enum | 否 | 前端 filter |
+| `protocol` | enum | 否 | 前端 filter（旧名 `apiType`） |
 | `errorOnly` | boolean | 否 | 仅 `success === false` |
 | `errorCode` | string | 否 | 精确 `error.code` |
 | `convId` | string | 否 | 会话精确匹配 |
@@ -82,7 +82,7 @@
 | `token` | `{ id, name }` \| null | sk- 令牌快照；PG 直发时为 null |
 | `modelName` | string | 对外模型名 |
 | `providerId` | int | Vendor 主键 |
-| `apiType` | enum | 协议族 |
+| `protocol` | enum | 协议族（旧名 `apiType`） |
 | `tokenLatency` | int \| null | 见上文 |
 | `success` | boolean | |
 | `error` | object \| null | 失败时必填 |
@@ -134,7 +134,7 @@
   "convId": "CV-050-a3",
   "modelName": "demux-gpt-4o",
   "providerId": 1001,
-  "apiType": "openai",
+  "protocol": "openai",
   "tokenLatency": 320,
   "streamed": true,
   "clientIpV4": 3401195783,

@@ -4,16 +4,16 @@ import type { FormInstance, FormRules } from 'element-plus';
 
 import { ProviderGroupLabel } from '@demux/common';
 import type {
-  CreateModelRouteInput,
-  ModelRoute,
-  UpdateModelRouteInput,
-} from '../model/modelRoute.types';
+  CreateVendorRouteInput,
+  VendorRoute,
+  UpdateVendorRouteInput,
+} from '../model/vendorRoute.types';
 import type { ProviderGroup, ProviderUpstreamModel } from '../model/catalog.types';
 import { getDemuxCatalogPort } from '../services';
 
 interface Props {
   modelValue: boolean;
-  route: ModelRoute | null;
+  route: VendorRoute | null;
   loading: boolean;
   providerGroups: ProviderGroup[];
   initialVendorKey?: string;
@@ -27,7 +27,7 @@ const props = defineProps<Props>();
 
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void;
-  (e: 'submit', payload: { create?: CreateModelRouteInput; update?: UpdateModelRouteInput }): void;
+  (e: 'submit', payload: { create?: CreateVendorRouteInput; update?: UpdateVendorRouteInput }): void;
 }>();
 
 const catalogPort = getDemuxCatalogPort();
@@ -47,7 +47,7 @@ const vendorLocked = computed(() => !isEdit.value && Boolean(props.fixedVendorKe
 const upstreamLocked = computed(() => !isEdit.value && Boolean(props.fixedUpstreamModelId));
 
 interface FormState {
-  alias: string;
+  routeKey: string;
   vendorKey: string;
   vendorModel: string;
   isPublished: boolean;
@@ -55,7 +55,7 @@ interface FormState {
 }
 
 const emptyForm = (): FormState => ({
-  alias: '',
+  routeKey: '',
   vendorKey: '',
   vendorModel: '',
   isPublished: true,
@@ -70,7 +70,7 @@ const upstreamLoading = ref(false);
 const hydrating = ref(false);
 
 const rules: FormRules<FormState> = {
-  alias: [{ required: true, message: '请填写对外别名', trigger: 'blur' }],
+  routeKey: [{ required: true, message: '请填写对外别名', trigger: 'blur' }],
   vendorKey: [{ required: true, message: '请选择供应商组', trigger: 'change' }],
   vendorModel: [{ required: true, message: '请选择上游模型', trigger: 'change' }],
 };
@@ -103,7 +103,7 @@ watch(
     hydrating.value = true;
     if (props.route) {
       form.value = {
-        alias: props.route.alias,
+        routeKey: props.route.routeKey,
         vendorKey: props.route.vendorKey,
         vendorModel: props.route.vendorModel,
         isPublished: props.route.isPublished,
@@ -138,7 +138,7 @@ function onSubmit(): void {
   formRef.value?.validate((valid) => {
     if (!valid) return;
     const body = {
-      alias: form.value.alias.trim(),
+      routeKey: form.value.routeKey.trim(),
       vendorKey: form.value.vendorKey,
       vendorModel: form.value.vendorModel,
       isPublished: form.value.isPublished,
@@ -158,9 +158,9 @@ function onSubmit(): void {
     destroy-on-close
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" @submit.prevent>
-      <el-form-item label="对外别名" prop="alias">
+      <el-form-item label="对外别名" prop="routeKey">
         <el-input
-          v-model="form.alias"
+          v-model="form.routeKey"
           placeholder="用户请求 model 字段，如 demux-gpt-4o"
           :disabled="isEdit"
         />

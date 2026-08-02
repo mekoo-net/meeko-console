@@ -7,10 +7,10 @@ const uidString = z.union([z.string(), z.number()]).transform((v) => String(v));
 /**
  * 模型别名绑定：对外别名 → 渠道 + 上游注册名。
  */
-export const modelRouteSchema = z.object({
+export const vendorRouteSchema = z.object({
   uid: uidString,
   /** 用户请求体 model 字段 / 计费主键 */
-  alias: z.string().min(1).max(128),
+  routeKey: z.string().min(1).max(128),
   vendorKey: z.string().min(1).max(64),
   vendorModel: z.string().min(1).max(160),
   isPublished: z.boolean(),
@@ -19,25 +19,25 @@ export const modelRouteSchema = z.object({
   updatedAtUtc: epochMillisSchema,
 });
 
-export type ModelRoute = z.infer<typeof modelRouteSchema>;
+export type VendorRoute = z.infer<typeof vendorRouteSchema>;
 
-export interface CreateModelRouteInput {
-  alias: string;
+export interface CreateVendorRouteInput {
+  routeKey: string;
   vendorKey: string;
   vendorModel: string;
   isPublished?: boolean;
   notes?: string | null;
 }
 
-export interface UpdateModelRouteInput {
-  alias?: string;
+export interface UpdateVendorRouteInput {
+  routeKey?: string;
   vendorKey?: string;
   vendorModel?: string;
   isPublished?: boolean;
   notes?: string | null;
 }
 
-export interface ListModelRoutesFilter {
+export interface ListVendorRoutesFilter {
   keyword: string;
   vendorKey: string | 'all';
   isPublished: boolean | 'all';
@@ -46,7 +46,7 @@ export interface ListModelRoutesFilter {
 }
 
 /** 按渠道 + 上游模型聚合的别名计数（不含明细行）。 */
-export interface ModelRouteStats {
+export interface VendorRouteStats {
   vendorKey: string;
   total: number;
   byVendorModel: Record<string, number>;

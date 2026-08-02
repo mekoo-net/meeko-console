@@ -217,7 +217,7 @@ const outputDims = computed<DimRow[]>(() => {
       <h4 class="section-title">链路</h4>
       <div class="log-detail__row">
         <span class="label">协议</span>
-        <span>{{ log.apiType ? ApiTypeLabel[log.apiType] : '—' }}</span>
+        <span>{{ log.protocol ? ApiTypeLabel[log.protocol] : '—' }}</span>
       </div>
       <div class="log-detail__row">
         <span class="label">流式</span>

@@ -10,7 +10,7 @@
  *  - `per_audio_minute` ：pricePerMinute
  *  - `per_character`    ：pricePerKChar
  *
- * `tierMultipliers` 是用户级 LV 折扣，与 `pricing.tiers[]` 是两个概念。
+ * `tierMultipliers` 是用户级 LV 折扣，与 `rate.tiers[]` 是两个概念。
  */
 import { computed, ref, watch } from 'vue';
 import { Delete, Plus } from '@element-plus/icons-vue';
@@ -26,14 +26,14 @@ import {
 import type {
   PerImageTier,
   PerVideoTier,
-  Pricing,
-  UpsertPricingInput,
+  Rate,
+  UpsertRateInput,
 } from '@demux/common';
 import type { Model } from '@demux/common';
 
 interface Props {
   modelValue: boolean;
-  pricing: Pricing | null;
+  rate: Rate | null;
   model: Model | null;
   loading: boolean;
 }
@@ -42,7 +42,7 @@ const props = defineProps<Props>();
 
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void;
-  (e: 'submit', payload: UpsertPricingInput): void;
+  (e: 'submit', payload: UpsertRateInput): void;
 }>();
 
 const visible = computed({
@@ -135,7 +135,7 @@ const rules: FormRules<FormState> = {
   effectiveFromUtc: [{ required: true, message: '请选择生效时间', trigger: 'change' }],
 };
 
-function loadPricingIntoForm(p: Pricing): FormState {
+function loadRateIntoForm(p: Rate): FormState {
   const base = emptyForm(p.modelId);
   base.billingType = p.billingType;
   base.currency = p.currency;
@@ -149,48 +149,48 @@ function loadPricingIntoForm(p: Pricing): FormState {
     case 'per_token':
       base.perToken = {
         input: {
-          perMToken: p.pricing.input.perMToken,
-          cachedRead: p.pricing.input.cachedRead ?? null,
-          cachedWrite: p.pricing.input.cachedWrite ?? null,
-          audio: p.pricing.input.audio ?? null,
+          perMToken: p.rate.input.perMToken,
+          cachedRead: p.rate.input.cachedRead ?? null,
+          cachedWrite: p.rate.input.cachedWrite ?? null,
+          audio: p.rate.input.audio ?? null,
         },
         output: {
-          perMToken: p.pricing.output.perMToken,
-          reasoning: p.pricing.output.reasoning ?? null,
-          audio: p.pricing.output.audio ?? null,
+          perMToken: p.rate.output.perMToken,
+          reasoning: p.rate.output.reasoning ?? null,
+          audio: p.rate.output.audio ?? null,
         },
       };
       break;
     case 'per_call':
       base.perCall = {
-        pricePerCall: p.pricing.pricePerCall,
-        cachedPricePerCall: p.pricing.cachedPricePerCall ?? null,
+        pricePerCall: p.rate.pricePerCall,
+        cachedPricePerCall: p.rate.cachedPricePerCall ?? null,
       };
       break;
     case 'per_image':
-      base.perImageTiers = p.pricing.tiers.map((t) => ({ ...t }));
+      base.perImageTiers = p.rate.tiers.map((t) => ({ ...t }));
       break;
     case 'per_video':
-      base.perVideoTiers = p.pricing.tiers.map((t) => ({ ...t }));
-      base.perVideoMinSeconds = p.pricing.minSeconds ?? null;
-      base.perVideoMaxSeconds = p.pricing.maxSeconds ?? null;
+      base.perVideoTiers = p.rate.tiers.map((t) => ({ ...t }));
+      base.perVideoMinSeconds = p.rate.minSeconds ?? null;
+      base.perVideoMaxSeconds = p.rate.maxSeconds ?? null;
       break;
     case 'per_audio_minute':
-      base.perAudio = { pricePerMinute: p.pricing.pricePerMinute };
+      base.perAudio = { pricePerMinute: p.rate.pricePerMinute };
       break;
     case 'per_character':
-      base.perCharacter = { pricePerKChar: p.pricing.pricePerKChar };
+      base.perCharacter = { pricePerKChar: p.rate.pricePerKChar };
       break;
   }
   return base;
 }
 
 watch(
-  () => [props.modelValue, props.pricing, props.model] as const,
+  () => [props.modelValue, props.rate, props.model] as const,
   ([open, p, m]) => {
     if (!open) return;
     if (p) {
-      form.value = loadPricingIntoForm(p);
+      form.value = loadRateIntoForm(p);
     } else if (m) {
       form.value = emptyForm(m.modelId);
     }
@@ -230,7 +230,7 @@ function removeVideoTier(idx: number): void {
   form.value.perVideoTiers.splice(idx, 1);
 }
 
-function buildPricingPayload(f: FormState): UpsertPricingInput['pricing'] {
+function buildRatePayload(f: FormState): UpsertRateInput['rate'] {
   switch (f.billingType) {
     case 'per_token': {
       const pt: PerTokenForm = f.perToken;
@@ -283,11 +283,11 @@ async function onSubmit(): Promise<void> {
   const payload = {
     modelId: f.modelId,
     billingType: f.billingType,
-    pricing: buildPricingPayload(f),
+    rate: buildRatePayload(f),
     currency: f.currency,
     tierMultipliers,
     effectiveFromUtc: f.effectiveFromUtc,
-  } as UpsertPricingInput;
+  } as UpsertRateInput;
   emit('submit', payload);
 }
 </script>
@@ -295,7 +295,7 @@ async function onSubmit(): Promise<void> {
 <template>
   <el-dialog
     v-model="visible"
-    :title="pricing ? `编辑定价 · ${pricing.modelId}` : `新建定价 · ${model?.modelId ?? ''}`"
+    :title="rate ? `编辑定价 · ${rate.modelId}` : `新建定价 · ${model?.modelId ?? ''}`"
     width="720px"
     :close-on-click-modal="false"
   >

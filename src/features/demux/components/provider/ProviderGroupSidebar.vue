@@ -16,7 +16,7 @@ import type { ProviderGroup } from '../../model/catalog.types';
 /** 选中值：`all` 表示全部渠道；否则为 queueGroup */
 export type ProviderGroupSelection = string;
 
-export interface VendorPricingCounts {
+export interface VendorRateCounts {
   configured: number;
   unconfigured: number;
 }
@@ -26,7 +26,7 @@ interface Props {
   modelValue: ProviderGroupSelection;
   loading?: boolean;
   /** 定价页：每渠道已配 / 未配别名数量 */
-  counts?: Record<string, VendorPricingCounts>;
+  counts?: Record<string, VendorRateCounts>;
   /** 定价页等场景展示「全部渠道」 */
   showAllOption?: boolean;
   allLabel?: string;

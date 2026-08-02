@@ -98,7 +98,7 @@ export const navViews: readonly NavView[] = [
       { type: 'leaf', index: '/demux/overview', title: '概览', icon: DataAnalysis },
       { type: 'leaf', index: '/demux/redemption', title: '激活码', icon: Tickets },
       { type: 'leaf', index: '/demux/providers', title: '供应商组', icon: Link },
-      { type: 'leaf', index: '/demux/pricing', title: '模型定价', icon: PriceTag },
+      { type: 'leaf', index: '/demux/rate', title: '模型定价', icon: PriceTag },
       { type: 'leaf', index: '/demux/logs', title: '调用日志', icon: DataLine },
       { type: 'leaf', index: '/demux/backends', title: '网关凭据', icon: Key },
       {

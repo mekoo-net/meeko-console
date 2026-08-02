@@ -185,10 +185,10 @@ export class DemuxCatalogMock implements DemuxCatalogPort {
         this.store.upstreamModels.splice(i, 1);
       }
     }
-    // Cascade: removing the group removes all of its outbound aliases too.
-    for (let i = this.store.modelRoutes.length - 1; i >= 0; i -= 1) {
-      if (this.store.modelRoutes[i]!.vendorKey === key) {
-        this.store.modelRoutes.splice(i, 1);
+    // Cascade: removing the group removes all of its outbound routeKeys too.
+    for (let i = this.store.vendorRoutes.length - 1; i >= 0; i -= 1) {
+      if (this.store.vendorRoutes[i]!.vendorKey === key) {
+        this.store.vendorRoutes.splice(i, 1);
       }
     }
     return ok(undefined);
@@ -203,11 +203,11 @@ export class DemuxCatalogMock implements DemuxCatalogPort {
     if (idx < 0) return fail({ code: 'not_found', message: '上游模型不存在' });
     const target = this.store.upstreamModels[idx]!;
     this.store.upstreamModels.splice(idx, 1);
-    // Cascade: removing the upstream model removes the aliases pointing at it.
-    for (let i = this.store.modelRoutes.length - 1; i >= 0; i -= 1) {
-      const r = this.store.modelRoutes[i]!;
+    // Cascade: removing the upstream model removes the routeKeys pointing at it.
+    for (let i = this.store.vendorRoutes.length - 1; i >= 0; i -= 1) {
+      const r = this.store.vendorRoutes[i]!;
       if (r.vendorKey === target.queueGroup && r.vendorModel === target.vendorModel) {
-        this.store.modelRoutes.splice(i, 1);
+        this.store.vendorRoutes.splice(i, 1);
       }
     }
     recomputeGroupModelCounts(this.store.providerGroups, this.store.upstreamModels);

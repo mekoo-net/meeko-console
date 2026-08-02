@@ -16,21 +16,21 @@ import { confirmDanger } from '@/shared/composables/useConfirm';
 
 import { ProviderGroupLabel, publishedLabel, publishedTone } from '@demux/common';
 import type {
-  CreateModelRouteInput,
-  ListModelRoutesFilter,
-  ModelRoute,
-  UpdateModelRouteInput,
-} from '../model/modelRoute.types';
+  CreateVendorRouteInput,
+  ListVendorRoutesFilter,
+  VendorRoute,
+  UpdateVendorRouteInput,
+} from '../model/vendorRoute.types';
 import type { ProviderGroup } from '../model/catalog.types';
-import { getDemuxCatalogPort, getDemuxModelRoutePort } from '../services';
-import ModelRouteEditDrawer from '../components/ModelRouteEditDrawer.vue';
+import { getDemuxCatalogPort, getDemuxVendorRoutePort } from '../services';
+import VendorRouteEditDrawer from '../components/VendorRouteEditDrawer.vue';
 
 const route = useRoute();
 const router = useRouter();
-const routePort = getDemuxModelRoutePort();
+const routePort = getDemuxVendorRoutePort();
 const catalogPort = getDemuxCatalogPort();
 
-const records = ref<ModelRoute[]>([]);
+const records = ref<VendorRoute[]>([]);
 const total = ref(0);
 const loading = ref(false);
 const providerGroups = ref<ProviderGroup[]>([]);
@@ -54,7 +54,7 @@ const filter = ref<PageFilter>(defaultFilter());
 
 const drawerOpen = ref(false);
 const drawerLoading = ref(false);
-const editingRoute = ref<ModelRoute | null>(null);
+const editingRoute = ref<VendorRoute | null>(null);
 
 const publishFilterOptions: { label: string; value: boolean | 'all' }[] = [
   { label: '全部', value: 'all' },
@@ -62,7 +62,7 @@ const publishFilterOptions: { label: string; value: boolean | 'all' }[] = [
   { label: '已下线', value: false },
 ];
 
-function buildPortFilter(): ListModelRoutesFilter {
+function buildPortFilter(): ListVendorRoutesFilter {
   return {
     keyword: filter.value.keyword.trim(),
     vendorKey: filter.value.vendorKey,
@@ -121,14 +121,14 @@ function openCreate(): void {
   drawerOpen.value = true;
 }
 
-function openEdit(row: ModelRoute): void {
+function openEdit(row: VendorRoute): void {
   editingRoute.value = row;
   drawerOpen.value = true;
 }
 
 async function onSubmit(payload: {
-  create?: CreateModelRouteInput;
-  update?: UpdateModelRouteInput;
+  create?: CreateVendorRouteInput;
+  update?: UpdateVendorRouteInput;
 }): Promise<void> {
   drawerLoading.value = true;
   try {
@@ -158,10 +158,10 @@ async function onSubmit(payload: {
   }
 }
 
-async function onDelete(row: ModelRoute): Promise<void> {
+async function onDelete(row: VendorRoute): Promise<void> {
   const okp = await confirmDanger({
     title: '删除别名绑定',
-    message: `确认删除别名「${row.alias}」？删除后该别名将不可用。`,
+    message: `确认删除别名「${row.routeKey}」？删除后该别名将不可用。`,
     confirmText: '确认删除',
     type: 'warning',
   });
@@ -175,8 +175,8 @@ async function onDelete(row: ModelRoute): Promise<void> {
   }
 }
 
-function jumpPricing(alias: string): void {
-  void router.push({ name: 'demux-pricing', query: { keyword: alias } });
+function jumpRate(routeKey: string): void {
+  void router.push({ name: 'demux-rate', query: { keyword: routeKey } });
 }
 
 const initialVendorKey = computed(() => {
@@ -251,25 +251,25 @@ onMounted(async () => {
       :empty-text="' '"
     >
       <el-table-column label="对外别名" min-width="180">
-        <template #default="{ row }: { row: ModelRoute }">
-          <span class="mono alias">{{ row.alias }}</span>
+        <template #default="{ row }: { row: VendorRoute }">
+          <span class="mono routeKey">{{ row.routeKey }}</span>
         </template>
       </el-table-column>
 
       <el-table-column label="供应商组" width="120">
-        <template #default="{ row }: { row: ModelRoute }">
+        <template #default="{ row }: { row: VendorRoute }">
           <el-tag size="small" effect="plain">{{ vendorLabel(row.vendorKey) }}</el-tag>
         </template>
       </el-table-column>
 
       <el-table-column label="上游注册名" min-width="200">
-        <template #default="{ row }: { row: ModelRoute }">
+        <template #default="{ row }: { row: VendorRoute }">
           <span class="mono upstream">{{ row.vendorModel }}</span>
         </template>
       </el-table-column>
 
       <el-table-column label="上线状态" width="100">
-        <template #default="{ row }: { row: ModelRoute }">
+        <template #default="{ row }: { row: VendorRoute }">
           <StatusTag
             :label="publishedLabel(row.isPublished)"
             :tone="publishedTone(row.isPublished)"
@@ -278,14 +278,14 @@ onMounted(async () => {
       </el-table-column>
 
       <el-table-column label="更新" width="150">
-        <template #default="{ row }: { row: ModelRoute }">
+        <template #default="{ row }: { row: VendorRoute }">
           <span class="cell-date">{{ formatDateTime(row.updatedAtUtc) }}</span>
         </template>
       </el-table-column>
 
       <el-table-column label="操作" width="220" align="right" fixed="right">
-        <template #default="{ row }: { row: ModelRoute }">
-          <el-button :icon="PriceTag" link type="primary" @click="jumpPricing(row.alias)">
+        <template #default="{ row }: { row: VendorRoute }">
+          <el-button :icon="PriceTag" link type="primary" @click="jumpRate(row.routeKey)">
             定价
           </el-button>
           <el-button :icon="Edit" link type="primary" @click="openEdit(row)">编辑</el-button>
@@ -312,7 +312,7 @@ onMounted(async () => {
       />
     </div>
 
-    <ModelRouteEditDrawer
+    <VendorRouteEditDrawer
       v-model="drawerOpen"
       :route="editingRoute"
       :loading="drawerLoading"
@@ -334,7 +334,7 @@ onMounted(async () => {
 .mono {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
-.alias {
+.routeKey {
   font-weight: 600;
   color: var(--el-color-primary);
 }

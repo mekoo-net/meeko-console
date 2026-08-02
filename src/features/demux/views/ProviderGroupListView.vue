@@ -4,7 +4,7 @@
  *
  * 入库 / 模型添加由「接入供应商」页统一负责，此处只做：
  *  - 查看 / 搜索 / 分组浏览
- *  - 编辑某个上游模型的对外别名（ModelRoute）
+ *  - 编辑某个上游模型的对外别名（VendorRoute）
  *  - 删除单模型 / 删除整组（被引用时拒绝）
  */
 import { computed, onMounted, ref, watch } from 'vue';
@@ -20,8 +20,8 @@ import { clientPaginate, usePagination } from '@/shared/composables/usePaginatio
 
 import { ProviderGroupLabel } from '@demux/common';
 import type { ProviderGroup, ProviderUpstreamModel } from '../model/catalog.types';
-import type { ModelRouteStats } from '../model/modelRoute.types';
-import { getDemuxCatalogPort, getDemuxModelRoutePort } from '../services';
+import type { VendorRouteStats } from '../model/vendorRoute.types';
+import { getDemuxCatalogPort, getDemuxVendorRoutePort } from '../services';
 import ProviderWorkspaceLayout from '../components/provider/ProviderWorkspaceLayout.vue';
 import ProviderGroupSidebar from '../components/provider/ProviderGroupSidebar.vue';
 import ProviderDetailPanel from '../components/provider/ProviderDetailPanel.vue';
@@ -29,11 +29,11 @@ import ProviderUpstreamModelEditDrawer from '../components/ProviderUpstreamModel
 import ProviderGroupEditDrawer from '../components/provider/ProviderGroupEditDrawer.vue';
 import CatalogImportDialog from '../components/CatalogImportDialog.vue';
 const catalogPort = getDemuxCatalogPort();
-const routePort = getDemuxModelRoutePort();
+const routePort = getDemuxVendorRoutePort();
 
 const groups = ref<ProviderGroup[]>([]);
 const modelsByGroup = ref<Record<string, ProviderUpstreamModel[]>>({});
-const routeStatsByGroup = ref<Record<string, ModelRouteStats>>({});
+const routeStatsByGroup = ref<Record<string, VendorRouteStats>>({});
 
 const loading = ref(false);
 const detailLoading = ref(false);
@@ -95,11 +95,11 @@ function groupLabel(queueGroup: string, vendorSlug?: string | null): string {
   return ProviderGroupLabel[queueGroup] ?? queueGroup;
 }
 
-function aliasCount(queueGroup: string, vendorModel: string): number {
+function routeKeyCount(queueGroup: string, vendorModel: string): number {
   return routeStatsByGroup.value[queueGroup]?.byVendorModel[vendorModel] ?? 0;
 }
 
-function totalAliasCount(queueGroup: string): number {
+function totalRouteKeyCount(queueGroup: string): number {
   return routeStatsByGroup.value[queueGroup]?.total ?? 0;
 }
 
@@ -172,14 +172,14 @@ function openEditGroup(group: ProviderGroup): void {
 async function onRemoveModel(model: ProviderUpstreamModel): Promise<void> {
   const group = selectedGroup.value;
   if (!group) return;
-  const aliasN = aliasCount(group.queueGroup, model.vendorModel);
-  const aliasNote =
-    aliasN > 0
-      ? `该模型下的 ${aliasN} 个对外别名将一并删除。`
+  const routeKeyN = routeKeyCount(group.queueGroup, model.vendorModel);
+  const routeKeyNote =
+    routeKeyN > 0
+      ? `该模型下的 ${routeKeyN} 个对外别名将一并删除。`
       : '';
   const okp = await confirmDanger({
     title: '删除上游模型',
-    message: `确认从组「${groupLabel(group.queueGroup, group.vendorSlug)}」移除模型 ${model.vendorModel}？${aliasNote}删除后如需恢复，需通过「接入供应商」重新导入。`,
+    message: `确认从组「${groupLabel(group.queueGroup, group.vendorSlug)}」移除模型 ${model.vendorModel}？${routeKeyNote}删除后如需恢复，需通过「接入供应商」重新导入。`,
     confirmText: '确认删除',
     type: 'warning',
   });
@@ -197,11 +197,11 @@ async function onRemoveModel(model: ProviderUpstreamModel): Promise<void> {
 async function onRemoveGroup(): Promise<void> {
   const group = selectedGroup.value;
   if (!group) return;
-  const aliasN = totalAliasCount(group.queueGroup);
+  const routeKeyN = totalRouteKeyCount(group.queueGroup);
   const modelN = group.upstreamModelCount;
   const parts: string[] = [];
   if (modelN > 0) parts.push(`${modelN} 个上游模型`);
-  if (aliasN > 0) parts.push(`${aliasN} 个对外别名`);
+  if (routeKeyN > 0) parts.push(`${routeKeyN} 个对外别名`);
   const cascadeNote = parts.length > 0 ? `将一并删除其下 ${parts.join(' 和 ')}。` : '';
   const okp = await confirmDanger({
     title: '删除供应商组',
@@ -279,7 +279,7 @@ onMounted(async () => {
           <p class="provider-detail__sub">{{ selectedGroup.queueGroup }}</p>
           <div class="provider-detail__stats">
             <span>{{ selectedGroup.upstreamModelCount }} 上游模型</span>
-            <span>{{ totalAliasCount(selectedGroup.queueGroup) }} 个别名</span>
+            <span>{{ totalRouteKeyCount(selectedGroup.queueGroup) }} 个别名</span>
             <span>入库于 {{ fromNow(selectedGroup.importedAtUtc) }}</span>
           </div>
         </div>
@@ -324,7 +324,7 @@ onMounted(async () => {
           </el-table-column>
           <el-table-column label="别名数" width="100" align="center">
             <template #default="{ row: m }: { row: ProviderUpstreamModel }">
-              <span class="num">{{ aliasCount(selectedGroup.queueGroup, m.vendorModel) }}</span>
+              <span class="num">{{ routeKeyCount(selectedGroup.queueGroup, m.vendorModel) }}</span>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="160" align="right" fixed="right">

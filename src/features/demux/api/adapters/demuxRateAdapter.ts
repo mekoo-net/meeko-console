@@ -1,32 +1,32 @@
 import {
-  pricingSchema,
-  upsertPricingInputSchema,
-  type ListPricingFilter,
+  rateSchema,
+  upsertRateInputSchema,
+  type ListRateFilter,
   type ListVendorModelGroupsFilter,
-  type Pricing,
-  type UnconfiguredAliasPage,
-  type UpsertPricingInput,
+  type Rate,
+  type UnconfiguredRoutePage,
+  type UpsertRateInput,
   type VendorModelGroup,
   type VendorModelGroupedPage,
-  type VendorPricingStatsMap,
+  type VendorRateStatsMap,
 } from '@demux/common';
 import type {
-  DemuxPricingPort,
-  ListPricingPage,
-} from '@/features/demux/services/ports/demuxPricingPort';
+  DemuxRatePort,
+  ListRatePage,
+} from '@/features/demux/services/ports/demuxRatePort';
 import { requestDemux, type ItemsEnvelope } from '@/features/demux/api/http';
 import { demuxPlatformPaths } from '@/features/demux/api/routes';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 
-const BASE = demuxPlatformPaths.adminPricing;
+const BASE = demuxPlatformPaths.adminRate;
 const VENDOR_MODEL_BASE = demuxPlatformPaths.adminVendorModel;
 
-/** 新表 model_pricings 响应 */
-interface PricingWire {
+/** 新表 vendor_rates 响应 */
+interface RateWire {
   id: string | number;
   modelId: string;
   billingType: string;
-  pricing: unknown;
+  rate: unknown;
   multiplier: number;
   currency: string;
   tierMultipliers?: Record<string, number>;
@@ -34,17 +34,17 @@ interface PricingWire {
   updatedAtUtc: string;
 }
 
-function parsePricing(value: unknown): AppResult<Pricing> {
-  const r = pricingSchema.safeParse(value);
+function parseRate(value: unknown): AppResult<Rate> {
+  const r = rateSchema.safeParse(value);
   return r.success ? ok(r.data) : fail({ code: 'validation', message: '定价格式错误' });
 }
 
-function wireToPricing(row: PricingWire): AppResult<Pricing> {
-  return parsePricing({
+function wireToRate(row: RateWire): AppResult<Rate> {
+  return parseRate({
     id: row.id,
     modelId: row.modelId,
     billingType: row.billingType,
-    pricing: row.pricing,
+    rate: row.rate,
     multiplier: row.multiplier,
     currency: row.currency,
     tierMultipliers: row.tierMultipliers ?? {},
@@ -53,18 +53,18 @@ function wireToPricing(row: PricingWire): AppResult<Pricing> {
   });
 }
 
-function normalizeListRow(row: unknown): AppResult<Pricing> | null {
+function normalizeListRow(row: unknown): AppResult<Rate> | null {
   if (!row || typeof row !== 'object') return null;
   const r = row as Record<string, unknown>;
   if (typeof r.modelId === 'string' && r.modelId.trim()) {
-    return wireToPricing(row as PricingWire);
+    return wireToRate(row as RateWire);
   }
   return null;
 }
 
 type VendorModelGroupedWire = Record<
   string,
-  Record<string, Array<{ alias: string; pricing: unknown }>>
+  Record<string, Array<{ routeKey: string; rate: unknown }>>
 >;
 
 function flattenVendorModelGroups(items: VendorModelGroupedWire): AppResult<VendorModelGroup[]> {
@@ -76,14 +76,14 @@ function flattenVendorModelGroups(items: VendorModelGroupedWire): AppResult<Vend
     const vendorModels = Object.keys(models).sort();
     for (const vendorModel of vendorModels) {
       const entries = models[vendorModel] ?? [];
-      const aliases: VendorModelGroup['aliases'] = [];
+      const routeKeys: VendorModelGroup['routeKeys'] = [];
       for (const entry of entries) {
-        const parsed = wireToPricing(entry.pricing as PricingWire);
+        const parsed = wireToRate(entry.rate as RateWire);
         if (!parsed.success) return parsed;
-        aliases.push({ alias: entry.alias, pricing: parsed.data });
+        routeKeys.push({ routeKey: entry.routeKey, rate: parsed.data });
       }
-      if (aliases.length > 0) {
-        groups.push({ vendorKey, vendorModel, aliases });
+      if (routeKeys.length > 0) {
+        groups.push({ vendorKey, vendorModel, routeKeys });
       }
     }
   }
@@ -91,12 +91,12 @@ function flattenVendorModelGroups(items: VendorModelGroupedWire): AppResult<Vend
 }
 
 
-export class DemuxPricingHttpAdapter implements DemuxPricingPort {
+export class DemuxRateHttpAdapter implements DemuxRatePort {
   async list(input: {
     page: number;
     pageSize: number;
-    filter: ListPricingFilter;
-  }): Promise<AppResult<ListPricingPage>> {
+    filter: ListRateFilter;
+  }): Promise<AppResult<ListRatePage>> {
     const { page, pageSize, filter } = input;
     const result = await requestDemux<ItemsEnvelope<unknown>>(BASE, {
       query: {
@@ -107,7 +107,7 @@ export class DemuxPricingHttpAdapter implements DemuxPricingPort {
     });
     if (!result.success) return result;
 
-    const parsed: Pricing[] = [];
+    const parsed: Rate[] = [];
     for (const row of result.data.items ?? []) {
       const p = normalizeListRow(row);
       if (!p) continue;
@@ -146,7 +146,7 @@ export class DemuxPricingHttpAdapter implements DemuxPricingPort {
     });
   }
 
-  async get(modelId: string): Promise<AppResult<Pricing>> {
+  async get(modelId: string): Promise<AppResult<Rate>> {
     const result = await requestDemux<unknown>(`${BASE}/get`, {
       query: { modelId },
     });
@@ -158,8 +158,8 @@ export class DemuxPricingHttpAdapter implements DemuxPricingPort {
     return normalized;
   }
 
-  async upsert(input: UpsertPricingInput): Promise<AppResult<Pricing>> {
-    const v = upsertPricingInputSchema.safeParse(input);
+  async upsert(input: UpsertRateInput): Promise<AppResult<Rate>> {
+    const v = upsertRateInputSchema.safeParse(input);
     if (!v.success) {
       return fail({
         code: 'validation',
@@ -185,12 +185,12 @@ export class DemuxPricingHttpAdapter implements DemuxPricingPort {
     });
   }
 
-  async vendorPricingStats(): Promise<AppResult<VendorPricingStatsMap>> {
+  async vendorRateStats(): Promise<AppResult<VendorRateStatsMap>> {
     const result = await requestDemux<Record<string, { configured?: number; unconfigured?: number }>>(
       `${VENDOR_MODEL_BASE}/stats`,
     );
     if (!result.success) return result;
-    const map: VendorPricingStatsMap = {};
+    const map: VendorRateStatsMap = {};
     for (const [key, entry] of Object.entries(result.data ?? {})) {
       map[key] = {
         configured: entry.configured ?? 0,
@@ -200,13 +200,13 @@ export class DemuxPricingHttpAdapter implements DemuxPricingPort {
     return ok(map);
   }
 
-  async listUnconfiguredAliases(input: {
+  async listUnconfiguredRoutes(input: {
     page: number;
     pageSize: number;
     vendorKey: string;
-  }): Promise<AppResult<UnconfiguredAliasPage>> {
+  }): Promise<AppResult<UnconfiguredRoutePage>> {
     const result = await requestDemux<ItemsEnvelope<{
-      alias?: string;
+      routeKey?: string;
       vendorKey?: string;
       vendorModel?: string;
     }>>(`${VENDOR_MODEL_BASE}/unconfigured`, {
@@ -219,7 +219,7 @@ export class DemuxPricingHttpAdapter implements DemuxPricingPort {
     if (!result.success) return result;
     return ok({
       items: (result.data.items ?? []).map((row) => ({
-        alias: row.alias ?? '',
+        routeKey: row.routeKey ?? '',
         vendorKey: row.vendorKey ?? '',
         vendorModel: row.vendorModel ?? '',
       })),

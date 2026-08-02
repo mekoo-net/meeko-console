@@ -29,7 +29,7 @@ function applyFilter(rows: LogEntry[], f: ListLogsFilter): LogEntry[] {
     if (f.modelName && !r.modelName.toLowerCase().includes(f.modelName.toLowerCase())) return false;
     if (f.vendorKey && vendorOf(r).toLowerCase() !== f.vendorKey.toLowerCase()) return false;
     if (f.providerId != null && r.providerId !== f.providerId) return false;
-    if (f.apiType && r.apiType !== f.apiType) return false;
+    if (f.protocol && r.protocol !== f.protocol) return false;
     if (f.convId && r.convId !== f.convId) return false;
     if (f.logId && r.id !== f.logId.trim()) return false;
     if (f.traceId) {

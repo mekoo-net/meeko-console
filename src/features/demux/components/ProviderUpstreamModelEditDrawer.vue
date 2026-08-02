@@ -16,12 +16,12 @@ import { confirmDanger } from '@/shared/composables/useConfirm';
 import { ProviderGroupLabel, publishedLabel, publishedTone } from '@demux/common';
 import type { ProviderGroup, ProviderUpstreamModel } from '../model/catalog.types';
 import type {
-  CreateModelRouteInput,
-  ModelRoute,
-  UpdateModelRouteInput,
-} from '../model/modelRoute.types';
-import { getDemuxModelRoutePort } from '../services';
-import ModelRouteEditDrawer from './ModelRouteEditDrawer.vue';
+  CreateVendorRouteInput,
+  VendorRoute,
+  UpdateVendorRouteInput,
+} from '../model/vendorRoute.types';
+import { getDemuxVendorRoutePort } from '../services';
+import VendorRouteEditDrawer from './VendorRouteEditDrawer.vue';
 
 interface Props {
   modelValue: boolean;
@@ -37,19 +37,19 @@ const emit = defineEmits<{
   (e: 'refresh'): void;
 }>();
 
-const routePort = getDemuxModelRoutePort();
+const routePort = getDemuxVendorRoutePort();
 
 const visible = computed({
   get: () => props.modelValue,
   set: (v) => emit('update:modelValue', v),
 });
 
-const routes = ref<ModelRoute[]>([]);
+const routes = ref<VendorRoute[]>([]);
 const routesLoading = ref(false);
 
-const aliasDrawerOpen = ref(false);
-const aliasDrawerLoading = ref(false);
-const editingRoute = ref<ModelRoute | null>(null);
+const routeKeyDrawerOpen = ref(false);
+const routeKeyDrawerLoading = ref(false);
+const editingRoute = ref<VendorRoute | null>(null);
 
 const groupTitle = computed(() => {
   if (!props.group) return '';
@@ -82,27 +82,27 @@ async function loadRoutes(): Promise<void> {
   }
 }
 
-function openCreateAlias(): void {
+function openCreateRouteKey(): void {
   editingRoute.value = null;
-  aliasDrawerOpen.value = true;
+  routeKeyDrawerOpen.value = true;
 }
 
-function openEditAlias(route: ModelRoute): void {
+function openEditRouteKey(route: VendorRoute): void {
   editingRoute.value = route;
-  aliasDrawerOpen.value = true;
+  routeKeyDrawerOpen.value = true;
 }
 
-async function onAliasSubmit(payload: {
-  create?: CreateModelRouteInput;
-  update?: UpdateModelRouteInput;
+async function onRouteKeySubmit(payload: {
+  create?: CreateVendorRouteInput;
+  update?: UpdateVendorRouteInput;
 }): Promise<void> {
-  aliasDrawerLoading.value = true;
+  routeKeyDrawerLoading.value = true;
   try {
     if (payload.create) {
       const r = await routePort.create(payload.create);
       if (r.success) {
         ElMessage.success('别名已创建');
-        aliasDrawerOpen.value = false;
+        routeKeyDrawerOpen.value = false;
         await loadRoutes();
         emit('refresh');
       } else {
@@ -114,7 +114,7 @@ async function onAliasSubmit(payload: {
       const r = await routePort.update(editingRoute.value.uid, payload.update);
       if (r.success) {
         ElMessage.success('已保存');
-        aliasDrawerOpen.value = false;
+        routeKeyDrawerOpen.value = false;
         await loadRoutes();
         emit('refresh');
       } else {
@@ -122,14 +122,14 @@ async function onAliasSubmit(payload: {
       }
     }
   } finally {
-    aliasDrawerLoading.value = false;
+    routeKeyDrawerLoading.value = false;
   }
 }
 
-async function onDeleteAlias(route: ModelRoute): Promise<void> {
+async function onDeleteRouteKey(route: VendorRoute): Promise<void> {
   const okp = await confirmDanger({
     title: '删除别名',
-    message: `确认删除别名「${route.alias}」？删除后该别名将不可用。`,
+    message: `确认删除别名「${route.routeKey}」？删除后该别名将不可用。`,
     confirmText: '确认删除',
     type: 'warning',
   });
@@ -176,7 +176,7 @@ watch(
 
       <div class="section-head">
         <span class="section-head__title">对外别名</span>
-        <el-button type="primary" size="small" :icon="Plus" @click="openCreateAlias">
+        <el-button type="primary" size="small" :icon="Plus" @click="openCreateRouteKey">
           创建别名
         </el-button>
       </div>
@@ -186,16 +186,16 @@ watch(
         :data="routes"
         row-key="uid"
         size="small"
-        class="alias-table"
+        class="routeKey-table"
         :empty-text="' '"
       >
         <el-table-column label="别名" min-width="160">
-          <template #default="{ row }: { row: ModelRoute }">
-            <span class="mono alias-name">{{ row.alias }}</span>
+          <template #default="{ row }: { row: VendorRoute }">
+            <span class="mono routeKey-name">{{ row.routeKey }}</span>
           </template>
         </el-table-column>
         <el-table-column label="上线状态" width="100">
-          <template #default="{ row }: { row: ModelRoute }">
+          <template #default="{ row }: { row: VendorRoute }">
             <StatusTag
               :label="publishedLabel(row.isPublished)"
               :tone="publishedTone(row.isPublished)"
@@ -203,34 +203,34 @@ watch(
           </template>
         </el-table-column>
         <el-table-column label="更新" width="140">
-          <template #default="{ row }: { row: ModelRoute }">
+          <template #default="{ row }: { row: VendorRoute }">
             <span class="cell-date">{{ formatDateTime(row.updatedAtUtc) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="120" align="right" fixed="right">
-          <template #default="{ row }: { row: ModelRoute }">
-            <el-button :icon="Edit" link type="primary" @click="openEditAlias(row)">编辑</el-button>
-            <el-button :icon="Delete" link type="danger" @click="onDeleteAlias(row)">删除</el-button>
+          <template #default="{ row }: { row: VendorRoute }">
+            <el-button :icon="Edit" link type="primary" @click="openEditRouteKey(row)">编辑</el-button>
+            <el-button :icon="Delete" link type="danger" @click="onDeleteRouteKey(row)">删除</el-button>
           </template>
         </el-table-column>
         <template #empty>
           <EmptyState
             title="暂无对外别名"
             description="一个上游模型可创建多个对外别名（别名需全局唯一）；用户请求 model 字段需映射到此外部别名。点击上方「创建别名」添加。"
-            class="alias-empty"
+            class="routeKey-empty"
           />
         </template>
       </el-table>
     </template>
 
-    <ModelRouteEditDrawer
-      v-model="aliasDrawerOpen"
+    <VendorRouteEditDrawer
+      v-model="routeKeyDrawerOpen"
       :route="editingRoute"
-      :loading="aliasDrawerLoading"
+      :loading="routeKeyDrawerLoading"
       :provider-groups="providerGroups"
       :fixed-vendor-key="group?.queueGroup"
       :fixed-upstream-model-id="model?.vendorModel"
-      @submit="onAliasSubmit"
+      @submit="onRouteKeySubmit"
     />
   </el-drawer>
 </template>
@@ -257,10 +257,10 @@ watch(
   font-size: 14px;
   font-weight: 600;
 }
-.alias-table {
+.routeKey-table {
   width: 100%;
 }
-.alias-name {
+.routeKey-name {
   font-weight: 600;
   color: var(--el-color-primary);
 }
@@ -268,7 +268,7 @@ watch(
   font-size: 12px;
   color: var(--el-text-color-secondary);
 }
-.alias-empty {
+.routeKey-empty {
   padding: 16px 0;
 }
 </style>
