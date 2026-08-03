@@ -3,6 +3,7 @@ import { createSnowflakeIdSeq, createUidSeq, type Uid } from '@/shared/lib/id';
 import type {
   ApiType,
   BillReverseCode,
+  LogProtocol,
   ModelCapability,
   ModelFamily,
 } from '@demux/common';
@@ -817,10 +818,12 @@ function seedLogs(providers: Provider[]): LogEntry[] {
       },
       token,
       modelName: pair.displayName,
-      providerId: p.id,
+      vendorKey: apiTypeToVendorKey(p.apiType),
+      vendorPlug: apiTypeToVendorPlug(p.apiType),
+      vendorModel: pair.modelName,
       status: success ? 'success' : 'failure',
       content: {
-        protocol: p.apiType,
+        protocol: apiTypeToLogProtocol(p.apiType),
         statusCode: httpStatus,
         streamed,
         convId,
@@ -881,6 +884,33 @@ function seedLogs(providers: Provider[]): LogEntry[] {
     });
   }
   return out.sort((a, b) => b.id.localeCompare(a.id));
+}
+
+/**
+ * Provider 的 apiType（协议族）→ 该次调用实际走的协议端点。
+ * 后端真实取值来自 `ApiProtocol` 常量，与 Provider 的 apiType 不是同一套枚举。
+ */
+function apiTypeToLogProtocol(apiType: ApiType): LogProtocol {
+  switch (apiType) {
+    case 'anthropic':
+      return 'anthropic_messages';
+    case 'gemini':
+      return 'gemini_generate_content';
+    default:
+      return 'openai_chat';
+  }
+}
+
+/** vendorKey（内部队列组）→ 对外公开 slug，对齐后端 `Vendor.VendorSlug`。 */
+function apiTypeToVendorPlug(apiType: ApiType): string {
+  const m: Record<string, string> = {
+    claude: 'nai',
+    gemini: 'pa',
+    openai: 'rong',
+    deepseek: 'zhi',
+    kiro: 'claude',
+  };
+  return m[apiTypeToVendorKey(apiType)] ?? apiTypeToVendorKey(apiType);
 }
 
 /** apiType → 网关 vendor key（Mock 简化映射） */

@@ -71,9 +71,10 @@ function mapOverviewWire(raw: unknown): TavernUsageStats {
     topProviders: Array.isArray(topVendorsRaw)
       ? topVendorsRaw.map((row) => {
           const v = row as Record<string, unknown>;
+          const vendorKey = String(v.vendorKey ?? v.VendorKey ?? '');
           return {
-            providerId: num(v.vendorIndex ?? v.VendorIndex),
-            providerName: String(v.vendorKey ?? v.VendorKey ?? ''),
+            vendorKey,
+            providerName: vendorKey,
             calls: num(v.calls ?? v.Calls),
             errors: num(v.errors ?? v.Errors),
             avgTokenLatency: 0,

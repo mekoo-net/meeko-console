@@ -91,8 +91,12 @@ interface ModelRankRow {
   errorCount?: number;
 }
 
+/**
+ * 后端 `AiProviderStatDto`。曾经的 `providerId` 已在渠道模型重构时移除，
+ * 分组键改成了 `vendorKey`；这里跟着改，否则排行榜每行都读到 undefined。
+ */
 interface ProviderRankRow {
-  providerId?: number;
+  vendorKey?: string;
   providerName?: string;
   requestCount?: number;
   errorCount?: number;
@@ -158,13 +162,17 @@ function mapTopModels(rows: ModelRankRow[]): LogStatsTopModel[] {
 }
 
 function mapTopProviders(rows: ProviderRankRow[]): LogStatsTopProvider[] {
-  return rows.slice(0, TOP_RANK_LIMIT).map((r) => ({
-    providerId: num(r.providerId),
-    providerName: typeof r.providerName === 'string' ? r.providerName : undefined,
-    calls: num(r.requestCount),
-    errors: num(r.errorCount),
-    avgTokenLatency: num(r.avgTokenLatencyMs),
-  }));
+  return rows.slice(0, TOP_RANK_LIMIT).map((r) => {
+    const vendorKey = typeof r.vendorKey === 'string' ? r.vendorKey : '';
+    const providerName = r.providerName?.trim();
+    return {
+      vendorKey,
+      providerName: providerName || vendorKey || undefined,
+      calls: num(r.requestCount),
+      errors: num(r.errorCount),
+      avgTokenLatency: num(r.avgTokenLatencyMs),
+    };
+  });
 }
 
 /** 错误码分布：后端已按次数降序返回；超出 Top5 的合并为 `other`（与状态环形图口径一致）。 */
@@ -250,7 +258,6 @@ export class DemuxLogsHttpAdapter implements DemuxLogsPort {
         pageSize,
         accountUid: filter.accountUid || undefined,
         iamUserUid: filter.iamUid || undefined,
-        providerId: filter.providerId,
         protocol:   filter.protocol   || undefined,
         convId:     filter.convId     || undefined,
         modelName:  filter.modelName  || undefined,

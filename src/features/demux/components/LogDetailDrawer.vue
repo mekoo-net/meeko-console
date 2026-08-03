@@ -19,11 +19,11 @@ import StatusTag from '@/shared/ui/StatusTag.vue';
 
 import {
   AiUsageStatusLabel,
-  ApiTypeLabel,
-  BillingTypeLabel,
-  BillReverseCodeLabel,
-  LogErrorCodeLabel,
+  billingTypeText,
+  billReverseCodeText,
+  logErrorCodeText,
   logIsSuccess,
+  logProtocolText,
 } from '@demux/common';
 import type { LogEntry } from '@demux/common';
 
@@ -44,20 +44,36 @@ const visible = computed({
   set: (v) => emit('update:modelValue', v),
 });
 
-function errorCodeText(code: string): string {
-  return (LogErrorCodeLabel as Record<string, string>)[code] ?? code;
-}
-
 function vendorFromModelName(modelName: string): string {
   const i = modelName.indexOf('/');
   return i > 0 ? modelName.slice(0, i) : '—';
 }
 
+/**
+ * 渠道展示优先级：对外 slug（`vendorPlug`）→ 内部渠道键（`vendorKey`）→ modelName 前缀。
+ * slug 才是运营对外沟通用的名字，`vendorKey` 是队列组代号，只在 slug 没配时兜底。
+ */
 const vendorText = computed(() => {
   const l = props.log;
   if (!l) return '—';
-  // 优先用定价快照钉死的真实渠道；缺失时退化为 modelName 前缀。
-  return l.vendorKey?.trim() || vendorFromModelName(l.modelName);
+  return l.vendorPlug?.trim() || l.vendorKey?.trim() || vendorFromModelName(l.modelName);
+});
+
+/** slug 与内部键不同名时，把内部键作为副标题带出来，方便对着 queue_group 排障。 */
+const vendorKeySub = computed(() => {
+  const l = props.log;
+  const key = l?.vendorKey?.trim();
+  if (!key) return '';
+  return key === vendorText.value ? '' : key;
+});
+
+const protocolText = computed(() => logProtocolText(props.log?.content.protocol));
+
+/** sk- 调用但令牌名没补全（令牌已删）时退化显示 `#id`，不能跟 PG 直发混为一谈。 */
+const sourceText = computed(() => {
+  const token = props.log?.token;
+  if (!token) return 'PG 直发';
+  return token.name?.trim() || `#${token.id}`;
 });
 
 const upstreamModelText = computed(() => props.log?.vendorModel?.trim() || '—');
@@ -73,11 +89,6 @@ const clientIpText = computed(() => props.log?.content.clientIp?.trim() || '—'
 const latencyHint = computed(() =>
   props.log?.content.streamed ? '首字延迟（TTFT）' : '端到端总耗时',
 );
-
-const sourceText = computed(() => {
-  const name = props.log?.token?.name?.trim();
-  return name || 'PG';
-});
 
 /** 是否允许触发驳回：有账单 & 当前状态是 completed */
 const canReverse = computed(() => {
@@ -102,7 +113,8 @@ interface DimRow {
 
 const inputDims = computed<DimRow[]>(() => {
   const l = props.log;
-  if (!l || l.billingType !== 'per_token') return [];
+  // `unknown` 与 `per_token` 同形（见 logEntrySchema 的兜底分支），共用这套维度展开。
+  if (!l || (l.billingType !== 'per_token' && l.billingType !== 'unknown')) return [];
   const u = l.usage.input;
   const c = l.cost.input;
   return [
@@ -125,7 +137,7 @@ const inputDims = computed<DimRow[]>(() => {
 
 const outputDims = computed<DimRow[]>(() => {
   const l = props.log;
-  if (!l || l.billingType !== 'per_token') return [];
+  if (!l || (l.billingType !== 'per_token' && l.billingType !== 'unknown')) return [];
   const u = l.usage.output;
   const c = l.cost.output;
   return [
@@ -153,12 +165,15 @@ const outputDims = computed<DimRow[]>(() => {
         <el-descriptions-item label="日志编号" :span="2">
           <span class="mono log-id-muted">{{ log.id }}</span>
         </el-descriptions-item>
+        <el-descriptions-item label="TraceId" :span="2">
+          <span class="mono log-id-muted">{{ log.traceId || '—' }}</span>
+        </el-descriptions-item>
         <el-descriptions-item label="状态">
           <StatusTag v-if="log.status === 'pending'" label="调用中" tone="warning" />
           <StatusTag v-else-if="log.status === 'success'" label="成功" tone="success" />
           <StatusTag
             v-else
-            :label="log.content.error ? errorCodeText(log.content.error.code) : AiUsageStatusLabel[log.status]"
+            :label="log.content.error ? logErrorCodeText(log.content.error.code) : AiUsageStatusLabel[log.status]"
             tone="danger"
           />
         </el-descriptions-item>
@@ -177,7 +192,12 @@ const outputDims = computed<DimRow[]>(() => {
             <span v-if="log.vendorModel" class="model-cell__upstream mono">↳ 上游 {{ upstreamModelText }}</span>
           </div>
         </el-descriptions-item>
-        <el-descriptions-item label="渠道">{{ vendorText }}</el-descriptions-item>
+        <el-descriptions-item label="渠道">
+          <div class="model-cell">
+            <span>{{ vendorText }}</span>
+            <span v-if="vendorKeySub" class="model-cell__upstream mono">{{ vendorKeySub }}</span>
+          </div>
+        </el-descriptions-item>
         <el-descriptions-item label="账户">
           <div class="account-cell">
             <span v-if="log.account.displayName" class="account-cell__name">{{ log.account.displayName }}</span>
@@ -186,7 +206,7 @@ const outputDims = computed<DimRow[]>(() => {
           </div>
         </el-descriptions-item>
         <el-descriptions-item label="计费">
-          {{ BillingTypeLabel[log.billingType] }}
+          {{ billingTypeText(log.billingType) }}
         </el-descriptions-item>
         <el-descriptions-item label="扣费">
           <span class="cost-total">{{ formatMoney(log.cost.total, { fractionDigits: BILLING_FRACTION_DIGITS }) }}</span>
@@ -203,6 +223,10 @@ const outputDims = computed<DimRow[]>(() => {
         <span class="label">调用来源</span>
         <span>{{ sourceText }}</span>
       </div>
+      <div v-if="log.token" class="log-detail__row">
+        <span class="label">令牌 ID</span>
+        <span class="mono">{{ log.token.id }}</span>
+      </div>
       <div class="log-detail__row">
         <span class="label">IAM 用户</span>
         <span class="mono">{{ log.account.iamUid ?? '—' }}</span>
@@ -214,7 +238,7 @@ const outputDims = computed<DimRow[]>(() => {
       <h4 class="section-title">请求上下文</h4>
       <div class="log-detail__row">
         <span class="label">协议</span>
-        <span>{{ log.content.protocol ? ApiTypeLabel[log.content.protocol] : '—' }}</span>
+        <span>{{ protocolText }}</span>
       </div>
       <div class="log-detail__row">
         <span class="label">流式</span>
@@ -236,7 +260,10 @@ const outputDims = computed<DimRow[]>(() => {
       <template v-if="log.content.error">
         <div class="log-detail__row">
           <span class="label">错误码</span>
-          <el-tag size="small" type="danger" effect="plain">{{ log.content.error.code }}</el-tag>
+          <el-tag size="small" type="danger" effect="plain">
+            {{ logErrorCodeText(log.content.error.code) }}
+          </el-tag>
+          <span class="error-code-raw mono">{{ log.content.error.code }}</span>
         </div>
         <div v-if="log.content.error.message" class="log-detail__row log-detail__row--col">
           <span class="label">错误摘要</span>
@@ -248,8 +275,15 @@ const outputDims = computed<DimRow[]>(() => {
 
       <h4 class="section-title">计费明细</h4>
 
-      <!-- ============ per_token ============ -->
-      <template v-if="log.billingType === 'per_token'">
+      <!-- ============ per_token / unknown ============ -->
+      <!--
+        unknown = 定价快照缺失（费率行被删 / 早于当前定价体系）。后端此时仍按 token 形
+        下发 usage 与 cost，只是各维度单价全 0，所以复用同一块渲染，另加一行说明。
+      -->
+      <div v-if="log.billingType === 'unknown'" class="snapshot-hint snapshot-hint--warn">
+        该调用未关联定价快照，单价明细不可用；总扣费取日志落库金额。
+      </div>
+      <template v-if="log.billingType === 'per_token' || log.billingType === 'unknown'">
         <div class="log-detail__row">
           <span class="label">总 tokens</span>
           <span class="num">{{ log.usage.totalTokens.toLocaleString() }}</span>
@@ -449,7 +483,7 @@ const outputDims = computed<DimRow[]>(() => {
         <template v-if="log.bill.status === 'reversed'">
           <div class="log-detail__row">
             <span class="label">驳回原因</span>
-            <span>{{ log.bill.reversal.code ? BillReverseCodeLabel[log.bill.reversal.code] : '—' }}</span>
+            <span>{{ billReverseCodeText(log.bill.reversal.code) }}</span>
           </div>
           <div class="log-detail__row">
             <span class="label">驳回时间</span>
@@ -562,6 +596,13 @@ const outputDims = computed<DimRow[]>(() => {
   font-size: 11.5px;
   color: var(--el-text-color-secondary);
   margin: 4px 0 2px;
+}
+.snapshot-hint--warn {
+  color: var(--el-color-warning);
+}
+.error-code-raw {
+  font-size: 11.5px;
+  color: var(--el-text-color-placeholder);
 }
 .snapshot-zero {
   color: var(--el-text-color-placeholder);

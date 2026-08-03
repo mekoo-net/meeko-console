@@ -25,9 +25,10 @@ import { BILLING_FRACTION_DIGITS, formatMoney } from '@/shared/lib/money';
 
 import {
   AiUsageStatusLabel,
-  BillingTypeLabel,
+  billingTypeText,
   BillReverseCodeLabel,
-  LogErrorCodeLabel,
+  logErrorCodeText,
+  logProtocolText,
 } from '@demux/common';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 import type {
@@ -252,6 +253,8 @@ async function submitReverse(payload: ReverseLogInput): Promise<void> {
  */
 function usageSummary(row: LogEntry): { main: string; sub: string } {
   switch (row.billingType) {
+    // `unknown`（定价快照缺失）与 per_token 同形，见 logEntrySchema 的兜底分支。
+    case 'unknown':
     case 'per_token':
       return {
         main: `${row.usage.totalTokens.toLocaleString()} tokens`,
@@ -306,7 +309,11 @@ function formatTokenShort(n: number): string {
  * 仅 token 计费（per_token / per_call）适用；其它计费类型返回空数组，回退到 usageSummary 文本。
  */
 function usageTagRows(row: LogEntry): UsageTag[][] {
-  if (row.billingType !== 'per_token' && row.billingType !== 'per_call') return [];
+  if (
+    row.billingType !== 'per_token'
+    && row.billingType !== 'per_call'
+    && row.billingType !== 'unknown'
+  ) return [];
   const { input, output } = row.usage;
 
   const inputRow: UsageTag[] = [
@@ -365,9 +372,12 @@ function vendorFromModelName(modelName: string): string {
   return i > 0 ? modelName.slice(0, i) : '—';
 }
 
-/** 渠道展示：优先用定价快照钉死的 `vendorKey`，否则退化为 modelName 前缀。 */
+/**
+ * 渠道展示：对外 slug（`vendorPlug`）优先，其次内部渠道键，最后退化为 modelName 前缀。
+ * 过滤仍按 `vendorKey` 走——那是后端认的查询维度。
+ */
 function vendorText(row: LogEntry): string {
-  return row.vendorKey?.trim() || vendorFromModelName(row.modelName);
+  return row.vendorPlug?.trim() || row.vendorKey?.trim() || vendorFromModelName(row.modelName);
 }
 
 function setVendorFilter(vendor: string): void {
@@ -404,13 +414,11 @@ function modelTagStyle(name: string): { backgroundColor: string; color: string }
   return { backgroundColor: c.bg, color: c.fg };
 }
 
-/** 错误码 → 国际化文案；未识别码原样返回 */
-function errorCodeText(code: string): string {
-  return (LogErrorCodeLabel as Record<string, string>)[code] ?? code;
-}
-
+/** sk- 调用但令牌名没补全（令牌已删）时退化显示 `#id`，不能跟 PG 直发混为一谈。 */
 function sourceLabel(row: LogEntry): string {
-  return row.token?.name?.trim() || 'PG';
+  const token = row.token;
+  if (!token) return 'PG';
+  return token.name?.trim() || `#${token.id}`;
 }
 
 function drillByConvId(convId: string): void {
@@ -546,10 +554,17 @@ onMounted(() => {
               </el-button>
             </el-tooltip>
             <span v-else class="cell-muted">—</span>
-            <el-tag v-if="row.token?.name" size="small" effect="plain" type="info" class="cell-call__source">
-              {{ sourceLabel(row) }}
-            </el-tag>
-            <span v-else class="cell-call__source cell-source-pg">PG</span>
+            <div class="cell-call__meta">
+              <el-tag v-if="row.token" size="small" effect="plain" type="info" class="cell-call__source">
+                {{ sourceLabel(row) }}
+              </el-tag>
+              <span v-else class="cell-call__source cell-source-pg">PG</span>
+              <span
+                v-if="row.content.protocol"
+                class="cell-call__protocol"
+                :title="`协议：${logProtocolText(row.content.protocol)}`"
+              >{{ logProtocolText(row.content.protocol) }}</span>
+            </div>
           </div>
         </template>
       </el-table-column>
@@ -560,7 +575,7 @@ onMounted(() => {
           <StatusTag v-else-if="row.status === 'success'" label="成功" tone="success" />
           <StatusTag
             v-else
-            :label="row.content.error ? errorCodeText(row.content.error.code) : AiUsageStatusLabel[row.status]"
+            :label="row.content.error ? logErrorCodeText(row.content.error.code) : AiUsageStatusLabel[row.status]"
             tone="danger"
           />
         </template>
@@ -573,7 +588,7 @@ onMounted(() => {
             link
             type="primary"
             class="cell-vendor cell-vendor--link"
-            title="按此渠道过滤"
+            :title="`按渠道「${row.vendorKey}」过滤`"
             @click="setVendorFilter(row.vendorKey!)"
           >{{ vendorText(row) }}</el-button>
           <span v-else class="cell-vendor">{{ vendorText(row) }}</span>
@@ -600,8 +615,13 @@ onMounted(() => {
 
       <el-table-column label="计费" width="96" align="center">
         <template #default="{ row }: { row: LogEntry }">
-          <el-tag size="small" type="info" effect="plain" round>
-            {{ BillingTypeLabel[row.billingType] }}
+          <el-tag
+            size="small"
+            :type="row.billingType === 'unknown' ? 'warning' : 'info'"
+            effect="plain"
+            round
+          >
+            {{ billingTypeText(row.billingType) }}
           </el-tag>
         </template>
       </el-table-column>
@@ -772,6 +792,17 @@ onMounted(() => {
 }
 .cell-call__source {
   align-self: flex-start;
+}
+.cell-call__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.cell-call__protocol {
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
 }
 .cell-conv {
   font-size: 12px;

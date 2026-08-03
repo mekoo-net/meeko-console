@@ -29,7 +29,6 @@ function applyFilter(rows: LogEntry[], f: ListLogsFilter): LogEntry[] {
     if (f.iamUid && r.account.iamUid !== f.iamUid) return false;
     if (f.modelName && !r.modelName.toLowerCase().includes(f.modelName.toLowerCase())) return false;
     if (f.vendorKey && vendorOf(r).toLowerCase() !== f.vendorKey.toLowerCase()) return false;
-    if (f.providerId != null && r.providerId !== f.providerId) return false;
     if (f.protocol && r.content.protocol !== f.protocol) return false;
     if (f.convId && r.content.convId !== f.convId) return false;
     if (f.logId && r.id !== f.logId.trim()) return false;
@@ -149,13 +148,16 @@ function buildTopModels(rows: LogEntry[], limit = 5): LogStatsTopModel[] {
     .slice(0, limit);
 }
 
+/** 与后端一致：按 `vendorKey` 分组，展示名取 `vendorPlug`（对外 slug）回退 `vendorKey`。 */
 function buildTopProviders(rows: LogEntry[], limit = 5): LogStatsTopProvider[] {
-  type Agg = { calls: number; errors: number; ttftSum: number; ttftSamples: number };
-  const m = new Map<number, Agg>();
+  type Agg = { calls: number; errors: number; ttftSum: number; ttftSamples: number; plug?: string };
+  const m = new Map<string, Agg>();
   for (const r of rows) {
-    if (r.providerId == null) continue;
-    const a = m.get(r.providerId) ?? { calls: 0, errors: 0, ttftSum: 0, ttftSamples: 0 };
+    const key = r.vendorKey?.trim();
+    if (!key) continue;
+    const a = m.get(key) ?? { calls: 0, errors: 0, ttftSum: 0, ttftSamples: 0 };
     a.calls += 1;
+    a.plug = a.plug ?? r.vendorPlug?.trim() ?? undefined;
     const success = logIsSuccess(r);
     if (!success) a.errors += 1;
     // 仅流式成功样本进入 TTFT 聚合（与 LogStats 口径一致）
@@ -163,20 +165,17 @@ function buildTopProviders(rows: LogEntry[], limit = 5): LogStatsTopProvider[] {
       a.ttftSum += r.content.latencyMs;
       a.ttftSamples += 1;
     }
-    m.set(r.providerId, a);
+    m.set(key, a);
   }
   return [...m.entries()]
-    .map<LogStatsTopProvider>(([providerId, a]) => {
-      const provider = getDemuxStore().providers.find((p) => p.id === providerId);
-      return {
-        providerId,
-        providerName: provider?.name,
-        calls: a.calls,
-        errors: a.errors,
-        avgTokenLatency:
-          a.ttftSamples === 0 ? 0 : Math.round(a.ttftSum / a.ttftSamples),
-      };
-    })
+    .map<LogStatsTopProvider>(([vendorKey, a]) => ({
+      vendorKey,
+      providerName: a.plug || vendorKey,
+      calls: a.calls,
+      errors: a.errors,
+      avgTokenLatency:
+        a.ttftSamples === 0 ? 0 : Math.round(a.ttftSum / a.ttftSamples),
+    }))
     .sort((x, y) => y.calls - x.calls)
     .slice(0, limit);
 }

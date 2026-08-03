@@ -2,7 +2,7 @@
 /**
  * Top 模型渠道排行：调用量条形 + 失败次数 + 平均首字延迟（TTFT，单位 ms）。
  *
- * 渠道名由服务端 `providerName` 字段提供，缺失时回退为 `#providerId`。
+ * 渠道名由服务端 `providerName`（VendorSlug 优先）提供，缺失时回退为分组键 `vendorKey`。
  *
  * **延迟列含义**：仅基于有 TTFT 样本（流式 + 成功）求均值；纯图像 / 视频渠道无 TTFT，
  * 显示为 `—`，符合 `LogStatsTopProvider.avgTokenLatency` 的语义。
@@ -17,8 +17,7 @@ const props = defineProps<{
 }>();
 
 function displayName(p: LogStatsTopProvider): string {
-  const name = p.providerName?.trim();
-  return name || `#${p.providerId}`;
+  return p.providerName?.trim() || p.vendorKey || '—';
 }
 
 const maxCalls = computed(() => props.items.reduce((m, x) => Math.max(m, x.calls), 0));
@@ -40,7 +39,7 @@ const maxCalls = computed(() => props.items.reduce((m, x) => Math.max(m, x.calls
         </tr>
       </thead>
       <tbody>
-        <tr v-for="p in items" :key="p.providerId">
+        <tr v-for="p in items" :key="p.vendorKey">
           <td class="rank-table__name">{{ displayName(p) }}</td>
           <td class="rank-table__bar">
             <div class="bar-inline">

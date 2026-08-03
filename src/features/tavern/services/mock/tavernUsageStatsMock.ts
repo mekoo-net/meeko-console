@@ -30,9 +30,9 @@ const mockStats: TavernUsageStats = {
     { modelName: 'openai/gpt-4o', calls: 23, cost: 1.46, errorRate: 0.04 },
   ],
   topProviders: [
-    { providerId: 1, providerName: 'google', calls: 64, errors: 2, avgTokenLatency: 0 },
-    { providerId: 2, providerName: 'anthropic', calls: 41, errors: 2, avgTokenLatency: 0 },
-    { providerId: 3, providerName: 'openai', calls: 23, errors: 3, avgTokenLatency: 0 },
+    { vendorKey: 'google', providerName: 'google', calls: 64, errors: 2, avgTokenLatency: 0 },
+    { vendorKey: 'anthropic', providerName: 'anthropic', calls: 41, errors: 2, avgTokenLatency: 0 },
+    { vendorKey: 'openai', providerName: 'openai', calls: 23, errors: 3, avgTokenLatency: 0 },
   ],
   errorCodes: [
     { code: 'failed', count: 5 },
