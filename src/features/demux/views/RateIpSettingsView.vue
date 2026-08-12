@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
-import { Delete, Plus } from '@element-plus/icons-vue';
+import { Delete, Plus, QuestionFilled } from '@element-plus/icons-vue';
 
 import RateSettingsPanel from '@/features/demux/components/RateSettingsPanel.vue';
 import RateWindowInput from '@/features/demux/components/RateWindowInput.vue';
@@ -27,7 +27,7 @@ onMounted(() => {
 <template>
   <RateSettingsPanel
     title="IP 设置"
-    description="针对具体 IP / CIDR 覆盖默认策略，未覆盖的 IP 使用总开关页的 IP 默认策略"
+    description="针对具体 IP / CIDR 覆盖默认策略，未覆盖的 IP 使用总开关页的 IP 默认策略；关闭某行则该 IP 豁免限速"
     :loading="loading"
     :loaded="loaded"
     :dirty="isDirty"
@@ -60,7 +60,18 @@ onMounted(() => {
           </template>
         </el-table-column>
 
-        <el-table-column label="启用" width="70" align="center">
+        <el-table-column label="启用" width="88" align="center">
+          <template #header>
+            <span class="col-help">
+              启用
+              <el-tooltip
+                content="关闭后该 IP / CIDR 豁免限速（不再回退默认策略）；如需按维度放开，可保持启用并把对应上限填 0。"
+                placement="top"
+              >
+                <el-icon><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </span>
+          </template>
           <template #default="{ row }">
             <el-switch v-model="row.enabled" size="small" />
           </template>
@@ -134,5 +145,11 @@ onMounted(() => {
 
 .cell-num {
   width: 100%;
+}
+
+.col-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 </style>
