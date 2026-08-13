@@ -9,7 +9,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
-import { InfoFilled, View } from '@element-plus/icons-vue';
+import { InfoFilled, RefreshLeft, View } from '@element-plus/icons-vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import StatusTag from '@/shared/ui/StatusTag.vue';
@@ -35,6 +35,7 @@ import {
 import { getBillingPort } from '../services';
 import type { ListBillsFilter } from '../services/ports/billingPort';
 import BillDetailDrawer from '../components/BillDetailDrawer.vue';
+import BatchReverseBillsDrawer from '../components/BatchReverseBillsDrawer.vue';
 
 const router = useRouter();
 const billingPort = getBillingPort();
@@ -167,6 +168,8 @@ function openDetail(row: BillingEntry): void {
   detailOpen.value = true;
 }
 
+const batchReverseOpen = ref(false);
+
 /** 第一行展示的金额：有扣费拆分时取钱包余额扣除额（可能为 0），否则回落到实际扣费额。 */
 function balanceAmount(row: BillingEntry): number {
   return row.deduction ? row.deduction.balanceDeducted : row.amount.actual;
@@ -188,7 +191,13 @@ onMounted(() => {
       <PageHeader
         title="账单流水"
         description="账户钱包扣款流水（订阅 / 用量 / 一次性订单）。错扣回滚、部分退还直接驳回原账单，保留原始扣费与实际扣费便于审计。"
-      />
+      >
+        <template #actions>
+          <el-button :icon="RefreshLeft" type="danger" plain @click="batchReverseOpen = true">
+            批量驳回
+          </el-button>
+        </template>
+      </PageHeader>
     </template>
 
     <template #filters>
@@ -400,6 +409,8 @@ onMounted(() => {
   </FillListPageLayout>
 
   <BillDetailDrawer v-model="detailOpen" :bill-id="detailBillId" />
+
+  <BatchReverseBillsDrawer v-model="batchReverseOpen" @done="fetchData()" />
 </template>
 
 <style scoped>

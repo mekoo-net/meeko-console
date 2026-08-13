@@ -16,7 +16,7 @@ import {
   type ReverseLogInput,
   type ReverseLogResult,
 } from '@demux/common';
-import type { DemuxLogsPort, ListLogsPage } from '../ports/demuxLogsPort';
+import type { DemuxLogsPort, ListLogsPage, LogBillRef } from '../ports/demuxLogsPort';
 
 import { getDemuxStore } from './data';
 
@@ -259,6 +259,19 @@ export class DemuxLogsMock implements DemuxLogsPort {
       reversedBy: MOCK_ADMIN_IAM_UID,
       reversedCode: input.reasonCode,
     });
+  }
+
+  async resolveByBillSerials(billSerialNos: string[]): Promise<AppResult<LogBillRef[]>> {
+    await delay();
+    const wanted = new Set(billSerialNos.map((s) => s.trim()).filter(Boolean));
+    if (wanted.size === 0) return ok([]);
+    const rows: LogBillRef[] = [];
+    for (const log of this.store.logs) {
+      const serial = log.bill?.id;
+      if (!serial || !wanted.has(serial)) continue;
+      rows.push({ billSerialNo: serial, logId: log.id });
+    }
+    return ok(rows);
   }
 
   async stats(filter: ListLogsFilter): Promise<AppResult<LogStats>> {

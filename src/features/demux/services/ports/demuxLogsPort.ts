@@ -14,6 +14,14 @@ export interface ListLogsPage {
   total: number;
 }
 
+/** 账单号 → 调用日志号映射行（后端 `LogBillRefDto`）。 */
+export interface LogBillRef {
+  /** 账单流水号（BL + UTC 日期 + 9 位序列）。 */
+  billSerialNo: string;
+  /** 发起该账单扣费的调用日志号；雪花 ID，字符串传递避免 JS 精度丢失。 */
+  logId: string;
+}
+
 /**
  * 调用日志查询端口。数据面 —— 通常对应另一个微服务（ClickHouse / ES 网关）。
  *
@@ -61,4 +69,13 @@ export interface DemuxLogsPort {
    * 前端拿到回执后**就地更新行**，避免重新拉列表丢失滚动 / 过滤上下文。
    */
   reverse(input: ReverseLogInput): Promise<AppResult<ReverseLogResult>>;
+
+  /**
+   * 批量把账单号解析成调用日志号。
+   *
+   * 驳回的入参是 logId，而运营手里通常只有一串账单号（对账单、工单里贴的都是 BL 号），
+   * 逐条走 `list({ billUid })` 会打出 N 次查询；这里一次换回全部映射，
+   * 解析不到的账单号不会出现在结果里，由调用方按差集判定「未找到」。
+   */
+  resolveByBillSerials(billSerialNos: string[]): Promise<AppResult<LogBillRef[]>>;
 }

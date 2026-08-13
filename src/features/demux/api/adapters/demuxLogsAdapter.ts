@@ -19,6 +19,7 @@ import type {
 import type {
   DemuxLogsPort,
   ListLogsPage,
+  LogBillRef,
 } from '@/features/demux/services/ports/demuxLogsPort';
 
 const BASE = demuxPlatformPaths.adminLogs;
@@ -370,5 +371,23 @@ export class DemuxLogsHttpAdapter implements DemuxLogsPort {
         reversedCode: (row.reversedCode ?? input.reasonCode) as ReverseLogResult['reversedCode'],
       },
     };
+  }
+
+  async resolveByBillSerials(billSerialNos: string[]): Promise<AppResult<LogBillRef[]>> {
+    if (billSerialNos.length === 0) return { success: true, data: [] };
+    const result = await requestDemux<ItemsEnvelope<{ billSerialNo?: string; logId?: string }>>(
+      `${BASE}/resolve-by-bill-serials`,
+      { method: 'POST', body: { billSerialNos } },
+    );
+    if (!result.success) return result;
+
+    const rows: LogBillRef[] = [];
+    for (const it of result.data.items) {
+      const serial = it.billSerialNo?.trim();
+      const logId = it.logId?.trim();
+      if (!serial || !logId) continue;
+      rows.push({ billSerialNo: serial, logId });
+    }
+    return { success: true, data: rows };
   }
 }
