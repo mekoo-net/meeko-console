@@ -16,12 +16,12 @@ export function apiUrl(path: string): string {
 
 /**
  * Demux.Gateway 业务 API（`/api/*`，如速率限制、sk- 令牌等）。
- * - 生产默认 `https://demux-api.meeyo.org`
+ * - 生产默认 `https://console.meeyo.org`
  * - 本地默认 `http://localhost:8201`（Gateway Api 端口）
  */
 export function demuxApiUrl(path: string): string {
   const base =
     readEnvBase('VITE_DEMUX_API_BASE') ||
-    (import.meta.env.DEV ? 'http://localhost:8201' : 'https://demux-api.meeyo.org');
+    (import.meta.env.DEV ? 'http://localhost:8201' : 'https://console.meeyo.org');
   return `${base}${normalizePath(path)}`;
 }
