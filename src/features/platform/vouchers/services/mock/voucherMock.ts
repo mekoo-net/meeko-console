@@ -13,6 +13,7 @@ import {
   VoucherLedgerKind,
   VoucherValidityKind,
   type ActivityClaimer,
+  type TemplateIssued,
   type CreateVoucherActivityInput,
   type CreateVoucherGrantRuleInput,
   type CreateVoucherTemplateInput,
@@ -29,6 +30,7 @@ import {
 } from '../../model/voucher.types';
 import type {
   ListActivityClaimersInput,
+  ListTemplateIssuedInput,
   ListUserVouchersInput,
   ListVoucherActivitiesInput,
   ListVoucherGrantRulesInput,
@@ -107,6 +109,24 @@ const activities: MockActivity[] = [
     })),
   },
 ];
+
+interface MockIssued extends TemplateIssued {
+  templateId: string;
+}
+
+const issuedRows: MockIssued[] = activities[0]!.claimers.map((c, i) => ({
+  id: c.userVoucherId,
+  templateId: '1',
+  accountUid: c.accountUid,
+  serialNo: `VC${String(i + 1).padStart(6, '0')}`,
+  faceValue: 5,
+  remainingValue: c.status === UserVoucherStatus.Used ? 0 : 5,
+  status: c.status,
+  issuedAtUtc: c.claimedAtUtc,
+  validToUtc: c.claimedAtUtc + 30 * 86400000,
+  origin: 'activity:50',
+  contact: c.contact,
+}));
 
 const grantRules: VoucherGrantRule[] = [
   {
@@ -221,11 +241,12 @@ export class VoucherMock implements VoucherPort {
     let issued = 0;
     for (const uid of input.accountUids) {
       if (!uid) continue;
+      const id = nextId();
       userVouchers.unshift({
-        id: nextId(),
+        id,
         templateId: t.id,
         accountUid: uid,
-        serialNo: `VC${nextId()}`,
+        serialNo: `VC${id}`,
         deductKind: t.rule.kind,
         faceValue,
         thresholdAmount,
@@ -235,10 +256,40 @@ export class VoucherMock implements VoucherPort {
         status: UserVoucherStatus.Unused,
         issuedAtUtc: now,
       });
+      issuedRows.unshift({
+        id,
+        templateId: t.id,
+        accountUid: uid,
+        serialNo: `VC${id}`,
+        faceValue,
+        remainingValue: faceValue,
+        status: UserVoucherStatus.Unused,
+        issuedAtUtc: now,
+        validToUtc: now + days * 86400000,
+        origin: null,
+      });
       issued++;
     }
     t.issuedCount += issued;
     return ok({ issuedCount: issued, requestedCount: input.accountUids.length });
+  }
+
+  async listTemplateIssued(input: ListTemplateIssuedInput) {
+    let rows = issuedRows.filter((v) => v.templateId === input.templateId);
+    if (input.accountUid) rows = rows.filter((c) => c.accountUid === input.accountUid);
+    if (input.status != null) rows = rows.filter((c) => c.status === input.status);
+    return ok({
+      items: clientPaginate(
+        rows.map((row) => {
+          const { templateId, ...rest } = row;
+          void templateId;
+          return rest;
+        }),
+        input.page,
+        input.pageSize,
+      ),
+      total: rows.length,
+    });
   }
 
   async revoke(userVoucherId: string): Promise<AppResult<boolean>> {

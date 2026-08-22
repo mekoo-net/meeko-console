@@ -9,6 +9,7 @@ import {
   VoucherValidityKind,
   UserVoucherStatus,
   type ActivityClaimer,
+  type TemplateIssued,
   type ActivityVoucherItem,
   type CreateVoucherActivityInput,
   type CreateVoucherGrantRuleInput,
@@ -28,6 +29,7 @@ import {
 } from '@/features/platform/vouchers/model/voucher.types';
 import type {
   ListActivityClaimersInput,
+  ListTemplateIssuedInput,
   ListUserVouchersInput,
   ListVoucherActivitiesInput,
   ListVoucherGrantRulesInput,
@@ -38,6 +40,7 @@ import type { ListPage } from '@/shared/composables/useListQuery';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { request } from '@/shared/api/httpClient';
 import { asEpochMillis, asEpochMillisNullable } from '@/shared/lib/epoch';
+import { mapAccountContact } from '@/features/platform/accounts/model/account.types';
 
 const TEMPLATES = '/api/admin/billing/voucher/templates';
 const ACTIVITIES = '/api/admin/billing/voucher/activities';
@@ -372,8 +375,31 @@ function mapClaimer(raw: Raw): ActivityClaimer {
     claimedAtUtc: asEpochMillis(raw.claimedAtUtc) ?? 0,
     claimIp: raw.claimIp != null ? String(raw.claimIp) : null,
     status: enumNum(USER_VOUCHER_STATUS_FROM_WIRE, raw.status),
+    contact: mapAccountContact(raw.contact),
   };
 }
+
+function mapIssued(raw: Raw): TemplateIssued {
+  return {
+    id: String(raw.id ?? ''),
+    accountUid: String(raw.accountUid ?? ''),
+    serialNo: raw.serialNo != null ? String(raw.serialNo) : null,
+    faceValue: num(raw.faceValue),
+    remainingValue: num(raw.remainingValue),
+    status: enumNum(USER_VOUCHER_STATUS_FROM_WIRE, raw.status),
+    issuedAtUtc: asEpochMillis(raw.issuedAtUtc) ?? 0,
+    validToUtc: asEpochMillis(raw.validToUtc) ?? 0,
+    origin: raw.origin != null && raw.origin !== '' ? String(raw.origin) : null,
+    contact: mapAccountContact(raw.contact),
+  };
+}
+
+const USER_VOUCHER_STATUS_TO_WIRE: Record<number, string> = {
+  [UserVoucherStatus.Unused]: 'unused',
+  [UserVoucherStatus.Used]: 'used',
+  [UserVoucherStatus.Expired]: 'expired',
+  [UserVoucherStatus.Revoked]: 'revoked',
+};
 
 function parseTemplate(value: unknown): AppResult<VoucherTemplate> {
   if (!value || typeof value !== 'object') return fail({ code: 'validation', message: '券批次数据格式错误' });
@@ -464,6 +490,25 @@ export class VoucherHttpAdapter implements VoucherPort {
       issuedCount: num(res.data.issuedCount),
       requestedCount: num(res.data.requestedCount),
     });
+  }
+
+  async listTemplateIssued(
+    input: ListTemplateIssuedInput,
+  ): Promise<AppResult<ListPage<TemplateIssued>>> {
+    const res = await request<unknown>(
+      `${TEMPLATES}/${encodeURIComponent(input.templateId)}/issued`,
+      {
+        query: {
+          page: input.page,
+          pageSize: input.pageSize,
+          keyword: input.accountUid ?? undefined,
+          status:
+            input.status != null ? (USER_VOUCHER_STATUS_TO_WIRE[input.status] ?? input.status) : undefined,
+        },
+      },
+    );
+    if (!res.success) return res;
+    return ok(parseListPage(res.data, mapIssued));
   }
 
   async revoke(userVoucherId: string): Promise<AppResult<boolean>> {

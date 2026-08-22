@@ -30,6 +30,7 @@
 | 13 | 邮件模板列表 `/notices/email/templates` | Admin | [`13-notices-email-templates.md`](./13-notices-email-templates.md) |
 | 14 | 编辑邮件模板 `/notices/email/templates/:code/:locale` | Admin | [`14-notices-email-template-edit.md`](./14-notices-email-template-edit.md) |
 | 15 | 通知调试 `/notices/debug` | Admin | [`15-notices-debug.md`](./15-notices-debug.md) |
+| 16 | 平台令牌：下发抵扣券 / 查用户 / 查 Demux 用量 | Admin / API Key | [`16-ops-voucher-issue-and-usage.md`](./16-ops-voucher-issue-and-usage.md) |
 
 ## BFF 域路由前缀（默认）
 

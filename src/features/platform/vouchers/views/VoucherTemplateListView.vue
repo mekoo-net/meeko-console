@@ -13,6 +13,7 @@ import { formatMoney } from '@/shared/lib/money';
 import VoucherTemplateFormDialog from '../components/VoucherTemplateFormDialog.vue';
 import IssueVouchersDialog from '../components/IssueVouchersDialog.vue';
 import TemplateActivitiesDialog from '../components/TemplateActivitiesDialog.vue';
+import TemplateIssuedDialog from '../components/TemplateIssuedDialog.vue';
 import {
   VoucherDeductKind,
   VoucherTemplateStatus,
@@ -44,9 +45,11 @@ const displayed = computed(() => list.items.value?.items ?? []);
 const editVisible = ref(false);
 const issueVisible = ref(false);
 const activitiesVisible = ref(false);
+const issuedVisible = ref(false);
 const editing = ref<VoucherTemplate | null>(null);
 const issuing = ref<VoucherTemplate | null>(null);
 const viewingActivities = ref<VoucherTemplate | null>(null);
+const viewingIssued = ref<VoucherTemplate | null>(null);
 
 const statusTagType: Record<number, string> = {
   [VoucherTemplateStatus.Draft]: 'info',
@@ -88,6 +91,11 @@ function openIssue(row: VoucherTemplate): void {
 function openActivities(row: VoucherTemplate): void {
   viewingActivities.value = row;
   activitiesVisible.value = true;
+}
+
+function openIssued(row: VoucherTemplate): void {
+  viewingIssued.value = row;
+  issuedVisible.value = true;
 }
 
 async function copyKey(code: string): Promise<void> {
@@ -255,7 +263,13 @@ async function setStatus(row: VoucherTemplate, status: number, label: string): P
         width="120"
       >
         <template #default="{ row }: { row: VoucherTemplate }">
-          {{ row.issuedCount }}<span v-if="row.totalQuota"> / {{ row.totalQuota }}</span>
+          <el-button
+            link
+            type="primary"
+            @click="openIssued(row)"
+          >
+            {{ row.issuedCount }}<span v-if="row.totalQuota"> / {{ row.totalQuota }}</span>
+          </el-button>
         </template>
       </el-table-column>
       <el-table-column
@@ -273,10 +287,17 @@ async function setStatus(row: VoucherTemplate, status: number, label: string): P
       </el-table-column>
       <el-table-column
         label="操作"
-        width="320"
+        width="380"
         fixed="right"
       >
         <template #default="{ row }: { row: VoucherTemplate }">
+          <el-button
+            link
+            type="primary"
+            @click="openIssued(row)"
+          >
+            发放记录
+          </el-button>
           <el-button
             link
             type="primary"
@@ -366,6 +387,11 @@ async function setStatus(row: VoucherTemplate, status: number, label: string): P
   <TemplateActivitiesDialog
     v-model="activitiesVisible"
     :template="viewingActivities"
+  />
+
+  <TemplateIssuedDialog
+    v-model="issuedVisible"
+    :template="viewingIssued"
   />
 </template>
 

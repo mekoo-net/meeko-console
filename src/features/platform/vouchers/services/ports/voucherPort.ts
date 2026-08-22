@@ -3,6 +3,7 @@ import type { AppResult } from '@/shared/api/httpTypes';
 
 import type {
   ActivityClaimer,
+  TemplateIssued,
   CreateVoucherActivityInput,
   CreateVoucherGrantRuleInput,
   CreateVoucherTemplateInput,
@@ -47,6 +48,16 @@ export interface ListActivityClaimersInput {
   status?: number | null;
 }
 
+export interface ListTemplateIssuedInput {
+  templateId: string;
+  page: number;
+  pageSize: number;
+  /** 按账户 UID 精确过滤（关键字为纯数字时生效）。 */
+  accountUid?: string;
+  /** 券状态过滤（UserVoucherStatus）。 */
+  status?: number | null;
+}
+
 export interface ListVoucherGrantRulesInput {
   page: number;
   pageSize: number;
@@ -62,6 +73,7 @@ export interface VoucherPort {
   updateTemplate(id: string, input: UpdateVoucherTemplateInput): Promise<AppResult<VoucherTemplate>>;
   setTemplateStatus(id: string, status: number): Promise<AppResult<VoucherTemplate>>;
   issue(id: string, input: IssueVouchersInput): Promise<AppResult<IssueVouchersResult>>;
+  listTemplateIssued(input: ListTemplateIssuedInput): Promise<AppResult<ListPage<TemplateIssued>>>;
   revoke(userVoucherId: string): Promise<AppResult<boolean>>;
   listUserVouchers(input: ListUserVouchersInput): Promise<AppResult<ListPage<UserVoucher>>>;
   listRedemptions(accountUid: string, take?: number): Promise<AppResult<VoucherRedemption[]>>;

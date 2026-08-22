@@ -387,3 +387,25 @@ export interface ActivityClaimer {
   /** 账户联系信息（嵌套对象，BFF 按当前页 uid 关联补全）。 */
   contact?: AccountContact;
 }
+
+/** 某券批次的一张已发券：下发给了谁、还剩多少、从哪条通道发出。 */
+export interface TemplateIssued {
+  id: string;
+  accountUid: string;
+  serialNo?: string | null;
+  faceValue: number;
+  remainingValue: number;
+  status: number;
+  issuedAtUtc: number;
+  validToUtc: number;
+  /** 发券来源：空 = 后台下发；`activity:{id}` / `grant:{id}`。 */
+  origin?: string | null;
+  contact?: AccountContact;
+}
+
+export function issuedOriginLabel(origin?: string | null): string {
+  if (!origin) return '后台下发';
+  if (origin.startsWith('activity:')) return '领券活动';
+  if (origin.startsWith('grant:')) return '自动发券';
+  return origin;
+}
