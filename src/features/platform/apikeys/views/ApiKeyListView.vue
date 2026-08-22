@@ -73,7 +73,7 @@ async function submitCreate(): Promise<void> {
     return;
   }
   if (form.scopes.length === 0) {
-    ElMessage.warning('请至少勾选一项权限');
+    ElMessage.warning('请至少勾选一个接口');
     return;
   }
 
@@ -137,7 +137,7 @@ function statusType(row: PlatformApiKey): 'success' | 'info' | 'warning' {
       <div>
         <h3 class="settings-panel__title">平台令牌</h3>
         <p class="settings-panel__desc">
-          给机器调用平台接口用。权限写在令牌上，不继承管理员角色。
+          给机器调用现有后台接口。勾选这把令牌能打哪些路径，不继承管理员角色。
         </p>
       </div>
       <div class="settings-panel__head-actions">
@@ -179,7 +179,7 @@ function statusType(row: PlatformApiKey): 'success' | 'info' | 'warning' {
               <code class="hint">{{ row.keyHint }}…</code>
             </template>
           </el-table-column>
-          <el-table-column label="权限" min-width="220">
+          <el-table-column label="接口" min-width="220">
             <template #default="{ row }">
               <el-tag
                 v-for="scope in row.scopes"
@@ -251,7 +251,7 @@ function statusType(row: PlatformApiKey): 'success' | 'info' | 'warning' {
         <el-form-item label="名称" required>
           <el-input v-model="form.name" maxlength="80" show-word-limit placeholder="例如：发卡脚本" />
         </el-form-item>
-        <el-form-item label="权限" required>
+        <el-form-item label="可调用接口" required>
           <div class="scope-box">
             <div class="scope-box__toolbar">
               <el-button link type="primary" @click="checkAllScopes">全选</el-button>

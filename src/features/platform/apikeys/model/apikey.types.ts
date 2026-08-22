@@ -44,14 +44,17 @@ export function apiKeyStatusLabel(status: ApiKeyStatus): string {
   return '有效';
 }
 
-/** 令牌权限码中文说明。目录本身以 GET scopes 为准，这里只负责展示。 */
+/** 现有接口中文说明。目录以 GET scopes 为准，这里只负责展示。 */
 export const API_KEY_SCOPE_LABELS: Record<string, string> = {
-  'account.lookup': '精确查找账户',
-  'billing.voucher.issue': '按模板发卡',
+  'GET /api/admin/accounts': '查找账户',
+  'POST /api/admin/billing/voucher/templates/{templateId}/issue': '按模板发卡',
 };
 
 export function apiKeyScopeLabel(code: string): string {
   return API_KEY_SCOPE_LABELS[code] ?? code;
 }
 
-export const FALLBACK_API_KEY_SCOPES = Object.keys(API_KEY_SCOPE_LABELS);
+export const FALLBACK_API_KEY_SCOPES = [
+  'GET /api/admin/accounts',
+  'POST /api/admin/billing/voucher/templates/{templateId}/issue',
+];

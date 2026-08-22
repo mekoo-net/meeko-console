@@ -32,7 +32,7 @@ export class ApiKeyMock implements ApiKeyPort {
   async issue(input: IssueApiKeyInput): Promise<AppResult<IssuedApiKey>> {
     const name = input.name.trim();
     if (!name) return fail({ code: 'validation', message: 'name required (1-80)' });
-    if (input.scopes.length === 0) return fail({ code: 'validation', message: 'scopes required' });
+    if (input.scopes.length === 0) return fail({ code: 'validation', message: 'endpoints required' });
 
     const plaintext = randomPlaintext();
     const now = Date.now();
