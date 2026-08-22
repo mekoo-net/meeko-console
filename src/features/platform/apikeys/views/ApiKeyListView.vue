@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ElMessage, type ElTree } from 'element-plus';
-import { Plus, Refresh } from '@element-plus/icons-vue';
-import { computed, onMounted, reactive, ref } from 'vue';
+import { CopyDocument, Hide, Plus, Refresh, View } from '@element-plus/icons-vue';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import { confirmDanger } from '@/shared/composables/useConfirm';
@@ -31,27 +31,40 @@ const treeRef = ref<InstanceType<typeof ElTree>>();
 
 const drawer = ref(false);
 const saving = ref(false);
+const editingId = ref<string | null>(null);
+const revealed = ref<Set<string>>(new Set());
 const form = reactive({
   name: '',
   scopes: [] as string[],
   expiresAt: '',
 });
 
-const secretDialog = ref(false);
-const issuedName = ref('');
-const issuedPlaintext = ref('');
-
 onMounted(async () => {
   const res = await getApiKeyPort().listScopes();
   if (res.success) catalog.value = res.data;
 });
 
+async function applyTreeKeys(keys: string[]): Promise<void> {
+  await nextTick();
+  treeRef.value?.setCheckedKeys(keys);
+}
+
 function openCreate(): void {
+  editingId.value = null;
   form.name = '';
   form.scopes = [];
   form.expiresAt = '';
   drawer.value = true;
-  treeRef.value?.setCheckedKeys([]);
+  void applyTreeKeys([]);
+}
+
+function openEdit(row: PlatformApiKey): void {
+  editingId.value = row.id;
+  form.name = row.name;
+  form.scopes = [...row.scopes];
+  form.expiresAt = '';
+  drawer.value = true;
+  void applyTreeKeys(form.scopes);
 }
 
 function syncTreeScopes(): void {
@@ -69,12 +82,7 @@ function clearScopes(): void {
   treeRef.value?.setCheckedKeys([]);
 }
 
-async function submitCreate(): Promise<void> {
-  const name = form.name.trim();
-  if (!name) {
-    ElMessage.warning('请填写令牌名称');
-    return;
-  }
+async function submitForm(): Promise<void> {
   if (form.scopes.length === 0) {
     ElMessage.warning('请至少勾选一项权限');
     return;
@@ -82,28 +90,61 @@ async function submitCreate(): Promise<void> {
 
   saving.value = true;
   try {
-    const res = await getApiKeyPort().issue({
-      name,
-      scopes: form.scopes,
-      expiresAtUtc: form.expiresAt ? new Date(form.expiresAt).toISOString() : null,
-    });
-    if (!res.success) {
-      ElMessage.error(res.error.message);
-      return;
+    if (editingId.value) {
+      const res = await getApiKeyPort().update(editingId.value, { scopes: form.scopes });
+      if (!res.success) {
+        ElMessage.error(res.error.message);
+        return;
+      }
+      ElMessage.success('权限已更新');
+    } else {
+      const name = form.name.trim();
+      if (!name) {
+        ElMessage.warning('请填写令牌名称');
+        return;
+      }
+      const res = await getApiKeyPort().issue({
+        name,
+        scopes: form.scopes,
+        expiresAtUtc: form.expiresAt ? new Date(form.expiresAt).toISOString() : null,
+      });
+      if (!res.success) {
+        ElMessage.error(res.error.message);
+        return;
+      }
+      ElMessage.success('令牌已创建，可在列表里查看明文');
     }
     drawer.value = false;
-    issuedName.value = res.data.key.name;
-    issuedPlaintext.value = res.data.plaintext;
-    secretDialog.value = true;
     void list.refresh();
   } finally {
     saving.value = false;
   }
 }
 
-async function copyPlaintext(): Promise<void> {
+function isRevealed(id: string): boolean {
+  return revealed.value.has(id);
+}
+
+function toggleReveal(id: string): void {
+  const next = new Set(revealed.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  revealed.value = next;
+}
+
+function tokenPreview(row: PlatformApiKey): string {
+  if (!row.plaintext) return row.keyHint ? `${row.keyHint}…` : '—';
+  if (isRevealed(row.id)) return row.plaintext;
+  return `${row.plaintext.slice(0, 8)}…`;
+}
+
+async function copyToken(row: PlatformApiKey): Promise<void> {
+  if (!row.plaintext) {
+    ElMessage.warning('这枚是旧令牌，当时没存明文，请重新签发');
+    return;
+  }
   try {
-    await navigator.clipboard.writeText(issuedPlaintext.value);
+    await navigator.clipboard.writeText(row.plaintext);
     ElMessage.success('已复制');
   } catch {
     ElMessage.error('复制失败，请手动选中复制');
@@ -140,7 +181,7 @@ function statusType(row: PlatformApiKey): 'success' | 'info' | 'warning' {
       <div>
         <h3 class="settings-panel__title">平台令牌</h3>
         <p class="settings-panel__desc">
-          给机器调用平台与产品后台。勾选权限与员工角色同一套，不绑某个管理员。
+          给机器调用平台与产品后台。勾选权限与员工角色同一套；明文保存在库里，随时可看可改权限。
         </p>
       </div>
       <div class="settings-panel__head-actions">
@@ -176,10 +217,19 @@ function statusType(row: PlatformApiKey): 'success' | 'info' | 'warning' {
           height="100%"
           :empty-text="' '"
         >
-          <el-table-column prop="name" label="名称" min-width="140" />
-          <el-table-column label="提示" width="110">
+          <el-table-column prop="name" label="名称" min-width="120" />
+          <el-table-column label="令牌" min-width="220">
             <template #default="{ row }">
-              <code class="hint">{{ row.keyHint }}…</code>
+              <div class="token-cell">
+                <code class="hint">{{ tokenPreview(row) }}</code>
+                <el-button
+                  v-if="row.plaintext"
+                  link
+                  :icon="isRevealed(row.id) ? Hide : View"
+                  @click="toggleReveal(row.id)"
+                />
+                <el-button link :icon="CopyDocument" @click="copyToken(row)" />
+              </div>
             </template>
           </el-table-column>
           <el-table-column label="权限" min-width="280">
@@ -217,22 +267,18 @@ function statusType(row: PlatformApiKey): 'success' | 'info' | 'warning' {
               {{ formatDateTime(row.createdAtUtc) }}
             </template>
           </el-table-column>
-          <el-table-column v-if="canWrite" label="操作" width="80" fixed="right">
+          <el-table-column v-if="canWrite" label="操作" width="120" fixed="right">
             <template #default="{ row }">
-              <el-button
-                v-if="!row.revokedAtUtc"
-                link
-                type="danger"
-                @click="revoke(row)"
-              >
-                吊销
-              </el-button>
+              <template v-if="!row.revokedAtUtc">
+                <el-button link type="primary" @click="openEdit(row)">权限</el-button>
+                <el-button link type="danger" @click="revoke(row)">吊销</el-button>
+              </template>
               <span v-else class="muted">—</span>
             </template>
           </el-table-column>
 
           <template #empty>
-            <EmptyState title="还没有令牌" description="创建后把明文交给调用方，这里只留提示前缀。" />
+            <EmptyState title="还没有令牌" description="创建后明文会留在列表里，随时可看、可改权限。" />
           </template>
         </el-table>
       </div>
@@ -249,10 +295,16 @@ function statusType(row: PlatformApiKey): 'success' | 'info' | 'warning' {
       </div>
     </div>
 
-    <el-drawer v-model="drawer" title="创建令牌" size="640px" destroy-on-close>
-      <el-form label-width="88px" @submit.prevent="submitCreate">
+    <el-drawer v-model="drawer" :title="editingId ? '修改权限' : '创建令牌'" size="640px" destroy-on-close>
+      <el-form label-width="88px" @submit.prevent="submitForm">
         <el-form-item label="名称" required>
-          <el-input v-model="form.name" maxlength="80" show-word-limit placeholder="例如：发卡脚本" />
+          <el-input
+            v-model="form.name"
+            maxlength="80"
+            show-word-limit
+            placeholder="例如：发卡脚本"
+            :disabled="!!editingId"
+          />
         </el-form-item>
         <el-form-item label="权限" required>
           <div class="scope-box">
@@ -272,7 +324,7 @@ function statusType(row: PlatformApiKey): 'success' | 'info' | 'warning' {
             />
           </div>
         </el-form-item>
-        <el-form-item label="过期时间">
+        <el-form-item v-if="!editingId" label="过期时间">
           <el-date-picker
             v-model="form.expiresAt"
             type="datetime"
@@ -284,31 +336,11 @@ function statusType(row: PlatformApiKey): 'success' | 'info' | 'warning' {
       </el-form>
       <template #footer>
         <el-button @click="drawer = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitCreate">创建</el-button>
+        <el-button type="primary" :loading="saving" @click="submitForm">
+          {{ editingId ? '保存' : '创建' }}
+        </el-button>
       </template>
     </el-drawer>
-
-    <el-dialog
-      v-model="secretDialog"
-      title="令牌已创建"
-      width="520px"
-      :close-on-click-modal="false"
-      :close-on-press-escape="false"
-    >
-      <el-alert
-        type="warning"
-        :closable="false"
-        show-icon
-        title="明文只出现这一次，关闭后无法再看。"
-        class="secret-alert"
-      />
-      <p class="secret-name">{{ issuedName }}</p>
-      <el-input :model-value="issuedPlaintext" readonly type="textarea" :rows="3" />
-      <template #footer>
-        <el-button type="primary" @click="copyPlaintext">复制明文</el-button>
-        <el-button @click="secretDialog = false">我已保存</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -384,6 +416,13 @@ function statusType(row: PlatformApiKey): 'success' | 'info' | 'warning' {
 .hint {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+  word-break: break-all;
+}
+
+.token-cell {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .scope-tag {
@@ -454,12 +493,4 @@ function statusType(row: PlatformApiKey): 'success' | 'info' | 'warning' {
   color: var(--el-text-color-secondary);
 }
 
-.secret-alert {
-  margin-bottom: 12px;
-}
-
-.secret-name {
-  margin: 0 0 8px;
-  font-weight: 600;
-}
 </style>

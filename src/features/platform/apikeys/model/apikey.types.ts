@@ -17,6 +17,7 @@ export const platformApiKeySchema = z.object({
   revokedAtUtc: z.number().int().nullable(),
   lastUsedAtUtc: z.number().int().nullable(),
   createdAtUtc: z.number().int(),
+  plaintext: z.string().nullable().optional(),
 });
 
 export type PlatformApiKey = z.infer<typeof platformApiKeySchema>;
@@ -32,6 +33,7 @@ export function mapPlatformApiKey(raw: Record<string, unknown>): PlatformApiKey 
     revokedAtUtc: asEpochMillisNullable(raw.revokedAtUtc ?? raw.revoked_at_utc),
     lastUsedAtUtc: asEpochMillisNullable(raw.lastUsedAtUtc ?? raw.last_used_at_utc),
     createdAtUtc: asEpochMillis(raw.createdAtUtc ?? raw.created_at_utc) ?? 0,
+    plaintext: typeof raw.plaintext === 'string' && raw.plaintext.length > 0 ? raw.plaintext : null,
   });
 }
 

@@ -5,7 +5,7 @@ import {
 import type { PermissionCatalogItem } from '@/features/platform/staff/model/staff.types';
 
 import { mapPlatformApiKey, type PlatformApiKey } from '../../model/apikey.types';
-import type { ApiKeyPort, IssueApiKeyInput, IssuedApiKey, ListApiKeyPage } from '../ports/apikeyPort';
+import type { ApiKeyPort, IssueApiKeyInput, IssuedApiKey, ListApiKeyPage, UpdateApiKeyInput } from '../ports/apikeyPort';
 
 let nextId = 1;
 const keys: PlatformApiKey[] = [];
@@ -52,9 +52,19 @@ export class ApiKeyMock implements ApiKeyPort {
       revokedAtUtc: null,
       lastUsedAtUtc: null,
       createdAtUtc: now,
+      plaintext,
     });
     keys.unshift(key);
     return ok({ key, plaintext });
+  }
+
+  async update(id: string, input: UpdateApiKeyInput): Promise<AppResult<PlatformApiKey>> {
+    const row = keys.find((k) => k.id === id);
+    if (!row) return fail({ code: 'not_found', message: `API key ${id} not found` });
+    if (row.revokedAtUtc) return fail({ code: 'conflict', message: 'revoked key cannot change permissions' });
+    if (input.scopes.length === 0) return fail({ code: 'validation', message: 'permissions required' });
+    row.scopes = [...input.scopes];
+    return ok(row);
   }
 
   async revoke(id: string): Promise<AppResult<void>> {

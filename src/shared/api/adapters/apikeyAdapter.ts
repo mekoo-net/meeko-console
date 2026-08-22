@@ -8,6 +8,7 @@ import type {
   IssueApiKeyInput,
   IssuedApiKey,
   ListApiKeyPage,
+  UpdateApiKeyInput,
 } from '@/features/platform/apikeys/services/ports/apikeyPort';
 import type { PermissionCatalogItem } from '@/features/platform/staff/model/staff.types';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
@@ -46,6 +47,15 @@ export class ApiKeyHttpAdapter implements ApiKeyPort {
       key: mapPlatformApiKey(res.data.key),
       plaintext: res.data.plaintext,
     });
+  }
+
+  async update(id: string, input: UpdateApiKeyInput): Promise<AppResult<PlatformApiKey>> {
+    const res = await request<Record<string, unknown>>(`/api/admin/platform/apikeys/${id}`, {
+      method: 'PUT',
+      body: { scopes: input.scopes },
+    });
+    if (!res.success) return res;
+    return ok(mapPlatformApiKey(res.data));
   }
 
   async revoke(id: string): Promise<AppResult<void>> {

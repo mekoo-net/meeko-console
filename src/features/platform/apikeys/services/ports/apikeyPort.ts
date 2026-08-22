@@ -19,9 +19,14 @@ export interface IssuedApiKey {
   plaintext: string;
 }
 
+export interface UpdateApiKeyInput {
+  scopes: string[];
+}
+
 export interface ApiKeyPort {
   list(input: { page: number; pageSize: number }): Promise<AppResult<ListApiKeyPage>>;
   listScopes(): Promise<AppResult<PermissionCatalogItem[]>>;
   issue(input: IssueApiKeyInput): Promise<AppResult<IssuedApiKey>>;
+  update(id: string, input: UpdateApiKeyInput): Promise<AppResult<PlatformApiKey>>;
   revoke(id: string): Promise<AppResult<void>>;
 }

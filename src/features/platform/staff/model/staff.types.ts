@@ -117,6 +117,7 @@ export const PERMISSION_RESOURCE_LABELS: Record<string, string> = {
 /** 特殊码的完整中文名（无法按 资源+操作 组合出来的）。 */
 export const PERMISSION_CODE_LABELS: Record<string, string> = {
   'platform.read': '平台概览',
+  'billing.voucher.write': '下发代金券',
 };
 
 const PERMISSION_ACTION_LABELS: Record<string, string> = {
@@ -185,6 +186,13 @@ function domainRank(domain: string): number {
 /** buildPermissionTree 的输入：纯码，或目录接口返回的 码+描述。 */
 export type PermissionTreeInput = string | { code: string; description?: string | null };
 
+/** 种子占位英文不算可用描述，否则会盖掉本地中文映射。 */
+function usableCatalogDescription(description: string | null | undefined, code: string): string | null {
+  if (!description || description === code) return null;
+  if (description.startsWith('System staff permission:')) return null;
+  return description;
+}
+
 /**
  * 把权限目录组装成 域 → 资源 → 操作 三级树（JumpServer 风格授权树的数据源）。
  * 叶子标签优先用目录里产品自注册的 description，缺失时降级为本地映射/原始码；
@@ -202,7 +210,7 @@ export function buildPermissionTree(items: readonly PermissionTreeInput[]): Perm
       entry = { direct: [], resources: new Map() };
       domains.set(domain, entry);
     }
-    const label = description && description !== code ? description : permissionLabel(code);
+    const label = usableCatalogDescription(description, code) ?? permissionLabel(code);
     const leaf: PermissionTreeNode = { key: code, code, label };
     if (resource === null) {
       entry.direct.push(leaf);
