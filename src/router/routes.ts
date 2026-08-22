@@ -339,6 +339,16 @@ export const routes: RouteRecordRaw[] = [
               permissions: ['platform.role.read'],
             },
           },
+          {
+            path: 'apikeys',
+            name: 'settings-apikeys',
+            component: () => import('@/features/platform/apikeys/views/ApiKeyListView.vue'),
+            meta: {
+              title: '平台令牌',
+              requiresAuth: true,
+              permissions: ['platform.apikey.read'],
+            },
+          },
         ],
       },
       {

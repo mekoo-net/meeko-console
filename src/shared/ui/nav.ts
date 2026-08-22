@@ -191,6 +191,7 @@ export const navViews: readonly NavView[] = [
         children: [
           { type: 'leaf', index: '/settings/staff', title: '管理账户', icon: User, perm: 'platform.staff.read' },
           { type: 'leaf', index: '/settings/roles', title: '角色权限', icon: Lock, perm: 'platform.role.read' },
+          { type: 'leaf', index: '/settings/apikeys', title: '平台令牌', icon: Key, perm: 'platform.apikey.read' },
         ],
       },
     ],

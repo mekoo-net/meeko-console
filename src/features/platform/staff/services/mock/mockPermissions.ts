@@ -12,6 +12,8 @@ export const MOCK_ALL_STAFF_PERMISSIONS = [
   'platform.role.write',
   'platform.settings.read',
   'platform.settings.write',
+  'platform.apikey.read',
+  'platform.apikey.write',
   'notice.template.read',
   'notice.template.write',
   'notice.channel.read',

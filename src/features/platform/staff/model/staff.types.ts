@@ -93,6 +93,7 @@ export const PERMISSION_RESOURCE_LABELS: Record<string, string> = {
   'platform.staff': '管理员',
   'platform.role': '角色权限',
   'platform.settings': '系统设置',
+  'platform.apikey': '平台令牌',
   'notice.template': '邮件模板',
   'notice.channel': '通知渠道',
   'billing.recharge': '充值记录',
