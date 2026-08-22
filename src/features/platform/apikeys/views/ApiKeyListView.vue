@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ElMessage } from 'element-plus';
+import { ElMessage, type ElTree } from 'element-plus';
 import { Plus, Refresh } from '@element-plus/icons-vue';
 import { computed, onMounted, reactive, ref } from 'vue';
 
@@ -7,10 +7,13 @@ import EmptyState from '@/shared/ui/EmptyState.vue';
 import { confirmDanger } from '@/shared/composables/useConfirm';
 import { formatDateTime } from '@/shared/lib/date';
 import { useAuthStore } from '@/stores/auth';
+import {
+  buildPermissionTree,
+  type PermissionCatalogItem,
+} from '@/features/platform/staff/model/staff.types';
 
 import { useApiKeyList } from '../composables/useApiKeyList';
 import {
-  FALLBACK_API_KEY_SCOPES,
   apiKeyScopeLabel,
   apiKeyStatus,
   apiKeyStatusLabel,
@@ -22,7 +25,9 @@ const auth = useAuthStore();
 const canWrite = computed(() => auth.hasPermission('platform.apikey.write'));
 
 const list = useApiKeyList();
-const catalog = ref<string[]>([...FALLBACK_API_KEY_SCOPES]);
+const catalog = ref<PermissionCatalogItem[]>([]);
+const permissionTree = computed(() => buildPermissionTree(catalog.value));
+const treeRef = ref<InstanceType<typeof ElTree>>();
 
 const drawer = ref(false);
 const saving = ref(false);
@@ -38,9 +43,7 @@ const issuedPlaintext = ref('');
 
 onMounted(async () => {
   const res = await getApiKeyPort().listScopes();
-  if (res.success && res.data.length > 0) {
-    catalog.value = res.data;
-  }
+  if (res.success) catalog.value = res.data;
 });
 
 function openCreate(): void {
@@ -48,22 +51,22 @@ function openCreate(): void {
   form.scopes = [];
   form.expiresAt = '';
   drawer.value = true;
+  treeRef.value?.setCheckedKeys([]);
 }
 
-function toggleScope(code: string, checked: boolean): void {
-  if (checked) {
-    if (!form.scopes.includes(code)) form.scopes.push(code);
-    return;
-  }
-  form.scopes = form.scopes.filter((s) => s !== code);
+function syncTreeScopes(): void {
+  const keys = (treeRef.value?.getCheckedKeys(true) ?? []) as string[];
+  form.scopes = keys.filter((k) => !k.startsWith('domain:') && !k.startsWith('resource:'));
 }
 
 function checkAllScopes(): void {
-  form.scopes = [...catalog.value];
+  form.scopes = catalog.value.map((i) => i.code);
+  treeRef.value?.setCheckedKeys(form.scopes);
 }
 
 function clearScopes(): void {
   form.scopes = [];
+  treeRef.value?.setCheckedKeys([]);
 }
 
 async function submitCreate(): Promise<void> {
@@ -73,7 +76,7 @@ async function submitCreate(): Promise<void> {
     return;
   }
   if (form.scopes.length === 0) {
-    ElMessage.warning('请至少勾选一个接口');
+    ElMessage.warning('请至少勾选一项权限');
     return;
   }
 
@@ -137,7 +140,7 @@ function statusType(row: PlatformApiKey): 'success' | 'info' | 'warning' {
       <div>
         <h3 class="settings-panel__title">平台令牌</h3>
         <p class="settings-panel__desc">
-          给机器调用现有后台接口。勾选这把令牌能打哪些路径，不继承管理员角色。
+          给机器调用平台与产品后台。勾选权限与员工角色同一套，不绑某个管理员。
         </p>
       </div>
       <div class="settings-panel__head-actions">
@@ -179,7 +182,7 @@ function statusType(row: PlatformApiKey): 'success' | 'info' | 'warning' {
               <code class="hint">{{ row.keyHint }}…</code>
             </template>
           </el-table-column>
-          <el-table-column label="接口" min-width="220">
+          <el-table-column label="权限" min-width="280">
             <template #default="{ row }">
               <el-tag
                 v-for="scope in row.scopes"
@@ -246,29 +249,27 @@ function statusType(row: PlatformApiKey): 'success' | 'info' | 'warning' {
       </div>
     </div>
 
-    <el-drawer v-model="drawer" title="创建令牌" size="460px" destroy-on-close>
+    <el-drawer v-model="drawer" title="创建令牌" size="640px" destroy-on-close>
       <el-form label-width="88px" @submit.prevent="submitCreate">
         <el-form-item label="名称" required>
           <el-input v-model="form.name" maxlength="80" show-word-limit placeholder="例如：发卡脚本" />
         </el-form-item>
-        <el-form-item label="可调用接口" required>
+        <el-form-item label="权限" required>
           <div class="scope-box">
             <div class="scope-box__toolbar">
               <el-button link type="primary" @click="checkAllScopes">全选</el-button>
               <el-button link @click="clearScopes">清空</el-button>
+              <span class="muted">已选 {{ form.scopes.length }}</span>
             </div>
-            <el-checkbox
-              v-for="code in catalog"
-              :key="code"
-              :model-value="form.scopes.includes(code)"
-              class="scope-box__item"
-              @change="(v: boolean | string | number) => toggleScope(code, v === true)"
-            >
-              <div class="scope-box__label">
-                <span>{{ apiKeyScopeLabel(code) }}</span>
-                <code>{{ code }}</code>
-              </div>
-            </el-checkbox>
+            <el-tree
+              ref="treeRef"
+              :data="permissionTree"
+              show-checkbox
+              node-key="key"
+              default-expand-all
+              :props="{ label: 'label', children: 'children' }"
+              @check="syncTreeScopes"
+            />
           </div>
         </el-form-item>
         <el-form-item label="过期时间">
@@ -399,12 +400,39 @@ function statusType(row: PlatformApiKey): 'success' | 'info' | 'warning' {
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 8px;
   padding: 8px 12px 4px;
+  max-height: calc(100vh - 280px);
+  overflow: auto;
 }
 
 .scope-box__toolbar {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-bottom: 4px;
+}
+
+.scope-box__group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scope-box__resource {
+  margin-bottom: 8px;
+}
+
+.scope-box__resource-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin: 4px 0;
+}
+
+.method {
+  display: inline-block;
+  min-width: 44px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-color-primary);
 }
 
 .scope-box__item {

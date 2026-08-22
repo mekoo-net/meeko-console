@@ -1,10 +1,10 @@
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
-
 import {
-  FALLBACK_API_KEY_SCOPES,
-  mapPlatformApiKey,
-  type PlatformApiKey,
-} from '../../model/apikey.types';
+  MOCK_ALL_STAFF_PERMISSIONS,
+} from '@/features/platform/staff/services/mock/mockPermissions';
+import type { PermissionCatalogItem } from '@/features/platform/staff/model/staff.types';
+
+import { mapPlatformApiKey, type PlatformApiKey } from '../../model/apikey.types';
 import type { ApiKeyPort, IssueApiKeyInput, IssuedApiKey, ListApiKeyPage } from '../ports/apikeyPort';
 
 let nextId = 1;
@@ -16,6 +16,12 @@ function randomPlaintext(): string {
   return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+const MOCK_CATALOG: PermissionCatalogItem[] = MOCK_ALL_STAFF_PERMISSIONS.map((code, i) => ({
+  id: String(i + 1),
+  code,
+  description: null,
+}));
+
 export class ApiKeyMock implements ApiKeyPort {
   async list(input: { page: number; pageSize: number }): Promise<AppResult<ListApiKeyPage>> {
     const start = (input.page - 1) * input.pageSize;
@@ -25,14 +31,14 @@ export class ApiKeyMock implements ApiKeyPort {
     });
   }
 
-  async listScopes(): Promise<AppResult<string[]>> {
-    return ok([...FALLBACK_API_KEY_SCOPES]);
+  async listScopes(): Promise<AppResult<PermissionCatalogItem[]>> {
+    return ok(MOCK_CATALOG);
   }
 
   async issue(input: IssueApiKeyInput): Promise<AppResult<IssuedApiKey>> {
     const name = input.name.trim();
     if (!name) return fail({ code: 'validation', message: 'name required (1-80)' });
-    if (input.scopes.length === 0) return fail({ code: 'validation', message: 'endpoints required' });
+    if (input.scopes.length === 0) return fail({ code: 'validation', message: 'permissions required' });
 
     const plaintext = randomPlaintext();
     const now = Date.now();

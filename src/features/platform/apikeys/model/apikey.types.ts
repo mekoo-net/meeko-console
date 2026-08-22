@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+import {
+  permissionCatalogItemSchema,
+  permissionLabel,
+  type PermissionCatalogItem,
+} from '@/features/platform/staff/model/staff.types';
 import { asEpochMillis, asEpochMillisNullable } from '@/shared/lib/epoch';
 
 export const platformApiKeySchema = z.object({
@@ -44,17 +49,21 @@ export function apiKeyStatusLabel(status: ApiKeyStatus): string {
   return '有效';
 }
 
-/** 现有接口中文说明。目录以 GET scopes 为准，这里只负责展示。 */
-export const API_KEY_SCOPE_LABELS: Record<string, string> = {
-  'GET /api/admin/accounts': '查找账户',
-  'POST /api/admin/billing/voucher/templates/{templateId}/issue': '按模板发卡',
-};
-
 export function apiKeyScopeLabel(code: string): string {
-  return API_KEY_SCOPE_LABELS[code] ?? code;
+  return permissionLabel(code);
 }
 
-export const FALLBACK_API_KEY_SCOPES = [
-  'GET /api/admin/accounts',
-  'POST /api/admin/billing/voucher/templates/{templateId}/issue',
-];
+export function mapPermissionCatalog(raw: unknown): PermissionCatalogItem[] {
+  const rows = Array.isArray(raw) ? raw : [];
+  return rows
+    .map((row) => {
+      const item = row as Record<string, unknown>;
+      const parsed = permissionCatalogItemSchema.safeParse({
+        id: String(item.id ?? item.code ?? ''),
+        code: String(item.code ?? ''),
+        description: item.description == null ? null : String(item.description),
+      });
+      return parsed.success ? parsed.data : null;
+    })
+    .filter((x): x is PermissionCatalogItem => x != null && x.code.length > 0);
+}

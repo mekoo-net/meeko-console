@@ -1,4 +1,5 @@
 import {
+  mapPermissionCatalog,
   mapPlatformApiKey,
   type PlatformApiKey,
 } from '@/features/platform/apikeys/model/apikey.types';
@@ -8,6 +9,7 @@ import type {
   IssuedApiKey,
   ListApiKeyPage,
 } from '@/features/platform/apikeys/services/ports/apikeyPort';
+import type { PermissionCatalogItem } from '@/features/platform/staff/model/staff.types';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { request } from '@/shared/api/httpClient';
 
@@ -21,8 +23,10 @@ export class ApiKeyHttpAdapter implements ApiKeyPort {
     return ok({ items, total: res.data.total });
   }
 
-  async listScopes(): Promise<AppResult<string[]>> {
-    return request<string[]>('/api/admin/platform/apikeys/scopes');
+  async listScopes(): Promise<AppResult<PermissionCatalogItem[]>> {
+    const res = await request<unknown>('/api/admin/platform/apikeys/scopes');
+    if (!res.success) return res;
+    return ok(mapPermissionCatalog(res.data));
   }
 
   async issue(input: IssueApiKeyInput): Promise<AppResult<IssuedApiKey>> {
