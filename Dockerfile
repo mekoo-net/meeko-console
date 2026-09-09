@@ -14,10 +14,9 @@ ENV VITE_API_BASE=$VITE_API_BASE \
     VITE_USE_MOCK=$VITE_USE_MOCK \
     NODE_ENV=production
 
-# 与 pnpm-lock.yaml 同版本的 pnpm 由 corepack 提供；devDependencies（vite/vue-tsc）构建期需要
-RUN corepack enable && corepack prepare pnpm@10 --activate
+# pnpm 版本以 package.json 的 packageManager 为准，corepack 按它拉取；devDependencies（vite/vue-tsc）构建期需要
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .pnpmrc ./
-RUN pnpm install --frozen-lockfile --prod=false
+RUN corepack enable && pnpm install --frozen-lockfile --prod=false
 
 COPY . .
 RUN pnpm run build
