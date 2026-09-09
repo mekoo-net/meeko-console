@@ -24,6 +24,7 @@ export default defineConfig(({ mode }) => {
   //   /me/**      → Keystone（当前用户自助）
   //   /demux/** → Demux 产品门面
   //   /tavern/**  → Tavern 产品门面
+  //   /toapi/**   → ToApi 产品门面（Meeko.ToApi 控制面）
   // 旧的 /accounts、/iam 已并入 /api/admin/**，不再需要独立 proxy 条目。
   const proxyRules = {
     '/api':     { target: gatewayTarget, changeOrigin: true },
@@ -32,6 +33,7 @@ export default defineConfig(({ mode }) => {
     '/me':      { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
     '/demux':  { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
     '/tavern': { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
+    '/toapi':  { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
   };
 
   return {

@@ -4,37 +4,28 @@ import { ElMessage } from 'element-plus';
 import { CopyDocument, Download } from '@element-plus/icons-vue';
 
 const visible = defineModel<boolean>('visible', { required: true });
-
 const emit = defineEmits<{ (e: 'closed'): void }>();
+const props = defineProps<{ keys: string[]; batchName?: string }>();
 
-const props = defineProps<{
-  keys: string[];
-  batchName?: string;
-}>();
-
-const title = computed(() =>
-  props.keys.length > 1 ? `已生成 ${props.keys.length} 个激活码` : '激活码已发布',
-);
+const title = computed(() => (props.keys.length > 1 ? `已生成 ${props.keys.length} 个兑换码` : '兑换码已发布'));
 
 async function copyAll(): Promise<void> {
   try {
     await navigator.clipboard.writeText(props.keys.join('\n'));
-    ElMessage.success('已复制全部激活码');
+    ElMessage.success('已复制全部');
   } catch {
     ElMessage.error('复制失败');
   }
 }
 
 function downloadTxt(): void {
-  const body = props.keys.join('\n');
-  const blob = new Blob([body], { type: 'text/plain;charset=utf-8' });
+  const blob = new Blob([props.keys.join('\n')], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = `${(props.batchName || 'redemption').replace(/\s+/g, '-')}-keys.txt`;
   a.click();
   URL.revokeObjectURL(url);
-  ElMessage.success('已开始下载');
 }
 </script>
 
@@ -45,7 +36,6 @@ function downloadTxt(): void {
     width="520px"
     align-center
     append-to-body
-    class="redemption-success-dialog"
     :close-on-click-modal="false"
     @closed="emit('closed')"
   >
@@ -53,30 +43,44 @@ function downloadTxt(): void {
       type="warning"
       :closable="false"
       show-icon
-      title="请立即保存激活码"
-      description="关闭本窗口后，列表仅显示脱敏 Key。请复制或下载完整明文后再关闭。"
-      class="success-alert"
+      title="请立即保存"
+      description="关闭后列表只显示脱敏 Key，完整明文不再提供。"
+      class="alert"
     />
-
-    <ul class="keys-list">
-      <li v-for="(k, idx) in keys" :key="`${idx}-${k}`" class="keys-list__item">
+    <ul class="keys">
+      <li
+        v-for="(k, idx) in keys"
+        :key="`${idx}-${k}`"
+      >
         <code>{{ k }}</code>
       </li>
     </ul>
-
     <template #footer>
-      <el-button :icon="Download" @click="downloadTxt">下载 .txt</el-button>
-      <el-button type="primary" :icon="CopyDocument" @click="copyAll">复制全部</el-button>
-      <el-button @click="visible = false">我已保存</el-button>
+      <el-button
+        :icon="Download"
+        @click="downloadTxt"
+      >
+        下载 .txt
+      </el-button>
+      <el-button
+        type="primary"
+        :icon="CopyDocument"
+        @click="copyAll"
+      >
+        复制全部
+      </el-button>
+      <el-button @click="visible = false">
+        我已保存
+      </el-button>
     </template>
   </el-dialog>
 </template>
 
 <style scoped>
-.success-alert {
+.alert {
   margin-bottom: 16px;
 }
-.keys-list {
+.keys {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -86,17 +90,16 @@ function downloadTxt(): void {
   border-radius: 8px;
   background: #f8fafc;
 }
-.keys-list__item {
+.keys li {
   padding: 10px 14px;
   border-bottom: 1px solid var(--el-border-color-extra-light);
 }
-.keys-list__item:last-child {
+.keys li:last-child {
   border-bottom: none;
 }
-.keys-list__item code {
+.keys code {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 13px;
   word-break: break-all;
-  color: #0f172a;
 }
 </style>

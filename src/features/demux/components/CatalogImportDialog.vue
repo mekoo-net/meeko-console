@@ -23,7 +23,7 @@ import type {
 } from '../model/catalog.types';
 import { getDemuxCatalogPort } from '../services';
 import ProviderDetailPanel from './provider/ProviderDetailPanel.vue';
-import './provider/providerWorkspace.css';
+import '@/shared/ui/workspace/workspace.css';
 
 interface Props {
   modelValue: boolean;

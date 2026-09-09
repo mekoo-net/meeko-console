@@ -1,7 +1,7 @@
 # meeko-console 静态产物镜像（Vue 3 + Vite）
 # 纯静态 SPA：运行期不需要 Node.js，也不内置 Web 服务。
 # 镜像只携带构建好的 dist/，启动时同步到挂载目录，由宿主/外部 Web 服务托管。
-FROM oven/bun:1-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 
 # Vite 在构建期把 VITE_* 变量内联进产物，需在 build 之前注入
@@ -14,12 +14,13 @@ ENV VITE_API_BASE=$VITE_API_BASE \
     VITE_USE_MOCK=$VITE_USE_MOCK \
     NODE_ENV=production
 
-# bun 安装/构建比 node 系包管理器快很多；devDependencies（vite/vue-tsc）默认会安装
-COPY package.json bun.lock* ./
-RUN if [ -f bun.lock ]; then bun install --frozen-lockfile; else bun install; fi
+# 与 pnpm-lock.yaml 同版本的 pnpm 由 corepack 提供；devDependencies（vite/vue-tsc）构建期需要
+RUN corepack enable && corepack prepare pnpm@10 --activate
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .pnpmrc ./
+RUN pnpm install --frozen-lockfile --prod=false
 
 COPY . .
-RUN bun run build
+RUN pnpm run build
 
 # 运行阶段：极简镜像，仅存放静态产物，无任何常驻服务
 FROM alpine:3.20 AS runtime

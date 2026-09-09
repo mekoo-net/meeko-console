@@ -1,6 +1,7 @@
 import {
   Bell,
   ChatLineRound,
+  Connection,
   CreditCard,
   Coin,
   DataAnalysis,
@@ -87,6 +88,7 @@ export const navViews: readonly NavView[] = [
           { type: 'leaf', index: '/billing/voucher-grants', title: '自动发券', icon: MagicStick },
         ],
       },
+      { type: 'leaf', index: '/billing/redemption', title: '兑换码', icon: Tickets, roles: ['Admin'] },
     ],
   },
   {
@@ -96,7 +98,6 @@ export const navViews: readonly NavView[] = [
     roles: ['Admin'],
     menu: [
       { type: 'leaf', index: '/demux/overview', title: '概览', icon: DataAnalysis },
-      { type: 'leaf', index: '/demux/redemption', title: '激活码', icon: Tickets },
       { type: 'leaf', index: '/demux/providers', title: '供应商组', icon: Link },
       { type: 'leaf', index: '/demux/rate', title: '模型定价', icon: PriceTag },
       { type: 'leaf', index: '/demux/logs', title: '调用日志', icon: DataLine },
@@ -119,6 +120,17 @@ export const navViews: readonly NavView[] = [
       { type: 'leaf', index: '/tavern/overview', title: '概览', icon: DataAnalysis },
       { type: 'leaf', index: '/tavern/pipeline', title: '管线设置', icon: MagicStick },
       { type: 'leaf', index: '/tavern/backends', title: '网关凭据', icon: Key },
+    ],
+  },
+  {
+    id: 'toapi',
+    title: 'ToApi',
+    icon: Connection,
+    roles: ['Admin'],
+    menu: [
+      { type: 'leaf', index: '/toapi/groups', title: '渠道分组', icon: Link },
+      { type: 'leaf', index: '/toapi/rates', title: '模型定价', icon: PriceTag },
+      { type: 'leaf', index: '/toapi/logs', title: '调用日志', icon: DataLine },
     ],
   },
   {

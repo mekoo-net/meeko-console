@@ -100,7 +100,9 @@ export const routes: RouteRecordRaw[] = [
           },
           {
             path: 'redemption',
-            redirect: { name: 'demux-redemption' },
+            name: 'billing-redemption',
+            component: () => import('@/features/platform/redemption/views/RedemptionCodesView.vue'),
+            meta: { title: '兑换码', requiresAuth: true, roles: ['Admin'] },
           },
         ],
       },
@@ -158,9 +160,7 @@ export const routes: RouteRecordRaw[] = [
           },
           {
             path: 'redemption',
-            name: 'demux-redemption',
-            component: () => import('@/features/demux/views/RedemptionCodesView.vue'),
-            meta: { title: '激活码', requiresAuth: true, roles: ['Admin'] },
+            redirect: { name: 'billing-redemption' },
           },
           {
             path: 'settings',
@@ -224,6 +224,36 @@ export const routes: RouteRecordRaw[] = [
             name: 'tavern-backends',
             component: () => import('@/features/tavern/views/GatewayCredentialsView.vue'),
             meta: { title: '网关凭据', requiresAuth: true, roles: ['Admin'] },
+          },
+        ],
+      },
+      {
+        path: 'toapi',
+        component: () => import('@/features/toapi/views/ToApiLayout.vue'),
+        redirect: { name: 'toapi-groups' },
+        meta: { title: 'ToApi 管理', requiresAuth: true, roles: ['Admin'] },
+        children: [
+          {
+            path: 'groups',
+            name: 'toapi-groups',
+            component: () => import('@/features/toapi/views/SupplyGroupsView.vue'),
+            meta: { title: '渠道分组', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'rates',
+            name: 'toapi-rates',
+            component: () => import('@/features/toapi/views/ModelRatesView.vue'),
+            meta: { title: '模型定价', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'logs',
+            name: 'toapi-logs',
+            component: () => import('@/features/toapi/views/UsageLogsView.vue'),
+            meta: { title: '调用日志', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'redemption',
+            redirect: { name: 'billing-redemption' },
           },
         ],
       },

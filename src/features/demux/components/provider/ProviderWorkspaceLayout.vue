@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import './providerWorkspace.css';
+import '@/shared/ui/workspace/workspace.css';
 
 interface Props {
   loading?: boolean;
