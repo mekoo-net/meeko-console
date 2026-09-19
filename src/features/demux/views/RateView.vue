@@ -1,38 +1,37 @@
 <script setup lang="ts">
 /**
- * 模型定价：左右分栏。左侧按供应商组（QueueGroup）筛选，右侧管理该渠道下别名定价。
+ * 模型定价：左侧渠道，右侧每条别名的有效价。
+ *
+ * 别名要么走渠道定价（价格表 × 渠道倍率），要么自定义按量 / 按次等。
  */
 import { computed, onMounted, ref, watch } from 'vue';
 
-import { Delete, Edit, RefreshLeft, Search } from '@element-plus/icons-vue';
+import { Delete, Edit } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import { formatDateTime } from '@/shared/lib/date';
-import { formatMoney } from '@/shared/lib/money';
 import { confirmDanger } from '@/shared/composables/useConfirm';
 import { usePagination } from '@/shared/composables/usePagination';
 
-import {
-  ModelFamilyLabel,
-  ProviderGroupLabel,
-  billingTypeValues,
-  BillingTypeLabel,
-  type BillingType,
-} from '@demux/common';
-import type { Rate, UpsertRateInput, VendorModelGroup } from '@demux/common';
-import type { Model } from '@demux/common';
+import { ProviderGroupLabel } from '@demux/common';
+import type { Rate, RouteRateEntry, VendorModelGroup } from '@demux/common';
 import type { UnconfiguredRoute, VendorRateStatsMap } from '@demux/common';
 import type { ProviderGroup } from '../model/catalog.types';
+import { formatMultiplier } from '../model/rateSummary';
+import { isEmbeddingPrice, rateBodyDisplay, type PriceDisplay } from '../model/priceTable';
 import { getDemuxCatalogPort, getDemuxRatePort } from '../services';
 import ProviderWorkspaceLayout from '../components/provider/ProviderWorkspaceLayout.vue';
 import ProviderGroupSidebar from '../components/provider/ProviderGroupSidebar.vue';
 import ProviderDetailPanel from '../components/provider/ProviderDetailPanel.vue';
-import RateEditDialog from '../components/RateEditDialog.vue';
+import AliasMap from '../components/AliasMap.vue';
+import PriceCells from '../components/pricing/PriceCells.vue';
+import RouteRateDrawer, { type RouteRateTarget } from '../components/RouteRateDrawer.vue';
+import ProviderGroupEditDrawer from '../components/provider/ProviderGroupEditDrawer.vue';
 
-const ratePort = getDemuxRatePort();
 const catalogPort = getDemuxCatalogPort();
+const ratePort = getDemuxRatePort();
 
 const groups = ref<ProviderGroup[]>([]);
 const groupsLoading = ref(false);
@@ -47,22 +46,10 @@ const unconfiguredLoading = ref(false);
 const pricedPagination = usePagination({ pageSize: 20, pageSizes: [10, 20, 50, 100] });
 const unconfiguredPagination = usePagination({ pageSize: 15, pageSizes: [10, 15, 30, 50] });
 
-interface PageFilter {
-  keyword: string;
-  billingType: BillingType | 'all';
-}
+const routeRateOpen = ref(false);
+const routeRateTarget = ref<RouteRateTarget | null>(null);
 
-const defaultFilter = (): PageFilter => ({
-  keyword: '',
-  billingType: 'all',
-});
-
-const filter = ref<PageFilter>(defaultFilter());
-
-const dialogOpen = ref(false);
-const dialogLoading = ref(false);
-const editingRate = ref<Rate | null>(null);
-const editingModel = ref<Model | null>(null);
+const vendorMultiplierOpen = ref(false);
 
 type TabName = 'priced' | 'unconfigured';
 const activeTab = ref<TabName>('priced');
@@ -89,32 +76,30 @@ const selectedVendorUnconfiguredCount = computed(
   () => vendorRateCounts.value[selectedVendor.value]?.unconfigured ?? 0,
 );
 
-function groupRowKey(row: VendorModelGroup): string {
-  return `${row.vendorKey}|${row.vendorModel}`;
+interface PricedRow {
+  vendorKey: string;
+  vendorModel: string;
+  entry: RouteRateEntry;
+  display: Omit<PriceDisplay, 'price'>;
 }
 
-function modelFromRouteKey(routeKey: string): Model {
-  const t = Date.now();
-  return {
-    uid: routeKey,
-    modelId: routeKey,
-    displayName: routeKey,
-    family: 'other',
-    capabilities: ['chat'],
-    visibleMinTier: 1,
-    maxContextTokens: 128_000,
-    maxOutputTokens: null,
-    supportsStreaming: true,
-    supportsFunctionCall: false,
-    description: null,
-    createdAtUtc: t,
-    updatedAtUtc: t,
-  };
-}
-
-const pagedUnconfigured = computed<Model[]>(() =>
-  unconfiguredItems.value.map((row) => modelFromRouteKey(row.routeKey)),
+const pricedRows = computed<PricedRow[]>(() =>
+  pricedGroups.value.flatMap((group) =>
+    group.routeKeys.map((entry) => ({
+      vendorKey: group.vendorKey,
+      vendorModel: group.vendorModel,
+      entry,
+      display: rateBodyDisplay(
+        entry.rate,
+        isEmbeddingPrice({ modelKey: group.vendorModel, capabilities: null }),
+      ),
+    })),
+  ),
 );
+
+function pricedRowKey(row: PricedRow): string {
+  return `${row.vendorKey}|${row.entry.routeKey}`;
+}
 
 async function loadGroups(): Promise<void> {
   groupsLoading.value = true;
@@ -164,8 +149,8 @@ async function loadPricedGroups(): Promise<void> {
       pageSize: pricedPagination.state.pageSize,
       filter: {
         vendorKey: selectedVendor.value,
-        keyword: filter.value.keyword,
-        billingType: filter.value.billingType,
+        keyword: '',
+        billingType: 'all',
       },
     });
     if (r.success) {
@@ -179,38 +164,39 @@ async function loadPricedGroups(): Promise<void> {
   }
 }
 
-function resetFilter(): void {
-  filter.value = defaultFilter();
-  pricedPagination.setPage(1);
+function openRouteRate(row: PricedRow): void {
+  routeRateTarget.value = {
+    routeId: row.entry.routeId,
+    routeKey: row.entry.routeKey,
+    vendorModel: row.vendorModel,
+    pricingMode: row.entry.pricingMode,
+    rate: row.entry.rate,
+  };
+  routeRateOpen.value = true;
 }
 
-function openEdit(p: Rate): void {
-  editingRate.value = p;
-  editingModel.value = modelFromRouteKey(p.modelId);
-  dialogOpen.value = true;
+function openUnconfigured(row: UnconfiguredRoute): void {
+  routeRateTarget.value = {
+    routeId: row.routeId,
+    routeKey: row.routeKey,
+    vendorModel: row.vendorModel,
+    pricingMode: 'compiled',
+    rate: null,
+  };
+  routeRateOpen.value = true;
 }
 
-function openCreateFor(m: Model): void {
-  editingRate.value = null;
-  editingModel.value = m;
-  dialogOpen.value = true;
+async function reloadAll(): Promise<void> {
+  await Promise.all([loadPricedGroups(), loadVendorRateStats(), loadGroups()]);
+  if (activeTab.value === 'unconfigured') await loadUnconfiguredRoutes();
 }
 
-async function onSubmit(payload: UpsertRateInput): Promise<void> {
-  dialogLoading.value = true;
-  try {
-    const r = await ratePort.upsert(payload);
-    if (r.success) {
-      ElMessage.success('定价已保存');
-      dialogOpen.value = false;
-      await Promise.all([loadPricedGroups(), loadVendorRateStats()]);
-      if (activeTab.value === 'unconfigured') await loadUnconfiguredRoutes();
-    } else {
-      ElMessage.error(r.error.message);
-    }
-  } finally {
-    dialogLoading.value = false;
-  }
+async function onRouteRateSaved(): Promise<void> {
+  await reloadAll();
+}
+
+async function onVendorMultiplierSaved(): Promise<void> {
+  await reloadAll();
 }
 
 async function onDelete(row: Rate): Promise<void> {
@@ -224,109 +210,25 @@ async function onDelete(row: Rate): Promise<void> {
   const r = await ratePort.delete(String(row.id));
   if (r.success) {
     ElMessage.success('已删除');
-    await Promise.all([loadPricedGroups(), loadVendorRateStats()]);
-    if (activeTab.value === 'unconfigured') await loadUnconfiguredRoutes();
+    await reloadAll();
   } else {
     ElMessage.error(r.error.message);
   }
 }
 
-function priceSummary(row: Rate): string {
-  switch (row.billingType) {
-    case 'per_token': {
-      const p = row.rate;
-      const extras: string[] = [];
-      if (p.input.cachedRead != null) {
-        extras.push(`cR ${formatMoney(p.input.cachedRead, { fractionDigits: 2 })}`);
-      }
-      if (p.input.cachedWrite != null) {
-        extras.push(`cW ${formatMoney(p.input.cachedWrite, { fractionDigits: 2 })}`);
-      }
-      if (p.output.reasoning != null) {
-        extras.push(`reason ${formatMoney(p.output.reasoning, { fractionDigits: 2 })}`);
-      }
-      if (p.input.audio != null || p.output.audio != null) {
-        const ai = p.input.audio ?? 0;
-        const ao = p.output.audio ?? 0;
-        extras.push(
-          `audio ${formatMoney(ai, { fractionDigits: 2 })}/${formatMoney(ao, { fractionDigits: 2 })}`,
-        );
-      }
-      const main = `${formatMoney(p.input.perMToken, { fractionDigits: 2 })} 入 / ${formatMoney(
-        p.output.perMToken,
-        { fractionDigits: 2 },
-      )} 出 · per 1M`;
-      return extras.length ? `${main} · ${extras.join(' · ')}` : main;
-    }
-    case 'per_call': {
-      const p = row.rate;
-      const cached =
-        p.cachedPricePerCall != null
-          ? ` · cached ${formatMoney(p.cachedPricePerCall, { fractionDigits: 4 })}`
-          : '';
-      return `${formatMoney(p.pricePerCall, { fractionDigits: 4 })} / 次${cached}`;
-    }
-    case 'per_image': {
-      const prices = row.rate.tiers.map((t) => t.pricePerImage);
-      const min = Math.min(...prices);
-      const max = Math.max(...prices);
-      const range =
-        min === max
-          ? formatMoney(min, { fractionDigits: 4 })
-          : `${formatMoney(min, { fractionDigits: 4 }) }-${formatMoney(max, { fractionDigits: 4 })}`;
-      return `${row.rate.tiers.length} 档 / ${range} / 张`;
-    }
-    case 'per_video': {
-      const prices = row.rate.tiers.map((t) => t.pricePerSecond);
-      const min = Math.min(...prices);
-      const max = Math.max(...prices);
-      const range =
-        min === max
-          ? formatMoney(min, { fractionDigits: 4 })
-          : `${formatMoney(min, { fractionDigits: 4 }) }-${formatMoney(max, { fractionDigits: 4 })}`;
-      return `${row.rate.tiers.length} 档 / ${range} / 秒`;
-    }
-    case 'per_audio_minute':
-      return `${formatMoney(row.rate.pricePerMinute, { fractionDigits: 4 })} / 分钟`;
-    case 'per_character':
-      return `${formatMoney(row.rate.pricePerKChar, { fractionDigits: 4 })} / 1K 字符`;
-  }
-}
-
-function tierBadgeLabel(level: number, mult: number): string {
-  return `Lv${level} × ${mult}`;
-}
-
-function vendorLabelForKey(vendorKey: string): string {
-  if (!vendorKey) return '—';
-  return ProviderGroupLabel[vendorKey] ?? vendorKey;
-}
-
-watch(
-  () => [filter.value.keyword, filter.value.billingType, selectedVendor.value] as const,
-  () => {
-    pricedPagination.setPage(1);
-    unconfiguredPagination.setPage(1);
-  },
-);
+watch(selectedVendor, () => {
+  activeTab.value = 'priced';
+  pricedPagination.setPage(1);
+  unconfiguredPagination.setPage(1);
+});
 
 watch(
   () =>
-    [
-      pricedPagination.state.page,
-      pricedPagination.state.pageSize,
-      filter.value.keyword,
-      filter.value.billingType,
-      selectedVendor.value,
-    ] as const,
+    [pricedPagination.state.page, pricedPagination.state.pageSize, selectedVendor.value] as const,
   () => {
     void loadPricedGroups();
   },
 );
-
-watch(selectedVendor, () => {
-  activeTab.value = 'priced';
-});
 
 watch(
   () =>
@@ -356,10 +258,7 @@ onMounted(async () => {
 <template>
   <ProviderWorkspaceLayout :loading="groupsLoading && groups.length === 0">
     <template #header>
-      <PageHeader
-        title="模型定价"
-        description="仅对已配置对外别名（模型路由 routeKey）定价。左侧按 QueueGroup 筛选；未配置列表只展示「有 routeKey、尚未定价」的条目，上游模型需先在供应商组建别名。"
-      />
+      <PageHeader title="模型定价" />
     </template>
 
     <ProviderGroupSidebar
@@ -368,7 +267,6 @@ onMounted(async () => {
       :loading="groupsLoading"
       :counts="vendorRateCounts"
       search-placeholder="搜索渠道 / QueueGroup"
-      empty-description="请先在「供应商组」页从网关同步 Provider。"
     />
 
     <ProviderDetailPanel>
@@ -381,6 +279,15 @@ onMounted(async () => {
             <span>未配置 {{ selectedVendorUnconfiguredCount }} 个</span>
           </div>
         </div>
+        <button
+          v-if="selectedGroup"
+          type="button"
+          class="mult"
+          @click="vendorMultiplierOpen = true"
+        >
+          <span class="mult__v">{{ formatMultiplier(selectedGroup.priceMultiplier) }}</span>
+          <span class="mult__k">渠道倍率</span>
+        </button>
       </template>
 
       <template #toolbar>
@@ -418,141 +325,42 @@ onMounted(async () => {
             </template>
           </el-tab-pane>
         </el-tabs>
-
-        <el-form v-if="activeTab === 'priced'" inline class="filter-form" @submit.prevent>
-          <el-form-item label="搜索">
-            <el-input
-              v-model="filter.keyword"
-              :prefix-icon="Search"
-              placeholder="别名 / 原始模型名"
-              style="width: 220px"
-              clearable
-            />
-          </el-form-item>
-          <el-form-item label="计费类型">
-            <el-select v-model="filter.billingType" style="width: 160px">
-              <el-option label="全部" value="all" />
-              <el-option
-                v-for="m in billingTypeValues"
-                :key="m"
-                :label="BillingTypeLabel[m]"
-                :value="m"
-              />
-            </el-select>
-          </el-form-item>
-          <el-form-item>
-            <el-button :icon="RefreshLeft" @click="resetFilter">重置</el-button>
-          </el-form-item>
-        </el-form>
       </template>
 
-      <div v-show="activeTab === 'priced'" class="provider-detail__table-wrap">
-        <el-table
-          v-loading="pricedGroupsLoading"
-          :data="pricedGroups"
-          :row-key="groupRowKey"
-          size="small"
-          class="compact-table"
-          height="100%"
-          :empty-text="' '"
-        >
-          <el-table-column type="expand">
-            <template #default="{ row }: { row: VendorModelGroup }">
-              <el-table
-                :data="row.routeKeys"
-                row-key="routeKey"
-                size="small"
-                class="inner-table"
-              >
-                <el-table-column label="对外别名" min-width="200">
-                  <template #default="{ row: routeRow }">
-                    <div class="cell-model">
-                      <div class="cell-model__name">{{ routeRow.routeKey }}</div>
-                    </div>
-                  </template>
-                </el-table-column>
-                <el-table-column label="计费类型" width="120">
-                  <template #default="{ row: routeRow }">
-                    <el-tag size="small" type="primary" effect="plain" round>
-                      {{ BillingTypeLabel[routeRow.rate.billingType as BillingType] }}
-                    </el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column label="基础单价" min-width="280">
-                  <template #default="{ row: routeRow }">
-                    <span class="cell-price">{{ priceSummary(routeRow.rate) }}</span>
-                  </template>
-                </el-table-column>
-                <el-table-column label="LV 倍率" min-width="180">
-                  <template #default="{ row: routeRow }">
-                    <div class="tier-badges">
-                      <el-tag
-                        v-for="[lv, mult] in Object.entries(routeRow.rate.tierMultipliers)"
-                        :key="lv"
-                        size="small"
-                        effect="plain"
-                        :type="Number(mult) < 1 ? 'success' : 'warning'"
-                      >
-                        {{ tierBadgeLabel(Number(lv), Number(mult)) }}
-                      </el-tag>
-                      <span
-                        v-if="Object.keys(routeRow.rate.tierMultipliers).length === 0"
-                        class="cell-muted"
-                      >
-                        —
-                      </span>
-                    </div>
-                  </template>
-                </el-table-column>
-                <el-table-column label="生效" width="150">
-                  <template #default="{ row: routeRow }">
-                    <span class="cell-date">{{
-                      formatDateTime(routeRow.rate.effectiveFromUtc)
-                    }}</span>
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="140" align="right">
-                  <template #default="{ row: routeRow }">
-                    <el-button :icon="Edit" link type="primary" @click="openEdit(routeRow.rate)">
-                      编辑
-                    </el-button>
-                    <el-button
-                      :icon="Delete"
-                      link
-                      type="danger"
-                      @click="onDelete(routeRow.rate)"
-                    >
-                      删除
-                    </el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </template>
-          </el-table-column>
-          <el-table-column label="原始模型名" min-width="240">
-            <template #default="{ row }: { row: VendorModelGroup }">
-              <div class="cell-model">
-                <div class="cell-model__name">{{ row.vendorModel }}</div>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column label="渠道" width="120">
-            <template #default="{ row }: { row: VendorModelGroup }">
-              <el-tag size="small" effect="plain">{{ vendorLabelForKey(row.vendorKey) }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="别名数" width="100">
-            <template #default="{ row }: { row: VendorModelGroup }">
-              {{ row.routeKeys.length }} 个
-            </template>
-          </el-table-column>
-          <template #empty>
-            <EmptyState
-              title="暂无定价"
-              description="该渠道下尚无已定价别名；可切换「未配置」或先在供应商组创建别名。"
-            />
-          </template>
-        </el-table>
+      <div v-show="activeTab === 'priced'" v-loading="pricedGroupsLoading" class="provider-detail__table-wrap">
+        <div class="rate-list">
+          <div v-if="pricedRows.length > 0" class="rate-row rate-row--head">
+            <span>别名</span>
+            <span>价格</span>
+            <span>日期</span>
+            <span class="rate-row__ops-h">操作</span>
+          </div>
+          <article
+            v-for="row in pricedRows"
+            :key="pricedRowKey(row)"
+            class="rate-row"
+            @click="openRouteRate(row)"
+          >
+            <AliasMap class="rate-row__alias" :alias="row.entry.routeKey" :target="row.vendorModel" />
+            <div class="rate-row__price">
+              <PriceCells :model="row.display" />
+            </div>
+            <div class="rate-row__date">{{ formatDateTime(row.entry.rate.effectiveFromUtc) }}</div>
+            <div class="rate-row__ops">
+              <el-button :icon="Edit" link type="primary" @click.stop="openRouteRate(row)">
+                定价
+              </el-button>
+              <el-button :icon="Delete" link type="danger" @click.stop="onDelete(row.entry.rate)">
+                删除
+              </el-button>
+            </div>
+          </article>
+          <EmptyState
+            v-if="pricedRows.length === 0 && !pricedGroupsLoading"
+            class="rate-list__empty"
+            title="暂无定价"
+          />
+        </div>
       </div>
 
       <div v-show="activeTab === 'priced'" class="provider-pagination">
@@ -566,45 +374,35 @@ onMounted(async () => {
         />
       </div>
 
-      <div v-show="activeTab === 'unconfigured'" class="provider-detail__table-wrap">
-        <el-table
-          v-loading="unconfiguredLoading"
-          :data="pagedUnconfigured"
-          row-key="modelId"
-          size="small"
-          class="compact-table unconfigured-table"
-          height="100%"
-          @row-click="(row: Model) => openCreateFor(row)"
-        >
-          <el-table-column label="对外别名" min-width="260">
-            <template #default="{ row }: { row: Model }">
-              <div class="cell-model">
-                <div class="cell-model__name">{{ row.displayName }}</div>
-                <div class="cell-model__id">{{ row.modelId }}</div>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column label="family" width="120">
-            <template #default="{ row }: { row: Model }">
-              <el-tag size="small" type="info" effect="plain">
-                {{ ModelFamilyLabel[row.family] }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="120" align="right" fixed="right">
-            <template #default="{ row }: { row: Model }">
-              <el-button size="small" type="primary" plain @click.stop="openCreateFor(row)">
-                设置定价
+      <div
+        v-show="activeTab === 'unconfigured'"
+        v-loading="unconfiguredLoading"
+        class="provider-detail__table-wrap"
+      >
+        <div class="rate-list rate-list--open">
+          <div v-if="unconfiguredItems.length > 0" class="rate-row rate-row--head">
+            <span>别名</span>
+            <span class="rate-row__ops-h">操作</span>
+          </div>
+          <article
+            v-for="row in unconfiguredItems"
+            :key="row.routeKey"
+            class="rate-row"
+            @click="openUnconfigured(row)"
+          >
+            <AliasMap class="rate-row__alias" :alias="row.routeKey" :target="row.vendorModel" />
+            <div class="rate-row__ops">
+              <el-button size="small" type="primary" plain @click.stop="openUnconfigured(row)">
+                定价
               </el-button>
-            </template>
-          </el-table-column>
-          <template #empty>
-            <EmptyState
-              title="全部已配置"
-              description="当前筛选范围内，所有启用别名均已设置定价。"
-            />
-          </template>
-        </el-table>
+            </div>
+          </article>
+          <EmptyState
+            v-if="unconfiguredItems.length === 0 && !unconfiguredLoading"
+            class="rate-list__empty"
+            title="全部已配置"
+          />
+        </div>
       </div>
 
       <div v-show="activeTab === 'unconfigured'" class="provider-pagination">
@@ -619,12 +417,17 @@ onMounted(async () => {
       </div>
     </ProviderDetailPanel>
 
-    <RateEditDialog
-      v-model="dialogOpen"
-      :rate="editingRate"
-      :model="editingModel"
-      :loading="dialogLoading"
-      @submit="onSubmit"
+    <RouteRateDrawer
+      v-model="routeRateOpen"
+      :target="routeRateTarget"
+      :vendor-multiplier="selectedGroup?.priceMultiplier ?? 1"
+      @saved="onRouteRateSaved"
+    />
+
+    <ProviderGroupEditDrawer
+      v-model="vendorMultiplierOpen"
+      :group="selectedGroup"
+      @refresh="onVendorMultiplierSaved"
     />
   </ProviderWorkspaceLayout>
 </template>
@@ -633,6 +436,9 @@ onMounted(async () => {
 .detail-header__main {
   flex: 1;
   min-width: 0;
+}
+:deep(.provider-detail__header) {
+  align-items: center;
 }
 .rate-tabs {
   margin-bottom: 4px;
@@ -648,48 +454,94 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
 }
-.filter-form {
-  margin-top: 12px;
+.rate-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: minmax(160px, 1.1fr) minmax(220px, 1.5fr) 148px 140px;
+  column-gap: 16px;
+  align-content: start;
+  padding: 0 4px 8px;
+  height: 100%;
 }
-.cell-model__name {
-  font-weight: 500;
+.rate-list--open {
+  grid-template-columns: minmax(0, 1fr) 88px;
 }
-.cell-model__id {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  margin-top: 2px;
+.rate-list__empty {
+  grid-column: 1 / -1;
 }
-.cell-price {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 12.5px;
+.rate-row {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  align-items: center;
+  padding: 11px 8px;
+  border-bottom: 1px solid var(--el-border-color-extra-light);
 }
-.tier-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.num {
-  font-variant-numeric: tabular-nums;
-}
-.unconfigured-table :deep(.el-table__row) {
+.rate-row:not(.rate-row--head) {
   cursor: pointer;
 }
-.cell-muted {
-  color: var(--el-text-color-secondary);
+.rate-row:not(.rate-row--head):hover {
+  background: var(--el-fill-color-light);
 }
-.cell-date {
+.rate-row--head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0 8px 7px;
+  background: var(--el-bg-color);
+  border-bottom-color: var(--el-border-color-lighter);
   font-size: 12px;
   color: var(--el-text-color-secondary);
 }
-.inner-table {
-  margin: 4px 0 4px 48px;
-  width: calc(100% - 48px);
+.rate-row__alias {
+  min-width: 0;
 }
-.inner-table :deep(.el-table__header th) {
-  background: var(--el-fill-color-light);
+.rate-row__price {
+  min-width: 0;
 }
-.inner-table :deep(.el-table__body tr:last-child td) {
-  border-bottom: none;
+.rate-row__date {
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+.rate-row__ops {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+.rate-row__ops-h {
+  text-align: right;
+}
+.mult {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  line-height: 1;
+}
+.mult__v {
+  font-size: 22px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  color: var(--el-text-color-primary);
+}
+.mult:hover .mult__v {
+  color: var(--el-color-primary);
+}
+.mult__k {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 </style>

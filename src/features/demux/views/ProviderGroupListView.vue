@@ -9,7 +9,7 @@
  */
 import { computed, onMounted, ref, watch } from 'vue';
 
-import { Delete, Edit, Plus, Refresh, Search, Setting } from '@element-plus/icons-vue';
+import { Delete, Edit, Plus, Refresh, Setting } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
@@ -39,7 +39,6 @@ const loading = ref(false);
 const detailLoading = ref(false);
 
 const selectedQueueGroup = ref('');
-const modelKeyword = ref('');
 
 const importDialogOpen = ref(false);
 
@@ -59,14 +58,7 @@ const selectedGroup = computed(() =>
 const currentModels = computed(() => {
   const qg = selectedQueueGroup.value;
   if (!qg) return [];
-  const list = modelsByGroup.value[qg] ?? [];
-  const kw = modelKeyword.value.trim().toLowerCase();
-  if (!kw) return list;
-  return list.filter(
-    (m) =>
-      m.vendorModel.toLowerCase().includes(kw) ||
-      (m.label ?? '').toLowerCase().includes(kw),
-  );
+  return modelsByGroup.value[qg] ?? [];
 });
 
 const pagedModels = computed(() =>
@@ -84,10 +76,6 @@ watch(
   },
   { immediate: true },
 );
-
-watch(modelKeyword, () => {
-  modelPagination.setPage(1);
-});
 
 function groupLabel(queueGroup: string, vendorSlug?: string | null): string {
   const slug = vendorSlug?.trim();
@@ -178,7 +166,7 @@ async function onRemoveModel(model: ProviderUpstreamModel): Promise<void> {
       ? `该模型下的 ${routeKeyN} 个对外别名将一并删除。`
       : '';
   const okp = await confirmDanger({
-    title: '删除上游模型',
+    title: '删除接入模型',
     message: `确认从组「${groupLabel(group.queueGroup, group.vendorSlug)}」移除模型 ${model.vendorModel}？${routeKeyNote}删除后如需恢复，需通过「接入供应商」重新导入。`,
     confirmText: '确认删除',
     type: 'warning',
@@ -200,7 +188,7 @@ async function onRemoveGroup(): Promise<void> {
   const routeKeyN = totalRouteKeyCount(group.queueGroup);
   const modelN = group.upstreamModelCount;
   const parts: string[] = [];
-  if (modelN > 0) parts.push(`${modelN} 个上游模型`);
+  if (modelN > 0) parts.push(`${modelN} 个接入模型`);
   if (routeKeyN > 0) parts.push(`${routeKeyN} 个对外别名`);
   const cascadeNote = parts.length > 0 ? `将一并删除其下 ${parts.join(' 和 ')}。` : '';
   const okp = await confirmDanger({
@@ -231,7 +219,6 @@ async function onCatalogImported(): Promise<void> {
 
 watch(selectedQueueGroup, (qg, prev) => {
   if (!qg || qg === prev) return;
-  modelKeyword.value = '';
   modelPagination.setPage(1);
   if (modelsByGroup.value[qg] === undefined) {
     void refreshGroupDetail(qg);
@@ -246,16 +233,13 @@ onMounted(async () => {
 <template>
   <ProviderWorkspaceLayout :loading="loading">
     <template #header>
-      <PageHeader
-        title="供应商组"
-        description="此处仅展示已接入的供应商组。新增 QueueGroup 或上游模型请去「接入供应商」从网关拉取。模型需在「模型定价」配价后方可被调用。未设置对外 slug 的组不会出现在公开定价。"
-      >
+      <PageHeader title="供应商组">
         <template #actions>
           <el-button :icon="Refresh" plain :loading="loading" @click="fetchGroups()">
             刷新
           </el-button>
           <el-button type="primary" :icon="Plus" @click="openImportDialog">
-            去接入
+            接入
           </el-button>
         </template>
       </PageHeader>
@@ -266,7 +250,6 @@ onMounted(async () => {
       :groups="groups"
       show-edit-button
       empty-title="尚未接入任何供应商组"
-      empty-description="点击右上角「去接入」从 LLM 网关拉取并入库。"
       @edit="openEditGroup"
     />
 
@@ -276,32 +259,20 @@ onMounted(async () => {
           <h2 class="provider-detail__title">
             {{ groupLabel(selectedGroup.queueGroup, selectedGroup.vendorSlug) }}
           </h2>
-          <p class="provider-detail__sub">{{ selectedGroup.queueGroup }}</p>
-          <div class="provider-detail__stats">
-            <span>{{ selectedGroup.upstreamModelCount }} 上游模型</span>
-            <span>{{ totalRouteKeyCount(selectedGroup.queueGroup) }} 个别名</span>
-            <span>入库于 {{ fromNow(selectedGroup.importedAtUtc) }}</span>
-          </div>
+          <p class="provider-detail__sub">
+            {{ selectedGroup.queueGroup }}
+            <span class="detail-sep">·</span>
+            {{ fromNow(selectedGroup.createdAtUtc) }}
+          </p>
         </div>
         <div class="detail-actions">
           <el-button :icon="Setting" plain @click="openEditGroup(selectedGroup)">
-            编辑通道 slug
+            渠道设置
           </el-button>
-          <el-button :icon="Plus" plain @click="openImportDialog">补充模型</el-button>
           <el-button :icon="Delete" type="danger" plain @click="onRemoveGroup">
             删除供应商组
           </el-button>
         </div>
-      </template>
-
-      <template #toolbar>
-        <el-input
-          v-model="modelKeyword"
-          :prefix-icon="Search"
-          placeholder="搜索上游模型 ID / 显示名"
-          clearable
-          style="max-width: 320px"
-        />
       </template>
 
       <div class="provider-detail__table-wrap">
@@ -314,7 +285,7 @@ onMounted(async () => {
           height="100%"
           :empty-text="' '"
         >
-          <el-table-column label="上游模型" min-width="260">
+          <el-table-column label="接入模型" min-width="260">
             <template #default="{ row: m }: { row: ProviderUpstreamModel }">
               <span class="mono model-id">{{ m.vendorModel }}</span>
               <span v-if="m.label && m.label !== m.vendorModel" class="model-label">
@@ -335,12 +306,7 @@ onMounted(async () => {
           </el-table-column>
           <template #empty>
             <EmptyState
-              :title="modelKeyword ? '无匹配模型' : '该供应商组下暂无上游模型'"
-              :description="
-                modelKeyword
-                  ? '换个关键词，或清空搜索。'
-                  : '点击右上角「补充模型」从网关拉取并选择导入。'
-              "
+              title="该供应商组下暂无接入模型"
             />
           </template>
         </el-table>
@@ -359,11 +325,8 @@ onMounted(async () => {
 
     <ProviderDetailPanel v-else show-placeholder>
       <template #placeholder>
-        <EmptyState
-          title="尚未接入任何供应商组"
-          description="点击右上角「去接入」从 LLM 网关拉取并入库。"
-        >
-          <el-button type="primary" :icon="Plus" @click="openImportDialog">去接入</el-button>
+        <EmptyState title="尚未接入任何供应商组">
+          <el-button type="primary" :icon="Plus" @click="openImportDialog">接入</el-button>
         </EmptyState>
       </template>
     </ProviderDetailPanel>
@@ -408,6 +371,10 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--el-text-color-secondary);
   margin-top: 2px;
+}
+.detail-sep {
+  margin: 0 6px;
+  color: var(--el-text-color-placeholder);
 }
 .num {
   font-variant-numeric: tabular-nums;

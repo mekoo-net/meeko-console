@@ -2,6 +2,9 @@ import type { AppResult } from '@/shared/api/httpTypes';
 
 import type {
   VendorConsumptionRow,
+  ModelConsumptionRow,
+  ConsumptionReport,
+  ConsumptionReportQuery,
   ListLogsFilter,
   LogEntry,
   LogStats,
@@ -56,6 +59,20 @@ export interface DemuxLogsPort {
    * 即使别名/供应商事后被删也能完整统计。`filter.vendorKey` 非空时只统计该渠道。
    */
   statByVendor(filter: ListLogsFilter): Promise<AppResult<VendorConsumptionRow[]>>;
+
+  /**
+   * 按对外模型别名聚合的消费统计。
+   *
+   * 口径与 `statByVendor` 相同：只计成功调用。`filter.modelName` 模糊匹配 routeKey，
+   * `filter.vendorKey` 非空时只统计该渠道上的模型。
+   */
+  statByModel(filter: ListLogsFilter): Promise<AppResult<ModelConsumptionRow[]>>;
+
+  /**
+   * 灵活消耗报表：时间桶 × 拆分维度的成功调用格子。
+   * `timeBucket` hour/day/none，`breakdown` vendor/model，渠道与模型均可多选精确匹配。
+   */
+  statConsumption(query: ConsumptionReportQuery): Promise<AppResult<ConsumptionReport>>;
 
   /**
    * 驳回单条调用日志对应的账单（actualAmount → 0，钱包余额反向冲账）。

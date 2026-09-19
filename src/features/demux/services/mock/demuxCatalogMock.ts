@@ -129,9 +129,10 @@ export class DemuxCatalogMock implements DemuxCatalogPort {
         queueGroup,
         vendorSlug,
         status: 'active',
+        priceMultiplier: 1,
         upstreamModelCount: 0,
         notes: input.notes?.trim() || null,
-        importedAtUtc: t,
+        createdAtUtc: t,
         updatedAtUtc: t,
       };
       const p = parseGroup(row);

@@ -102,7 +102,7 @@ REST 路径参数写 `{queueGroup}` / `{id}`；前端 Port 方法参数名可能
   "status": "active",
   "upstreamModelCount": 3,
   "notes": null,
-  "importedAtUtc": "2026-05-19T08:00:00Z",
+  "createdAtUtc": "2026-05-19T08:00:00Z",
   "updatedAtUtc": "2026-05-19T08:00:00Z"
 }
 
@@ -114,7 +114,7 @@ REST 路径参数写 `{queueGroup}` / `{id}`；前端 Port 方法参数名可能
 | `displayName` | 控制台展示名。 |
 | `status` | `active` / `disabled`。 |
 | `upstreamModelCount` | 组内已入库的上游模型数。 |
-| `importedAtUtc` | 首次入库时间。 |
+| `createdAtUtc` | 首次入库时间。 |
 
 枚举：`providerGroupStatusValues`（`src/features/demux/model/enums.ts`）。
 

@@ -8,11 +8,11 @@
  *     <div>...chart body...</div>
  *   </Panel>
  */
-defineProps<{ title: string }>();
+defineProps<{ title: string; fill?: boolean }>();
 </script>
 
 <template>
-  <section class="panel">
+  <section class="panel" :class="{ 'panel--fill': fill }">
     <header class="panel__head">
       <h3 class="panel__title">{{ title }}</h3>
       <div class="panel__actions">
@@ -60,5 +60,15 @@ defineProps<{ title: string }>();
   flex: 1;
   padding: 14px 16px;
   min-height: 200px;
+}
+.panel--fill {
+  flex: 1;
+  min-height: 0;
+}
+.panel--fill .panel__body {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 </style>

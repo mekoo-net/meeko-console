@@ -156,7 +156,7 @@ watch(
 <template>
   <el-drawer
     v-model="visible"
-    title="编辑上游模型"
+    title="编辑接入模型"
     size="800px"
     destroy-on-close
   >
@@ -166,7 +166,7 @@ watch(
           {{ groupTitle }}
           <span class="mono meta__sub">{{ group.queueGroup }}</span>
         </el-descriptions-item>
-        <el-descriptions-item label="上游模型 ID">
+        <el-descriptions-item label="接入模型 ID">
           <span class="mono">{{ model.vendorModel }}</span>
         </el-descriptions-item>
         <el-descriptions-item v-if="model.label" label="显示名">

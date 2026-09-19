@@ -43,6 +43,9 @@
 | --- | --- | --- | --- |
 | 列表 | `list(input)` | GET | `/demux/api/admin/logs` |
 | 统计（与 list 同 filter 子集） | `stats(filter)` | GET | `/demux/api/admin/logs/stats` |
+| 按渠道消耗 | `statByVendor(filter)` | GET | `/demux/api/admin/logs/stats/by/vendor` |
+| 按模型消耗 | `statByModel(filter)` | GET | `/demux/api/admin/logs/stats/consumption/models` |
+| 灵活消耗报表 | `statConsumption(query)` | GET | `/demux/api/admin/logs/stats/consumption` |
 | 驳回账单 | `reverse(input)` | POST | `/demux/api/admin/logs/{logId}/reverse`（**规划，适配器未实现**） |
 | Model 字典 | `DemuxaiModelPort.list` | GET | `/demux/api/admin/models` |
 | Vendor 字典 | `DemuxaiProviderPort.list` | GET | `/demux/api/admin/providers` |
@@ -64,10 +67,9 @@
 | `accessTokenId` / `iamUserUid` | string | 否 | `accessTokenId` = sk- 令牌实体主键（0 = 账户级直发）；`iamUserUid` = `account.iamUserUid`（IAM userId）。 |
 | `modelName` | string | 否 | 模糊匹配 |
 | `groupCode` | string | 否 | BFF 已有；可对应模型组 / 路由分组（接入约定） |
-| `status` | string | 否 | BFF 用量状态过滤 |
+| `status` | string | 否 | `pending` 调用中 / `success` 成功 / `failure` 失败 |
 | `vendorKey` | string | 否 | 渠道精确匹配（= `vendors.queue_group`） |
 | `protocol` | enum | 否 | 精确匹配 `content.protocol`，取值见下 |
-| `errorOnly` | boolean | 否 | 仅 `success === false` |
 | `errorCode` | string | 否 | 精确 `error.code` |
 | `convId` | string | 否 | 会话精确匹配 |
 响应：
@@ -242,7 +244,7 @@ onMounted → loadDeps()（models / providers / accounts）
 过滤 / 时间窗变化 → page=1 → list
 行「查看」→ LogDetailDrawer
 行「驳回」→ LogReverseDialog → reverse()（BFF 就绪后）
-errorOnly → filter.errorOnly = true
+status → filter.status = pending | success | failure
 
 ```
 

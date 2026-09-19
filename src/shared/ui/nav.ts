@@ -6,6 +6,7 @@ import {
   Coin,
   DataAnalysis,
   DataLine,
+  Histogram,
   Document,
   Folder,
   Key,
@@ -98,10 +99,11 @@ export const navViews: readonly NavView[] = [
     roles: ['Admin'],
     menu: [
       { type: 'leaf', index: '/demux/overview', title: '概览', icon: DataAnalysis },
-      { type: 'leaf', index: '/demux/providers', title: '供应商组', icon: Link },
+      { type: 'leaf', index: '/demux/report', title: '报表', icon: Histogram },
+      { type: 'leaf', index: '/demux/pricing', title: '价格表', icon: Coin },
+      { type: 'leaf', index: '/demux/vendors', title: '供应商组', icon: Link },
       { type: 'leaf', index: '/demux/rate', title: '模型定价', icon: PriceTag },
       { type: 'leaf', index: '/demux/logs', title: '调用日志', icon: DataLine },
-      { type: 'leaf', index: '/demux/backends', title: '网关凭据', icon: Key },
       {
         type: 'group',
         index: '/demux/settings',
@@ -119,7 +121,6 @@ export const navViews: readonly NavView[] = [
     menu: [
       { type: 'leaf', index: '/tavern/overview', title: '概览', icon: DataAnalysis },
       { type: 'leaf', index: '/tavern/pipeline', title: '管线设置', icon: MagicStick },
-      { type: 'leaf', index: '/tavern/backends', title: '网关凭据', icon: Key },
     ],
   },
   {
@@ -204,6 +205,17 @@ export const navViews: readonly NavView[] = [
           { type: 'leaf', index: '/settings/staff', title: '管理账户', icon: User, perm: 'platform.staff.read' },
           { type: 'leaf', index: '/settings/roles', title: '角色权限', icon: Lock, perm: 'platform.role.read' },
           { type: 'leaf', index: '/settings/apikeys', title: '平台令牌', icon: Key, perm: 'platform.apikey.read' },
+        ],
+      },
+      {
+        type: 'group',
+        index: '/settings/gateway',
+        title: '业务接入',
+        icon: Connection,
+        roles: ['Admin'],
+        children: [
+          { type: 'leaf', index: '/settings/gateway/issue', title: '签发凭据', icon: Key, roles: ['Admin'] },
+          { type: 'leaf', index: '/settings/gateway/credentials', title: '凭据列表', icon: Tickets, roles: ['Admin'] },
         ],
       },
     ],

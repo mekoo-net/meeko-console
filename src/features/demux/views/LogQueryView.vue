@@ -6,13 +6,13 @@
  *  - **必须传时间范围**：UI 默认填最近 24h；用户清空 dateRange 时按钮置灰
  *  - 邮箱 / 手机：服务端经 Keystone 解析 account_uid 后筛日志（全量分页，非当前页本地过滤）
  *  - 渠道筛选走 `modelName` 前缀，不在此页拉渠道组字典
- *  - 错误日志一键过滤 → 排障常用
+ *  - 表格里可点的字段写入筛选条件，不跳到别的页面
+ *  - 状态过滤：调用中 / 成功 / 失败
  *  - KPI 汇总卡片已迁移至「概览」页（OverviewView）
  */
 import { onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
 
-import { Right, RefreshLeft, Search, View, Warning } from '@element-plus/icons-vue';
+import { Right, RefreshLeft, Search, View } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
@@ -29,6 +29,7 @@ import {
   BillReverseCodeLabel,
   logErrorCodeText,
   logProtocolText,
+  type AiUsageStatus,
 } from '@demux/common';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 import type {
@@ -40,7 +41,6 @@ import { getDemuxLogsPort } from '../services';
 import LogDetailDrawer from '../components/LogDetailDrawer.vue';
 import LogReverseDialog from '../components/LogReverseDialog.vue';
 
-const router = useRouter();
 const logsPort = getDemuxLogsPort();
 
 const records = ref<LogEntry[]>([]);
@@ -62,10 +62,12 @@ interface PageFilter {
   convId: string;
   /** TraceId 精确匹配 */
   traceId: string;
+  /** 调用日志号精确匹配（点表格写入，筛选项以 tag 展示） */
+  logId: string;
   /** 账单 UID 精确匹配（= `LogEntry.bill.id`） */
   billUid: string;
-  /** 仅看失败调用（status !== 'success'） */
-  errorOnly: boolean;
+  /** 结算状态；空 = 全部。页面只开放调用中 / 成功 / 失败。 */
+  status: '' | Extract<AiUsageStatus, 'pending' | 'success' | 'failure'>;
 }
 
 const last24h = (): [string, string] => {
@@ -82,8 +84,9 @@ const defaultFilter = (): PageFilter => ({
   vendorKey: '',
   convId: '',
   traceId: '',
+  logId: '',
   billUid: '',
-  errorOnly: false,
+  status: '',
 });
 
 const filter = ref<PageFilter>(defaultFilter());
@@ -96,9 +99,8 @@ const reverseLog = ref<LogEntry | null>(null);
 const reverseSubmitting = ref(false);
 
 function buildPortFilter(): ListLogsFilter {
-  const f: ListLogsFilter = {
-    errorOnly: filter.value.errorOnly,
-  };
+  const f: ListLogsFilter = {};
+  if (filter.value.status) f.status = filter.value.status;
   if (filter.value.accountUid.trim()) f.accountUid = filter.value.accountUid.trim();
   const contact = filter.value.contactKeyword.trim();
   if (contact) f.contactKeyword = contact;
@@ -107,9 +109,11 @@ function buildPortFilter(): ListLogsFilter {
   if (qg) f.vendorKey = qg;
   const traceId = filter.value.traceId.trim();
   if (traceId) f.traceId = traceId;
+  const logId = filter.value.logId.trim();
+  if (logId) f.logId = logId;
   const billUid = filter.value.billUid.trim();
   if (billUid) f.billUid = billUid;
-  const hasExactLookup = Boolean(traceId || billUid);
+  const hasExactLookup = Boolean(traceId || logId || billUid);
   if (filter.value.dateRange?.[0] && filter.value.dateRange[1]) {
     Object.assign(f, dateRangeToEpochMillis(filter.value.dateRange));
   }
@@ -162,8 +166,9 @@ watch(
       filter.value.vendorKey,
       filter.value.convId,
       filter.value.traceId,
+      filter.value.logId,
       filter.value.billUid,
-      filter.value.errorOnly,
+      filter.value.status,
     ] as const,
   () => {
     // 回到第一页：已在第 1 页则直接拉，否则只改 page，
@@ -390,6 +395,27 @@ function setModelFilter(model: string): void {
   page.value = 1;
 }
 
+function setAccountFilter(uid: string): void {
+  filter.value.accountUid = uid;
+  page.value = 1;
+}
+
+function setStatusFilter(status: AiUsageStatus): void {
+  filter.value.status =
+    status === 'pending' || status === 'success' || status === 'failure' ? status : 'failure';
+  page.value = 1;
+}
+
+function setTraceFilter(traceId: string): void {
+  filter.value.traceId = traceId;
+  page.value = 1;
+}
+
+function setLogIdFilter(logId: string): void {
+  filter.value.logId = logId;
+  page.value = 1;
+}
+
 /**
  * 模型彩色标签（newapi / sub2api 风格）：按模型名哈希到固定调色板，同名同色，便于扫读。
  * 浅底 + 同色系文字，颜色取自一组温和的 tailwind 色阶。
@@ -428,6 +454,11 @@ function drillByConvId(convId: string): void {
 
 function clearConvFilter(): void {
   filter.value.convId = '';
+  page.value = 1;
+}
+
+function clearLogIdFilter(): void {
+  filter.value.logId = '';
   page.value = 1;
 }
 
@@ -471,17 +502,14 @@ onMounted(() => {
             style="width: 220px"
           />
         </el-form-item>
-        <el-form-item>
-          <el-checkbox v-model="filter.errorOnly">
-            <span class="error-only">
-              <el-icon><Warning /></el-icon>
-              仅看异常
-            </span>
-          </el-checkbox>
-        </el-form-item>
         <el-form-item v-if="filter.convId" label="会话">
           <el-tag closable type="info" @close="clearConvFilter">
             {{ filter.convId }}
+          </el-tag>
+        </el-form-item>
+        <el-form-item v-if="filter.logId" label="日志号">
+          <el-tag closable type="info" class="mono" @close="clearLogIdFilter">
+            {{ filter.logId }}
           </el-tag>
         </el-form-item>
 
@@ -503,6 +531,18 @@ onMounted(() => {
               clearable
               style="width: 220px"
             />
+          </el-form-item>
+          <el-form-item label="状态">
+            <el-select
+              v-model="filter.status"
+              placeholder="全部"
+              clearable
+              style="width: 140px"
+            >
+              <el-option label="调用中" value="pending" />
+              <el-option label="成功" value="success" />
+              <el-option label="失败" value="failure" />
+            </el-select>
           </el-form-item>
         </template>
       </FilterBar>
@@ -539,8 +579,22 @@ onMounted(() => {
       <el-table-column label="日志编号" min-width="190">
         <template #default="{ row }: { row: LogEntry }">
           <div class="cell-ids">
-            <span class="cell-logid mono">{{ row.id }}</span>
-            <span class="cell-trace mono">{{ row.traceId || '—' }}</span>
+            <el-button
+              link
+              type="primary"
+              class="cell-logid mono"
+              title="按日志号过滤"
+              @click="setLogIdFilter(row.id)"
+            >{{ row.id }}</el-button>
+            <el-button
+              v-if="row.traceId"
+              link
+              type="primary"
+              class="cell-trace mono"
+              title="按 TraceId 过滤"
+              @click="setTraceFilter(row.traceId)"
+            >{{ row.traceId }}</el-button>
+            <span v-else class="cell-trace cell-muted">—</span>
           </div>
         </template>
       </el-table-column>
@@ -571,13 +625,20 @@ onMounted(() => {
 
       <el-table-column label="状态" width="88" align="center">
         <template #default="{ row }: { row: LogEntry }">
-          <StatusTag v-if="row.status === 'pending'" label="调用中" tone="warning" />
-          <StatusTag v-else-if="row.status === 'success'" label="成功" tone="success" />
-          <StatusTag
-            v-else
-            :label="row.content.error ? logErrorCodeText(row.content.error.code) : AiUsageStatusLabel[row.status]"
-            tone="danger"
-          />
+          <button
+            type="button"
+            class="cell-status"
+            :title="`按状态「${AiUsageStatusLabel[row.status]}」过滤`"
+            @click="setStatusFilter(row.status)"
+          >
+            <StatusTag v-if="row.status === 'pending'" label="调用中" tone="warning" />
+            <StatusTag v-else-if="row.status === 'success'" label="成功" tone="success" />
+            <StatusTag
+              v-else
+              :label="row.content.error ? logErrorCodeText(row.content.error.code) : AiUsageStatusLabel[row.status]"
+              tone="danger"
+            />
+          </button>
         </template>
       </el-table-column>
 
@@ -682,7 +743,8 @@ onMounted(() => {
             link
             type="primary"
             class="cell-account-link"
-            @click="router.push(`/accounts/${row.account.uid}`)"
+            :title="`按账户 UID「${row.account.uid}」过滤`"
+            @click="setAccountFilter(row.account.uid)"
           >
             <span class="cell-account">
               <span class="cell-account__line">{{ row.account.email || '—' }}</span>
@@ -740,13 +802,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.error-only {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--el-color-warning);
-}
-
 .log-table {
   margin-top: 0;
 }
@@ -767,21 +822,38 @@ onMounted(() => {
   white-space: nowrap;
 }
 .cell-logid {
+  padding: 0;
+  height: auto;
   font-size: 12px;
-  color: var(--el-text-color-primary);
   word-break: break-all;
   line-height: 1.35;
+  white-space: normal;
+  text-align: left;
+  justify-content: flex-start;
 }
 .cell-ids {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 3px;
   line-height: 1.35;
 }
 .cell-trace {
+  padding: 0;
+  height: auto;
   font-size: 11.5px;
-  color: var(--el-text-color-secondary);
   word-break: break-all;
+  white-space: normal;
+  text-align: left;
+  justify-content: flex-start;
+}
+.cell-status {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  line-height: 0;
 }
 .cell-call {
   display: flex;

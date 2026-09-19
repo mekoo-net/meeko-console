@@ -6,6 +6,9 @@ import {
   logEntrySchema,
   logIsSuccess,
   type VendorConsumptionRow,
+  type ModelConsumptionRow,
+  type ConsumptionReport,
+  type ConsumptionReportQuery,
   type ListLogsFilter,
   type LogEntry,
   type LogStats,
@@ -47,6 +50,7 @@ function applyFilter(rows: LogEntry[], f: ListLogsFilter): LogEntry[] {
       const name = (r.account.displayName ?? '').toLowerCase();
       if (!email.includes(kw) && !phone.includes(kw) && !name.includes(kw)) return false;
     }
+    if (f.status && r.status !== f.status) return false;
     if (f.errorOnly && logIsSuccess(r)) return false;
     if (f.errorCode) {
       if (logIsSuccess(r)) return false;
@@ -383,5 +387,145 @@ export class DemuxLogsMock implements DemuxLogsPort {
       .sort((x, y) => y.totalCost - x.totalCost);
 
     return ok(rows);
+  }
+
+  async statByModel(filter: ListLogsFilter): Promise<AppResult<ModelConsumptionRow[]>> {
+    await delay();
+    const filtered = applyFilter(this.store.logs, filter).filter(logIsSuccess);
+
+    type Agg = {
+      requestCount: number;
+      prompt: number;
+      completion: number;
+      cost: number;
+      vendors: Set<string>;
+    };
+    const m = new Map<string, Agg>();
+    for (const r of filtered) {
+      const key = r.modelName.trim() || '(unknown)';
+      const a = m.get(key) ?? { requestCount: 0, prompt: 0, completion: 0, cost: 0, vendors: new Set<string>() };
+      const { prompt, completion } = promptCompletionOf(r);
+      a.requestCount += 1;
+      a.prompt += prompt;
+      a.completion += completion;
+      a.cost += r.cost.total;
+      const vendor = vendorOf(r);
+      if (vendor) a.vendors.add(vendor);
+      m.set(key, a);
+    }
+
+    const rows = [...m.entries()]
+      .map<ModelConsumptionRow>(([modelName, a]) => ({
+        modelName,
+        requestCount: a.requestCount,
+        totalPromptTokens: a.prompt,
+        totalCompletionTokens: a.completion,
+        totalCost: Math.round(a.cost * 10000) / 10000,
+        vendorCount: a.vendors.size,
+      }))
+      .sort((x, y) => y.totalCost - x.totalCost);
+
+    return ok(rows);
+  }
+
+  async statConsumption(query: ConsumptionReportQuery): Promise<AppResult<ConsumptionReport>> {
+    await delay();
+    const timeBucket = query.timeBucket;
+    const breakdown = query.breakdown;
+    const bucketSeconds = timeBucket === 'hour' ? 3600 : timeBucket === 'day' ? 86400 : 0;
+
+    let filtered = applyFilter(this.store.logs, {
+      fromUtc: query.fromUtc,
+      toUtc: query.toUtc,
+    }).filter(logIsSuccess);
+
+    if (query.vendorKeys?.length) {
+      const set = new Set(query.vendorKeys.map((k) => k.toLowerCase()));
+      filtered = filtered.filter((r) => set.has(vendorOf(r).toLowerCase()));
+    }
+    if (query.modelNames?.length) {
+      const set = new Set(query.modelNames.map((k) => k.toLowerCase()));
+      filtered = filtered.filter((r) => set.has(r.modelName.trim().toLowerCase()));
+    }
+
+    const groupOf = (r: LogEntry): string => {
+      if (breakdown === 'vendor') return vendorOf(r) || '(unknown)';
+      if (breakdown === 'model') return r.modelName.trim() || '(unknown)';
+      return '';
+    };
+
+    const bucketOf = (ts: number): number => {
+      if (bucketSeconds <= 0) return 0;
+      return Math.floor(ts / (bucketSeconds * 1000)) * bucketSeconds * 1000;
+    };
+
+    type Agg = { requestCount: number; prompt: number; completion: number; cost: number };
+    const totals = new Map<string, Agg>();
+    for (const r of filtered) {
+      const key = groupOf(r);
+      const a = totals.get(key) ?? { requestCount: 0, prompt: 0, completion: 0, cost: 0 };
+      const { prompt, completion } = promptCompletionOf(r);
+      a.requestCount += 1;
+      a.prompt += prompt;
+      a.completion += completion;
+      a.cost += r.cost.total;
+      totals.set(key, a);
+    }
+
+    const topKeys = [...totals.entries()]
+      .sort((a, b) => b[1].cost - a[1].cost)
+      .slice(0, 200)
+      .map(([k]) => k);
+    const keep = new Set(topKeys);
+
+    if (timeBucket === 'none') {
+      return ok({
+        bucketSeconds: 0,
+        timeBucket,
+        breakdown,
+        cells: topKeys.map((groupKey) => {
+          const a = totals.get(groupKey)!;
+          return {
+            bucketStartUtc: 0,
+            groupKey,
+            requestCount: a.requestCount,
+            totalPromptTokens: a.prompt,
+            totalCompletionTokens: a.completion,
+            totalCost: Math.round(a.cost * 10000) / 10000,
+          };
+        }),
+      });
+    }
+
+    const cells = new Map<string, Agg>();
+    for (const r of filtered) {
+      const groupKey = groupOf(r);
+      if (!keep.has(groupKey)) continue;
+      const cellKey = `${bucketOf(r.createAt)}\0${groupKey}`;
+      const a = cells.get(cellKey) ?? { requestCount: 0, prompt: 0, completion: 0, cost: 0 };
+      const { prompt, completion } = promptCompletionOf(r);
+      a.requestCount += 1;
+      a.prompt += prompt;
+      a.completion += completion;
+      a.cost += r.cost.total;
+      cells.set(cellKey, a);
+    }
+
+    return ok({
+      bucketSeconds,
+      timeBucket,
+      breakdown,
+      cells: [...cells.entries()].map(([k, a]) => {
+        const sep = k.indexOf('\0');
+        return {
+          bucketStartUtc: Number(k.slice(0, sep)),
+          groupKey: k.slice(sep + 1),
+          requestCount: a.requestCount,
+          totalPromptTokens: a.prompt,
+          totalCompletionTokens: a.completion,
+          totalCost: Math.round(a.cost * 10000) / 10000,
+        };
+      }),
+    });
   }
 }

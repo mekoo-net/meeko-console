@@ -119,26 +119,42 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '概览', requiresAuth: true, roles: ['Admin'] },
           },
           {
-            path: 'providers',
-            name: 'demux-providers',
+            path: 'report',
+            name: 'demux-report',
+            component: () => import('@/features/demux/views/ConsumptionReportView.vue'),
+            meta: { title: '报表', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'vendors',
+            name: 'demux-vendors',
             component: () => import('@/features/demux/views/ProviderGroupListView.vue'),
             meta: { title: '供应商组', requiresAuth: true, roles: ['Admin'] },
           },
           {
+            path: 'providers',
+            redirect: { name: 'demux-vendors' },
+          },
+          {
             path: 'catalog/import',
-            redirect: { name: 'demux-providers' },
+            redirect: { name: 'demux-vendors' },
           },
           {
             path: 'model-routes',
-            redirect: { name: 'demux-providers' },
+            redirect: { name: 'demux-vendors' },
           },
           {
             path: 'channels',
-            redirect: { name: 'demux-providers' },
+            redirect: { name: 'demux-vendors' },
           },
           {
             path: 'models',
-            redirect: { name: 'demux-providers' },
+            redirect: { name: 'demux-vendors' },
+          },
+          {
+            path: 'pricing',
+            name: 'demux-pricing',
+            component: () => import('@/features/demux/views/ModelPriceView.vue'),
+            meta: { title: '价格表', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'rate',
@@ -154,9 +170,7 @@ export const routes: RouteRecordRaw[] = [
           },
           {
             path: 'backends',
-            name: 'demux-backends',
-            component: () => import('@/features/demux/views/GatewayCredentialsView.vue'),
-            meta: { title: '网关凭据', requiresAuth: true, roles: ['Admin'] },
+            redirect: { name: 'settings-gateway-issue' },
           },
           {
             path: 'redemption',
@@ -165,6 +179,14 @@ export const routes: RouteRecordRaw[] = [
           {
             path: 'settings',
             redirect: { name: 'demux-settings-rate' },
+          },
+          {
+            path: 'settings/issue',
+            redirect: { name: 'settings-gateway-issue' },
+          },
+          {
+            path: 'settings/credentials',
+            redirect: { name: 'settings-gateway-credentials' },
           },
           {
             path: 'settings/rate',
@@ -221,9 +243,7 @@ export const routes: RouteRecordRaw[] = [
           },
           {
             path: 'backends',
-            name: 'tavern-backends',
-            component: () => import('@/features/tavern/views/GatewayCredentialsView.vue'),
-            meta: { title: '网关凭据', requiresAuth: true, roles: ['Admin'] },
+            redirect: { name: 'settings-gateway-issue' },
           },
         ],
       },
@@ -378,6 +398,22 @@ export const routes: RouteRecordRaw[] = [
               requiresAuth: true,
               permissions: ['platform.apikey.read'],
             },
+          },
+          {
+            path: 'gateway',
+            redirect: { name: 'settings-gateway-issue' },
+          },
+          {
+            path: 'gateway/issue',
+            name: 'settings-gateway-issue',
+            component: () => import('@/features/platform/gateway/views/GatewayCredentialIssueView.vue'),
+            meta: { title: '签发凭据', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'gateway/credentials',
+            name: 'settings-gateway-credentials',
+            component: () => import('@/features/platform/gateway/views/GatewayCredentialListView.vue'),
+            meta: { title: '凭据列表', requiresAuth: true, roles: ['Admin'] },
           },
         ],
       },

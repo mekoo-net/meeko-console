@@ -8,7 +8,7 @@
 | 角色 | **Admin** |
 | 视图 | `src/features/demux/views/OverviewView.vue` |
 | 子组件 | `DateRangeBar` / `OverviewKpi` / `OverviewTrafficChart` / `OverviewStatusDonut` / `OverviewCostTokensChart` / `OverviewErrorTop` / `OverviewTopModels` / `OverviewTopProviders` |
-| Port | `DemuxaiLogsPort.stats` + `DemuxaiProviderPort.list`（Vendor 字典，仅用于 Top 渠道名映射） |
+| Port | `DemuxLogsPort.stats` |
 
 ## 业务定义
 
@@ -23,7 +23,7 @@
 
 | 业务动作 | Port 方法 | HTTP | REST 端点 |
 | --- | --- | --- | --- |
-| 统计聚合（KPI + 时序 + Top + 错误码 + 延迟） | `DemuxaiLogsPort.stats(filter)` | GET | `/demux/api/admin/logs/stats` 及 `…/stats/by/{model,provider,errorcode}`、`…/stats/latency` |
+| 统计聚合（KPI + 时序 + Top + 错误码 + 延迟） | `DemuxLogsPort.stats(filter)` | GET | `/demux/api/admin/logs/stats` 及 `…/stats/by/{model,provider,errorcode}`、`…/stats/latency` |
 | Vendor 字典（Top 渠道名映射） | `DemuxaiProviderPort.list` | GET | `/demux/api/admin/providers` |
 
 > Demux 管理端接口统一包在 **`{ success, message?, data }` 信封**内（HTTP 200），前端经 `requestDemuxAi` 解包。详见 [`00-conventions.md`](./00-conventions.md)。
@@ -145,6 +145,8 @@ DateRangeBar 改变 dateRange → fetchStats()   // 必填，最长 7 天
 
 - 用户清空 `dateRange` 时刷新按钮置灰，提示「请先选择时间范围」。
 - 默认时间范围：最近 24h。
+
+消耗报表在独立页 [`/demux/report`](./07b-demuxai-report.md)。
 
 ## 错误码
 

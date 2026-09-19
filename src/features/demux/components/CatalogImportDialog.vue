@@ -315,10 +315,6 @@ watch(visible, (open) => {
     destroy-on-close
     append-to-body
   >
-    <p class="catalog-import-dialog__desc">
-      从 LLM 网关拉取当前可服务的 QueueGroup 与上游模型，勾选后入库；入库后可在本页继续接入其它组。
-    </p>
-
     <div class="catalog-import-dialog__actions">
       <span v-if="discoveredAtUtc" class="catalog-import-dialog__meta">
         上次拉取：{{ formatDateTime(discoveredAtUtc) }}
@@ -385,7 +381,6 @@ watch(visible, (open) => {
         <EmptyState
           v-else-if="!discovering"
           :title="groupKeyword ? '无匹配 QueueGroup' : '尚未从网关拉取数据'"
-          description="点击「重新拉取」从 LLM 网关获取清单。"
           class="provider-sidebar__empty"
         />
       </aside>
@@ -442,9 +437,6 @@ watch(visible, (open) => {
               >
                 首次入库须填写合法 slug，否则无法创建
               </p>
-              <p v-else-if="selectedGroup?.alreadyImported" class="import-slug-hint">
-                已入库组补充模型时可留空，将保留现有 slug
-              </p>
             </div>
             <el-input
               v-model="modelKeyword"
@@ -496,7 +488,6 @@ watch(visible, (open) => {
             <template #empty>
               <EmptyState
                 :title="modelKeyword ? '无匹配模型' : '该 QueueGroup 暂无上游模型'"
-                :description="modelKeyword ? '换个关键词或清空搜索。' : '网关此刻报告为空，可换组或重新拉取。'"
               />
             </template>
           </el-table>
@@ -505,10 +496,7 @@ watch(visible, (open) => {
 
       <ProviderDetailPanel v-else show-placeholder>
         <template #placeholder>
-          <EmptyState
-            title="选择左侧 QueueGroup 开始接入"
-            description="点击左栏一个供应商组，右侧勾选要入库的上游模型；可连续操作多组。"
-          />
+          <EmptyState title="选择左侧 QueueGroup 开始接入" />
         </template>
       </ProviderDetailPanel>
     </div>
@@ -516,12 +504,6 @@ watch(visible, (open) => {
 </template>
 
 <style scoped>
-.catalog-import-dialog__desc {
-  margin: 0 0 12px;
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-  line-height: 1.5;
-}
 .catalog-import-dialog__actions {
   display: flex;
   align-items: center;

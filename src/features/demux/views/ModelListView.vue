@@ -146,7 +146,7 @@ async function onSubmit(payload: { update: UpdateModelInput }): Promise<void> {
 function jumpToProvider(providerUid: string): void {
   drawerOpen.value = false;
   void router.push({
-    name: 'demux-providers',
+    name: 'demux-vendors',
     query: { focus: providerUid },
   });
 }

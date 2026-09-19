@@ -33,7 +33,7 @@ interface Props {
   searchPlaceholder?: string;
   emptyTitle?: string;
   emptyDescription?: string;
-  /** 是否展示编辑 slug 按钮（供应商组页开启） */
+  /** 是否展示渠道设置按钮（供应商组页开启） */
   showEditButton?: boolean;
 }
 
@@ -43,7 +43,7 @@ const props = withDefaults(defineProps<Props>(), {
   allLabel: '全部渠道',
   searchPlaceholder: '搜索组名 / QueueGroup',
   emptyTitle: '暂无供应商组',
-  emptyDescription: '请从「接入供应商」拉取并入库。',
+  emptyDescription: undefined,
   showEditButton: false,
 });
 
@@ -151,14 +151,14 @@ function slugDisplay(vendorSlug?: string | null): string {
               link
               type="primary"
               size="small"
-              title="编辑对外通道 slug"
+              title="渠道设置"
               @click="onEdit(g, $event)"
             />
           </div>
         </div>
         <span class="provider-sidebar__item-qg">{{ g.queueGroup }}</span>
         <div class="provider-sidebar__item-meta">
-          <span>{{ g.upstreamModelCount }} 个上游模型</span>
+          <span>{{ g.upstreamModelCount }} 个接入模型</span>
           <span v-if="counts" class="provider-sidebar__badges">
             <el-tag
               v-if="counts[g.queueGroup]?.configured"

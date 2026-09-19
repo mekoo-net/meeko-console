@@ -24,6 +24,8 @@ export const demuxPlatformPaths = {
   adminModels: '/demux/api/admin/models',
   adminRate: '/demux/api/admin/rate',
   adminVendorModel: '/demux/api/admin/vendor/model',
+  /** 价格表 / 倍率 / 编译 / 拉价 */
+  adminPricing: '/demux/api/admin/pricing',
   adminRoutes: '/demux/api/admin/routes',
   adminLogs: '/demux/api/admin/logs',
   adminBackends: '/demux/api/admin/backends',

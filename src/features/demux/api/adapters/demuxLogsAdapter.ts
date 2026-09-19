@@ -7,6 +7,9 @@ import { asEpochMillis } from '@/shared/lib/epoch';
 import { logEntrySchema } from '@demux/common';
 import type {
   VendorConsumptionRow,
+  ModelConsumptionRow,
+  ConsumptionReport,
+  ConsumptionReportQuery,
   ListLogsFilter,
   LogEntry,
   LogStats,
@@ -75,14 +78,48 @@ function inferBucketSizeSec(rows: BucketRow[]): number {
   return 86400;
 }
 
-/** 后端 AiVendorStatDto（按渠道聚合行）形状。 */
 interface VendorRow {
-  vendorKey: string;
-  requestCount: number;
-  totalPromptTokens: number;
-  totalCompletionTokens: number;
-  totalQuota: number;
-  upstreamModelCount: number;
+  vendorKey?: string;
+  requestCount?: number;
+  totalPromptTokens?: number;
+  totalCompletionTokens?: number;
+  totalQuota?: number;
+  upstreamModelCount?: number;
+}
+
+interface ModelConsumptionWire {
+  modelName?: string;
+  requestCount?: number;
+  totalPromptTokens?: number;
+  totalCompletionTokens?: number;
+  totalQuota?: number;
+  vendorCount?: number;
+}
+
+interface ConsumptionCellWire {
+  bucketStartUtc?: number;
+  groupKey?: string;
+  requestCount?: number;
+  totalPromptTokens?: number;
+  totalCompletionTokens?: number;
+  totalQuota?: number;
+}
+
+interface ConsumptionReportWire {
+  bucketSeconds?: number;
+  timeBucket?: string;
+  breakdown?: string;
+  cells?: ConsumptionCellWire[];
+}
+
+function parseTimeBucket(raw: string | undefined): ConsumptionReportQuery['timeBucket'] | undefined {
+  if (raw === 'hour' || raw === 'day' || raw === 'none') return raw;
+  return undefined;
+}
+
+function parseBreakdown(raw: string | undefined): ConsumptionReportQuery['breakdown'] | undefined {
+  if (raw === 'none' || raw === 'vendor' || raw === 'model') return raw;
+  return undefined;
 }
 
 interface ModelRankRow {
@@ -145,6 +182,17 @@ function mapRawItem(raw: unknown): LogEntry {
     return remapped as unknown as LogEntry;
   }
   return parsed.data;
+}
+
+/** 消耗报表共用查询参数：时间窗 + 可选渠道 / 模型。 */
+function consumptionQuery(filter: ListLogsFilter): Record<string, string | number | undefined> {
+  return {
+    fromUtc: filter.fromUtc,
+    toUtc: filter.toUtc,
+    accountUid: filter.accountUid || undefined,
+    vendorKey: filter.vendorKey || undefined,
+    modelName: filter.modelName || undefined,
+  };
 }
 
 const TOP_RANK_LIMIT = 5;
@@ -267,8 +315,8 @@ export class DemuxLogsHttpAdapter implements DemuxLogsPort {
         traceId:    filter.traceId    || undefined,
         billSerialNo: filter.billUid  || undefined,
         contactKeyword: filter.contactKeyword?.trim() || undefined,
-        errorOnly:  filter.errorOnly  || undefined,
         errorCode:  filter.errorCode  || undefined,
+        status:     filter.status     || undefined,
         fromUtc:    filter.fromUtc,
         toUtc:      filter.toUtc,
       },
@@ -280,23 +328,68 @@ export class DemuxLogsHttpAdapter implements DemuxLogsPort {
 
   async statByVendor(filter: ListLogsFilter): Promise<AppResult<VendorConsumptionRow[]>> {
     const result = await requestDemux<ItemsEnvelope<VendorRow>>(`${BASE}/stats/by/vendor`, {
-      query: {
-        fromUtc:    filter.fromUtc,
-        toUtc:      filter.toUtc,
-        accountUid: filter.accountUid || undefined,
-        vendorKey: filter.vendorKey || undefined,
-      },
+      query: consumptionQuery(filter),
     });
     if (!result.success) return result;
     const rows = result.data.items.map((r): VendorConsumptionRow => ({
-      vendorKey:            r.vendorKey,
-      requestCount:          r.requestCount,
-      totalPromptTokens:     r.totalPromptTokens,
-      totalCompletionTokens: r.totalCompletionTokens,
-      totalCost:             r.totalQuota,
-      upstreamModelCount:    r.upstreamModelCount,
+      vendorKey:            typeof r.vendorKey === 'string' ? r.vendorKey : '',
+      requestCount:          num(r.requestCount),
+      totalPromptTokens:     num(r.totalPromptTokens),
+      totalCompletionTokens: num(r.totalCompletionTokens),
+      totalCost:             num(r.totalQuota),
+      upstreamModelCount:    num(r.upstreamModelCount),
     }));
     return { success: true, data: rows };
+  }
+
+  async statByModel(filter: ListLogsFilter): Promise<AppResult<ModelConsumptionRow[]>> {
+    const result = await requestDemux<ItemsEnvelope<ModelConsumptionWire>>(
+      `${BASE}/stats/consumption/models`,
+      { query: consumptionQuery(filter) },
+    );
+    if (!result.success) return result;
+    const rows = result.data.items.map((r): ModelConsumptionRow => ({
+      modelName:             typeof r.modelName === 'string' ? r.modelName : '',
+      requestCount:          num(r.requestCount),
+      totalPromptTokens:     num(r.totalPromptTokens),
+      totalCompletionTokens: num(r.totalCompletionTokens),
+      totalCost:             num(r.totalQuota),
+      vendorCount:           num(r.vendorCount),
+    }));
+    return { success: true, data: rows };
+  }
+
+  async statConsumption(query: ConsumptionReportQuery): Promise<AppResult<ConsumptionReport>> {
+    const result = await requestDemux<ConsumptionReportWire>(`${BASE}/stats/consumption`, {
+      query: {
+        fromUtc: query.fromUtc,
+        toUtc: query.toUtc,
+        timeBucket: query.timeBucket,
+        breakdown: query.breakdown,
+        vendorKeys: query.vendorKeys?.length ? query.vendorKeys.join(',') : undefined,
+        modelNames: query.modelNames?.length ? query.modelNames.join(',') : undefined,
+      },
+    });
+    if (!result.success) return result;
+    const timeBucket = parseTimeBucket(result.data.timeBucket) ?? query.timeBucket;
+    const breakdown = parseBreakdown(result.data.breakdown) ?? query.breakdown;
+    const cells = (result.data.cells ?? []).map((c) => ({
+      bucketStartUtc: num(c.bucketStartUtc),
+      groupKey: typeof c.groupKey === 'string' ? c.groupKey : '',
+      requestCount: num(c.requestCount),
+      totalPromptTokens: num(c.totalPromptTokens),
+      totalCompletionTokens: num(c.totalCompletionTokens),
+      totalCost: num(c.totalQuota),
+    }));
+    return {
+      success: true,
+      data: {
+        bucketSeconds: num(result.data.bucketSeconds) || (timeBucket === 'hour' ? 3600 : timeBucket === 'day' ? 86400 : 0),
+        timeBucket,
+        breakdown,
+        cells,
+      },
+    };
   }
 
   async stats(filter: ListLogsFilter): Promise<AppResult<LogStats>> {
@@ -342,8 +435,7 @@ export class DemuxLogsHttpAdapter implements DemuxLogsPort {
       reversedAtUtc?: number | null;
       reversedBy?: string | null;
       reversedCode?: string | null;
-      failureCode?: string | null;
-      failureMessage?: string | null;
+      error?: { code?: string | null; message?: string | null } | null;
     }>(`${BASE}/${input.logId}/reverse`, {
       method: 'POST',
       body: {
@@ -356,8 +448,8 @@ export class DemuxLogsHttpAdapter implements DemuxLogsPort {
     const row = result.data;
     if (!row.success) {
       return fail({
-        code: mapFailureCode(row.failureCode),
-        message: row.failureMessage ?? '驳回失败',
+        code: mapFailureCode(row.error?.code),
+        message: row.error?.message ?? '驳回失败',
       });
     }
 

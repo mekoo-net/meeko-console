@@ -8,6 +8,8 @@ import { DemuxRateMock } from './mock/demuxRateMock';
 import { DemuxProviderMock } from './mock/demuxProviderMock';
 import { DemuxBackendMock } from './mock/demuxBackendMock';
 import { DemuxRateLimitMock } from './mock/demuxRateLimitMock';
+import { DemuxPricingMock } from './mock/demuxPricingMock';
+import { DemuxPricingHttpAdapter } from '@/features/demux/api/adapters/demuxPricingAdapter';
 import { DemuxBackendHttpAdapter } from '@/features/demux/api/adapters/demuxBackendAdapter';
 import { DemuxRateLimitHttpAdapter } from '@/features/demux/api/adapters/demuxRateLimitAdapter';
 import { DemuxCatalogHttpAdapter } from '@/features/demux/api/adapters/demuxCatalogAdapter';
@@ -24,11 +26,13 @@ import type { DemuxRatePort } from './ports/demuxRatePort';
 import type { DemuxProviderPort } from './ports/demuxProviderPort';
 import type { DemuxBackendPort } from './ports/demuxBackendPort';
 import type { DemuxRateLimitPort } from './ports/demuxRateLimitPort';
+import type { DemuxPricingPort } from './ports/demuxPricingPort';
 
 /**
  * demuxai 域端口工厂。
  *
  * - catalog / vendorRoutes：新架构（网关渠道只读 + 别名运营）
+ * - rate：每条路由的有效价（直读 / 手工写）；pricing：有效价上游的价格表 / 倍率
  * - providers / models：旧端口，日志与过渡兼容保留
  */
 abstract class DemuxServices {
@@ -37,6 +41,7 @@ abstract class DemuxServices {
   abstract readonly providers: DemuxProviderPort;
   abstract readonly models: DemuxModelPort;
   abstract readonly rate: DemuxRatePort;
+  abstract readonly pricing: DemuxPricingPort;
   abstract readonly logs: DemuxLogsPort;
   abstract readonly backend: DemuxBackendPort;
   abstract readonly rateLimit: DemuxRateLimitPort;
@@ -48,6 +53,7 @@ class DemuxMockServices extends DemuxServices {
   readonly providers = new DemuxProviderMock();
   readonly models = new DemuxModelMock();
   readonly rate = new DemuxRateMock();
+  readonly pricing = new DemuxPricingMock();
   readonly logs = new DemuxLogsMock();
   readonly backend = new DemuxBackendMock();
   readonly rateLimit = new DemuxRateLimitMock();
@@ -59,6 +65,7 @@ class DemuxHttpServices extends DemuxServices {
   readonly providers = new DemuxProviderHttpAdapter();
   readonly models = new DemuxModelHttpAdapter();
   readonly rate = new DemuxRateHttpAdapter();
+  readonly pricing = new DemuxPricingHttpAdapter();
   readonly logs = new DemuxLogsHttpAdapter();
   readonly backend = new DemuxBackendHttpAdapter();
   readonly rateLimit = new DemuxRateLimitHttpAdapter();
@@ -84,6 +91,10 @@ export function getDemuxModelPort(): DemuxModelPort {
 
 export function getDemuxRatePort(): DemuxRatePort {
   return services.rate;
+}
+
+export function getDemuxPricingPort(): DemuxPricingPort {
+  return services.pricing;
 }
 
 export function getDemuxLogsPort(): DemuxLogsPort {

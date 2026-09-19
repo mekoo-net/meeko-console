@@ -2,8 +2,9 @@
 /**
  * 概览页专用的时间范围过滤栏。
  *
- * 仅一行：时间范围 picker  +  快捷按钮（24h / 7d / 30d）  +  查询 / 重置。
- * （与共享 `FilterBar` 的差异：去掉了账户 UID / 邮箱-手机两行，业务过滤仅按时间。）
+ * 默认一行：时间范围 picker  +  快捷按钮（24h / 7d / 30d）  +  查询 / 重置。
+ * 默认 slot 可追加第二行业务筛选（报表的粒度 / 拆分 / 渠道）。
+ * （与共享 `FilterBar` 的差异：去掉了账户 UID / 邮箱-手机两行。）
  */
 import { ref, watch } from 'vue';
 import { RefreshLeft, Search } from '@element-plus/icons-vue';
@@ -132,6 +133,9 @@ function onReset(): void {
         <el-button :icon="RefreshLeft" @click="onReset">重置</el-button>
       </div>
     </div>
+    <div v-if="$slots.default" class="filter-bar__row filter-bar__row--extra">
+      <slot />
+    </div>
   </el-form>
 </template>
 
@@ -147,6 +151,11 @@ function onReset(): void {
   display: flex;
   align-items: center;
   gap: 28px;
+}
+.filter-bar__row--extra {
+  margin-top: 14px;
+  flex-wrap: wrap;
+  gap: 16px 28px;
 }
 .filter-bar :deep(.el-form-item) {
   margin: 0;

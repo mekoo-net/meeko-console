@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { routePricingModeValues } from '@demux/common';
 import { epochMillisSchema } from '@/shared/lib/epoch';
 
 const uidString = z.union([z.string(), z.number()]).transform((v) => String(v));
@@ -14,6 +15,10 @@ export const vendorRouteSchema = z.object({
   vendorKey: z.string().min(1).max(64),
   vendorModel: z.string().min(1).max(160),
   isPublished: z.boolean(),
+  /** 有效价来路；旧后端不下发时按 compiled。 */
+  pricingMode: z.enum(routePricingModeValues).default('compiled'),
+  /** 路由级倍率覆盖；null = 只用渠道倍率。 */
+  priceMultiplier: z.number().nonnegative().nullable().optional(),
   notes: z.string().nullable().optional(),
   createdAtUtc: epochMillisSchema,
   updatedAtUtc: epochMillisSchema,

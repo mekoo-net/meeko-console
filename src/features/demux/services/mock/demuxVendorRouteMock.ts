@@ -85,6 +85,8 @@ export class DemuxVendorRouteMock implements DemuxVendorRoutePort {
       vendorKey: input.vendorKey.trim(),
       vendorModel: input.vendorModel.trim(),
       isPublished: input.isPublished ?? true,
+      pricingMode: 'compiled',
+      priceMultiplier: null,
       notes: input.notes?.trim() || null,
       createdAtUtc: t,
       updatedAtUtc: t,

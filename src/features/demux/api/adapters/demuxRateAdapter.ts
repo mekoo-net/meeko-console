@@ -4,6 +4,7 @@ import {
   type ListRateFilter,
   type ListVendorModelGroupsFilter,
   type Rate,
+  type RoutePricingMode,
   type UnconfiguredRoutePage,
   type UpsertRateInput,
   type VendorModelGroup,
@@ -27,11 +28,11 @@ interface RateWire {
   modelId: string;
   billingType: string;
   rate: unknown;
-  multiplier: number;
   currency: string;
-  tierMultipliers?: Record<string, number>;
   effectiveFromUtc: string;
   updatedAtUtc: string;
+  sourcePriceId?: string | number | null;
+  multiplierApplied?: number | null;
 }
 
 function parseRate(value: unknown): AppResult<Rate> {
@@ -45,11 +46,11 @@ function wireToRate(row: RateWire): AppResult<Rate> {
     modelId: row.modelId,
     billingType: row.billingType,
     rate: row.rate,
-    multiplier: row.multiplier,
     currency: row.currency,
-    tierMultipliers: row.tierMultipliers ?? {},
     effectiveFromUtc: row.effectiveFromUtc,
     updatedAtUtc: row.updatedAtUtc,
+    sourcePriceId: row.sourcePriceId ?? null,
+    multiplierApplied: row.multiplierApplied ?? null,
   });
 }
 
@@ -62,10 +63,19 @@ function normalizeListRow(row: unknown): AppResult<Rate> | null {
   return null;
 }
 
-type VendorModelGroupedWire = Record<
-  string,
-  Record<string, Array<{ routeKey: string; rate: unknown }>>
->;
+interface GroupedEntryWire {
+  routeKey: string;
+  rate: unknown;
+  routeId?: string | number | null;
+  pricingMode?: string | null;
+  priceMultiplier?: number | null;
+}
+
+type VendorModelGroupedWire = Record<string, Record<string, GroupedEntryWire[]>>;
+
+function parsePricingMode(v: string | null | undefined): RoutePricingMode {
+  return v === 'manual' ? 'manual' : 'compiled';
+}
 
 function flattenVendorModelGroups(items: VendorModelGroupedWire): AppResult<VendorModelGroup[]> {
   const groups: VendorModelGroup[] = [];
@@ -80,7 +90,13 @@ function flattenVendorModelGroups(items: VendorModelGroupedWire): AppResult<Vend
       for (const entry of entries) {
         const parsed = wireToRate(entry.rate as RateWire);
         if (!parsed.success) return parsed;
-        routeKeys.push({ routeKey: entry.routeKey, rate: parsed.data });
+        routeKeys.push({
+          routeKey: entry.routeKey,
+          rate: parsed.data,
+          routeId: entry.routeId == null ? null : String(entry.routeId),
+          pricingMode: parsePricingMode(entry.pricingMode),
+          priceMultiplier: entry.priceMultiplier ?? null,
+        });
       }
       if (routeKeys.length > 0) {
         groups.push({ vendorKey, vendorModel, routeKeys });
@@ -103,6 +119,7 @@ export class DemuxRateHttpAdapter implements DemuxRatePort {
         p: page,
         pageSize,
         keyword: filter.keyword || undefined,
+        billingType: filter.billingType === 'all' ? undefined : filter.billingType,
       },
     });
     if (!result.success) return result;
@@ -112,7 +129,6 @@ export class DemuxRateHttpAdapter implements DemuxRatePort {
       const p = normalizeListRow(row);
       if (!p) continue;
       if (!p.success) return p;
-      if (filter.billingType !== 'all' && p.data.billingType !== filter.billingType) continue;
       parsed.push(p.data);
     }
     return ok({ items: parsed, total: result.data.total ?? parsed.length });
@@ -209,6 +225,7 @@ export class DemuxRateHttpAdapter implements DemuxRatePort {
       routeKey?: string;
       vendorKey?: string;
       vendorModel?: string;
+      routeId?: string | number | null;
     }>>(`${VENDOR_MODEL_BASE}/unconfigured`, {
       query: {
         page: input.page,
@@ -222,6 +239,7 @@ export class DemuxRateHttpAdapter implements DemuxRatePort {
         routeKey: row.routeKey ?? '',
         vendorKey: row.vendorKey ?? '',
         vendorModel: row.vendorModel ?? '',
+        routeId: row.routeId != null && String(row.routeId) !== '' ? String(row.routeId) : null,
       })),
       total: result.data.total ?? 0,
     });

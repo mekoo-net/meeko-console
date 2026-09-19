@@ -15,7 +15,13 @@ import type {
 import type { ProviderGroup, ProviderUpstreamModel } from '../../model/catalog.types';
 import type { VendorRoute } from '../../model/vendorRoute.types';
 import type { Model } from '@demux/common';
-import type { Rate } from '@demux/common';
+import { PRICE_CURRENCY, USD_CNY_FIXED_RATE, type ModelPrice, type Rate, type RateBody } from '@demux/common';
+import {
+  OFFICIAL_USD_PRICES,
+  officialUsdCapabilities,
+  officialUsdRateBody,
+  scaleRateBody,
+} from './officialUsdPrices';
 import type { LogEntry } from '@demux/common';
 
 /**
@@ -32,9 +38,12 @@ export interface DemuxStore {
   providerGroups: ProviderGroup[];
   upstreamModels: ProviderUpstreamModel[];
   vendorRoutes: VendorRoute[];
+  /** 价格表（基准价，按 modelKey 唯一，人民币） */
+  modelPrices: ModelPrice[];
 }
 
 export const genProviderUid = createUidSeq(12_000_000);
+export const genModelPriceUid = createUidSeq(20_000_000);
 export const genProviderModelUid = createUidSeq(15_000_000);
 export const genMappingUid = createUidSeq(16_000_000);
 export const genModelUid = createUidSeq(13_000_000);
@@ -561,7 +570,6 @@ function seedRate(models: Model[]): Rate[] {
           output: { perMToken: 72 },
         },
         currency: 'CNY',
-        tierMultipliers: { '5': 0.7, '4': 0.85 },
         updatedBy: { iamUid: '200000001' },
       },
     ],
@@ -574,7 +582,6 @@ function seedRate(models: Model[]): Rate[] {
           output: { perMToken: 4 },
         },
         currency: 'CNY',
-        tierMultipliers: { '5': 0.6 },
         updatedBy: { iamUid: '200000001' },
       },
     ],
@@ -591,7 +598,6 @@ function seedRate(models: Model[]): Rate[] {
           output: { perMToken: 110 },
         },
         currency: 'CNY',
-        tierMultipliers: { '5': 0.75 },
         updatedBy: { iamUid: '200000001' },
       },
     ],
@@ -604,7 +610,6 @@ function seedRate(models: Model[]): Rate[] {
           output: { perMToken: 2 },
         },
         currency: 'CNY',
-        tierMultipliers: {},
         updatedBy: { iamUid: '200000001' },
       },
     ],
@@ -617,7 +622,6 @@ function seedRate(models: Model[]): Rate[] {
           output: { perMToken: 18, reasoning: 18 },
         },
         currency: 'CNY',
-        tierMultipliers: {},
         updatedBy: { iamUid: '200000001' },
       },
     ],
@@ -630,7 +634,6 @@ function seedRate(models: Model[]): Rate[] {
           output: { perMToken: 60 },
         },
         currency: 'CNY',
-        tierMultipliers: {},
         updatedBy: { iamUid: '200000001' },
       },
     ],
@@ -643,7 +646,6 @@ function seedRate(models: Model[]): Rate[] {
           output: { perMToken: 2 },
         },
         currency: 'CNY',
-        tierMultipliers: { '5': 0.5, '4': 0.75 },
         updatedBy: { iamUid: '200000001' },
       },
     ],
@@ -656,7 +658,6 @@ function seedRate(models: Model[]): Rate[] {
           output: { perMToken: 0 },
         },
         currency: 'CNY',
-        tierMultipliers: {},
         updatedBy: { iamUid: '200000001' },
       },
     ],
@@ -748,14 +749,16 @@ function seedLogs(providers: Provider[]): LogEntry[] {
     const prompt = 200 + (i * 37) % 4000;
     const completion = 80 + (i * 53) % 1600;
     const failed = i % 23 === 0;
-    const success = !failed;
+    const pending = !failed && i % 19 === 0;
+    const success = !failed && !pending;
     const streamed = i % 2 === 0;
 
     const errorCode = failed ? errorCodes[i % errorCodes.length]! : null;
     const httpStatus = failed ? (errorCodeToHttp[errorCode!] ?? 500) : 200;
 
     // 失败请求里大约一半是"已扣费"（产品里最有驳回价值的场景），另一半没扣到
-    const hasBill = !failed || (i % 2 === 0);
+    // 失败请求里大约一半是"已扣费"；调用中尚未结算，没有账单
+    const hasBill = pending ? false : (!failed || i % 2 === 0);
     // 每隔约 47 条预先种一条"已驳回"行，方便页面上看到两种状态
     const preReversed = hasBill && i % 47 === 11;
 
@@ -821,7 +824,7 @@ function seedLogs(providers: Provider[]): LogEntry[] {
       vendorKey: apiTypeToVendorKey(p.apiType),
       vendorPlug: apiTypeToVendorPlug(p.apiType),
       vendorModel: pair.modelName,
-      status: success ? 'success' : 'failure',
+      status: pending ? 'pending' : success ? 'success' : 'failure',
       content: {
         protocol: apiTypeToLogProtocol(p.apiType),
         statusCode: httpStatus,
@@ -937,15 +940,15 @@ export const gatewayDiscoveryCatalog: Readonly<
 > = {
   kiro: {
     displayName: 'Kiro',
-    models: ['claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-opus-4-6', 'claude-opus-4-7-preview'],
+    models: ['claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-opus-4-6', 'claude-opus-4-7'],
   },
   gemini: {
     displayName: 'Gemini',
-    models: ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3.5-flash'],
   },
   codex: {
     displayName: 'Codex',
-    models: ['gpt-4o', 'gpt-4o-mini', 'o1-mini', 'o1-preview'],
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-5.6', 'gpt-5-mini'],
   },
   cursor: {
     displayName: 'Cursor',
@@ -958,11 +961,11 @@ export function seedImportedProviderGroups(): ProviderGroup[] {
   const t = epochMs(now);
   return [
     { id: genProviderGroupUid(), queueGroup: 'kiro', vendorSlug: 'nai', status: 'active', upstreamModelCount: 3,
-      notes: null, importedAtUtc: t, updatedAtUtc: t },
+      priceMultiplier: 1.15, notes: null, createdAtUtc: t, updatedAtUtc: t },
     { id: genProviderGroupUid(), queueGroup: 'gemini', vendorSlug: 'pa', status: 'active', upstreamModelCount: 3,
-      notes: null, importedAtUtc: t, updatedAtUtc: t },
+      priceMultiplier: 1.2, notes: null, createdAtUtc: t, updatedAtUtc: t },
     { id: genProviderGroupUid(), queueGroup: 'codex', vendorSlug: 'rong', status: 'active', upstreamModelCount: 3,
-      notes: null, importedAtUtc: t, updatedAtUtc: t },
+      priceMultiplier: 1, notes: null, createdAtUtc: t, updatedAtUtc: t },
   ];
 }
 
@@ -1013,6 +1016,8 @@ function seedVendorRoutes(providers: Provider[]): VendorRoute[] {
         vendorKey,
         vendorModel: pmRef.modelName,
         isPublished: true,
+        pricingMode: 'compiled',
+        priceMultiplier: null,
         notes: mapping.notes ?? null,
         createdAtUtc: t,
         updatedAtUtc: t,
@@ -1044,6 +1049,8 @@ function seedCatalogVendorRoutes(
       vendorKey: queueGroup,
       vendorModel,
       isPublished,
+      pricingMode: 'compiled',
+      priceMultiplier: null,
       notes,
       createdAtUtc: t,
       updatedAtUtc: t,
@@ -1051,12 +1058,105 @@ function seedCatalogVendorRoutes(
   };
   add('kiro', 'claude-sonnet-4-6', 'demux-claude-sonnet');
   add('kiro', 'claude-haiku-4-5', 'demux-claude-haiku');
-  add('gemini', 'gemini-2.0-flash-exp', 'demux-gemini-flash');
-  add('gemini', 'gemini-1.5-pro', 'demux-gemini-pro');
+  add('kiro', 'claude-opus-4-6', 'demux-claude-opus');
+  add('gemini', 'gemini-2.5-flash', 'demux-gemini-flash');
+  add('gemini', 'gemini-2.5-pro', 'demux-gemini-pro');
+  add('gemini', 'gemini-3.5-flash', 'demux-gemini-3-5-flash');
   add('codex', 'gpt-4o', 'demux-gpt-4o');
   add('codex', 'gpt-4o-mini', 'demux-gpt-4o-mini');
-  add('codex', 'o1-mini', 'demux-o1-mini', false, '演示下线别名');
+  add('codex', 'gpt-5.6', 'demux-gpt-5', false, '演示下线别名');
+  // 价格表没有这条，编译会跳过 → 「未定价」页有东西可看
+  routes.push({
+    uid: genVendorRouteUid(),
+    routeKey: 'demux-claude-internal',
+    vendorKey: 'kiro',
+    vendorModel: 'claude-internal-preview',
+    isPublished: true,
+    pricingMode: 'compiled',
+    priceMultiplier: null,
+    notes: '演示：价格表尚未收录',
+    createdAtUtc: t,
+    updatedAtUtc: t,
+  });
   return routes;
+}
+
+/**
+ * 渠道页看的是「别名有效价」，modelId = routeKey。
+ * 旧 seedRate 挂在展示名（GPT-4o）上，跟 demux-* 对不上，列表是空的。
+ */
+function seedCompiledRates(
+  routes: VendorRoute[],
+  prices: ModelPrice[],
+  groups: ProviderGroup[],
+): Rate[] {
+  const t = epochMs(now);
+  const priceByKey = new Map(prices.map((p) => [p.modelKey, p]));
+  const vendorMult = new Map(groups.map((g) => [g.queueGroup, g.priceMultiplier]));
+  const out: Rate[] = [];
+  const seen = new Set<string>();
+  for (const route of routes) {
+    if (!route.isPublished || route.pricingMode !== 'compiled') continue;
+    if (seen.has(route.routeKey)) continue;
+    seen.add(route.routeKey);
+    const price = priceByKey.get(route.vendorModel.trim().toLowerCase());
+    if (!price) continue;
+    const multiplier = (vendorMult.get(route.vendorKey) ?? 1) * (route.priceMultiplier ?? 1);
+    const body = scaleRateBody(
+      { billingType: price.billingType, rate: price.rate } as RateBody,
+      multiplier,
+    );
+    out.push({
+      ...body,
+      id: genRateUid(),
+      modelId: route.routeKey,
+      currency: PRICE_CURRENCY,
+      effectiveFromUtc: t - 2 * 86_400_000,
+      updatedAtUtc: t,
+      updatedBy: { iamUid: '200000001' },
+      sourcePriceId: price.id,
+      multiplierApplied: multiplier,
+    } as Rate);
+  }
+  return out;
+}
+
+/**
+ * 这几条种子假装被人改过价（偏离官方牌价），好让「上游同步」的 diff 有东西可看。
+ * 固定几个键、固定倍数——mock 每次打开要一模一样。
+ */
+const ADJUSTED: Readonly<Record<string, number>> = {
+  'gpt-4.1': 1.1,
+  'claude-sonnet-4-5': 1.15,
+  'gemini-2.5-flash': 0.9,
+};
+
+/**
+ * 价格表种子 = 固化的官方美元牌价 × 固定汇率。
+ * 与渠道里用到哪些模型无关：价格表是一套官方基准目录，不是「在用清单」。
+ */
+function seedModelPrices(): ModelPrice[] {
+  const t = epochMs(now);
+  return OFFICIAL_USD_PRICES.map((row) => {
+    const adjusted = ADJUSTED[row.modelKey];
+    const f = adjusted ?? 1;
+    const body = scaleRateBody(officialUsdRateBody(row), USD_CNY_FIXED_RATE * f);
+    const catalogued = row.kind === 'llm' || row.kind === 'embedding';
+    const sourced = adjusted == null && catalogued;
+    return {
+      id: genModelPriceUid(),
+      modelKey: row.modelKey,
+      maker: row.maker,
+      billingType: body.billingType,
+      rate: body.rate,
+      currency: PRICE_CURRENCY,
+      capabilities: officialUsdCapabilities(row),
+      source: sourced ? 'models_dev' : '',
+      sourceRef: sourced ? `models_dev:${row.maker}/${row.modelKey}` : null,
+      fetchedAtUtc: sourced ? t - 86_400_000 : null,
+      effectiveFromUtc: t - 7 * 86_400_000,
+    } as ModelPrice;
+  });
 }
 
 let cached: DemuxStore | null = null;
@@ -1066,16 +1166,27 @@ export function getDemuxStore(): DemuxStore {
   if (cached !== null) return cached;
   const providers = seedProviders();
   const models = seedModels(providers);
-  const rate = seedRate(models);
   const logs = seedLogs(providers);
   const providerGroups = seedImportedProviderGroups();
   const upstreamModels = seedImportedUpstreamModels(providerGroups);
   recomputeGroupModelCounts(providerGroups, upstreamModels);
+  // 目录别名放后面：同 routeKey 时渠道页认 codex/kiro/gemini，不被旧 Provider 映射盖掉
   const vendorRoutes = [
-    ...seedCatalogVendorRoutes(upstreamModels),
     ...seedVendorRoutes(providers),
+    ...seedCatalogVendorRoutes(upstreamModels),
   ];
-  cached = { providers, models, rate, logs, providerGroups, upstreamModels, vendorRoutes };
+  const modelPrices = seedModelPrices();
+  const rate = [...seedRate(models), ...seedCompiledRates(vendorRoutes, modelPrices, providerGroups)];
+  cached = {
+    providers,
+    models,
+    rate,
+    logs,
+    providerGroups,
+    upstreamModels,
+    vendorRoutes,
+    modelPrices,
+  };
   return cached;
 }
 

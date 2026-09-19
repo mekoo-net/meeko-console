@@ -3,6 +3,7 @@ import { clientPaginate } from '@/shared/composables/usePagination';
 import { delay } from '@/shared/lib/delay';
 
 import {
+  PRICE_CURRENCY,
   rateSchema,
   upsertRateInputSchema,
   type ListRateFilter,
@@ -15,6 +16,7 @@ import {
   type VendorRateStatsMap,
 } from '@demux/common';
 import type { DemuxRatePort, ListRatePage } from '../ports/demuxRatePort';
+import type { VendorRoute } from '../../model/vendorRoute.types';
 
 import { genRateUid, getDemuxStore } from './data';
 
@@ -80,11 +82,9 @@ export class DemuxRateMock implements DemuxRatePort {
   }): Promise<AppResult<VendorModelGroupedPage>> {
     await delay();
 
-    const routeMap = new Map<string, { vendorKey: string; vendorModel: string }>();
+    const routeMap = new Map<string, VendorRoute>();
     for (const route of this.store.vendorRoutes) {
-      if (route.isPublished) {
-        routeMap.set(route.routeKey, { vendorKey: route.vendorKey, vendorModel: route.vendorModel });
-      }
+      if (route.isPublished) routeMap.set(route.routeKey, route);
     }
 
     const groupMap = new Map<string, VendorModelGroup>();
@@ -105,7 +105,13 @@ export class DemuxRateMock implements DemuxRatePort {
         };
         groupMap.set(groupKey, group);
       }
-      group.routeKeys.push({ routeKey: row.modelId, rate: parsed.data });
+      group.routeKeys.push({
+        routeKey: row.modelId,
+        rate: parsed.data,
+        routeId: route.uid,
+        pricingMode: route.pricingMode,
+        priceMultiplier: route.priceMultiplier ?? null,
+      });
     }
 
     let groups = [...groupMap.values()].map((g) => ({
@@ -160,12 +166,19 @@ export class DemuxRateMock implements DemuxRatePort {
     const v = validateUpsert(input);
     if (!v.success) return v;
 
-    if (!this.store.models.some((m) => m.modelId === input.modelId)) {
+    const route = this.store.vendorRoutes.find((r) => r.routeKey === input.modelId);
+    if (!route && !this.store.models.some((m) => m.modelId === input.modelId)) {
       return fail({
         code: 'validation',
         message: `模型 "${input.modelId}" 不存在，请先确保有 Provider 映射指向它`,
         details: { modelId: ['unknown model'] },
       });
+    }
+
+    // 与后端一致：管理员亲手写了有效价，路由切成手工模式，编译器不再盖它。
+    if (route && route.pricingMode !== 'manual') {
+      route.pricingMode = 'manual';
+      route.updatedAtUtc = Date.now();
     }
 
     const t = Date.now();
@@ -175,8 +188,12 @@ export class DemuxRateMock implements DemuxRatePort {
       const next = {
         ...input,
         id: cur.id,
+        currency: PRICE_CURRENCY,
+        effectiveFromUtc: t,
         updatedAtUtc: t,
         updatedBy: cur.updatedBy ?? null,
+        sourcePriceId: null,
+        multiplierApplied: null,
       } as Rate;
       const p = parseRate(next);
       if (!p.success) return p;
@@ -187,8 +204,12 @@ export class DemuxRateMock implements DemuxRatePort {
     const row = {
       ...input,
       id: genRateUid(),
+      currency: PRICE_CURRENCY,
+      effectiveFromUtc: t,
       updatedAtUtc: t,
       updatedBy: null,
+      sourcePriceId: null,
+      multiplierApplied: null,
     } as Rate;
     const p = parseRate(row);
     if (!p.success) return p;
@@ -235,6 +256,7 @@ export class DemuxRateMock implements DemuxRatePort {
         routeKey: r.routeKey,
         vendorKey: r.vendorKey,
         vendorModel: r.vendorModel,
+        routeId: r.uid,
       }))
       .sort((a, b) => a.routeKey.localeCompare(b.routeKey));
     const items = clientPaginate(rows, input.page, input.pageSize);

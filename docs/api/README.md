@@ -21,6 +21,7 @@
 | 05 | 账单流水 `/billing/bills` | 已登录 | [`05-billing-bills.md`](./05-billing-bills.md) |
 | 06 | 充值渠道 `/billing/channels` | Admin | [`06-billing-channels.md`](./06-billing-channels.md) |
 | 07 | DemuxAI 概览 `/demux/overview` | Admin | [`07-demuxai-overview.md`](./07-demuxai-overview.md) |
+| 07b | Demux 报表 `/demux/report` | Admin | [`07b-demuxai-report.md`](./07b-demuxai-report.md) |
 | 08 | 供应商组 `/demux/providers` | Admin | [`08-demuxai-providers.md`](./08-demuxai-providers.md) |
 | 09 | 模型别名与元数据 `/demux/models`（重定向至 providers） | Admin | [`09-demuxai-models.md`](./09-demuxai-models.md) |
 | 10 | 模型定价 `/demux/pricing` | Admin | [`10-demuxai-pricing.md`](./10-demuxai-pricing.md) |

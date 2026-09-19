@@ -20,8 +20,7 @@ export interface ListRatePage {
  *
  * - 主键是 `modelId`（与 Model 1..1），可包含 `/`（如 `gemini/gemini-3.1-pro-preview`）
  * - upsert 语义：存在则更新，不存在则创建
- * - `effectiveFromUtc > now()` 时为预生效记录
- * - 历史价格不可被修改，只能用新的 effectiveFrom 覆盖
+ * - 币种恒为 `PRICE_CURRENCY`、生效时间由后端取落库时刻，都不由调用方传
  */
 export interface DemuxRatePort {
   list(input: {
