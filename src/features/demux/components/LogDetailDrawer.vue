@@ -86,6 +86,16 @@ const hasCharge = computed(() => {
 
 const clientIpText = computed(() => props.log?.content.clientIp?.trim() || '—');
 
+const logError = computed(() => props.log?.content.error);
+const showLogError = computed(() => logHasErrorCode(logError.value));
+const statusLabel = computed(() => {
+  const l = props.log;
+  if (!l) return '—';
+  if (l.status === 'pending') return '调用中';
+  if (l.status === 'success') return '成功';
+  return showLogError.value ? logErrorCodeText(logError.value?.code) : AiUsageStatusLabel[l.status];
+});
+
 /** 耗时语义随流式切换：流式是首字延迟，非流式是端到端总耗时。 */
 const latencyHint = computed(() =>
   props.log?.content.streamed ? '首字延迟（TTFT）' : '端到端总耗时',
@@ -172,11 +182,7 @@ const outputDims = computed<DimRow[]>(() => {
         <el-descriptions-item label="状态">
           <StatusTag v-if="log.status === 'pending'" label="调用中" tone="warning" />
           <StatusTag v-else-if="log.status === 'success'" label="成功" tone="success" />
-          <StatusTag
-            v-else
-            :label="logHasErrorCode(log.content.error) ? logErrorCodeText(log.content.error.code) : AiUsageStatusLabel[log.status]"
-            tone="danger"
-          />
+          <StatusTag v-else :label="statusLabel" tone="danger" />
         </el-descriptions-item>
         <el-descriptions-item label="耗时">
           <span v-if="log.content.latencyMs != null" class="num" :title="latencyHint">
@@ -258,17 +264,17 @@ const outputDims = computed<DimRow[]>(() => {
         <span class="label">请求 IP</span>
         <span class="mono">{{ clientIpText }}</span>
       </div>
-      <template v-if="logHasErrorCode(log.content.error)">
+      <template v-if="showLogError">
         <div class="log-detail__row">
           <span class="label">错误码</span>
           <el-tag size="small" type="danger" effect="plain">
-            {{ logErrorCodeText(log.content.error.code) }}
+            {{ logErrorCodeText(logError?.code) }}
           </el-tag>
-          <span class="error-code-raw mono">{{ log.content.error.code }}</span>
+          <span class="error-code-raw mono">{{ logError?.code }}</span>
         </div>
-        <div v-if="log.content.error.message" class="log-detail__row log-detail__row--col">
+        <div v-if="logError?.message" class="log-detail__row log-detail__row--col">
           <span class="label">错误摘要</span>
-          <pre class="error-msg">{{ log.content.error.message }}</pre>
+          <pre class="error-msg">{{ logError.message }}</pre>
         </div>
       </template>
 

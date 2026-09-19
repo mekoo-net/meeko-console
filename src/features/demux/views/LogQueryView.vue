@@ -410,10 +410,16 @@ function setStatusFilter(status: AiUsageStatus): void {
 
 /** 会话 ID 列表只露到 `xxxxxxxx-xxxx-xxxx-xxxx`，完整值放 tooltip。 */
 function shortConvId(id: string): string {
-  const head = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4})/i.exec(id);
-  if (head && id.length > head[1].length) return `${head[1]}…`;
+  const head = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4})/i.exec(id)?.[1];
+  if (head && id.length > head.length) return `${head}…`;
   if (id.length > 23) return `${id.slice(0, 23)}…`;
   return id;
+}
+
+function failureStatusLabel(row: LogEntry): string {
+  return logHasErrorCode(row.content.error)
+    ? logErrorCodeText(row.content.error?.code)
+    : AiUsageStatusLabel[row.status];
 }
 
 /**
@@ -611,7 +617,7 @@ onMounted(() => {
             <StatusTag v-else-if="row.status === 'success'" label="成功" tone="success" />
             <StatusTag
               v-else
-              :label="logHasErrorCode(row.content.error) ? logErrorCodeText(row.content.error.code) : AiUsageStatusLabel[row.status]"
+              :label="failureStatusLabel(row)"
               tone="danger"
             />
           </button>
