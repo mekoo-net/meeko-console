@@ -6,7 +6,8 @@
  *  - **必须传时间范围**：UI 默认填最近 24h；用户清空 dateRange 时按钮置灰
  *  - 邮箱 / 手机：服务端经 Keystone 解析 account_uid 后筛日志（全量分页，非当前页本地过滤）
  *  - 渠道筛选走 `modelName` 前缀，不在此页拉渠道组字典
- *  - 表格里可点的字段写入筛选条件，不跳到别的页面
+ *  - 表格里可点的字段（渠道 / 模型 / 状态 / 账户 / 会话）写入筛选条件，不跳到别的页面
+ *  - 日志编号、TraceId 只展示，不点进筛选；TraceId 灰色、与编号左对齐
  *  - 状态过滤：调用中 / 成功 / 失败
  *  - KPI 汇总卡片已迁移至「概览」页（OverviewView）
  */
@@ -28,6 +29,7 @@ import {
   billingTypeText,
   BillReverseCodeLabel,
   logErrorCodeText,
+  logHasErrorCode,
   logProtocolText,
   type AiUsageStatus,
 } from '@demux/common';
@@ -406,14 +408,12 @@ function setStatusFilter(status: AiUsageStatus): void {
   page.value = 1;
 }
 
-function setTraceFilter(traceId: string): void {
-  filter.value.traceId = traceId;
-  page.value = 1;
-}
-
-function setLogIdFilter(logId: string): void {
-  filter.value.logId = logId;
-  page.value = 1;
+/** 会话 ID 列表只露到 `xxxxxxxx-xxxx-xxxx-xxxx`，完整值放 tooltip。 */
+function shortConvId(id: string): string {
+  const head = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4})/i.exec(id);
+  if (head && id.length > head[1].length) return `${head[1]}…`;
+  if (id.length > 23) return `${id.slice(0, 23)}…`;
+  return id;
 }
 
 /**
@@ -454,11 +454,6 @@ function drillByConvId(convId: string): void {
 
 function clearConvFilter(): void {
   filter.value.convId = '';
-  page.value = 1;
-}
-
-function clearLogIdFilter(): void {
-  filter.value.logId = '';
   page.value = 1;
 }
 
@@ -507,12 +502,6 @@ onMounted(() => {
             {{ filter.convId }}
           </el-tag>
         </el-form-item>
-        <el-form-item v-if="filter.logId" label="日志号">
-          <el-tag closable type="info" class="mono" @close="clearLogIdFilter">
-            {{ filter.logId }}
-          </el-tag>
-        </el-form-item>
-
         <template #extra-row>
           <el-form-item label="渠道">
             <el-input
@@ -579,21 +568,8 @@ onMounted(() => {
       <el-table-column label="日志编号" min-width="190">
         <template #default="{ row }: { row: LogEntry }">
           <div class="cell-ids">
-            <el-button
-              link
-              type="primary"
-              class="cell-logid mono"
-              title="按日志号过滤"
-              @click="setLogIdFilter(row.id)"
-            >{{ row.id }}</el-button>
-            <el-button
-              v-if="row.traceId"
-              link
-              type="primary"
-              class="cell-trace mono"
-              title="按 TraceId 过滤"
-              @click="setTraceFilter(row.traceId)"
-            >{{ row.traceId }}</el-button>
+            <span class="cell-logid mono">{{ row.id }}</span>
+            <span v-if="row.traceId" class="cell-trace mono">{{ row.traceId }}</span>
             <span v-else class="cell-trace cell-muted">—</span>
           </div>
         </template>
@@ -604,7 +580,7 @@ onMounted(() => {
           <div class="cell-call">
             <el-tooltip v-if="row.content.convId" :content="row.content.convId" placement="top" :show-after="200">
               <el-button link type="primary" class="cell-conv mono" @click="drillByConvId(row.content.convId!)">
-                {{ row.content.convId }}
+                {{ shortConvId(row.content.convId) }}
               </el-button>
             </el-tooltip>
             <span v-else class="cell-muted">—</span>
@@ -635,7 +611,7 @@ onMounted(() => {
             <StatusTag v-else-if="row.status === 'success'" label="成功" tone="success" />
             <StatusTag
               v-else
-              :label="row.content.error ? logErrorCodeText(row.content.error.code) : AiUsageStatusLabel[row.status]"
+              :label="logHasErrorCode(row.content.error) ? logErrorCodeText(row.content.error.code) : AiUsageStatusLabel[row.status]"
               tone="danger"
             />
           </button>
@@ -821,16 +797,6 @@ onMounted(() => {
   color: var(--el-text-color-regular);
   white-space: nowrap;
 }
-.cell-logid {
-  padding: 0;
-  height: auto;
-  font-size: 12px;
-  word-break: break-all;
-  line-height: 1.35;
-  white-space: normal;
-  text-align: left;
-  justify-content: flex-start;
-}
 .cell-ids {
   display: flex;
   flex-direction: column;
@@ -838,14 +804,23 @@ onMounted(() => {
   gap: 3px;
   line-height: 1.35;
 }
+.cell-logid,
 .cell-trace {
+  display: block;
+  width: 100%;
+  margin: 0;
   padding: 0;
-  height: auto;
-  font-size: 11.5px;
+  font-size: 12px;
+  line-height: 1.35;
   word-break: break-all;
   white-space: normal;
   text-align: left;
-  justify-content: flex-start;
+}
+.cell-logid {
+  color: var(--el-text-color-primary);
+}
+.cell-trace {
+  color: var(--el-text-color-secondary);
 }
 .cell-status {
   margin: 0;
@@ -879,11 +854,10 @@ onMounted(() => {
 .cell-conv {
   font-size: 12px;
   color: var(--el-text-color-primary);
-  word-break: break-all;
   line-height: 1.35;
   padding: 0;
   height: auto;
-  white-space: normal;
+  white-space: nowrap;
   text-align: left;
 }
 .cell-source-pg {

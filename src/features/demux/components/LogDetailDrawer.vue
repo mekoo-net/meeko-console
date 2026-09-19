@@ -22,6 +22,7 @@ import {
   billingTypeText,
   billReverseCodeText,
   logErrorCodeText,
+  logHasErrorCode,
   logIsSuccess,
   logProtocolText,
 } from '@demux/common';
@@ -173,7 +174,7 @@ const outputDims = computed<DimRow[]>(() => {
           <StatusTag v-else-if="log.status === 'success'" label="成功" tone="success" />
           <StatusTag
             v-else
-            :label="log.content.error ? logErrorCodeText(log.content.error.code) : AiUsageStatusLabel[log.status]"
+            :label="logHasErrorCode(log.content.error) ? logErrorCodeText(log.content.error.code) : AiUsageStatusLabel[log.status]"
             tone="danger"
           />
         </el-descriptions-item>
@@ -257,7 +258,7 @@ const outputDims = computed<DimRow[]>(() => {
         <span class="label">请求 IP</span>
         <span class="mono">{{ clientIpText }}</span>
       </div>
-      <template v-if="log.content.error">
+      <template v-if="logHasErrorCode(log.content.error)">
         <div class="log-detail__row">
           <span class="label">错误码</span>
           <el-tag size="small" type="danger" effect="plain">

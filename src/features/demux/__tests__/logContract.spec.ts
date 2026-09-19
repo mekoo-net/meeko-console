@@ -4,6 +4,7 @@ import {
   billingTypeText,
   logEntrySchema,
   logErrorCodeText,
+  logHasErrorCode,
   logProtocolText,
 } from '@demux/common';
 
@@ -117,6 +118,14 @@ describe('展示层兜底', () => {
     expect(logErrorCodeText('zero_output')).toBe('无计费产出');
     expect(logErrorCodeText('billing_commit_failed')).toBe('结算未完成');
     expect(logErrorCodeText('some_vendor_code')).toBe('some_vendor_code');
+  });
+
+  it('没有真实错误码时不当错误展示', () => {
+    expect(logHasErrorCode(null)).toBe(false);
+    expect(logHasErrorCode({ code: '' })).toBe(false);
+    expect(logHasErrorCode({ code: 'upstream_error' })).toBe(false);
+    expect(logHasErrorCode({ code: 'upstream_error', message: 'Service unavailable' })).toBe(true);
+    expect(logHasErrorCode({ code: '503' })).toBe(true);
   });
 
   it('计费类型标签认得 unknown', () => {
