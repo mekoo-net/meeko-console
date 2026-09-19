@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   MODEL_PRICE_CURRENCY,
   PRICE_CURRENCY,
-  USD_CNY_FIXED_RATE,
   inferMaker,
   modelPriceSchema,
   rateSchema,
@@ -21,14 +20,13 @@ import { DemuxPricingMock } from '../services/mock/demuxPricingMock';
  *
  * - 价格表是美元，没有汇率设置项；
  * - 官方美元价原样进价格表，候选带 `sourceCurrency` / `fxApplied`（USD 源为 1）；
- * - 有效价 = 基准价(USD) × 渠道倍率 × 路由倍率 × 7，审计列只有 `sourcePriceId` / `multiplierApplied`；
- * - `PriceCompileResult` 没有 `skipped`——不存在「缺汇率」这种跳过原因。
+ * - 有效价(CNY) = 基准价(USD) × 渠道倍率，审计列只有 `sourcePriceId` / `multiplierApplied`；
+ * - 不再另乘 7；`PriceCompileResult` 没有 `skipped`。
  */
 describe('pricing contract', () => {
   beforeEach(() => _resetDemuxStore());
 
-  it('fixed FX is 1 USD = 7 CNY; catalog is USD, billing is CNY', () => {
-    expect(USD_CNY_FIXED_RATE).toBe(7);
+  it('catalog is USD and effective rates are CNY', () => {
     expect(MODEL_PRICE_CURRENCY).toBe('USD');
     expect(PRICE_CURRENCY).toBe('CNY');
   });
@@ -102,7 +100,7 @@ describe('pricing contract', () => {
       id: '30000001',
       modelId: 'demux-gpt-4o',
       billingType: 'per_token',
-      rate: { input: { perMToken: 21 }, output: { perMToken: 84 } },
+      rate: { input: { perMToken: 3 }, output: { perMToken: 12 } },
       currency: 'CNY',
       effectiveFromUtc: 1758200000000,
       updatedAtUtc: 1758200000000,
@@ -280,7 +278,7 @@ describe('pricing contract', () => {
     expect(google?.items.some((p) => p.modelKey === 'gemini-2.5-pro')).toBe(true);
   });
 
-  it('compile = USD catalog × vendor multiplier × route multiplier × 7 → CNY', async () => {
+  it('compile = USD catalog × vendor multiplier → CNY', async () => {
     const store = getDemuxStore();
     const port = new DemuxPricingMock();
 
@@ -307,10 +305,7 @@ describe('pricing contract', () => {
     expect(rate.multiplierApplied).toBe(3);
     expect('fxApplied' in rate).toBe(false);
     if (price.billingType === 'per_token' && rate.billingType === 'per_token') {
-      expect(rate.rate.input.perMToken).toBeCloseTo(
-        price.rate.input.perMToken * 3 * USD_CNY_FIXED_RATE,
-        6,
-      );
+      expect(rate.rate.input.perMToken).toBeCloseTo(price.rate.input.perMToken * 3, 6);
     }
   });
 

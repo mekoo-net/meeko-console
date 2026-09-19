@@ -15,7 +15,7 @@ import type {
 import type { ProviderGroup, ProviderUpstreamModel } from '../../model/catalog.types';
 import type { VendorRoute } from '../../model/vendorRoute.types';
 import type { Model } from '@demux/common';
-import { MODEL_PRICE_CURRENCY, PRICE_CURRENCY, USD_CNY_FIXED_RATE, type ModelPrice, type Rate, type RateBody } from '@demux/common';
+import { MODEL_PRICE_CURRENCY, PRICE_CURRENCY, type ModelPrice, type Rate, type RateBody } from '@demux/common';
 import {
   OFFICIAL_USD_PRICES,
   officialUsdCapabilities,
@@ -1104,7 +1104,7 @@ function seedCompiledRates(
     const multiplier = (vendorMult.get(route.vendorKey) ?? 1) * (route.priceMultiplier ?? 1);
     const body = scaleRateBody(
       { billingType: price.billingType, rate: price.rate } as RateBody,
-      multiplier * USD_CNY_FIXED_RATE,
+      multiplier,
     );
     out.push({
       ...body,
@@ -1132,7 +1132,7 @@ const ADJUSTED: Readonly<Record<string, number>> = {
 };
 
 /**
- * 价格表种子 = 固化的官方美元牌价。编译有效价时再 × 7。
+ * 价格表种子 = 固化的官方美元牌价。编译：美元 × 渠道倍率 = 人民币。
  * 与渠道里用到哪些模型无关：价格表是一套官方基准目录，不是「在用清单」。
  */
 function seedModelPrices(): ModelPrice[] {

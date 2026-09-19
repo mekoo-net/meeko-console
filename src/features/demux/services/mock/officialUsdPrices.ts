@@ -12,7 +12,7 @@
  *  - 图像 / 视频 / 音频 / 语音：不按 token 计，按厂家文档的张 / 秒 / 分钟 / 字符档登记。
  *  - `maker` 按模型键判定而非按源：阿里云也卖 `glm-5.2` / `kimi-k3`，厂家仍是智谱 / Moonshot。
  *
- * 单位是美元；价格表原样入库，编译有效价时再 × `USD_CNY_FIXED_RATE`。
+ * 单位是美元；价格表原样入库，编译时乘渠道倍率得到人民币。
  */
 import type { ModelCapabilities, RateBody } from '@demux/common';
 import { scaleRateBody } from '../../model/rateScale';

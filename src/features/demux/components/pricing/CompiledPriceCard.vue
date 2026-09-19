@@ -1,10 +1,9 @@
 <script setup lang="ts">
 /**
- * 渠道定价预览：入/写 一列、出/读 一列，每档写出 价格表(USD) × 倍率 × 7 = 有效价(CNY)。
+ * 渠道定价预览：入/写 一列、出/读 一列，每档写出 价格表(USD) × 渠道倍率 = 有效价(CNY)。
  */
 import { computed } from 'vue';
 
-import { USD_CNY_FIXED_RATE } from '@demux/common';
 import { formatMultiplier } from '../../model/rateSummary';
 import { MODEL_KIND, type PriceDisplay, type PricePart, type PricePartKind } from '../../model/priceTable';
 import PricePartMark from './PricePartMark.vue';
@@ -90,7 +89,6 @@ function rowLabel(part: PricePart): string {
           <div class="cprice__eq" :class="{ 'cprice__eq--inherited': row.part.inherited }">
             <span class="cprice__cat">{{ row.catalogText }}</span>
             <span class="cprice__factor">{{ mulText }}</span>
-            <span class="cprice__factor">×{{ USD_CNY_FIXED_RATE }}</span>
             <span class="cprice__eqs">=</span>
             <span class="cprice__eff">{{ row.part.text }}</span>
           </div>
@@ -99,7 +97,7 @@ function rowLabel(part: PricePart): string {
     </div>
 
     <p v-if="effective.note" class="cprice__note">{{ effective.note }}</p>
-    <p class="cprice__foot">有效价(CNY) = 价格表(USD) {{ mulText }} × {{ USD_CNY_FIXED_RATE }}</p>
+    <p class="cprice__foot">有效价(CNY) = 价格表(USD) {{ mulText }}</p>
   </div>
 </template>
 

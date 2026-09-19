@@ -4,7 +4,6 @@ import { delay } from '@/shared/lib/delay';
 import {
   MODEL_PRICE_CURRENCY,
   PRICE_CURRENCY,
-  USD_CNY_FIXED_RATE,
   canonicalizeModelKey,
   compareMakers,
   findBestModelKey,
@@ -44,7 +43,7 @@ function sameBody(a: RateBody, b: RateBody): boolean {
 }
 
 /**
- * Mock 版编译器：基准价(USD) × 渠道倍率 × 路由倍率 × 7 → store.rate（CNY）。
+ * Mock 版编译器：基准价(USD) × 渠道倍率 → store.rate（CNY）。不再另乘 7。
  * 只处理 Compiled 路由；Manual 路由的有效价原样保留。
  */
 function compile(
@@ -79,7 +78,7 @@ function compile(
     const multiplier = (vendorMult.get(route.vendorKey) ?? 1) * (route.priceMultiplier ?? 1);
     const body = scaleRateBody(
       { billingType: price.billingType, rate: price.rate } as RateBody,
-      multiplier * USD_CNY_FIXED_RATE,
+      multiplier,
     );
 
     const idx = store.rate.findIndex((r) => r.modelId === route.routeKey);

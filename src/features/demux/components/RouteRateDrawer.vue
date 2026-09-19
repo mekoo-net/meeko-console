@@ -2,7 +2,7 @@
 /**
  * 模型定价：一条别名怎么出价。
  *
- *  - 渠道定价：有效价 = 价格表(USD) × 渠道倍率 × 7。
+ *  - 渠道定价：有效价(CNY) = 价格表(USD) × 渠道倍率。
  *  - 自定义：自己填有效价，计量必须跟模型同类（LLM 按量/按次，生图只能档位）。
  */
 import { computed, ref, watch } from 'vue';
@@ -10,7 +10,7 @@ import { ElMessage } from 'element-plus';
 
 import type { ModelPrice, Rate, RateBody, RoutePricingMode } from '@demux/common';
 import type { BillingType } from '@demux/common';
-import { MODEL_PRICE_CURRENCY, PRICE_CURRENCY, USD_CNY_FIXED_RATE } from '@demux/common';
+import { MODEL_PRICE_CURRENCY, PRICE_CURRENCY } from '@demux/common';
 import { formatMultiplier } from '../model/rateSummary';
 import {
   allowedManualBillingTypes,
@@ -70,7 +70,7 @@ const catalogBody = computed<RateBody | null>(() => {
 const previewBody = computed<RateBody | null>(() => {
   const body = catalogBody.value;
   if (!body) return null;
-  return scaleRateBody(body, props.vendorMultiplier * USD_CNY_FIXED_RATE);
+  return scaleRateBody(body, props.vendorMultiplier);
 });
 
 const embedding = computed(() =>

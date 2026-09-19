@@ -21,7 +21,7 @@ export const providerGroupSchema = z.object({
   /** 对外公开通道 slug（如 nai / pa）；未设置时不参与公开定价。 */
   vendorSlug: z.string().min(1).max(64).nullable().optional(),
   status: providerGroupStatusSchema,
-  /** 渠道倍率：该组下所有 Compiled 路由的有效价 = 基准价 × 此倍率 × 路由倍率。 */
+  /** 渠道倍率：该组下 Compiled 路由的有效价(CNY) = 基准价(USD) × 此倍率 × 路由倍率。 */
   priceMultiplier: z.number().nonnegative().default(1),
   upstreamModelCount: z.number().int().nonnegative(),
   notes: z.string().nullable().optional(),

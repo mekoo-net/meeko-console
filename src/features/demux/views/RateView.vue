@@ -2,7 +2,7 @@
 /**
  * 模型定价：左侧渠道，右侧每条别名的有效价。
  *
- * 别名要么走渠道定价（价格表 × 渠道倍率），要么自定义按量 / 按次等。
+ * 别名要么走渠道定价（美元 × 渠道倍率 = 人民币），要么自定义按量 / 按次等。
  */
 import { computed, onMounted, ref, watch } from 'vue';
 
@@ -92,6 +92,7 @@ const pricedRows = computed<PricedRow[]>(() =>
       display: rateBodyDisplay(
         entry.rate,
         isEmbeddingPrice({ modelKey: group.vendorModel, capabilities: null }),
+        entry.rate.currency,
       ),
     })),
   ),

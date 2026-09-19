@@ -63,7 +63,7 @@ interface FetchCandidateWire {
   modelId: string;
   matchKind: string;
   billingType: string;
-  /** 美元牌价，编译时再 × 7。 */
+  /** 美元牌价，编译时乘渠道倍率得到人民币。 */
   rate: unknown;
   sourceCurrency?: string;
   fxApplied?: number;
