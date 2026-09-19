@@ -15,6 +15,7 @@ import { confirmDanger } from '@/shared/composables/useConfirm';
 
 import {
   PriceSourceKindLabel,
+  canonicalizeModelKey,
   makerLabel,
   type BillingType,
   type ModelCapabilities,
@@ -130,9 +131,9 @@ function openCreateModel(): void {
 }
 
 function confirmNewKey(): void {
-  const key = newKeyInput.value.trim().toLowerCase();
+  const key = canonicalizeModelKey(newKeyInput.value);
   if (!key) {
-    ElMessage.warning('请输入厂家发布的模型名');
+    ElMessage.warning('请输入厂家发布的模型名，例如 claude-opus-5');
     return;
   }
   const maker = selectedMaker.value;

@@ -4,7 +4,10 @@ import { delay } from '@/shared/lib/delay';
 import {
   PRICE_CURRENCY,
   USD_CNY_FIXED_RATE,
+  canonicalizeModelKey,
   compareMakers,
+  findBestModelKey,
+  modelKeyMatches,
   modelPriceSchema,
   normalizeMaker,
   upsertModelPriceInputSchema,
@@ -32,7 +35,7 @@ import {
 } from './officialUsdPrices';
 
 function normalizeModelKey(v: string): string {
-  return v.trim().toLowerCase();
+  return canonicalizeModelKey(v) || v.trim().toLowerCase();
 }
 
 function sameBody(a: RateBody, b: RateBody): boolean {
@@ -51,7 +54,7 @@ function compile(
   const vk = scope.vendorKeys?.map((v) => v.trim().toLowerCase());
   const rids = scope.routeIds ? new Set(scope.routeIds) : null;
 
-  const priceByKey = new Map(store.modelPrices.map((p) => [p.modelKey, p]));
+  const priceKeys = store.modelPrices.map((p) => p.modelKey);
   const vendorMult = new Map(store.providerGroups.map((g) => [g.queueGroup, g.priceMultiplier]));
 
   let compiled = 0;
@@ -63,12 +66,12 @@ function compile(
     if (route.pricingMode !== 'compiled') continue;
     if (rids && !rids.has(route.uid)) continue;
     if (vk && !vk.includes(route.vendorKey)) continue;
-    const key = normalizeModelKey(route.vendorModel);
-    if (mk && !mk.includes(key)) continue;
+    if (mk && !mk.some((k) => modelKeyMatches(route.vendorModel, k))) continue;
 
-    const price = priceByKey.get(key);
+    const best = findBestModelKey(route.vendorModel, priceKeys);
+    const price = best ? store.modelPrices.find((p) => p.modelKey === best) : undefined;
     if (!price) {
-      unmatched.add(key);
+      unmatched.add(normalizeModelKey(route.vendorModel));
       continue;
     }
 
