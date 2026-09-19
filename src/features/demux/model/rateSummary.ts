@@ -1,13 +1,13 @@
 import type { RateBody } from '@demux/common';
+import { MODEL_PRICE_CURRENCY } from '@demux/common';
 import { formatMoney } from '@/shared/lib/money';
 
 /**
  * 把一份 rate 形状压成一行可读文本，模型定价页 / 价格表页 / 拉价 diff 共用。
- * 单位随 billingType 变，金额不带币种符号——币种由调用方另列。
  */
-export function rateBodySummary(body: RateBody): string {
-  const m2 = (v: number) => formatMoney(v, { fractionDigits: 2 });
-  const m4 = (v: number) => formatMoney(v, { fractionDigits: 4 });
+export function rateBodySummary(body: RateBody, currency: string = MODEL_PRICE_CURRENCY): string {
+  const m2 = (v: number) => formatMoney(v, { currency, fractionDigits: 2 });
+  const m4 = (v: number) => formatMoney(v, { currency, fractionDigits: 4 });
 
   switch (body.billingType) {
     case 'per_token': {

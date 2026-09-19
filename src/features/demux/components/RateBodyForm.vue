@@ -10,6 +10,7 @@ import { ArrowRight, Delete, Plus } from '@element-plus/icons-vue';
 
 import {
   BillingTypeLabel,
+  PRICE_CURRENCY,
   type BillingType,
   type ModelCapabilities,
   type PerImageTier,
@@ -35,6 +36,8 @@ interface Props {
   catalogBillingType?: BillingType | null;
   /** 模型定价自定义：同类计量可切换。价格表不要开。 */
   allowBillingType?: boolean;
+  /** 价格表美元；自定义有效价人民币。 */
+  currency?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -42,7 +45,10 @@ const props = withDefaults(defineProps<Props>(), {
   capabilities: null,
   catalogBillingType: null,
   allowBillingType: false,
+  currency: PRICE_CURRENCY,
 });
+
+const moneySymbol = computed(() => (props.currency.toUpperCase() === 'USD' ? '$' : '¥'));
 
 type Money = number | null;
 
@@ -257,20 +263,20 @@ defineExpose({ buildRateBody });
 
     <template v-if="form.billingType === 'per_token' && isEmbedding">
       <div class="main-grid main-grid--one">
-        <PriceField v-model="form.inputPerM" label="向量" unit="每 1M tokens" placeholder="0" size="lg" />
+        <PriceField :currency-symbol="moneySymbol" v-model="form.inputPerM" label="向量" unit="每 1M tokens" placeholder="0" size="lg" />
       </div>
     </template>
     <template v-else-if="form.billingType === 'per_token'">
       <div class="io-grid">
         <div class="io-col">
           <span class="io-col__h">入 / 写</span>
-          <PriceField v-model="form.inputPerM" label="入" unit="每 1M tokens" placeholder="0" size="lg" />
-          <PriceField v-model="form.cachedWrite" label="写" unit="每 1M tokens" placeholder="同入价" />
+          <PriceField :currency-symbol="moneySymbol" v-model="form.inputPerM" label="入" unit="每 1M tokens" placeholder="0" size="lg" />
+          <PriceField :currency-symbol="moneySymbol" v-model="form.cachedWrite" label="写" unit="每 1M tokens" placeholder="同入价" />
         </div>
         <div class="io-col">
           <span class="io-col__h">出 / 读</span>
-          <PriceField v-model="form.outputPerM" label="出" unit="每 1M tokens" placeholder="0" size="lg" />
-          <PriceField v-model="form.cachedRead" label="读" unit="每 1M tokens" placeholder="同入价" />
+          <PriceField :currency-symbol="moneySymbol" v-model="form.outputPerM" label="出" unit="每 1M tokens" placeholder="0" size="lg" />
+          <PriceField :currency-symbol="moneySymbol" v-model="form.cachedRead" label="读" unit="每 1M tokens" placeholder="同入价" />
         </div>
       </div>
 
@@ -286,10 +292,10 @@ defineExpose({ buildRateBody });
         </button>
         <div v-show="extrasOpen" class="extras__grid">
           <template v-if="showAudio">
-            <PriceField v-model="form.inputAudio" label="音频入" unit="每 1M" placeholder="不计" />
-            <PriceField v-model="form.outputAudio" label="音频出" unit="每 1M" placeholder="不计" />
+            <PriceField :currency-symbol="moneySymbol" v-model="form.inputAudio" label="音频入" unit="每 1M" placeholder="不计" />
+            <PriceField :currency-symbol="moneySymbol" v-model="form.outputAudio" label="音频出" unit="每 1M" placeholder="不计" />
           </template>
-          <PriceField
+          <PriceField :currency-symbol="moneySymbol"
             v-if="showReasoning"
             v-model="form.reasoning"
             label="reasoning"
@@ -302,16 +308,16 @@ defineExpose({ buildRateBody });
 
     <template v-else-if="form.billingType === 'per_call'">
       <div class="main-grid main-grid--one">
-        <PriceField v-model="form.pricePerCall" label="单次调用" unit="每次请求" placeholder="0" size="lg" />
+        <PriceField :currency-symbol="moneySymbol" v-model="form.pricePerCall" label="单次调用" unit="每次请求" placeholder="0" size="lg" />
       </div>
     </template>
 
     <div v-else-if="form.billingType === 'per_audio_minute'" class="main-grid main-grid--one">
-      <PriceField v-model="form.pricePerMinute" label="音频时长" unit="每分钟" placeholder="0" size="lg" />
+      <PriceField :currency-symbol="moneySymbol" v-model="form.pricePerMinute" label="音频时长" unit="每分钟" placeholder="0" size="lg" />
     </div>
 
     <div v-else-if="form.billingType === 'per_character'" class="main-grid main-grid--one">
-      <PriceField v-model="form.pricePerKChar" label="文本长度" unit="每 1K 字符" placeholder="0" size="lg" />
+      <PriceField :currency-symbol="moneySymbol" v-model="form.pricePerKChar" label="文本长度" unit="每 1K 字符" placeholder="0" size="lg" />
     </div>
 
     <template v-else-if="form.billingType === 'per_image'">
@@ -319,7 +325,7 @@ defineExpose({ buildRateBody });
         <div class="tiers__head">
           <span>size</span>
           <span>quality</span>
-          <span class="tiers__price-col">¥ / 张</span>
+          <span class="tiers__price-col">{{ moneySymbol }} / 张</span>
           <span></span>
         </div>
         <div v-for="(row, idx) in form.imageTiers" :key="idx" class="tiers__row">
@@ -351,7 +357,7 @@ defineExpose({ buildRateBody });
       <div class="tiers tiers--video">
         <div class="tiers__head">
           <span>resolution</span>
-          <span class="tiers__price-col">¥ / 秒</span>
+          <span class="tiers__price-col">{{ moneySymbol }} / 秒</span>
           <span></span>
         </div>
         <div v-for="(row, idx) in form.videoTiers" :key="idx" class="tiers__row">

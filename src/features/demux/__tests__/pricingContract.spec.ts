@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  MODEL_PRICE_CURRENCY,
   PRICE_CURRENCY,
   USD_CNY_FIXED_RATE,
   inferMaker,
@@ -18,16 +19,17 @@ import { DemuxPricingMock } from '../services/mock/demuxPricingMock';
 /**
  * 价格表契约：这些用例是给后端看的验收标准，而不是前端的自娱自乐。
  *
- * - 基准价只有人民币，没有汇率设置项；
- * - 官方美元价在 fetch 阶段就按固定 1:7 折成人民币返回，候选带 `sourceCurrency` / `fxApplied` 备注；
- * - 有效价 = 基准价 × 渠道倍率 × 路由倍率，审计列只有 `sourcePriceId` / `multiplierApplied`；
+ * - 价格表是美元，没有汇率设置项；
+ * - 官方美元价原样进价格表，候选带 `sourceCurrency` / `fxApplied`（USD 源为 1）；
+ * - 有效价 = 基准价(USD) × 渠道倍率 × 路由倍率 × 7，审计列只有 `sourcePriceId` / `multiplierApplied`；
  * - `PriceCompileResult` 没有 `skipped`——不存在「缺汇率」这种跳过原因。
  */
 describe('pricing contract', () => {
   beforeEach(() => _resetDemuxStore());
 
-  it('fixed FX is 1 USD = 7 CNY and the only price currency is CNY', () => {
+  it('fixed FX is 1 USD = 7 CNY; catalog is USD, billing is CNY', () => {
     expect(USD_CNY_FIXED_RATE).toBe(7);
+    expect(MODEL_PRICE_CURRENCY).toBe('USD');
     expect(PRICE_CURRENCY).toBe('CNY');
   });
 
@@ -64,14 +66,14 @@ describe('pricing contract', () => {
     expect(caps('text-embedding-3-large')).toEqual({ audio: false, reasoning: false, embedding: true });
   });
 
-  it('model_prices wire row must be CNY and carry a maker; any other currency is rejected', () => {
+  it('model_prices wire row must be USD and carry a maker; any other currency is rejected', () => {
     const row = {
       id: '20000001',
       modelKey: 'gpt-4o',
       maker: 'openai',
       billingType: 'per_token',
-      rate: { input: { perMToken: 17.5 }, output: { perMToken: 70 } },
-      currency: 'CNY',
+      rate: { input: { perMToken: 2.5 }, output: { perMToken: 10 } },
+      currency: 'USD',
       source: 'models_dev',
       sourceRef: 'openai/gpt-4o',
       fetchedAtUtc: 1758200000000,
@@ -79,14 +81,14 @@ describe('pricing contract', () => {
       routeCount: 2,
     };
     expect(modelPriceSchema.safeParse(row).success).toBe(true);
-    expect(modelPriceSchema.safeParse({ ...row, currency: 'USD' }).success).toBe(false);
+    expect(modelPriceSchema.safeParse({ ...row, currency: 'CNY' }).success).toBe(false);
   });
 
   it('upsert model price input carries neither currency nor effective time', () => {
     const parsed = upsertModelPriceInputSchema.safeParse({
       modelKey: 'gpt-4o',
       billingType: 'per_token',
-      rate: { input: { perMToken: 17.5 }, output: { perMToken: 70 } },
+      rate: { input: { perMToken: 2.5 }, output: { perMToken: 10 } },
       source: 'manual',
       effectiveFromUtc: 1758200000000,
     });
@@ -113,7 +115,7 @@ describe('pricing contract', () => {
     expect(parsed.success && 'fxApplied' in parsed.data).toBe(false);
   });
 
-  it('fetched candidates are already CNY (usd × 7) and annotate the conversion', async () => {
+  it('fetched candidates stay USD and do not convert at fetch', async () => {
     const port = new DemuxPricingMock();
     const r = await port.fetchPrices({ sources: [{ kind: 'models_dev' }], onlyMatched: true });
     expect(r.success).toBe(true);
@@ -123,13 +125,13 @@ describe('pricing contract', () => {
     expect(candidates.length).toBeGreaterThan(0);
     for (const c of candidates) {
       expect(c.sourceCurrency).toBe('USD');
-      expect(c.fxApplied).toBe(USD_CNY_FIXED_RATE);
+      expect(c.fxApplied).toBe(1);
       expect(c.maker).toBeTruthy();
       expect('currency' in c).toBe(false);
     }
   });
 
-  it('the catalog is the whole official snapshot converted at 7, not a list of in-use models', () => {
+  it('the catalog is the whole official snapshot in USD, not a list of in-use models', () => {
     const store = getDemuxStore();
     expect(store.modelPrices).toHaveLength(OFFICIAL_USD_PRICES.length);
     expect(store.modelPrices.filter((p) => p.billingType === 'per_token')).toHaveLength(
@@ -138,10 +140,13 @@ describe('pricing contract', () => {
 
     const gpt4o = store.modelPrices.find((p) => p.modelKey === 'gpt-4o');
     expect(gpt4o?.maker).toBe('openai');
-    expect(gpt4o?.currency).toBe(PRICE_CURRENCY);
+    expect(gpt4o?.currency).toBe(MODEL_PRICE_CURRENCY);
     if (gpt4o?.billingType === 'per_token') {
-      expect(gpt4o.rate.input.perMToken).toBeCloseTo(2.5 * USD_CNY_FIXED_RATE, 6);
+      expect(gpt4o.rate.input.perMToken).toBeCloseTo(2.5, 6);
     }
+    const gpt4oShow = priceDisplay(gpt4o!);
+    expect(gpt4oShow.columns[0]![0]!.text).toMatch(/2\.50/);
+    expect(gpt4oShow.columns[0]![0]!.text).not.toMatch(/¥/);
 
     // 阿里云也转售 glm / kimi，但厂家要归到真正做模型的那家。
     expect(store.modelPrices.find((p) => p.modelKey === 'glm-5.2')?.maker).toBe('zhipu');
@@ -275,7 +280,7 @@ describe('pricing contract', () => {
     expect(google?.items.some((p) => p.modelKey === 'gemini-2.5-pro')).toBe(true);
   });
 
-  it('compile = base × vendor multiplier × route multiplier, no FX factor', async () => {
+  it('compile = USD catalog × vendor multiplier × route multiplier × 7 → CNY', async () => {
     const store = getDemuxStore();
     const port = new DemuxPricingMock();
 
@@ -302,7 +307,10 @@ describe('pricing contract', () => {
     expect(rate.multiplierApplied).toBe(3);
     expect('fxApplied' in rate).toBe(false);
     if (price.billingType === 'per_token' && rate.billingType === 'per_token') {
-      expect(rate.rate.input.perMToken).toBeCloseTo(price.rate.input.perMToken * 3, 6);
+      expect(rate.rate.input.perMToken).toBeCloseTo(
+        price.rate.input.perMToken * 3 * USD_CNY_FIXED_RATE,
+        6,
+      );
     }
   });
 

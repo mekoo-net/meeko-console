@@ -2,7 +2,7 @@
 /**
  * 模型定价：一条别名怎么出价。
  *
- *  - 渠道定价：有效价 = 价格表 × 渠道倍率，价格表一改这里跟着变。
+ *  - 渠道定价：有效价 = 价格表(USD) × 渠道倍率 × 7。
  *  - 自定义：自己填有效价，计量必须跟模型同类（LLM 按量/按次，生图只能档位）。
  */
 import { computed, ref, watch } from 'vue';
@@ -10,6 +10,7 @@ import { ElMessage } from 'element-plus';
 
 import type { ModelPrice, Rate, RateBody, RoutePricingMode } from '@demux/common';
 import type { BillingType } from '@demux/common';
+import { MODEL_PRICE_CURRENCY, PRICE_CURRENCY, USD_CNY_FIXED_RATE } from '@demux/common';
 import { formatMultiplier } from '../model/rateSummary';
 import {
   allowedManualBillingTypes,
@@ -69,7 +70,7 @@ const catalogBody = computed<RateBody | null>(() => {
 const previewBody = computed<RateBody | null>(() => {
   const body = catalogBody.value;
   if (!body) return null;
-  return scaleRateBody(body, props.vendorMultiplier);
+  return scaleRateBody(body, props.vendorMultiplier * USD_CNY_FIXED_RATE);
 });
 
 const embedding = computed(() =>
@@ -82,13 +83,13 @@ const embedding = computed(() =>
 const catalogDisplay = computed(() => {
   const body = catalogBody.value;
   if (!body) return null;
-  return rateBodyDisplay(body, embedding.value);
+  return rateBodyDisplay(body, embedding.value, catalog.value?.currency ?? MODEL_PRICE_CURRENCY);
 });
 
 const compiledDisplay = computed(() => {
   const body = previewBody.value;
   if (!body) return null;
-  return rateBodyDisplay(body, embedding.value);
+  return rateBodyDisplay(body, embedding.value, PRICE_CURRENCY);
 });
 
 const customInitial = computed<RateDraft | null>(() => {

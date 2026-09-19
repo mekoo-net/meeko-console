@@ -5,6 +5,7 @@
  * 类型一列说这是 LLM 还是图像，价格列用 icon 摊开各档。单位不跟在后面——类型已经说明怎么计量。
  */
 import type { BillingType, ModelCapabilities, ModelPrice, RateBody } from '@demux/common';
+import { PRICE_CURRENCY } from '@demux/common';
 import { formatMoney } from '@/shared/lib/money';
 
 /**
@@ -111,68 +112,73 @@ export interface PriceDisplay {
   compact: { min: string; max: string; count: number } | null;
 }
 
-/** 有效价 / 基准价共用：一份 RateBody 摊成价格列。 */
+/** 有效价 / 基准价共用：一份 RateBody 摊成价格列。默认人民币（有效价）；价格表传 USD。 */
 export function rateBodyDisplay(
   body: RateBody,
   embedding = false,
+  currency: string = PRICE_CURRENCY,
 ): Omit<PriceDisplay, 'price'> {
   const kind: PriceModelKind =
     embedding && body.billingType === 'per_token' ? 'embedding' : body.billingType;
   return {
     kind,
     typeLabel: MODEL_KIND[kind].label,
-    columns: rateColumns(body, kind === 'embedding'),
+    columns: rateColumns(body, kind === 'embedding', currency),
     note: rateNote(body),
-    compact: compactTiers(body),
+    compact: compactTiers(body, currency),
   };
 }
 
 export function priceDisplay(price: ModelPrice): PriceDisplay {
   return {
     price,
-    ...rateBodyDisplay(price, priceModelKind(price) === 'embedding'),
+    ...rateBodyDisplay(price, priceModelKind(price) === 'embedding', price.currency),
   };
 }
 
-const m2 = (v: number) => formatMoney(v, { fractionDigits: 2 });
-const m4 = (v: number) => formatMoney(v, { fractionDigits: 4 });
+function m2(v: number, currency: string): string {
+  return formatMoney(v, { currency, fractionDigits: 2 });
+}
+function m4(v: number, currency: string): string {
+  return formatMoney(v, { currency, fractionDigits: 4 });
+}
 
-function rateColumns(body: RateBody, embedding: boolean): PricePart[][] {
+function rateColumns(body: RateBody, embedding: boolean, currency: string): PricePart[][] {
   switch (body.billingType) {
     case 'per_token': {
       const { input, output } = body.rate;
       if (embedding) {
-        return [[{ kind: 'input', label: '入', text: m2(input.perMToken) }]];
+        return [[{ kind: 'input', label: '入', text: m2(input.perMToken, currency) }]];
       }
       /** 缓存价留空 = 按入价计（后端 RatioResolver 同语义），所以显示入价并标继承，而不是省掉这一档。 */
       const cached = (kind: 'cacheWrite' | 'cacheRead', label: string, v: number | undefined): PricePart =>
         v == null
-          ? { kind, label, text: m2(input.perMToken), inherited: true }
-          : { kind, label, text: m2(v) };
+          ? { kind, label, text: m2(input.perMToken, currency), inherited: true }
+          : { kind, label, text: m2(v, currency) };
       const left: PricePart[] = [
-        { kind: 'input', label: '入', text: m2(input.perMToken) },
+        { kind: 'input', label: '入', text: m2(input.perMToken, currency) },
         cached('cacheWrite', '写', input.cachedWrite),
       ];
       const right: PricePart[] = [
-        { kind: 'output', label: '出', text: m2(output.perMToken) },
+        { kind: 'output', label: '出', text: m2(output.perMToken, currency) },
         cached('cacheRead', '读', input.cachedRead),
       ];
-      if (input.audio != null) left.push({ kind: 'audioIn', label: '音频入', text: m2(input.audio) });
-      if (output.audio != null) right.push({ kind: 'audioOut', label: '音频出', text: m2(output.audio) });
+      if (input.audio != null) left.push({ kind: 'audioIn', label: '音频入', text: m2(input.audio, currency) });
+      if (output.audio != null) right.push({ kind: 'audioOut', label: '音频出', text: m2(output.audio, currency) });
       if (output.reasoning != null) {
-        right.push({ kind: 'reasoning', label: 'reasoning', text: m2(output.reasoning) });
+        right.push({ kind: 'reasoning', label: 'reasoning', text: m2(output.reasoning, currency) });
       }
       return [left, right];
     }
     case 'per_call':
-      return [[{ kind: 'call', label: '单价', text: m4(body.rate.pricePerCall) }]];
+      return [[{ kind: 'call', label: '单价', text: m4(body.rate.pricePerCall, currency) }]];
     case 'per_image':
       return pairUp(
         body.rate.tiers.map((t) => ({
           kind: 'image' as const,
           label: `${t.size} ${t.quality}`,
           caption: imageCaption(t.size, t.quality),
-          text: m4(t.pricePerImage),
+          text: m4(t.pricePerImage, currency),
         })),
       );
     case 'per_video':
@@ -181,13 +187,13 @@ function rateColumns(body: RateBody, embedding: boolean): PricePart[][] {
           kind: 'video' as const,
           label: t.resolution,
           caption: t.resolution,
-          text: m4(t.pricePerSecond),
+          text: m4(t.pricePerSecond, currency),
         })),
       );
     case 'per_audio_minute':
-      return [[{ kind: 'audioIn', label: '音频', text: m4(body.rate.pricePerMinute) }]];
+      return [[{ kind: 'audioIn', label: '音频', text: m4(body.rate.pricePerMinute, currency) }]];
     case 'per_character':
-      return [[{ kind: 'audioOut', label: '语音', text: m4(body.rate.pricePerKChar) }]];
+      return [[{ kind: 'audioOut', label: '语音', text: m4(body.rate.pricePerKChar, currency) }]];
   }
 }
 
@@ -214,14 +220,14 @@ function compactQuality(q: string): string {
   return q;
 }
 
-function compactTiers(body: RateBody): { min: string; max: string; count: number } | null {
+function compactTiers(body: RateBody, currency: string): { min: string; max: string; count: number } | null {
   if (body.billingType !== 'per_image' && body.billingType !== 'per_video') return null;
   const prices =
     body.billingType === 'per_image'
       ? body.rate.tiers.map((t) => t.pricePerImage)
       : body.rate.tiers.map((t) => t.pricePerSecond);
   if (prices.length <= 2) return null;
-  return { min: m4(Math.min(...prices)), max: m4(Math.max(...prices)), count: prices.length };
+  return { min: m4(Math.min(...prices), currency), max: m4(Math.max(...prices), currency), count: prices.length };
 }
 
 function rateNote(body: RateBody): string | null {

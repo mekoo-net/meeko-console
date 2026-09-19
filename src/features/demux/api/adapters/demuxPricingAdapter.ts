@@ -1,5 +1,5 @@
 import {
-  PRICE_CURRENCY,
+  MODEL_PRICE_CURRENCY,
   compareMakers,
   inferMaker,
   modelPriceSchema,
@@ -63,7 +63,7 @@ interface FetchCandidateWire {
   modelId: string;
   matchKind: string;
   billingType: string;
-  /** 已折成 CNY。 */
+  /** 美元牌价，编译时再 × 7。 */
   rate: unknown;
   sourceCurrency?: string;
   fxApplied?: number;
@@ -142,7 +142,7 @@ function parseCandidate(w: FetchCandidateWire): FetchCandidate | null {
     maker: normalizeMaker(w.maker, w.modelId),
     modelId: w.modelId,
     matchKind: w.matchKind,
-    sourceCurrency: w.sourceCurrency ?? PRICE_CURRENCY,
+    sourceCurrency: w.sourceCurrency ?? MODEL_PRICE_CURRENCY,
     fxApplied: w.fxApplied ?? 1,
     sameAsCurrent: w.sameAsCurrent,
     capabilities: w.capabilities

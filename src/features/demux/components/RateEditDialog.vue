@@ -5,7 +5,7 @@
  */
 import { computed, ref } from 'vue';
 
-import type { BillingType, ModelCapabilities } from '@demux/common';
+import { MODEL_PRICE_CURRENCY, type BillingType, type ModelCapabilities } from '@demux/common';
 import RateBodyForm, { type RateDraft } from './RateBodyForm.vue';
 
 export type { RateDraft };
@@ -66,6 +66,7 @@ function onSubmit(): void {
       :initial="initial"
       :billing-type="billingType"
       :capabilities="capabilities"
+      :currency="MODEL_PRICE_CURRENCY"
     />
 
     <template #footer>

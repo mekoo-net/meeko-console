@@ -1,9 +1,9 @@
 <script setup lang="ts">
 /**
- * 价格表：官方定价依据。左侧厂家、右侧这家的模型与人民币基准价。
+ * 价格表：官方定价依据。左侧厂家、右侧这家的模型与美元牌价。
  *
  * 方向是「模型名映射到价格表取价」——这里只登记厂家发布的模型，不去迁就下游路由用了什么名字；
- * 哪个别名没映射上，是模型页的事。有效价 = 基准价 × 渠道倍率 × 路由倍率，官方美元价拉取时按 1:7 折人民币。
+ * 哪个别名没映射上，是模型页的事。有效价 = 基准价(USD) × 渠道倍率 × 路由倍率 × 7。
  */
 import { computed, onMounted, ref, watch } from 'vue';
 import { Delete, Edit, MoreFilled, Plus, Refresh } from '@element-plus/icons-vue';
@@ -281,7 +281,7 @@ onMounted(() => void load());
           <MakerMark :maker="activeGroup!.maker" />
           <div class="detail-ident">
             <h2 class="provider-detail__title">{{ makerLabel(activeGroup!.maker) }}</h2>
-            <p class="detail-sub">{{ activeGroup!.items.length }} 个模型 · 人民币基准价</p>
+            <p class="detail-sub">{{ activeGroup!.items.length }} 个模型 · 美元牌价</p>
           </div>
         </div>
         <div class="detail-actions">

@@ -2,6 +2,7 @@ import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { delay } from '@/shared/lib/delay';
 
 import {
+  MODEL_PRICE_CURRENCY,
   PRICE_CURRENCY,
   USD_CNY_FIXED_RATE,
   canonicalizeModelKey,
@@ -43,7 +44,7 @@ function sameBody(a: RateBody, b: RateBody): boolean {
 }
 
 /**
- * Mock 版编译器：基准价(CNY) × 渠道倍率 × 路由倍率 → store.rate（modelId = routeKey）。
+ * Mock 版编译器：基准价(USD) × 渠道倍率 × 路由倍率 × 7 → store.rate（CNY）。
  * 只处理 Compiled 路由；Manual 路由的有效价原样保留。
  */
 function compile(
@@ -76,7 +77,10 @@ function compile(
     }
 
     const multiplier = (vendorMult.get(route.vendorKey) ?? 1) * (route.priceMultiplier ?? 1);
-    const body = scaleRateBody({ billingType: price.billingType, rate: price.rate } as RateBody, multiplier);
+    const body = scaleRateBody(
+      { billingType: price.billingType, rate: price.rate } as RateBody,
+      multiplier * USD_CNY_FIXED_RATE,
+    );
 
     const idx = store.rate.findIndex((r) => r.modelId === route.routeKey);
     const current = idx >= 0 ? store.rate[idx]! : null;
@@ -169,7 +173,7 @@ export class DemuxPricingMock implements DemuxPricingPort {
       maker: normalizeMaker(input.maker, modelKey),
       billingType: input.billingType,
       rate: input.rate,
-      currency: PRICE_CURRENCY,
+      currency: MODEL_PRICE_CURRENCY,
       // 模型能力跟着目录走：改价不动它，新加的键能在目录里查到就带上。
       capabilities:
         idx >= 0
@@ -240,7 +244,7 @@ export class DemuxPricingMock implements DemuxPricingPort {
   }
 
   /**
-   * 官方价：直接回放固化的 models.dev 快照（美元），折成人民币给候选。
+   * 官方价：直接回放固化的 models.dev 快照（美元），价格表不折人民币。
    * 所以 mock 里同步出来的结果与目录一致——差异只出在种子里被改过价的那几条。
    */
   async fetchPrices(input: FetchPricesInput): Promise<AppResult<FetchPricesResult>> {
@@ -260,7 +264,7 @@ export class DemuxPricingMock implements DemuxPricingPort {
 
     const items = catalog.map((row) => {
       const current = priced.get(row.modelKey) ?? null;
-      const body = scaleRateBody(officialUsdRateBody(row), USD_CNY_FIXED_RATE);
+      const body = officialUsdRateBody(row);
       const candidates: FetchCandidate[] = input.sources.map((s) => ({
         ...body,
         sourceKind: s.kind,
@@ -270,7 +274,7 @@ export class DemuxPricingMock implements DemuxPricingPort {
         modelId: row.modelKey,
         matchKind: 'exact',
         sourceCurrency: 'USD',
-        fxApplied: USD_CNY_FIXED_RATE,
+        fxApplied: 1,
         sameAsCurrent:
           current != null &&
           current.billingType === body.billingType &&

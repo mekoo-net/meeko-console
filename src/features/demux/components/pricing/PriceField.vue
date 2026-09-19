@@ -16,9 +16,11 @@ interface Props {
   placeholder?: string;
   /** lg = 主价，大字号卡片；sm = 附属价，一行。 */
   size?: 'lg' | 'sm';
+  /** 价格表美元 `$`，有效价人民币 `¥`。 */
+  currencySymbol?: string;
 }
 
-const props = withDefaults(defineProps<Props>(), { placeholder: '', size: 'sm' });
+const props = withDefaults(defineProps<Props>(), { placeholder: '', size: 'sm', currencySymbol: '¥' });
 
 const emit = defineEmits<{ (e: 'update:modelValue', v: number | null): void }>();
 
@@ -27,7 +29,7 @@ function format(v: number | null): string {
 }
 
 function parse(s: string): number | null {
-  const t = s.trim().replace(/[,，¥]/g, '');
+  const t = s.trim().replace(/US\$/gi, '').replace(/[,，¥$]/g, '');
   if (!t) return null;
   const n = Number(t);
   if (!Number.isFinite(n) || n < 0) return null;
@@ -57,7 +59,7 @@ function onBlur(): void {
   <label class="pf" :class="`pf--${size}`">
     <span class="pf__label">{{ label }}</span>
     <span class="pf__box">
-      <span class="pf__cur">¥</span>
+      <span class="pf__cur">{{ currencySymbol }}</span>
       <input
         class="pf__input"
         type="text"

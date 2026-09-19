@@ -15,7 +15,7 @@ import type {
 import type { ProviderGroup, ProviderUpstreamModel } from '../../model/catalog.types';
 import type { VendorRoute } from '../../model/vendorRoute.types';
 import type { Model } from '@demux/common';
-import { PRICE_CURRENCY, USD_CNY_FIXED_RATE, type ModelPrice, type Rate, type RateBody } from '@demux/common';
+import { MODEL_PRICE_CURRENCY, PRICE_CURRENCY, USD_CNY_FIXED_RATE, type ModelPrice, type Rate, type RateBody } from '@demux/common';
 import {
   OFFICIAL_USD_PRICES,
   officialUsdCapabilities,
@@ -38,7 +38,7 @@ export interface DemuxStore {
   providerGroups: ProviderGroup[];
   upstreamModels: ProviderUpstreamModel[];
   vendorRoutes: VendorRoute[];
-  /** 价格表（基准价，按 modelKey 唯一，人民币） */
+  /** 价格表（基准价，按 modelKey 唯一，美元） */
   modelPrices: ModelPrice[];
 }
 
@@ -1104,7 +1104,7 @@ function seedCompiledRates(
     const multiplier = (vendorMult.get(route.vendorKey) ?? 1) * (route.priceMultiplier ?? 1);
     const body = scaleRateBody(
       { billingType: price.billingType, rate: price.rate } as RateBody,
-      multiplier,
+      multiplier * USD_CNY_FIXED_RATE,
     );
     out.push({
       ...body,
@@ -1132,7 +1132,7 @@ const ADJUSTED: Readonly<Record<string, number>> = {
 };
 
 /**
- * 价格表种子 = 固化的官方美元牌价 × 固定汇率。
+ * 价格表种子 = 固化的官方美元牌价。编译有效价时再 × 7。
  * 与渠道里用到哪些模型无关：价格表是一套官方基准目录，不是「在用清单」。
  */
 function seedModelPrices(): ModelPrice[] {
@@ -1140,7 +1140,7 @@ function seedModelPrices(): ModelPrice[] {
   return OFFICIAL_USD_PRICES.map((row) => {
     const adjusted = ADJUSTED[row.modelKey];
     const f = adjusted ?? 1;
-    const body = scaleRateBody(officialUsdRateBody(row), USD_CNY_FIXED_RATE * f);
+    const body = scaleRateBody(officialUsdRateBody(row), f);
     const catalogued = row.kind === 'llm' || row.kind === 'embedding';
     const sourced = adjusted == null && catalogued;
     return {
@@ -1149,7 +1149,7 @@ function seedModelPrices(): ModelPrice[] {
       maker: row.maker,
       billingType: body.billingType,
       rate: body.rate,
-      currency: PRICE_CURRENCY,
+      currency: MODEL_PRICE_CURRENCY,
       capabilities: officialUsdCapabilities(row),
       source: sourced ? 'models_dev' : '',
       sourceRef: sourced ? `models_dev:${row.maker}/${row.modelKey}` : null,
