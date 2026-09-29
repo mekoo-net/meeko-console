@@ -16,6 +16,7 @@ import { confirmDanger } from '@/shared/composables/useConfirm';
 import {
   PriceSourceKindLabel,
   canonicalizeModelKey,
+  compareMakers,
   makerLabel,
   type BillingType,
   type ModelCapabilities,
@@ -40,17 +41,57 @@ const groups = ref<ModelPriceMakerGroup[]>([]);
 const loading = ref(false);
 const selectedMaker = ref<string | null>(null);
 
+/** 手建、还没模型的厂家。价格表没有厂家表，空组只活在这边，直到第一条模型写进去。 */
+const EXTRA_MAKERS_KEY = 'meeko.console.price-table.extra-makers';
+
+function readExtraMakers(): string[] {
+  try {
+    const raw = localStorage.getItem(EXTRA_MAKERS_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((x): x is string => typeof x === 'string' && /^[a-z][a-z0-9_-]{0,62}$/.test(x));
+  } catch {
+    return [];
+  }
+}
+
+function persistExtraMakers(): void {
+  localStorage.setItem(EXTRA_MAKERS_KEY, JSON.stringify(extraMakers.value));
+}
+
+const extraMakers = ref<string[]>(readExtraMakers());
+
+const visibleGroups = computed(() => {
+  const have = new Set(groups.value.map((g) => g.maker));
+  const extras = extraMakers.value
+    .filter((m) => !have.has(m))
+    .map((m) => ({ maker: m, items: [] as ModelPrice[] }));
+  return [...groups.value, ...extras].sort((a, b) => compareMakers(a.maker, b.maker));
+});
+
 const totalModels = computed(() => groups.value.reduce((n, g) => n + g.items.length, 0));
 
 const activeGroup = computed(() => {
   if (selectedMaker.value == null) return null;
-  return groups.value.find((g) => g.maker === selectedMaker.value) ?? null;
+  return visibleGroups.value.find((g) => g.maker === selectedMaker.value) ?? null;
 });
 
 const rows = computed(() => (activeGroup.value?.items ?? []).map(priceDisplay));
 
 function selectMaker(maker: string): void {
   selectedMaker.value = maker;
+}
+
+function keepSelection(): boolean {
+  return (
+    selectedMaker.value != null && visibleGroups.value.some((g) => g.maker === selectedMaker.value)
+  );
+}
+
+function ensureSelection(): void {
+  if (keepSelection()) return;
+  selectedMaker.value = visibleGroups.value[0]?.maker ?? null;
 }
 
 async function load(): Promise<void> {
@@ -62,19 +103,13 @@ async function load(): Promise<void> {
       return;
     }
     groups.value = r.data;
-    const keys = r.data.map((g) => g.maker);
-    if (selectedMaker.value && keys.includes(selectedMaker.value)) return;
-    selectedMaker.value = keys[0] ?? null;
+    ensureSelection();
   } finally {
     loading.value = false;
   }
 }
 
-watch(groups, (list) => {
-  if (list.length === 0) return;
-  if (selectedMaker.value && list.some((g) => g.maker === selectedMaker.value)) return;
-  selectedMaker.value = list[0]!.maker;
-});
+watch(visibleGroups, () => ensureSelection());
 
 // ---- 编辑 -----------------------------------------------------------------------
 
@@ -94,6 +129,9 @@ const newKeyInput = ref('');
  */
 const newTypeInput = ref<PriceModelKind>('per_token');
 const editingBilling = ref<BillingType>('per_token');
+
+const newMakerDialogOpen = ref(false);
+const newMakerInput = ref('');
 
 const MODEL_TYPE_OPTIONS: readonly {
   value: PriceModelKind;
@@ -128,6 +166,33 @@ function openCreateModel(): void {
   newKeyInput.value = '';
   newTypeInput.value = 'per_token';
   newKeyDialogOpen.value = true;
+}
+
+function openCreateMaker(): void {
+  newMakerInput.value = '';
+  newMakerDialogOpen.value = true;
+}
+
+function confirmNewMaker(): void {
+  const key = newMakerInput.value.trim().toLowerCase();
+  if (!/^[a-z][a-z0-9_-]{0,62}$/.test(key)) {
+    ElMessage.warning('厂家键用小写字母开头，只含字母、数字、连字符');
+    return;
+  }
+  if (key === 'other') {
+    ElMessage.warning('「其他」是兜底分组，请用厂家自己的名字，例如 novelai');
+    return;
+  }
+  const existing = visibleGroups.value.find((g) => g.maker === key);
+  if (existing) {
+    selectedMaker.value = key;
+    newMakerDialogOpen.value = false;
+    return;
+  }
+  extraMakers.value = [...extraMakers.value, key];
+  persistExtraMakers();
+  selectedMaker.value = key;
+  newMakerDialogOpen.value = false;
 }
 
 function confirmNewKey(): void {
@@ -237,6 +302,7 @@ onMounted(() => void load());
     <template #header>
       <PageHeader title="价格表">
         <template #actions>
+          <el-button :icon="Plus" @click="openCreateMaker">新建厂家</el-button>
           <el-dropdown trigger="click" @command="onMore">
             <el-button :icon="MoreFilled" plain :loading="compiling" />
             <template #dropdown>
@@ -253,7 +319,7 @@ onMounted(() => void load());
     <aside class="provider-sidebar">
       <div class="provider-sidebar__list">
         <button
-          v-for="g in groups"
+          v-for="g in visibleGroups"
           :key="g.maker"
           type="button"
           class="provider-sidebar__item maker-item"
@@ -266,14 +332,19 @@ onMounted(() => void load());
             <span class="maker-item__meta">{{ g.items.length }} 个模型</span>
           </span>
         </button>
-        <p v-if="groups.length === 0 && !loading" class="provider-sidebar__empty">没有厂家</p>
+        <p v-if="visibleGroups.length === 0 && !loading" class="provider-sidebar__empty">没有厂家</p>
       </div>
-      <div class="maker-sidebar__foot">{{ totalModels }} 个模型</div>
+      <div class="maker-sidebar__foot">
+        <span>{{ totalModels }} 个模型</span>
+        <el-button :icon="Plus" link @click="openCreateMaker">新建厂家</el-button>
+      </div>
     </aside>
 
     <ProviderDetailPanel :show-placeholder="!activeGroup">
       <template #placeholder>
-        <EmptyState title="价格表是空的" />
+        <EmptyState title="价格表是空的" description="先建一个厂家，再在这家下面加模型。">
+          <el-button :icon="Plus" type="primary" @click="openCreateMaker">新建厂家</el-button>
+        </EmptyState>
       </template>
 
       <template #header>
@@ -377,6 +448,28 @@ onMounted(() => void load());
       </template>
     </el-dialog>
 
+    <el-dialog v-model="newMakerDialogOpen" width="420px" :close-on-click-modal="false">
+      <template #header>
+        <div class="new-model-head">
+          <span class="new-model-head__noun">新建厂家</span>
+        </div>
+      </template>
+      <el-input
+        v-model="newMakerInput"
+        placeholder="novelai / bfl / midjourney"
+        clearable
+        autofocus
+        @keyup.enter="confirmNewMaker"
+      />
+      <p class="new-model-tip">
+        厂家是模型是谁做的，不是渠道。建好之后在这家下面「新建模型」填牌价。
+      </p>
+      <template #footer>
+        <el-button @click="newMakerDialogOpen = false">取消</el-button>
+        <el-button type="primary" @click="confirmNewMaker">创建</el-button>
+      </template>
+    </el-dialog>
+
     <PriceSyncDialog v-model="syncOpen" :maker="syncMaker" @applied="load" />
   </ProviderWorkspaceLayout>
 </template>
@@ -408,7 +501,11 @@ onMounted(() => void load());
   color: var(--el-text-color-secondary);
 }
 .maker-sidebar__foot {
-  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 8px 14px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
   border-top: 1px solid var(--el-border-color-lighter);

@@ -44,6 +44,7 @@ describe('pricing contract', () => {
     expect(inferMaker('tongyi-embedding-vision-plus')).toBe('qwen');
     expect(inferMaker('text-embedding-3-large')).toBe('openai');
     expect(inferMaker('kimi-k2')).toBe('moonshot');
+    expect(inferMaker('nai-diffusion-4-5-full')).toBe('novelai');
     expect(inferMaker('some-unknown-thing')).toBe('other');
   });
 

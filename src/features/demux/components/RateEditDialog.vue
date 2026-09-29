@@ -1,6 +1,8 @@
 <script setup lang="ts">
 /**
  * 价格表用的基准价对话框。计量方式跟模型走，不在这里挑。
+ * 新建还没有目录行，但上一步已经选定计量；把它当作目录类型传下去，
+ * 否则表单会把生图 / 视频当成对话模型，退回按量。
  * 模型定价的渠道定价 / 自定义走 RouteRateDrawer。
  */
 import { computed, ref } from 'vue';
@@ -65,6 +67,7 @@ function onSubmit(): void {
       :subject-key="subjectKey"
       :initial="initial"
       :billing-type="billingType"
+      :catalog-billing-type="billingType"
       :capabilities="capabilities"
       :currency="MODEL_PRICE_CURRENCY"
     />
