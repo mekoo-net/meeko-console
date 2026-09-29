@@ -22,7 +22,12 @@ import type { Component } from 'vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import { formatDateTime } from '@/shared/lib/date';
-import type { LlmPipelineAdmin, LlmPlatformSettingsAdmin } from '../model/llmSettings.types';
+import type {
+  LlmPipelineAdmin,
+  LlmPipelinePurpose,
+  LlmPlatformModelOption,
+  LlmPlatformSettingsAdmin,
+} from '../model/llmSettings.types';
 import { getTavernLlmSettingsPort } from '../services';
 
 const FOLLOW_VALUE = '__follow__';
@@ -36,6 +41,8 @@ const snapshot = ref<Record<string, string | null>>({});
 
 const pickerPipeline = ref<LlmPipelineAdmin | null>(null);
 const drawerVisible = ref(false);
+const catalog = ref<LlmPlatformModelOption[]>([]);
+const catalogLoading = ref(false);
 
 const SECTIONS = [
   { key: 'actor', title: '角色侧', subtitle: '对话、互动与自主唤醒' },
@@ -76,7 +83,7 @@ const pipelineById = computed(() => {
 
 const modelLabelById = computed(() => {
   const map = new Map<string, string>();
-  for (const model of status.value?.models ?? []) {
+  for (const model of catalog.value) {
     map.set(model.id, model.label);
   }
   return map;
@@ -102,13 +109,44 @@ const pickerValue = computed({
   },
 });
 
+function modelPurpose(model: LlmPlatformModelOption): 'chat' | 'embedding' | 'ranking' {
+  const name = `${model.id} ${model.label}`.toLowerCase();
+  if (name.includes('embed')) return 'embedding';
+  if (name.includes('rerank') || name.includes('ranker')) return 'ranking';
+  return 'chat';
+}
+
+function modelsForPurpose(purpose: LlmPipelinePurpose): LlmPlatformModelOption[] {
+  const models = catalog.value;
+  if (purpose === 'embedding') return models.filter((model) => modelPurpose(model) === 'embedding');
+  if (purpose === 'ranking') return models.filter((model) => modelPurpose(model) === 'ranking');
+  if (purpose === 'vision') {
+    return models.filter(
+      (model) =>
+        modelPurpose(model) === 'chat' &&
+        model.modalities.some((modality) => modality.toLowerCase() === 'vision'),
+    );
+  }
+  return models.filter((model) => modelPurpose(model) === 'chat');
+}
+
+function pickerModelIds(pipeline: LlmPipelineAdmin): string[] {
+  const ids = modelsForPurpose(pipeline.purpose).map((model) => model.id);
+  const configured = draft[pipeline.id];
+  if (configured && !ids.some((id) => id.toLowerCase() === configured.toLowerCase())) {
+    return [configured, ...ids];
+  }
+  return ids;
+}
+
+const pickerIds = computed(() =>
+  pickerPipeline.value ? pickerModelIds(pickerPipeline.value) : [],
+);
+
 const pickerAutoHint = computed(() => {
   const pipeline = pickerPipeline.value;
-  if (!pipeline) return '暂无候选模型';
-  const first = pipeline.candidates[0];
-  return first
-    ? `不单独指定时，使用已发布目录首个候选：${modelLabel(first)}`
-    : '暂无候选模型';
+  if (!pipeline) return '不指定模型';
+  return pickerIds.value.length > 0 ? '不指定模型' : '目录里还没有适用的模型';
 });
 
 function selectPickerValue(value: string): void {
@@ -117,7 +155,14 @@ function selectPickerValue(value: string): void {
 
 function modelLabel(id: string | null | undefined): string {
   if (!id) return '—';
-  return modelLabelById.value.get(id) ?? id;
+  const exact = modelLabelById.value.get(id);
+  if (exact) return exact;
+  const lower = id.toLowerCase();
+  for (const [key, label] of modelLabelById.value) {
+    if (key.toLowerCase() === lower) return label;
+  }
+  const slash = id.lastIndexOf('/');
+  return slash >= 0 && slash < id.length - 1 ? id.slice(slash + 1) : id;
 }
 
 function applyStatus(next: LlmPlatformSettingsAdmin): void {
@@ -130,17 +175,10 @@ function applyStatus(next: LlmPlatformSettingsAdmin): void {
   snapshot.value = { ...configured };
 }
 
-function effectiveFor(pipeline: LlmPipelineAdmin): string | null {
-  const configured = draft[pipeline.id] ?? null;
-  if (configured && pipeline.candidates.includes(configured)) return configured;
-  return pipeline.candidates[0] ?? null;
-}
-
 function pipelineValueLabel(pipeline: LlmPipelineAdmin): string {
   const configured = draft[pipeline.id] ?? null;
   if (configured) return modelLabel(configured);
-  const effective = effectiveFor(pipeline);
-  return effective ? `自动 · ${modelLabel(effective)}` : '自动';
+  return '自动';
 }
 
 function isExplicitlySet(pipelineId: string): boolean {
@@ -157,13 +195,19 @@ function sectionPipelines(key: (typeof SECTIONS)[number]['key']): LlmPipelineAdm
     .filter((pipeline): pipeline is LlmPipelineAdmin => pipeline != null);
 }
 
-function openPicker(pipeline: LlmPipelineAdmin): void {
-  if (pipeline.candidates.length === 0) {
-    ElMessage.warning('该管线暂无可用候选模型');
-    return;
-  }
+async function openPicker(pipeline: LlmPipelineAdmin): Promise<void> {
   pickerPipeline.value = pipeline;
   drawerVisible.value = true;
+  if (catalog.value.length > 0 || catalogLoading.value) return;
+
+  catalogLoading.value = true;
+  try {
+    const r = await port.listCatalog();
+    if (r.success) catalog.value = r.data;
+    else ElMessage.error(r.error.message);
+  } finally {
+    catalogLoading.value = false;
+  }
 }
 
 function closePicker(): void {
@@ -298,7 +342,7 @@ onMounted(() => {
         v-if="status"
         class="pipeline-settings__meta"
       >
-        最近更新 {{ formatDateTime(status.updatedAtUtc) }} · 选「自动」时，使用该管线在已发布目录中的首个候选模型
+        最近更新 {{ formatDateTime(status.updatedAtUtc) }} · 「自动」表示这条管线不指定模型
       </p>
     </div>
 
@@ -355,6 +399,7 @@ onMounted(() => {
 
       <div
         v-if="pickerPipeline"
+        v-loading="catalogLoading"
         class="pipeline-settings__picker"
       >
         <button
@@ -380,7 +425,7 @@ onMounted(() => {
 
         <div class="pipeline-settings__pick-list">
           <button
-            v-for="id in pickerPipeline.candidates"
+            v-for="id in pickerIds"
             :key="id"
             type="button"
             class="pipeline-settings__pick"

@@ -1,5 +1,7 @@
 import {
+  llmPlatformModelOptionSchema,
   llmPlatformSettingsAdminSchema,
+  type LlmPlatformModelOption,
   type LlmPlatformSettingsAdmin,
   type UpdateLlmPlatformSettingsInput,
 } from '@/features/tavern/model/llmSettings.types';
@@ -19,8 +21,6 @@ function mapPipelineWire(raw: unknown): unknown {
     hint: w.hint ?? w.Hint ?? '',
     purpose: w.purpose ?? w.Purpose ?? 'chat',
     configured: w.configured ?? w.Configured ?? null,
-    effective: w.effective ?? w.Effective ?? null,
-    candidates: w.candidates ?? w.Candidates ?? [],
   };
 }
 
@@ -38,10 +38,8 @@ function mapSettingsWire(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object') return raw;
   const w = raw as Record<string, unknown>;
   const pipelinesRaw = w.pipelines ?? w.Pipelines;
-  const modelsRaw = w.models ?? w.Models;
   return {
     pipelines: Array.isArray(pipelinesRaw) ? pipelinesRaw.map(mapPipelineWire) : [],
-    models: Array.isArray(modelsRaw) ? modelsRaw.map(mapModelWire) : [],
     updatedAtUtc: asEpochMillis(w.updatedAtUtc ?? w.updated_at_utc) ?? Date.now(),
   };
 }
@@ -62,5 +60,13 @@ export class TavernLlmSettingsHttpAdapter implements TavernLlmSettingsPort {
     const res = await requestTavern<unknown>(BASE, { method: 'PUT', body: input });
     if (!res.success) return res;
     return parseSettings(res.data);
+  }
+
+  async listCatalog(): Promise<AppResult<LlmPlatformModelOption[]>> {
+    const res = await requestTavern<unknown>(`${BASE}/catalog`);
+    if (!res.success) return res;
+    const raw = Array.isArray(res.data) ? res.data : [];
+    const parsed = llmPlatformModelOptionSchema.array().safeParse(raw.map(mapModelWire));
+    return parsed.success ? ok(parsed.data) : fail({ code: 'validation', message: '模型目录格式错误' });
   }
 }

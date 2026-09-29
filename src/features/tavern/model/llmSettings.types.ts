@@ -11,8 +11,6 @@ export const llmPipelineAdminSchema = z.object({
   hint: z.string(),
   purpose: llmPipelinePurposeSchema,
   configured: z.string().nullable(),
-  effective: z.string().nullable(),
-  candidates: z.array(z.string()),
 });
 
 export type LlmPipelineAdmin = z.infer<typeof llmPipelineAdminSchema>;
@@ -27,7 +25,6 @@ export type LlmPlatformModelOption = z.infer<typeof llmPlatformModelOptionSchema
 
 export const llmPlatformSettingsAdminSchema = z.object({
   pipelines: z.array(llmPipelineAdminSchema),
-  models: z.array(llmPlatformModelOptionSchema),
   updatedAtUtc: epochMillisSchema,
 });
 

@@ -17,7 +17,7 @@ const MOCK_MODELS: LlmPlatformModelOption[] = [
   { id: 'bge-reranker-v2', label: 'BGE Reranker v2', modalities: [] },
 ];
 
-const PIPELINE_DESCRIPTORS: Array<Omit<LlmPipelineAdmin, 'configured' | 'effective' | 'candidates'>> = [
+const PIPELINE_DESCRIPTORS: Array<Omit<LlmPipelineAdmin, 'configured'>> = [
   { id: 'dialogue', label: '角色对话', hint: '用户 ↔ 角色的对话回合', purpose: 'chat' },
   { id: 'interaction', label: '角色互动', hint: '角色 ↔ 角色的交互回合', purpose: 'chat' },
   { id: 'wake', label: '自主唤醒', hint: '模型自注册闹钟触发的 agentic 唤醒回合', purpose: 'chat' },
@@ -32,35 +32,11 @@ const PIPELINE_DESCRIPTORS: Array<Omit<LlmPipelineAdmin, 'configured' | 'effecti
   { id: 'ranking', label: '检索重排', hint: 'RAG 检索结果重排', purpose: 'ranking' },
 ];
 
-function candidatesFor(purpose: LlmPipelineAdmin['purpose']): string[] {
-  switch (purpose) {
-    case 'vision':
-      return MOCK_MODELS.filter((m) => m.modalities.includes('vision')).map((m) => m.id);
-    case 'embedding':
-      return MOCK_MODELS.filter((m) => m.id.includes('embed')).map((m) => m.id);
-    case 'ranking':
-      return MOCK_MODELS.filter((m) => m.id.includes('rerank')).map((m) => m.id);
-    default:
-      return MOCK_MODELS.filter((m) => !m.id.includes('embed') && !m.id.includes('rerank')).map((m) => m.id);
-  }
-}
-
-function resolveEffective(configured: string | null, candidates: string[]): string | null {
-  if (configured && candidates.includes(configured)) return configured;
-  return candidates[0] ?? null;
-}
-
 function buildPipelines(configured: Record<string, string | null>): LlmPipelineAdmin[] {
-  return PIPELINE_DESCRIPTORS.map((descriptor) => {
-    const candidates = candidatesFor(descriptor.purpose);
-    const value = configured[descriptor.id] ?? null;
-    return {
-      ...descriptor,
-      configured: value,
-      effective: resolveEffective(value, candidates),
-      candidates,
-    };
-  });
+  return PIPELINE_DESCRIPTORS.map((descriptor) => ({
+    ...descriptor,
+    configured: configured[descriptor.id] ?? null,
+  }));
 }
 
 let configured: Record<string, string | null> = {
@@ -73,7 +49,6 @@ let updatedAtUtc = Date.now();
 function snapshot(): LlmPlatformSettingsAdmin {
   return {
     pipelines: buildPipelines(configured),
-    models: MOCK_MODELS,
     updatedAtUtc,
   };
 }
@@ -94,6 +69,11 @@ export class TavernLlmSettingsMock implements TavernLlmSettingsPort {
     configured = { ...configured, ...input.pipelines };
     updatedAtUtc = Date.now();
     return ok(snapshot());
+  }
+
+  async listCatalog(): Promise<AppResult<LlmPlatformModelOption[]>> {
+    await delay();
+    return ok(MOCK_MODELS);
   }
 }
 
