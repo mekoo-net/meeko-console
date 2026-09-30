@@ -1,6 +1,7 @@
-# meeko-console 静态产物镜像（Vue 3 + Vite）
-# 纯静态 SPA：运行期不需要 Node.js，也不内置 Web 服务。
-# 镜像只携带构建好的 dist/，启动时同步到挂载目录，由宿主/外部 Web 服务托管。
+# meeko-console（Vue 3 + Vite）
+# Vite 在构建期把 VITE_* 内联进产物，运行期改环境变量不会生效。
+# 镜像由 nginx 在 80 端口托管 dist/。Dokploy 前面的 Traefik 要有进程一直监听，
+# 不能再「拷到 /output 后退出」。深层路径回落到 index.html，见 nginx.conf。
 FROM node:22-alpine AS build
 WORKDIR /app
 
@@ -21,14 +22,10 @@ RUN corepack enable && pnpm install --frozen-lockfile --prod=false
 COPY . .
 RUN pnpm run build
 
-# 运行阶段：极简镜像，仅存放静态产物，无任何常驻服务
-FROM alpine:3.20 AS runtime
+# 官方镜像的 CMD 是 nginx -g 'daemon off;'，前台运行，容器不会退出。
+FROM nginx:1.30-alpine AS runtime
 
-# 构建产物固定放在 /dist，可直接只读挂载到外部 Web 服务容器
-COPY --from=build /app/dist /dist
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
 
-# 默认行为：把 /dist 同步到挂载目录 /output 后退出
-#   docker run --rm -v /srv/www/meeko-console:/output ghcr.io/<repo>/meeko-console:<tag>
-# 也可直接挂载 /dist 给其它容器：
-#   -v meeko-console-dist:/dist  或  --volumes-from
-CMD ["sh", "-c", "mkdir -p /output && cp -a /dist/. /output/ && echo 'meeko-console dist -> /output done'"]
+EXPOSE 80
