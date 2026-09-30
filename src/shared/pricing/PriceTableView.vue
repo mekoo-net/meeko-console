@@ -23,16 +23,16 @@ import {
   type ModelPriceMakerGroup,
   type UpsertModelPriceInput,
 } from '@demux/common';
-import { priceDisplay, type PriceModelKind } from '../model/priceTable';
-import { getDemuxPricingPort } from '../services';
-import ProviderWorkspaceLayout from '../components/provider/ProviderWorkspaceLayout.vue';
-import ProviderDetailPanel from '../components/provider/ProviderDetailPanel.vue';
-import RateEditDialog, { type RateDraft } from '../components/RateEditDialog.vue';
-import PriceSyncDialog from '../components/pricing/PriceSyncDialog.vue';
-import ModelKindMark from '../components/pricing/ModelKindMark.vue';
-import MakerMark from '../components/pricing/MakerMark.vue';
-import PriceCells from '../components/pricing/PriceCells.vue';
-import { notifyCompile } from '../components/pricing/compileFeedback';
+import { priceDisplay, type PriceModelKind } from '@/features/demux/model/priceTable';
+import { getDemuxPricingPort } from '@/features/demux/services';
+import ProviderWorkspaceLayout from '@/features/demux/components/provider/ProviderWorkspaceLayout.vue';
+import ProviderDetailPanel from '@/features/demux/components/provider/ProviderDetailPanel.vue';
+import RateEditDialog, { type RateDraft } from '@/features/demux/components/RateEditDialog.vue';
+import PriceSyncDialog from '@/features/demux/components/pricing/PriceSyncDialog.vue';
+import ModelKindMark from '@/features/demux/components/pricing/ModelKindMark.vue';
+import MakerMark from '@/features/demux/components/pricing/MakerMark.vue';
+import PriceCells from '@/features/demux/components/pricing/PriceCells.vue';
+import { notifyCompile } from '@/features/demux/components/pricing/compileFeedback';
 
 const pricingPort = getDemuxPricingPort();
 
