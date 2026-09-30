@@ -1,5 +1,6 @@
 import {
   MODEL_PRICE_CURRENCY,
+  canonicalizeModelKey,
   compareMakers,
   inferMaker,
   modelPriceSchema,
@@ -201,8 +202,11 @@ export class DemuxPricingHttpAdapter implements DemuxPricingPort {
   }
 
   async getModelPrice(modelKey: string): Promise<AppResult<ModelPrice>> {
+    // JSON 里的模型名带的是真正的 /。先收成价格表的叶子名再放进路径，路径里不再出现斜杠。
+    const key = canonicalizeModelKey(modelKey);
+    if (!key) return fail({ code: 'not_found', message: `基准价 ${modelKey} 不存在` });
     const res = await requestDemux<ModelPriceWire>(
-      `${BASE}/catalog/${encodeURIComponent(modelKey)}`,
+      `${BASE}/catalog/${encodeURIComponent(key)}`,
     );
     if (!res.success) return res;
     return parseModelPrice(res.data);
