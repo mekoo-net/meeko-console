@@ -111,8 +111,6 @@ export const accountSchema = z.object({
   lastActiveAtUtc: epochMillisNullableSchema.optional(),
   /** 最近活跃 IP（最后一次登录的来源 IP）；无记录时 API 可返回 null。 */
   lastActiveIp: z.string().nullish(),
-  /** 账户等级；列表 API 可能不返回，默认 1。 */
-  tier: z.number().int().min(1).default(1),
   /** 累积充值金额（元）；列表 API 可能不返回，默认 0。 */
   totalRechargedAmount: z.number().nonnegative().default(0),
   /** OAuth 绑定关系，未绑定时省略。 */
@@ -173,8 +171,6 @@ export interface AccountListFilter {
   contactKeyword: string;
   type: AccountType | 'all';
   status: AccountStatus | 'all';
-  /** 账户等级（1..5）精确筛选；null/省略不筛。 */
-  tier?: number | null;
   /** 成就/徽章 code；非空时只返回持有该徽章的账户。 */
   badgeCode?: string;
 }

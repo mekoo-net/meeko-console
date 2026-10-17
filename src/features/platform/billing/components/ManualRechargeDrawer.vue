@@ -11,15 +11,12 @@ import {
 } from '../model/billing.types';
 import { getBillingPort } from '../services';
 
+const visible = defineModel<boolean>('visible', { required: true });
 const props = defineProps<{
-  visible: boolean;
   accountUid: string;
   accountLabel?: string;
 }>();
-const emit = defineEmits<{
-  (e: 'update:visible', v: boolean): void;
-  (e: 'success'): void;
-}>();
+const emit = defineEmits<{ success: [] }>();
 
 const internalSources: RechargeProvider[] = ['manual', 'cs_compensation', 'marketing_reward'];
 
@@ -30,8 +27,9 @@ const submitting = ref(false);
 const amount = ref<number | null>(null);
 const source = ref<RechargeProvider>('manual');
 const note = ref('');
-const idempotencyKey = ref('');
 const productCode = ref('');
+/** 每次打开生成一个：双击或超时重试不会重复入账。 */
+const idempotencyKey = ref('');
 
 const products = ref<BillingProduct[]>([]);
 const productsLoading = ref(false);
@@ -58,30 +56,17 @@ watch(source, (next) => {
   }
 });
 
-const dialogVisible = computed({
-  get: () => props.visible,
-  set: (v) => emit('update:visible', v),
-});
-
 const targetLabel = computed(() => props.accountLabel?.trim() || props.accountUid);
 
-function resetForm(): void {
+watch(visible, (open) => {
+  if (!open) return;
   amount.value = null;
   source.value = 'manual';
   note.value = '';
-  idempotencyKey.value = '';
   productCode.value = '';
-}
-
-watch(
-  () => props.visible,
-  (open) => {
-    if (open) {
-      resetForm();
-      void loadProducts();
-    }
-  },
-);
+  idempotencyKey.value = crypto.randomUUID();
+  void loadProducts();
+});
 
 async function handleSubmit(): Promise<void> {
   if (!props.accountUid) {
@@ -89,7 +74,7 @@ async function handleSubmit(): Promise<void> {
     return;
   }
   if (amount.value == null || amount.value <= 0) {
-    ElMessage.warning('请输入大于 0 的入账金额');
+    ElMessage.warning('请输入大于 0 的充值金额');
     return;
   }
 
@@ -100,13 +85,13 @@ async function handleSubmit(): Promise<void> {
       amount: amount.value,
       source: source.value,
       note: note.value.trim() || undefined,
-      idempotencyKey: idempotencyKey.value.trim() || undefined,
+      idempotencyKey: idempotencyKey.value,
       productCode: showProductSelect.value ? productCode.value.trim() || undefined : undefined,
     });
     if (r.success) {
-      ElMessage.success('人工入账成功');
+      ElMessage.success('充值成功');
       emit('success');
-      dialogVisible.value = false;
+      visible.value = false;
     } else {
       ElMessage.error(r.error.message);
     }
@@ -117,19 +102,28 @@ async function handleSubmit(): Promise<void> {
 </script>
 
 <template>
-  <el-dialog
-    v-model="dialogVisible"
-    title="人工入账"
-    width="520px"
-    destroy-on-close
+  <el-drawer
+    v-model="visible"
+    title="充值"
+    size="480px"
+    append-to-body
     :close-on-click-modal="false"
   >
-    <el-form label-width="96px" label-position="right" @submit.prevent="handleSubmit">
+    <el-form
+      label-position="top"
+      @submit.prevent="handleSubmit"
+    >
       <el-form-item label="目标账户">
-        <el-input :model-value="targetLabel" disabled />
+        <el-input
+          :model-value="targetLabel"
+          disabled
+        />
       </el-form-item>
 
-      <el-form-item label="入账金额" required>
+      <el-form-item
+        label="充值金额"
+        required
+      >
         <el-input-number
           v-model="amount"
           :min="0.01"
@@ -140,8 +134,14 @@ async function handleSubmit(): Promise<void> {
         />
       </el-form-item>
 
-      <el-form-item label="入账来源" required>
-        <el-select v-model="source" style="width: 100%">
+      <el-form-item
+        label="入账来源"
+        required
+      >
+        <el-select
+          v-model="source"
+          style="width: 100%"
+        >
           <el-option
             v-for="s in internalSources"
             :key="s"
@@ -151,14 +151,17 @@ async function handleSubmit(): Promise<void> {
         </el-select>
       </el-form-item>
 
-      <el-form-item v-if="showProductSelect" label="入账业务">
+      <el-form-item
+        v-if="showProductSelect"
+        label="入账业务"
+      >
         <el-select
           v-model="productCode"
           style="width: 100%"
           clearable
           filterable
           :loading="productsLoading"
-          placeholder="选择业务后按该业务返利率触发邀请返利（不选则不返利）"
+          placeholder="不选则本次充值不返利"
         >
           <el-option
             v-for="p in products"
@@ -167,8 +170,8 @@ async function handleSubmit(): Promise<void> {
             :value="p.code"
           />
         </el-select>
-        <div class="manual-recharge__hint">
-          人工充值可触发邀请返利，返利倍率取决于所选业务；不选业务则本次入账不返利。
+        <div class="hint">
+          人工充值按所选业务的返利率给邀请人返利；不选业务则本次充值不返利。
         </div>
       </el-form-item>
 
@@ -182,25 +185,25 @@ async function handleSubmit(): Promise<void> {
           placeholder="可选，如审批单说明"
         />
       </el-form-item>
-
-      <el-form-item label="幂等键">
-        <el-input
-          v-model="idempotencyKey"
-          maxlength="64"
-          placeholder="可选，重复提交时防重复入账"
-        />
-      </el-form-item>
     </el-form>
 
     <template #footer>
-      <el-button @click="dialogVisible = false">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="handleSubmit">确认入账</el-button>
+      <el-button @click="visible = false">
+        取消
+      </el-button>
+      <el-button
+        type="primary"
+        :loading="submitting"
+        @click="handleSubmit"
+      >
+        确认充值
+      </el-button>
     </template>
-  </el-dialog>
+  </el-drawer>
 </template>
 
 <style scoped>
-.manual-recharge__hint {
+.hint {
   margin-top: 4px;
   font-size: 12px;
   line-height: 1.5;

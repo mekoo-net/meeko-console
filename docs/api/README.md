@@ -33,6 +33,7 @@
 | 15 | 通知调试 `/notices/debug` | Admin | [`15-notices-debug.md`](./15-notices-debug.md) |
 | 16 | 平台令牌：下发抵扣券 / 查用户 / 查 Demux 用量 | Admin / API Key | [`16-ops-voucher-issue-and-usage.md`](./16-ops-voucher-issue-and-usage.md) |
 | 17 | 兑换码 `/billing/redemption/{batches,codes,attempts}`（充值渠道「兑换码」的卡密） | Admin | [`17-billing-redemption.md`](./17-billing-redemption.md) |
+| 18 | 余额退款 `/billing/refunds`（账户详情「退款」，扣余额 + 线下打款） | Admin | [`18-billing-refund.md`](./18-billing-refund.md) |
 
 ## BFF 域路由前缀（默认）
 
@@ -74,7 +75,6 @@ Accept: application/json
         "email":       "admin@meeko.io"
       },
       "iamUserCount": 5,
-      "tier": 3,
       "totalRechargedAmount": 12800,
       "walletSummary": {
         "available":     1280.5,

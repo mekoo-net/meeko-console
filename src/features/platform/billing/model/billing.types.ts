@@ -472,6 +472,39 @@ export interface CreateInternalRechargeInput {
   productCode?: string | undefined;
 }
 
+/** 后台余额退款：只扣钱包余额，财务按折损比例线下打款给用户。 */
+export interface CreateBalanceRefundInput {
+  accountUid: string;
+  /** 从钱包扣减的金额，不能超过可用余额。 */
+  amount: number;
+  /** 折损比例（%），0 ≤ x < 100。 */
+  lossRatePercent: number;
+  note?: string | undefined;
+  idempotencyKey: string;
+}
+
+export const balanceRefundSchema = z.object({
+  /** 退款单流水号，如 RF20261018000000001。 */
+  id: z.string(),
+  accountUid: idString,
+  amount: z.number(),
+  lossRatePercent: z.number(),
+  /** 线下实际打给用户的金额。 */
+  payoutAmount: z.number(),
+  note: z.string().nullable(),
+  /** 扣款后的可用余额。 */
+  balanceAfter: z.number(),
+  createdAtUtc: epochMillisSchema,
+});
+export type BalanceRefund = z.infer<typeof balanceRefundSchema>;
+
+/** 实退 = 扣减 × (1 − 折损比例)，按分向下取整，与后端一致。按「分」和「万分比」做整数运算，避开浮点误差。 */
+export function refundPayoutOf(amount: number, lossRatePercent: number): number {
+  const cents = Math.round(amount * 100);
+  const keepBasisPoints = 10_000 - Math.round(lossRatePercent * 100);
+  return Math.floor((cents * keepBasisPoints) / 10_000) / 100;
+}
+
 export interface ListBillsFilter {
   /** 主账户 UID（精确匹配） */
   accountUid?: string | undefined;

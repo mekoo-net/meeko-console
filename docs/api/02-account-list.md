@@ -53,7 +53,6 @@
         "email":       "admin@meeko.io"
       },
       "iamUserCount": 5,
-      "tier": 3,
       "totalRechargedAmount": 12800,
       "walletSummary": {
         "available":     1280.5,
@@ -78,7 +77,6 @@
 | `name` | string | 必 | 显示名（组织名或个人昵称）。 |
 | `slug` | string | 必 | URL 友好标识。 |
 | `status` | enum | 必 | `active` / `suspended` / `deleted`。 |
-| `tier` | int (≥1) | 必 | 账户等级，按累计充值自动算。 |
 | `totalRechargedAmount` | number | 必 | 累计充值（元）。 |
 | `owner` | object | 可选 | Owner 信息族：`{ displayName, email }`。详情接口再额外回 `iamUserUid` / `phone`。**字段聚合理由**：Owner 的几条信息天然同生同灭，封装后未来加 `owner.avatarUrl` / `owner.title` 不污染顶层。 |
 | `iamUserCount` | int | 可选 | IAM 子账户数。 |

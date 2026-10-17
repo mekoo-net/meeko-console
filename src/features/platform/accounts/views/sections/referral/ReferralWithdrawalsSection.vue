@@ -105,7 +105,6 @@ onMounted(() => void load());
     </div>
 
     <div class="acc-page__head">
-      <h4 class="acc-page__title">提现记录</h4>
       <el-button :icon="Refresh" size="small" text :loading="loading" @click="load">刷新</el-button>
     </div>
 
@@ -227,7 +226,7 @@ onMounted(() => void load());
   color: var(--el-text-color-secondary);
 }
 .acc-page__head {
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
 }
 .withdrawals .acc-table-wrap {

@@ -182,10 +182,6 @@ async function revoke(a: Achievement): Promise<void> {
 
 <style scoped>
 .ach-section {
-  background: #fff;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 12px;
-  padding: 18px 22px 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;

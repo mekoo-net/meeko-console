@@ -2,7 +2,6 @@ import { createUidSeq, type Uid } from '@/shared/lib/id';
 
 import type { Account, Achievement, OAuthBinding, OAuthProvider } from '../../model/account.types';
 import { findAchievementDef } from '../../model/achievementCatalog';
-import { computeTier } from '../../model/tierConfig';
 import type { IamUser } from '../../model/iamUser.types';
 
 const accountUid = createUidSeq(100_000_000_000);
@@ -19,7 +18,7 @@ interface SeedAccount {
   createdDaysAgo: number;
   /** 最近活跃距今的小时数（Mock 扩展，构造差异化的 lastActiveAtUtc 用） */
   lastActiveHoursAgo: number;
-  /** 累积充值金额（元），用于自动算 tier。 */
+  /** 累积充值金额（元）。 */
   totalRechargedAmount: number;
   /** OAuth 已绑定的 provider 列表。 */
   oauthProviders: readonly OAuthProvider[];
@@ -209,7 +208,6 @@ function buildSeed(): AccountStore {
       updatedAtUtc: lastActiveAt.getTime(),
       lastActiveAtUtc: lastActiveAt.getTime(),
       lastActiveIp: `203.0.113.${seedIndex}`,
-      tier: computeTier(seed.totalRechargedAmount),
       totalRechargedAmount: seed.totalRechargedAmount,
       inviteCount: 0,
       oauthBindings: oauthBindings.length > 0 ? oauthBindings : undefined,

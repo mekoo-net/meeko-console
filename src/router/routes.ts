@@ -33,6 +33,97 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '账户列表', requiresAuth: true },
       },
       {
+        path: 'accounts/:uid',
+        component: () => import('@/features/platform/accounts/views/AccountLayout.vue'),
+        props: true,
+        redirect: (to) => `/accounts/${to.params.uid}/overview`,
+        meta: { title: '账户详情', requiresAuth: true },
+        children: [
+          {
+            path: 'overview',
+            name: 'account-detail',
+            component: () => import('@/features/platform/accounts/views/sections/OverviewSection.vue'),
+            meta: { title: '账户概览', requiresAuth: true },
+          },
+          {
+            path: 'billing',
+            component: () => import('@/features/platform/accounts/views/sections/BillingSection.vue'),
+            redirect: (to) => `/accounts/${to.params.uid}/billing/recharges`,
+            meta: { title: '账户账单', requiresAuth: true },
+            children: [
+              {
+                path: 'recharges',
+                name: 'account-billing',
+                component: () =>
+                  import('@/features/platform/accounts/views/sections/billing/BillingRechargesSection.vue'),
+                meta: { title: '充值记录', requiresAuth: true },
+              },
+              {
+                path: 'bills',
+                name: 'account-billing-bills',
+                component: () =>
+                  import('@/features/platform/accounts/views/sections/billing/BillingBillsSection.vue'),
+                meta: { title: '账单流水', requiresAuth: true },
+              },
+              {
+                path: 'vouchers',
+                name: 'account-billing-vouchers',
+                component: () =>
+                  import('@/features/platform/accounts/views/sections/billing/BillingVouchersSection.vue'),
+                meta: { title: '代金券', requiresAuth: true },
+              },
+            ],
+          },
+          {
+            path: 'referral',
+            component: () => import('@/features/platform/accounts/views/sections/ReferralSection.vue'),
+            redirect: (to) => `/accounts/${to.params.uid}/referral/invitees`,
+            meta: { title: '返利', requiresAuth: true },
+            children: [
+              {
+                path: 'invitees',
+                name: 'account-referral',
+                component: () =>
+                  import('@/features/platform/accounts/views/sections/referral/ReferralInviteesSection.vue'),
+                meta: { title: '邀请列表', requiresAuth: true },
+              },
+              {
+                path: 'rebates',
+                name: 'account-referral-rebates',
+                component: () =>
+                  import('@/features/platform/accounts/views/sections/referral/ReferralRebatesSection.vue'),
+                meta: { title: '返利流水', requiresAuth: true },
+              },
+              {
+                path: 'withdrawals',
+                name: 'account-referral-withdrawals',
+                component: () =>
+                  import('@/features/platform/accounts/views/sections/referral/ReferralWithdrawalsSection.vue'),
+                meta: { title: '提现记录', requiresAuth: true },
+              },
+            ],
+          },
+          {
+            path: 'achievements',
+            name: 'account-achievements',
+            component: () => import('@/features/platform/accounts/views/sections/AchievementsSection.vue'),
+            meta: { title: '账户徽章', requiresAuth: true },
+          },
+          {
+            path: 'iam',
+            name: 'account-iam',
+            component: () => import('@/features/platform/accounts/views/sections/IamSection.vue'),
+            meta: { title: 'IAM 用户', requiresAuth: true },
+          },
+          {
+            path: 'settings',
+            name: 'account-settings',
+            component: () => import('@/features/platform/accounts/views/sections/SettingsSection.vue'),
+            meta: { title: '账户设置', requiresAuth: true },
+          },
+        ],
+      },
+      {
         path: 'referral/withdrawals',
         redirect: { name: 'billing-withdrawals' },
       },
@@ -467,103 +558,6 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '通知调试', requiresAuth: true, roles: ['Admin'] },
           },
         ],
-      },
-    ],
-  },
-  {
-    path: '/accounts/:uid',
-    component: () => import('@/features/platform/accounts/views/AccountLayout.vue'),
-    props: true,
-    redirect: (to) => `/accounts/${to.params.uid}/overview`,
-    meta: { title: '账户详情', requiresAuth: true },
-    children: [
-      {
-        path: 'overview',
-        name: 'account-detail',
-        component: () => import('@/features/platform/accounts/views/sections/OverviewSection.vue'),
-        meta: { title: '账户概览', requiresAuth: true },
-      },
-      {
-        path: 'business',
-        name: 'account-business',
-        component: () => import('@/features/platform/accounts/views/sections/BusinessSection.vue'),
-        meta: { title: '账户业务', requiresAuth: true },
-      },
-      {
-        path: 'billing',
-        component: () => import('@/features/platform/accounts/views/sections/BillingSection.vue'),
-        redirect: (to) => `/accounts/${to.params.uid}/billing/recharges`,
-        meta: { title: '账户账单', requiresAuth: true },
-        children: [
-          {
-            path: 'recharges',
-            name: 'account-billing',
-            component: () =>
-              import('@/features/platform/accounts/views/sections/billing/BillingRechargesSection.vue'),
-            meta: { title: '充值记录', requiresAuth: true },
-          },
-          {
-            path: 'bills',
-            name: 'account-billing-bills',
-            component: () =>
-              import('@/features/platform/accounts/views/sections/billing/BillingBillsSection.vue'),
-            meta: { title: '账单流水', requiresAuth: true },
-          },
-          {
-            path: 'vouchers',
-            name: 'account-billing-vouchers',
-            component: () =>
-              import('@/features/platform/accounts/views/sections/billing/BillingVouchersSection.vue'),
-            meta: { title: '代金券', requiresAuth: true },
-          },
-        ],
-      },
-      {
-        path: 'referral',
-        component: () => import('@/features/platform/accounts/views/sections/ReferralSection.vue'),
-        redirect: (to) => `/accounts/${to.params.uid}/referral/invitees`,
-        meta: { title: '返利', requiresAuth: true },
-        children: [
-          {
-            path: 'invitees',
-            name: 'account-referral',
-            component: () =>
-              import('@/features/platform/accounts/views/sections/referral/ReferralInviteesSection.vue'),
-            meta: { title: '邀请列表', requiresAuth: true },
-          },
-          {
-            path: 'rebates',
-            name: 'account-referral-rebates',
-            component: () =>
-              import('@/features/platform/accounts/views/sections/referral/ReferralRebatesSection.vue'),
-            meta: { title: '返利流水', requiresAuth: true },
-          },
-          {
-            path: 'withdrawals',
-            name: 'account-referral-withdrawals',
-            component: () =>
-              import('@/features/platform/accounts/views/sections/referral/ReferralWithdrawalsSection.vue'),
-            meta: { title: '提现记录', requiresAuth: true },
-          },
-        ],
-      },
-      {
-        path: 'achievements',
-        name: 'account-achievements',
-        component: () => import('@/features/platform/accounts/views/sections/AchievementsSection.vue'),
-        meta: { title: '账户徽章', requiresAuth: true },
-      },
-      {
-        path: 'iam',
-        name: 'account-iam',
-        component: () => import('@/features/platform/accounts/views/sections/IamSection.vue'),
-        meta: { title: 'IAM 用户', requiresAuth: true },
-      },
-      {
-        path: 'settings',
-        name: 'account-settings',
-        component: () => import('@/features/platform/accounts/views/sections/SettingsSection.vue'),
-        meta: { title: '账户设置', requiresAuth: true },
       },
     ],
   },

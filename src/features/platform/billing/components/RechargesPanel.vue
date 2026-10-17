@@ -133,13 +133,6 @@ function onConfirmSuccess(updated: RechargeRecord): void {
 
 <template>
   <div class="acc-page">
-    <div class="acc-page__head">
-      <h4 class="acc-page__title">
-        充值记录
-        <span class="acc-page__count">共 {{ total }} 条</span>
-      </h4>
-    </div>
-
     <div class="tab-filter">
       <el-form
         :inline="true"

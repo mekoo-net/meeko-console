@@ -27,7 +27,6 @@ function listFiltered(filter: AccountListFilter): Account[] {
   const matched = all.filter((a) => {
     if (filter.type !== 'all' && a.type !== filter.type) return false;
     if (filter.status !== 'all' && a.status !== filter.status) return false;
-    if (filter.tier != null && filter.tier > 0 && a.tier !== filter.tier) return false;
     if (accountUid.length > 0 && a.uid !== accountUid) return false;
     if (contact.length > 0) {
       const email = (a.owner.email ?? '').toLowerCase();
@@ -143,17 +142,6 @@ export class AccountAdminMock implements AccountAdminPort {
       return ok(a);
     }
     const next: Account = { ...a, status, updatedAtUtc: Date.now() };
-    store.accounts.set(uid, next);
-    return parseAccount(next);
-  }
-
-  async setAccountTier(uid: string, tier: number): Promise<AppResult<Account>> {
-    await delay();
-    const store = getStore();
-    const a = store.accounts.get(uid);
-    if (!a) return fail({ code: 'not_found', message: `账户 ${uid} 不存在` });
-    if (tier < 1 || tier > 5) return fail({ code: 'validation', message: '等级必须为 1..5' });
-    const next: Account = { ...a, tier, updatedAtUtc: Date.now() };
     store.accounts.set(uid, next);
     return parseAccount(next);
   }

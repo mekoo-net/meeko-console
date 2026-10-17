@@ -92,7 +92,6 @@ Content-Type: application/problem+json
 | 时间字段 | 一律以 ISO-8601 UTC 字符串传输，字段名以 `AtUtc` 结尾。 |
 | 金额 | 后端 decimal，前端 `number`，单位**元**；展示走 `formatMoney` 做 banker rounding。 |
 | 货币 | 字段名 `currency`，ISO 4217（`CNY` 默认）。 |
-| `tier` / LV | 1 起的正整数，默认 1。 |
 
 ## 4. 鉴权
 ### 4.0 管理后台（本仓库）— Staff 员工登录

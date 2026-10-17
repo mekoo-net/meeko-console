@@ -70,11 +70,6 @@ async function saveRate(): Promise<void> {
   flex-direction: column;
   gap: 18px;
 }
-.panel {
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 14px;
-  padding: 18px 20px;
-}
 .panel__title {
   margin: 0 0 6px;
   font-size: 15px;

@@ -6,7 +6,6 @@ import { Plus, Search, Ticket } from '@element-plus/icons-vue';
 import LargeDialog from '@/shared/ui/LargeDialog.vue';
 import { getAccountAdminPort } from '@/features/platform/accounts/services';
 import type { Account } from '@/features/platform/accounts/model/account.types';
-import { TIER_THRESHOLDS } from '@/features/platform/accounts/model/tierConfig';
 import { ACHIEVEMENT_CATALOG, findAchievementDef } from '@/features/platform/accounts/model/achievementCatalog';
 import { debounce } from '@/shared/lib/debounce';
 import { formatDateTime } from '@/shared/lib/date';
@@ -67,7 +66,7 @@ function scopeSummary(t: VoucherTemplate): string {
 
 const submitting = ref(false);
 
-// 候选用户：服务端按 关键字 / 等级 / 徽章 筛选 + 分页（只刷新候选表格）。
+// 候选用户：服务端按 关键字 / 徽章 筛选 + 分页（只刷新候选表格）。
 const candidateAccounts = ref<Account[]>([]);
 const candidateLoading = ref(false);
 const candidatePage = ref(1);
@@ -76,7 +75,6 @@ const candidateTotal = ref(0);
 
 const filters = reactive({
   keyword: '',
-  tier: '' as number | '',
   badge: '',
 });
 
@@ -89,10 +87,6 @@ const selectedView = computed<Account[]>(() => {
   const start = (selectedPage.value - 1) * selectedPageSize;
   return selected.value.slice(start, start + selectedPageSize);
 });
-
-function tierName(tier: number): string {
-  return TIER_THRESHOLDS.find((t) => t.level === tier)?.name ?? `Lv${tier}`;
-}
 
 function badgeIcons(account: Account): string {
   return (account.achievementCodes ?? [])
@@ -136,7 +130,6 @@ async function loadCandidates(): Promise<void> {
         contactKeyword: /^\d+$/.test(keyword) ? '' : keyword,
         type: 'all',
         status: 'active',
-        tier: filters.tier === '' ? null : filters.tier,
         badgeCode: filters.badge || undefined,
       },
     });
@@ -160,7 +153,7 @@ const debouncedReload = debounce(() => {
 
 watch(() => filters.keyword, () => debouncedReload());
 watch(
-  () => [filters.tier, filters.badge],
+  () => filters.badge,
   () => {
     candidatePage.value = 1;
     void loadCandidates();
@@ -174,7 +167,6 @@ function onCandidatePageChange(page: number): void {
 
 function reset(): void {
   filters.keyword = '';
-  filters.tier = '';
   filters.badge = '';
   selected.value = [];
   selectedPage.value = 1;
@@ -296,20 +288,6 @@ async function onSubmit(): Promise<void> {
               class="filters__kw"
             />
             <el-select
-              v-model="filters.tier"
-              placeholder="等级"
-              clearable
-              size="small"
-              class="filters__tier"
-            >
-              <el-option
-                v-for="t in TIER_THRESHOLDS"
-                :key="t.level"
-                :label="t.name"
-                :value="t.level"
-              />
-            </el-select>
-            <el-select
               v-model="filters.badge"
               placeholder="徽章"
               clearable
@@ -353,14 +331,6 @@ async function onSubmit(): Promise<void> {
                     {{ row.uid }}<template v-if="accountEmail(row)"> · {{ accountEmail(row) }}</template>
                   </span>
                 </div>
-              </template>
-            </el-table-column>
-            <el-table-column
-              label="等级"
-              width="64"
-            >
-              <template #default="{ row }: { row: Account }">
-                {{ tierName(row.tier) }}
               </template>
             </el-table-column>
             <el-table-column
@@ -433,14 +403,6 @@ async function onSubmit(): Promise<void> {
                     {{ row.uid }}<template v-if="accountEmail(row)"> · {{ accountEmail(row) }}</template>
                   </span>
                 </div>
-              </template>
-            </el-table-column>
-            <el-table-column
-              label="等级"
-              width="64"
-            >
-              <template #default="{ row }: { row: Account }">
-                {{ tierName(row.tier) }}
               </template>
             </el-table-column>
             <el-table-column
@@ -624,9 +586,6 @@ async function onSubmit(): Promise<void> {
 .filters__kw {
   flex: 1;
   min-width: 120px;
-}
-.filters__tier {
-  width: 92px;
 }
 .filters__badge {
   width: 120px;

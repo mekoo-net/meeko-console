@@ -1,9 +1,12 @@
-import type { AppResult } from '@/shared/api/httpTypes';
+import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { request } from '@/shared/api/httpClient';
 import type { Uid } from '@/shared/lib/id';
 import { asEpochMillis, asEpochMillisNullable } from '@/shared/lib/epoch';
 
+import { balanceRefundSchema } from '@/features/platform/billing/model/billing.types';
 import type {
+  BalanceRefund,
+  CreateBalanceRefundInput,
   CreateInternalRechargeInput,
   CreateRechargeInput,
   ConfirmManualRechargeInput,
@@ -278,6 +281,22 @@ export class BillingHttpAdapter implements BillingPort {
         total: res.data.total,
       },
     };
+  }
+
+  async createBalanceRefund(input: CreateBalanceRefundInput): Promise<AppResult<BalanceRefund>> {
+    const res = await request<unknown>('/api/admin/billing/refunds', {
+      method: 'POST',
+      body: {
+        accountUid: Number(input.accountUid),
+        amount: input.amount,
+        lossRatePercent: input.lossRatePercent,
+        note: input.note,
+        idempotencyKey: input.idempotencyKey,
+      },
+    });
+    if (!res.success) return res;
+    const parsed = balanceRefundSchema.safeParse(res.data);
+    return parsed.success ? ok(parsed.data) : fail({ code: 'unknown', message: '退款结果格式不正确' });
   }
 
   async createInternalRecharge(

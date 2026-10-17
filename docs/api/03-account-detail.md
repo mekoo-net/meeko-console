@@ -58,7 +58,6 @@
     "phone":       "13800000000"
   },
   "iamUserCount": 5,
-  "tier": 3,
   "totalRechargedAmount": 12800,
   "wallet": {
     "available":    1280.5,

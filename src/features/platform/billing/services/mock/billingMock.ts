@@ -11,6 +11,9 @@ import {
   type ConfirmManualRechargeInput,
   type CreateRechargeInput,
   type CreateInternalRechargeInput,
+  type CreateBalanceRefundInput,
+  type BalanceRefund,
+  refundPayoutOf,
   type ListBillsFilter,
   type RechargeIntent,
   type RechargeRecord,
@@ -204,6 +207,28 @@ export class BillingMock implements BillingPort {
       createdAtUtc: Date.now(),
     });
     return ok(intent);
+  }
+
+  async createBalanceRefund(input: CreateBalanceRefundInput): Promise<AppResult<BalanceRefund>> {
+    await delay();
+    const b = ensure(input.accountUid);
+    if (input.amount <= 0) return fail({ code: 'validation', message: '退款金额必须大于 0。' });
+    if (input.lossRatePercent < 0 || input.lossRatePercent >= 100)
+      return fail({ code: 'validation', message: '折损比例须在 0 到 100 之间（不含 100）。' });
+    if (input.amount > b.wallet.available)
+      return fail({ code: 'conflict', message: `可用余额不足，最多可退 ${b.wallet.available} 元。` });
+    b.wallet.available -= input.amount;
+    const at = new Date();
+    return ok({
+      id: formatSerial('RF', at, genRechargeSerialSeq()),
+      accountUid: input.accountUid,
+      amount: input.amount,
+      lossRatePercent: input.lossRatePercent,
+      payoutAmount: refundPayoutOf(input.amount, input.lossRatePercent),
+      note: input.note ?? null,
+      balanceAfter: b.wallet.available,
+      createdAtUtc: at.getTime(),
+    });
   }
 
   async createInternalRecharge(input: CreateInternalRechargeInput): Promise<AppResult<RechargeRecord>> {

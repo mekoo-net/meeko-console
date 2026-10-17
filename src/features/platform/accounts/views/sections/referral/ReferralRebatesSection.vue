@@ -105,7 +105,6 @@ onMounted(() => void load());
     </div>
 
     <div class="acc-page__head">
-      <h4 class="acc-page__title">返利流水</h4>
       <el-button :icon="Refresh" size="small" text :loading="loading" @click="load">刷新</el-button>
     </div>
 
@@ -220,7 +219,7 @@ onMounted(() => void load());
   color: var(--el-text-color-secondary);
 }
 .acc-page__head {
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
 }
 .rebates .acc-table-wrap {

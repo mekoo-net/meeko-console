@@ -61,7 +61,6 @@ Authorization: Bearer <token>
       "type": "personal",
       "displayName": "张三",
       "status": "active",
-      "tier": 1,
       "owner": {
         "displayName": "张三",
         "email": "user@example.com"

@@ -52,6 +52,9 @@ export interface BillingPort {
 
   createInternalRecharge(input: CreateInternalRechargeInput): Promise<AppResult<RechargeRecord>>;
 
+  /** 余额退款：扣钱包余额，钱由财务线下打给用户。 */
+  createBalanceRefund(input: import('../../model/billing.types').CreateBalanceRefundInput): Promise<AppResult<import('../../model/billing.types').BalanceRefund>>;
+
   /** 按流水号拉取单条充值详情（含支付凭证 / 审计信息）。 */
   getRecharge(serial: string): Promise<AppResult<RechargeRecord>>;
 
