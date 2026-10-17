@@ -11,7 +11,7 @@
 
 ## 业务定义
 
-> 账单 = 钱包**扣款事件**（与充值流水分表）。承载 Hold Commit 等计费扣费场景。
+> 账单 = **扣费**（Hold Commit）+ **冲正扣费的退款**。只有账单编 `BL` 号、出现在本页；充值入账等其余钱包流水不是账单，不编 `BL`、不在本页，充值看充值记录（`RC`）。规范见 `src/Meeko.Billing/Meeko-Billing.md` §1.1。
 >
 > **错扣回滚 / 部分退款不另起一条**，而是直接驳回原账单：
 > - `status='reversed'`：完全驳回，`amount.actual=0`，必含 `reversal` 子对象
@@ -33,7 +33,6 @@
 | --- | --- | --- | --- |
 | 平台级全量账单 | `listBills` | GET | `/api/billing/bills` |
 | 取单条账单详情 | `getBill(id)` | GET | `/api/billing/bills/{id}` |
-| 驳回 / 部分退款（admin / 客服工单） | `reverseBill(id, payload)` | POST | `/api/billing/bills/{id}/reverse` |
 | 账户辅助查询（前端按 UID/邮箱/手机过滤显示） | `accountAdminPort.listAccounts` | GET | `/api/admin/accounts` |
 
 ## 请求 / 响应
@@ -109,11 +108,11 @@
 | `owner.accountUid` | string | 主账户 userId（**钱归它扣**，计费主体）。 |
 | `operator.accountUid` | string | 实操账户 userId（主账户 / IAM 子账户）。**与 owner 拆成两个对象**：一是双账户语义独立，二是未来要扩 `operator.iamUserUid` 区分席位级时无侵入。 |
 | `owner.contact` / `operator.contact` | object \| null | 账户身份与联系信息，由 BFF 按 uid 批量 enrich，统一嵌套 **`AccountContactDto`**：`{ uid, displayName, email, phone, accountType }`。**硬规范**：账户身份一律走此嵌套对象，不再展平成 `owner.displayName` / `owner.email` / `owner.phone`。 |
-| `business` | object | `{ productCode }`；`productCode` 为入账时快照（关联 `/api/admin/billing/products` 的 `code`）；充值/手工调账无产品归属时 `productCode` 为 `null`。 |
+| `business` | object | `{ productCode }`；`productCode` 为扣费时快照（关联 `/api/admin/billing/products` 的 `code`）；无产品归属时为 `null`。 |
 | `subType` | enum | `prepaid`（订阅 / 一次性订单）/ `usage`（按量）。 |
 | `status` | enum | 见下表。 |
 | `amount` | object | 金额族：`{ original, actual, currency, balanceAfter }`。`balanceAfter` 只在 `status ∈ {completed, partial_refunded}` 时非 null。 |
-| `ref` | object \| null | 关联业务实体：`{ type: 'recharge'/'hold'/'manual', id }`；`platform` 手工调账可为 `null`。 |
+| `ref` | object \| null | 关联业务实体：`{ type: 'hold', id }`（扣费 / 冲正挂在预扣单上）；无关联时为 `null`。 |
 | `failure` | object \| null | 仅 `status='failed'` 时非 null：`{ code }`，`code` 取值见下方"失败码"。 |
 | `reversal` | object \| null | 仅 `status ∈ {reversed, partial_refunded}` 时非 null：`{ atUtc, byIamUserUid, code, refundedAmount }`。`refundedAmount` = `amount.original − amount.actual`，前端不必再算。 |
 | `occurredAtUtc` | ISO8601 | 入账时间，前端排序基准。 |
@@ -137,30 +136,6 @@
 ### 单条详情 `GET /api/billing/bills/{id}`
 返回单个 Bill，结构与列表元素一致。用于深链 `?focus=BL20260531000001234`、客服侧排障。
 
-### 驳回 / 部分退款 `POST /api/billing/bills/{id}/reverse` （`ReverseBillPayload`）
-
-```json
-{
-  "refundedAmount": 5.0,
-  "code": "metering_error",
-  "note": "上游 token 计量偏差 +12%，按差额退还",
-  "idempotencyKey": "98e1d2c3-..."
-}
-
-```
-
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `refundedAmount` | number | 是 | 退还金额（元）。等于 `amount.original` → 完全驳回（`status='reversed'`）；小于 `amount.original` → 部分退款（`status='partial_refunded'`）。**禁止 > original**。 |
-| `code` | enum | 是 | `duplicate_charge` / `metering_error` / `service_unavailable` / `customer_compensation` / `manual_correction` 之一。 |
-| `note` | string | 否 | 工单 / 备注。 |
-| `idempotencyKey` | string | 否 | 同账单 24h 内重复请求返回同一结果。 |
-成功响应：更新后的 `Bill` 完整体。
-
-> BFF 实现要点：
-> - 整个驳回操作必须在数据库事务内一次写完，避免"先 reversed 再撤销"中间态；
-> - 钱包退款流水（充值表新增 `provider='cs_compensation'` 或 `manual` 记录）由 BFF 自动联动写入，前端不必单独发起。
-
 ## 交互流程
 
 ```
@@ -168,7 +143,6 @@
 onMounted → loadAccounts() + fetchData()
 filter 变化 → page=1 → listBills(...)
 点击行 InfoIcon 显示 failure.code / reversal.code tooltip
-驳回 / 部分退款（仅 Admin） → confirmDanger → reverseBill(id, payload) → refresh()
 
 ```
 
@@ -178,10 +152,9 @@ filter 变化 → page=1 → listBills(...)
 
 | HTTP | code | 含义 |
 | --- | --- | --- |
-| 400 | `validation` | 枚举非法值 / `fromUtc > toUtc` / `reverse.refundedAmount > amount.original` |
-| 403 | `forbidden` | 非 Admin 调驳回端点 / 普通用户跨账户 |
+| 400 | `validation` | 枚举非法值 / `fromUtc > toUtc` |
+| 403 | `forbidden` | 普通用户跨账户 |
 | 404 | `not_found` | `id` 不存在 |
-| 409 | `conflict` | 重复驳回（`status` 已是 `reversed`） |
 | 504 | `timeout` | 大跨度时间段超时（请缩短范围） |
 
 ## 备注
