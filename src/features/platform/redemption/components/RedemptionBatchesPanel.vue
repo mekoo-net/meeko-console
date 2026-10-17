@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import { ArrowDown } from '@element-plus/icons-vue';
+import { MoreFilled } from '@element-plus/icons-vue';
 
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import FilterBar from '@/shared/ui/FilterBar.vue';
 import StatusTag from '@/shared/ui/StatusTag.vue';
-import { formatDate, formatDateTime } from '@/shared/lib/date';
+import { formatDateTime } from '@/shared/lib/date';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 import { formatMoney } from '@/shared/lib/money';
 
@@ -108,22 +108,28 @@ function redeemPercent(b: RedemptionBatch): number {
   return b.quantity ? Math.round((b.redeemedCount / b.quantity) * 1000) / 10 : 0;
 }
 
-function validity(b: RedemptionBatch): string {
-  const now = Date.now();
-  if (b.startsAtUtc && b.startsAtUtc > now) return `${formatDate(b.startsAtUtc)} 起`;
-  return b.expiresAtUtc ? `至 ${formatDate(b.expiresAtUtc)}` : '长期有效';
+/** 不用 el-progress 的 status：设了 status 文字会被图标替换，看不到张数。 */
+function progressColor(b: RedemptionBatch): string | undefined {
+  if (b.status === 'frozen') return 'var(--el-color-danger)';
+  if (redeemPercent(b) >= 100) return 'var(--el-color-success)';
+  return undefined;
 }
 
+/** 导出不改批次，不用刷新列表。 */
 async function exportRow(b: RedemptionBatch): Promise<void> {
   const r = await actions.exportBatch(b);
-  if (!r) return;
-  emit('plain', r, 'exported');
-  await reload();
-  emit('changed', r.batch);
+  if (r) emit('plain', r, 'exported');
 }
 
-async function onCommand(cmd: 'freeze' | 'void', b: RedemptionBatch): Promise<void> {
-  const r = cmd === 'freeze' ? await actions.toggleBatchFrozen(b) : await actions.voidBatch(b);
+async function freezeRow(b: RedemptionBatch): Promise<void> {
+  const r = await actions.toggleBatchFrozen(b);
+  if (!r) return;
+  await reload();
+  emit('changed', r);
+}
+
+async function voidRow(b: RedemptionBatch): Promise<void> {
+  const r = await actions.voidBatch(b);
   if (!r) return;
   await reload();
   emit('changed', r);
@@ -156,7 +162,7 @@ onMounted(() => void reload());
         />
       </el-form-item>
       <template #extra-row>
-        <el-form-item label="销售渠道">
+        <el-form-item label="渠道">
           <el-input
             v-model="filter.salesChannel"
             clearable
@@ -180,7 +186,7 @@ onMounted(() => void reload());
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="入账途径">
+        <el-form-item label="形式">
           <el-select
             v-model="filter.purpose"
             @change="search"
@@ -214,26 +220,30 @@ onMounted(() => void reload());
       >
         <el-table-column
           label="批次"
-          min-width="220"
+          min-width="200"
           fixed="left"
         >
           <template #default="{ row }: { row: RedemptionBatch }">
             <div class="batch">
               <span class="batch__name">{{ row.name }}</span>
-              <span class="batch__meta">
-                <code class="rd-mono">{{ row.id }}</code>
-                <span
-                  v-if="row.salesChannel"
-                  class="batch__channel"
-                >{{ row.salesChannel }}</span>
-              </span>
+              <span class="batch__id">{{ row.id }}</span>
             </div>
           </template>
         </el-table-column>
 
         <el-table-column
+          label="渠道"
+          min-width="140"
+          show-overflow-tooltip
+        >
+          <template #default="{ row }: { row: RedemptionBatch }">
+            {{ row.salesChannel ?? '—' }}
+          </template>
+        </el-table-column>
+
+        <el-table-column
           label="面值"
-          width="88"
+          width="96"
           align="right"
         >
           <template #default="{ row }: { row: RedemptionBatch }">
@@ -242,8 +252,9 @@ onMounted(() => void reload());
         </el-table-column>
 
         <el-table-column
-          label="入账途径"
-          width="96"
+          label="形式"
+          width="100"
+          align="center"
         >
           <template #default="{ row }: { row: RedemptionBatch }">
             <StatusTag
@@ -254,33 +265,23 @@ onMounted(() => void reload());
         </el-table-column>
 
         <el-table-column
-          label="进度"
-          width="200"
+          label="核销"
+          min-width="190"
         >
           <template #default="{ row }: { row: RedemptionBatch }">
-            <div class="progress">
-              <div class="progress__text">
-                <span><strong>{{ row.redeemedCount }}</strong> / {{ row.quantity }}</span>
-                <span class="progress__pct">{{ redeemPercent(row) }}%</span>
-              </div>
-              <el-progress
-                :percentage="redeemPercent(row)"
-                :show-text="false"
-                :stroke-width="5"
-                :status="row.status === 'frozen' ? 'exception' : redeemPercent(row) >= 100 ? 'success' : undefined"
-              />
-              <div class="progress__extra">
-                <span class="progress__amount">已兑 {{ formatMoney(row.redeemedCount * row.faceValue, { currency: 'CNY' }) }}</span>
-                <span v-if="row.frozenCount">冻结 {{ row.frozenCount }}</span>
-                <span v-if="row.voidedCount">作废 {{ row.voidedCount }}</span>
-              </div>
-            </div>
+            <el-progress
+              :percentage="redeemPercent(row)"
+              :stroke-width="6"
+              :color="progressColor(row)"
+              :format="() => `${row.redeemedCount} / ${row.quantity}`"
+              class="progress"
+            />
           </template>
         </el-table-column>
 
         <el-table-column
           label="状态"
-          width="84"
+          width="88"
           align="center"
         >
           <template #default="{ row }: { row: RedemptionBatch }">
@@ -292,32 +293,27 @@ onMounted(() => void reload());
         </el-table-column>
 
         <el-table-column
-          label="有效期 / 限兑"
-          width="128"
+          label="限兑"
+          width="80"
+          align="center"
         >
           <template #default="{ row }: { row: RedemptionBatch }">
-            <div class="rd-two-line">
-              <span class="rd-muted">{{ validity(row) }}</span>
-              <span class="rd-muted">{{ row.perAccountLimit ? `每户限 ${row.perAccountLimit} 张` : '每户不限' }}</span>
-            </div>
+            {{ row.perAccountLimit ? `${row.perAccountLimit} 张` : '不限' }}
           </template>
         </el-table-column>
 
         <el-table-column
           label="创建"
-          width="128"
+          width="160"
         >
           <template #default="{ row }: { row: RedemptionBatch }">
-            <div class="two-line">
-              <span>{{ formatDateTime(row.createdAtUtc, 'YY-MM-DD HH:mm') }}</span>
-              <span class="rd-muted">{{ row.createdBy.displayName }}</span>
-            </div>
+            {{ formatDateTime(row.createdAtUtc, 'YYYY-MM-DD HH:mm:ss') }}
           </template>
         </el-table-column>
 
         <el-table-column
           label="操作"
-          width="190"
+          width="168"
           fixed="right"
         >
           <template #default="{ row }: { row: RedemptionBatch }">
@@ -349,30 +345,29 @@ onMounted(() => void reload());
               </el-button>
               <el-dropdown
                 trigger="click"
-                @command="(cmd: 'freeze' | 'void') => onCommand(cmd, row)"
+                placement="bottom-end"
+                @command="(cmd: 'freeze' | 'void') => (cmd === 'freeze' ? freezeRow(row) : voidRow(row))"
               >
                 <el-button
                   link
                   type="primary"
-                >
-                  更多<el-icon class="el-icon--right">
-                    <ArrowDown />
-                  </el-icon>
-                </el-button>
+                  :icon="MoreFilled"
+                  class="ops__more"
+                />
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item
                       command="freeze"
                       :disabled="row.status !== 'active' && row.status !== 'frozen'"
                     >
-                      {{ row.status === 'frozen' ? '解除冻结' : '冻结批次' }}
+                      {{ row.status === 'frozen' ? '解冻' : '冻结' }}
                     </el-dropdown-item>
                     <el-dropdown-item
                       command="void"
                       :disabled="row.status === 'voided' || batchUnusedCount(row) + row.frozenCount === 0"
-                      class="danger-item"
+                      class="rd-danger-item"
                     >
-                      作废未兑换
+                      作废
                     </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -409,70 +404,34 @@ onMounted(() => void reload());
 .batch {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  line-height: 1.35;
-  cursor: pointer;
+  line-height: 1.45;
 }
 .batch__name {
-  font-weight: 600;
   color: var(--el-text-color-primary);
+  font-weight: 500;
 }
-.batch__meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.batch__id {
   font-size: 12px;
   color: var(--el-text-color-secondary);
-  min-width: 0;
-}
-.batch__channel {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.progress {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.progress__text {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: var(--el-text-color-secondary);
-}
-.progress__text strong {
-  color: var(--el-text-color-primary);
-}
-.progress__extra {
-  display: flex;
-  gap: 8px;
-  font-size: 11.5px;
-  color: var(--el-text-color-placeholder);
-}
-.progress__amount {
-  color: var(--el-color-success);
-  font-variant-numeric: tabular-nums;
-}
-.two-line {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.4;
-  font-size: 12px;
 }
 .ops {
   display: flex;
   align-items: center;
-  gap: 4px;
+  white-space: nowrap;
 }
-.ops :deep(.el-button + .el-button) {
-  margin-left: 6px;
+.ops__more {
+  margin-left: 12px;
 }
-.ops :deep(.el-dropdown) {
-  margin-left: 6px;
-}
-:global(.danger-item:not(.is-disabled)) {
+/* 下拉菜单 Teleport 到 body，scoped 命不中。 */
+:global(.rd-danger-item:not(.is-disabled)) {
   color: var(--el-color-danger);
+}
+/* 表格里进度文字右侧留够宽度，「1234 / 10000」不换行。 */
+.progress :deep(.el-progress__text) {
+  min-width: 76px;
+  font-size: 12px !important;
+  color: var(--el-text-color-regular);
+  font-variant-numeric: tabular-nums;
 }
 </style>

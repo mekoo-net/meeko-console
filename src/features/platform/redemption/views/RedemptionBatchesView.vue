@@ -22,7 +22,7 @@ const refreshing = ref(false);
 const batchesPanel = ref<InstanceType<typeof RedemptionBatchesPanel> | null>(null);
 
 const formVisible = ref(false);
-/** null = 生成新批次；有值 = 编辑该批次。 */
+/** null = 创建新批次；有值 = 编辑该批次。 */
 const formBatch = ref<RedemptionBatch | null>(null);
 const keysVisible = ref(false);
 const keysPayload = ref<KeysPayload | null>(null);
@@ -109,7 +109,7 @@ onMounted(() => {
           :icon="Plus"
           @click="openCreate"
         >
-          批量生成
+          创建
         </el-button>
       </template>
     </PageHeader>
@@ -135,7 +135,6 @@ onMounted(() => {
       v-model:visible="batchDialogVisible"
       :batch="activeBatch"
       @plain="showKeys"
-      @edit="openEdit"
       @changed="onBatchChanged"
     />
 

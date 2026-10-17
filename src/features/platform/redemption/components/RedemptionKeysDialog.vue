@@ -33,15 +33,12 @@ const scope = computed(() => ('scope' in props.payload ? props.payload.scope : '
 /** 已兑换 / 全部导出是对账用：只给带状态的 CSV，不给能直接导进发卡网的 TXT 与复制。 */
 const forReconcile = computed(() => scope.value !== 'unused');
 
-const TITLE: Record<PlainMode, string> = { created: '已生成', appended: '已追加', exported: '已导出' };
+const TITLE: Record<PlainMode, string> = { created: '已创建', appended: '已追加', exported: '已导出' };
 const title = computed(() => {
   const what = props.mode === 'exported' ? ExportScopeLabel[scope.value] : '';
   return `${TITLE[props.mode]} ${rows.value.length} 张${what}卡密`;
 });
 const preview = computed(() => rows.value.slice(0, PREVIEW));
-const expiresText = computed(() =>
-  props.payload.batch.expiresAtUtc ? formatDateTime(props.payload.batch.expiresAtUtc) : '长期有效',
-);
 const fileBase = computed(() => {
   const what = props.mode === 'exported' ? `-${ExportScopeLabel[scope.value]}` : '';
   return `${props.payload.batch.id}${what}-${rows.value.length}张`;
@@ -69,10 +66,10 @@ function downloadTxt(): void {
 /** 带 BOM，Excel 直接打开中文不乱码；给财务留底对账用。对账导出多带状态与兑换方。 */
 function downloadCsv(): void {
   const b = props.payload.batch;
-  const head = ['卡密', '面值(元)', '批次号', '批次名称', '销售渠道', '有效期至'];
+  const head = ['卡密', '面值(元)', '批次号', '批次名称', '渠道'];
   const table = [forReconcile.value ? [...head, '状态', '兑换账户', '兑换账户 UID', '兑换时间'] : head];
   for (const r of rows.value) {
-    const base = [r.code, String(b.faceValue), b.id, b.name, b.salesChannel ?? '', expiresText.value];
+    const base = [r.code, String(b.faceValue), b.id, b.name, b.salesChannel ?? ''];
     table.push(
       forReconcile.value
         ? [...base, CodeStatusLabel[r.status], accountText(r), r.redeemedBy?.uid ?? '', r.redeemedAtUtc ? formatDateTime(r.redeemedAtUtc) : '']
@@ -112,7 +109,6 @@ async function copyAll(): Promise<void> {
         <code>{{ payload.batch.id }}</code>
         <span v-if="payload.batch.salesChannel">{{ payload.batch.salesChannel }}</span>
         <span>面值 {{ formatMoney(payload.batch.faceValue, { currency: 'CNY' }) }}</span>
-        <span>有效期 {{ expiresText }}</span>
       </div>
     </div>
 

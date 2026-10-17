@@ -6,38 +6,20 @@ import { batchExportCount, batchUnusedCount, canExportScope, exportScopeValues, 
 import { getRedemptionPort } from '../services';
 
 /**
- * 批次 / 卡密的变更动作。冻结、作废要原因：它写在受影响的每张卡上，
- * 客服查到一张冻结 / 作废的卡时只看得到这一句话。导出、解冻只需确认。
+ * 批次 / 卡密的变更动作，都只确认一次。
  * 返回更新后的实体；用户取消或失败时返回 null。
  */
 export function useRedemptionActions() {
   const port = getRedemptionPort();
 
-  async function askReason(
-    title: string,
-    message: string | (() => VNode),
-    confirmText: string,
-    placeholder: string,
-    danger = false,
-  ): Promise<string | null> {
+  async function confirm(title: string, message: string | (() => VNode), danger = false): Promise<boolean> {
     try {
-      const { value } = await ElMessageBox.prompt(message, title, {
-        confirmButtonText: confirmText,
+      await ElMessageBox.confirm(message, title, {
+        confirmButtonText: '确定',
         cancelButtonText: '取消',
-        inputPlaceholder: placeholder,
-        inputValidator: (v: string) => (v?.trim() ? true : '请填写原因'),
         confirmButtonClass: danger ? 'el-button--danger' : undefined,
         type: danger ? 'warning' : undefined,
       });
-      return value.trim();
-    } catch {
-      return null;
-    }
-  }
-
-  async function confirm(title: string, message: string | (() => VNode), confirmText: string): Promise<boolean> {
-    try {
-      await ElMessageBox.confirm(message, title, { confirmButtonText: confirmText, cancelButtonText: '取消' });
       return true;
     } catch {
       return false;
@@ -64,7 +46,7 @@ export function useRedemptionActions() {
             ),
         ),
       ]);
-    if (!(await confirm('导出卡密', message, '导出'))) return null;
+    if (!(await confirm('导出', message))) return null;
     const r = await port.exportBatch(b.id, scope.value);
     if (!r.success) {
       ElMessage.error(r.error.message);
@@ -75,34 +57,21 @@ export function useRedemptionActions() {
 
   async function toggleBatchFrozen(b: RedemptionBatch): Promise<RedemptionBatch | null> {
     const freezing = b.status !== 'frozen';
-    let reason: string | undefined;
-    if (freezing) {
-      const value = await askReason('冻结批次', `冻结「${b.name}」`, '冻结', '原因', true);
-      if (!value) return null;
-      reason = value;
-    } else if (!(await confirm('解除冻结', `解冻「${b.name}」`, '解冻'))) {
-      return null;
-    }
-    const r = await port.setBatchFrozen(b.id, freezing, reason);
+    const verb = freezing ? '冻结' : '解冻';
+    if (!(await confirm(verb, `确定${verb}「${b.name}」？`, freezing))) return null;
+    const r = await port.setBatchFrozen(b.id, freezing);
     if (!r.success) {
       ElMessage.error(r.error.message);
       return null;
     }
-    ElMessage.success(freezing ? '批次已冻结' : '批次已解冻');
+    ElMessage.success(`已${verb}`);
     return r.data;
   }
 
   async function voidBatch(b: RedemptionBatch): Promise<RedemptionBatch | null> {
     const n = batchUnusedCount(b) + b.frozenCount;
-    const reason = await askReason(
-      '作废批次',
-      `作废「${b.name}」${n} 张未兑换卡密，不可恢复`,
-      `作废 ${n} 张`,
-      '原因',
-      true,
-    );
-    if (!reason) return null;
-    const r = await port.voidBatch(b.id, reason);
+    if (!(await confirm('作废', `确定作废「${b.name}」剩余的 ${n} 张卡密？作废后不可恢复。`, true))) return null;
+    const r = await port.voidBatch(b.id);
     if (!r.success) {
       ElMessage.error(r.error.message);
       return null;
@@ -113,32 +82,25 @@ export function useRedemptionActions() {
 
   async function toggleCodeFrozen(c: RedemptionCode): Promise<RedemptionCode | null> {
     const freezing = c.status !== 'frozen';
-    let reason: string | undefined;
-    if (freezing) {
-      const value = await askReason('冻结卡密', `冻结 ${c.codeMasked}`, '冻结', '原因', true);
-      if (!value) return null;
-      reason = value;
-    } else if (!(await confirm('解除冻结', `解冻 ${c.codeMasked}`, '解冻'))) {
-      return null;
-    }
-    const r = await port.setCodeFrozen(c.id, freezing, reason);
+    const verb = freezing ? '冻结' : '解冻';
+    if (!(await confirm(verb, `确定${verb} ${c.codeMasked}？`, freezing))) return null;
+    const r = await port.setCodeFrozen(c.id, freezing);
     if (!r.success) {
       ElMessage.error(r.error.message);
       return null;
     }
-    ElMessage.success(freezing ? '卡密已冻结' : '卡密已解冻');
+    ElMessage.success(`已${verb}`);
     return r.data;
   }
 
   async function voidCode(c: RedemptionCode): Promise<RedemptionCode | null> {
-    const reason = await askReason('作废卡密', `作废 ${c.codeMasked}，不可恢复`, '作废', '原因', true);
-    if (!reason) return null;
-    const r = await port.voidCode(c.id, reason);
+    if (!(await confirm('作废', `确定作废 ${c.codeMasked}？作废后不可恢复。`, true))) return null;
+    const r = await port.voidCode(c.id);
     if (!r.success) {
       ElMessage.error(r.error.message);
       return null;
     }
-    ElMessage.success('卡密已作废');
+    ElMessage.success('已作废');
     return r.data;
   }
 

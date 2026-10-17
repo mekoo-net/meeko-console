@@ -28,15 +28,14 @@ export interface RedemptionPort {
   updateBatch(batchId: string, input: UpdateBatchInput): Promise<AppResult<PlainCodes>>;
   /** 按范围导出明文卡密。只读，不改批次。 */
   exportBatch(batchId: string, scope: ExportScope): Promise<AppResult<ExportedCodes>>;
-  /** 冻结要原因，记在连带冻结的卡上；解冻不要。 */
-  setBatchFrozen(batchId: string, frozen: boolean, reason?: string): Promise<AppResult<RedemptionBatch>>;
+  setBatchFrozen(batchId: string, frozen: boolean): Promise<AppResult<RedemptionBatch>>;
   /** 作废批次内全部未兑换卡密，不可恢复；已兑换的不受影响。 */
-  voidBatch(batchId: string, reason: string): Promise<AppResult<RedemptionBatch>>;
+  voidBatch(batchId: string): Promise<AppResult<RedemptionBatch>>;
 
   listCodes(query: PageQuery<CodeFilter>): Promise<AppResult<Paged<RedemptionCode>>>;
   getCode(codeId: string): Promise<AppResult<RedemptionCode>>;
-  setCodeFrozen(codeId: string, frozen: boolean, reason?: string): Promise<AppResult<RedemptionCode>>;
-  voidCode(codeId: string, reason: string): Promise<AppResult<RedemptionCode>>;
+  setCodeFrozen(codeId: string, frozen: boolean): Promise<AppResult<RedemptionCode>>;
+  voidCode(codeId: string): Promise<AppResult<RedemptionCode>>;
 
   listAttempts(query: PageQuery<AttemptFilter>): Promise<AppResult<Paged<RedemptionAttempt>>>;
 }

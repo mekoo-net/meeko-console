@@ -103,14 +103,6 @@ const resale = (c: RedemptionCode) =>
         title="已兑换后仍被其他账户提交"
         class="alert"
       />
-      <el-alert
-        v-else-if="current.statusReason"
-        :type="current.status === 'frozen' ? 'warning' : 'info'"
-        show-icon
-        :closable="false"
-        :title="`${CodeStatusLabel[current.status]}：${current.statusReason}`"
-        class="alert"
-      />
 
       <h4 class="section">
         使用情况
@@ -186,9 +178,6 @@ const resale = (c: RedemptionCode) =>
         </el-descriptions-item>
         <el-descriptions-item label="生成时间">
           {{ formatDateTime(current.createdAtUtc) }}
-        </el-descriptions-item>
-        <el-descriptions-item label="有效期至">
-          {{ current.expiresAtUtc ? formatDateTime(current.expiresAtUtc) : '长期有效' }}
         </el-descriptions-item>
       </el-descriptions>
 

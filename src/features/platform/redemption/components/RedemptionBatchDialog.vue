@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
-import { Delete, Download, EditPen, Lock, TopRight, Unlock } from '@element-plus/icons-vue';
+import { Download } from '@element-plus/icons-vue';
 
 import StatusTag from '@/shared/ui/StatusTag.vue';
 import { formatMoney } from '@/shared/lib/money';
@@ -24,11 +23,9 @@ const visible = defineModel<boolean>('visible', { required: true });
 const props = defineProps<{ batch: RedemptionBatch | null }>();
 const emit = defineEmits<{
   (e: 'plain', payload: KeysPayload, mode: PlainMode): void;
-  (e: 'edit', batch: RedemptionBatch): void;
   (e: 'changed', batch: RedemptionBatch): void;
 }>();
 
-const router = useRouter();
 const port = getRedemptionPort();
 const actions = useRedemptionActions();
 
@@ -61,27 +58,9 @@ async function refreshBatch(): Promise<void> {
   }
 }
 
-function applyBatch(b: RedemptionBatch): void {
-  current.value = b;
-  emit('changed', b);
-  void codesPanel.value?.reload();
-}
-
 async function exportIt(b: RedemptionBatch): Promise<void> {
   const r = await actions.exportBatch(b);
-  if (!r) return;
-  applyBatch(r.batch);
-  emit('plain', r, 'exported');
-}
-
-async function freezeIt(b: RedemptionBatch): Promise<void> {
-  const r = await actions.toggleBatchFrozen(b);
-  if (r) applyBatch(r);
-}
-
-async function voidIt(b: RedemptionBatch): Promise<void> {
-  const r = await actions.voidBatch(b);
-  if (r) applyBatch(r);
+  if (r) emit('plain', r, 'exported');
 }
 
 function openCode(c: RedemptionCode): void {
@@ -92,11 +71,6 @@ function openCode(c: RedemptionCode): void {
 function onCodeChanged(): void {
   void codesPanel.value?.reload();
   void refreshBatch();
-}
-
-function gotoAttempts(b: RedemptionBatch): void {
-  visible.value = false;
-  void router.push({ name: 'billing-redemption-attempts', query: { batchId: b.id } });
 }
 
 const money = (v: number) => formatMoney(v, { currency: 'CNY' });
@@ -170,55 +144,18 @@ const stats = computed(() => {
           :fixed-batch-id="current.id"
           @open="openCode"
           @changed="refreshBatch"
-        />
-      </div>
-    </template>
-
-    <template #footer>
-      <div
-        v-if="current"
-        class="foot"
-      >
-        <el-button
-          link
-          type="primary"
-          @click="gotoAttempts(current)"
         >
-          兑换日志<el-icon class="el-icon--right">
-            <TopRight />
-          </el-icon>
-        </el-button>
-        <div class="foot__spacer" />
-        <el-button
-          :icon="current.status === 'frozen' ? Unlock : Lock"
-          :disabled="current.status !== 'active' && current.status !== 'frozen'"
-          @click="freezeIt(current)"
-        >
-          {{ current.status === 'frozen' ? '解冻' : '冻结' }}
-        </el-button>
-        <el-button
-          type="danger"
-          plain
-          :icon="Delete"
-          :disabled="current.status === 'voided' || batchUnusedCount(current) + current.frozenCount === 0"
-          @click="voidIt(current)"
-        >
-          作废
-        </el-button>
-        <el-button
-          :icon="EditPen"
-          @click="emit('edit', current)"
-        >
-          编辑
-        </el-button>
-        <el-button
-          type="primary"
-          :icon="Download"
-          :disabled="!canExportBatch(current)"
-          @click="exportIt(current)"
-        >
-          导出
-        </el-button>
+          <template #actions>
+            <el-button
+              type="primary"
+              :icon="Download"
+              :disabled="!canExportBatch(current)"
+              @click="exportIt(current)"
+            >
+              导出
+            </el-button>
+          </template>
+        </RedemptionCodesPanel>
       </div>
     </template>
   </el-dialog>
@@ -337,23 +274,11 @@ code {
   height: 56vh;
   min-height: 360px;
 }
-.foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.foot :deep(.el-button + .el-button) {
-  margin-left: 0;
-}
-.foot__spacer {
-  flex: 1;
-}
 </style>
 
 <style>
-/* el-dialog 被 Teleport 到 body，scoped 命不中；收紧 body 上下留白，把高度留给表格。 */
+/* el-dialog 被 Teleport 到 body，scoped 命不中；收紧 body 顶部留白，把高度留给表格。 */
 .rd-batch-dialog .el-dialog__body {
   padding-top: 4px;
-  padding-bottom: 0;
 }
 </style>

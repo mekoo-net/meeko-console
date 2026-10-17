@@ -9,7 +9,7 @@ import {
   codePrefixOf,
   formatCode,
   randomCodeBody,
-  isBatchLive,
+  isBatchActive,
   RedemptionPurposeLabel,
   redemptionPurposeValues,
   type PlainCodes,
@@ -32,11 +32,10 @@ const submitting = ref(false);
 
 /** 超过这个面值合计需要二次确认：一批卡就是一笔等额负债，手滑多打一个 0 代价很大。 */
 const LARGE_TOTAL = 10_000;
-const DAY = 86_400_000;
 
 const editing = computed(() => Boolean(props.batch));
-/** 已作废 / 冻结 / 过期的批次只能改资料，不能加卡。 */
-const canGrow = computed(() => !props.batch || isBatchLive(props.batch));
+/** 已作废 / 冻结的批次只能改资料，不能加卡。 */
+const canGrow = computed(() => !props.batch || isBatchActive(props.batch));
 const baseQuantity = computed(() => props.batch?.quantity ?? 0);
 
 const emptyForm = () => ({
@@ -46,10 +45,6 @@ const emptyForm = () => ({
   faceValue: undefined as number | undefined,
   quantity: 0,
   prefix: 'MK',
-  startMode: 'now' as 'now' | 'scheduled',
-  startsAt: null as number | null,
-  expireMode: 'never' as 'never' | 'date',
-  expiresAt: null as number | null,
   limitMode: 'none' as 'none' | 'limited',
   perAccountLimit: 1,
 });
@@ -62,10 +57,6 @@ function formOf(b: RedemptionBatch): ReturnType<typeof emptyForm> {
     faceValue: b.faceValue,
     quantity: b.quantity,
     prefix: codePrefixOf(b.codePattern),
-    startMode: b.startsAtUtc ? 'scheduled' : 'now',
-    startsAt: b.startsAtUtc,
-    expireMode: b.expiresAtUtc ? 'date' : 'never',
-    expiresAt: b.expiresAtUtc,
     limitMode: b.perAccountLimit ? 'limited' : 'none',
     perAccountLimit: b.perAccountLimit ?? 1,
   };
@@ -95,20 +86,6 @@ function onPrefixInput(v: string): void {
   form.value.prefix = v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
 }
 
-const expireShortcuts = [
-  { text: '30 天后', value: () => new Date(Date.now() + 30 * DAY) },
-  { text: '90 天后', value: () => new Date(Date.now() + 90 * DAY) },
-  { text: '180 天后', value: () => new Date(Date.now() + 180 * DAY) },
-  { text: '1 年后', value: () => new Date(Date.now() + 365 * DAY) },
-];
-
-function disabledPast(d: Date): boolean {
-  return d.getTime() < Date.now() - DAY;
-}
-
-const startsAtUtc = computed(() => (form.value.startMode === 'scheduled' ? form.value.startsAt : null));
-const expiresAtUtc = computed(() => (form.value.expireMode === 'date' ? form.value.expiresAt : null));
-
 function validate(): string | null {
   const f = form.value;
   if (!f.name.trim()) return '请填写批次名称';
@@ -116,9 +93,6 @@ function validate(): string | null {
   if (!editing.value && !(f.quantity >= 1)) return '请填写数量';
   if (f.quantity < baseQuantity.value) return `数量不能少于 ${baseQuantity.value}`;
   if (f.prefix && f.prefix.length < 2) return '前缀至少 2 位，或留空';
-  if (f.startMode === 'scheduled' && !f.startsAt) return '请选择生效时间';
-  if (f.expireMode === 'date' && !f.expiresAt) return '请选择失效时间';
-  if (startsAtUtc.value && expiresAtUtc.value && expiresAtUtc.value <= startsAtUtc.value) return '失效时间须晚于生效时间';
   return null;
 }
 
@@ -127,7 +101,7 @@ async function confirmLarge(): Promise<boolean> {
   try {
     await ElMessageBox.confirm(
       `${addCount.value} 张 × ${formatMoney(faceValue.value, { currency: 'CNY' })} = ${formatMoney(addValue.value, { currency: 'CNY' })}`,
-      editing.value ? '确认追加' : '确认生成',
+      editing.value ? '确认追加' : '确认创建',
       { type: 'warning', confirmButtonText: '确认', cancelButtonText: '取消' },
     );
     return true;
@@ -152,8 +126,6 @@ async function submit(): Promise<void> {
       salesChannel: f.salesChannel.trim() || null,
       quantity: Math.floor(f.quantity),
       perAccountLimit: f.limitMode === 'limited' ? Math.floor(f.perAccountLimit) : null,
-      startsAtUtc: startsAtUtc.value,
-      expiresAtUtc: expiresAtUtc.value,
     };
     const r = props.batch
       ? await port.updateBatch(props.batch.id, common)
@@ -174,7 +146,7 @@ async function submit(): Promise<void> {
 <template>
   <el-drawer
     v-model="visible"
-    :title="editing ? '编辑批次' : '批量生成兑换码'"
+    :title="editing ? '编辑批次' : '创建批次'"
     size="600px"
     append-to-body
     :close-on-click-modal="false"
@@ -208,14 +180,14 @@ async function submit(): Promise<void> {
             show-word-limit
           />
         </el-form-item>
-        <el-form-item label="销售渠道">
+        <el-form-item label="渠道">
           <el-input
             v-model="form.salesChannel"
             maxlength="64"
           />
         </el-form-item>
         <el-form-item
-          label="入账途径"
+          label="形式"
           required
         >
           <el-select
@@ -316,50 +288,9 @@ async function submit(): Promise<void> {
 
       <section class="group">
         <h4 class="group__title">
-          有效期与限制
+          兑换限制
         </h4>
-        <div class="row">
-          <el-form-item label="生效时间">
-            <el-radio-group v-model="form.startMode">
-              <el-radio value="now">
-                立即
-              </el-radio>
-              <el-radio value="scheduled">
-                定时
-              </el-radio>
-            </el-radio-group>
-            <el-date-picker
-              v-if="form.startMode === 'scheduled'"
-              v-model="form.startsAt"
-              type="datetime"
-              value-format="x"
-              format="YYYY-MM-DD HH:mm"
-              :disabled-date="disabledPast"
-              style="width: 100%; margin-top: 6px"
-            />
-          </el-form-item>
-          <el-form-item label="失效时间">
-            <el-radio-group v-model="form.expireMode">
-              <el-radio value="never">
-                长期有效
-              </el-radio>
-              <el-radio value="date">
-                指定
-              </el-radio>
-            </el-radio-group>
-            <el-date-picker
-              v-if="form.expireMode === 'date'"
-              v-model="form.expiresAt"
-              type="datetime"
-              value-format="x"
-              format="YYYY-MM-DD HH:mm"
-              :shortcuts="expireShortcuts"
-              :disabled-date="disabledPast"
-              style="width: 100%; margin-top: 6px"
-            />
-          </el-form-item>
-        </div>
-        <el-form-item label="每户限兑">
+        <el-form-item label="限兑">
           <el-radio-group v-model="form.limitMode">
             <el-radio value="none">
               不限
@@ -401,7 +332,7 @@ async function submit(): Promise<void> {
           :loading="submitting"
           @click="submit"
         >
-          {{ editing ? '保存' : '生成' }}
+          {{ editing ? '保存' : '创建' }}
         </el-button>
       </div>
     </template>

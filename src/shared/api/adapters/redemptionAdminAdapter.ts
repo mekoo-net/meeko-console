@@ -109,19 +109,15 @@ export class RedemptionAdminHttpAdapter implements RedemptionPort {
     return res.success ? parseOne(exportedCodesSchema, res.data, '导出') : res;
   }
 
-  async setBatchFrozen(batchId: string, frozen: boolean, reason?: string): Promise<AppResult<RedemptionBatch>> {
+  async setBatchFrozen(batchId: string, frozen: boolean): Promise<AppResult<RedemptionBatch>> {
     const res = await request<unknown>(`${BASE}/batches/${encodeURIComponent(batchId)}/${frozen ? 'freeze' : 'unfreeze'}`, {
       method: 'POST',
-      body: frozen ? { reason } : undefined,
     });
     return res.success ? parseOne(redemptionBatchSchema, res.data, '批次') : res;
   }
 
-  async voidBatch(batchId: string, reason: string): Promise<AppResult<RedemptionBatch>> {
-    const res = await request<unknown>(`${BASE}/batches/${encodeURIComponent(batchId)}/void`, {
-      method: 'POST',
-      body: { reason },
-    });
+  async voidBatch(batchId: string): Promise<AppResult<RedemptionBatch>> {
+    const res = await request<unknown>(`${BASE}/batches/${encodeURIComponent(batchId)}/void`, { method: 'POST' });
     return res.success ? parseOne(redemptionBatchSchema, res.data, '批次') : res;
   }
 
@@ -139,19 +135,15 @@ export class RedemptionAdminHttpAdapter implements RedemptionPort {
     return res.success ? parseOne(redemptionCodeSchema, res.data, '卡密') : res;
   }
 
-  async setCodeFrozen(codeId: string, frozen: boolean, reason?: string): Promise<AppResult<RedemptionCode>> {
+  async setCodeFrozen(codeId: string, frozen: boolean): Promise<AppResult<RedemptionCode>> {
     const res = await request<unknown>(`${BASE}/codes/${encodeURIComponent(codeId)}/${frozen ? 'freeze' : 'unfreeze'}`, {
       method: 'POST',
-      body: frozen ? { reason } : undefined,
     });
     return res.success ? parseOne(redemptionCodeSchema, res.data, '卡密') : res;
   }
 
-  async voidCode(codeId: string, reason: string): Promise<AppResult<RedemptionCode>> {
-    const res = await request<unknown>(`${BASE}/codes/${encodeURIComponent(codeId)}/void`, {
-      method: 'POST',
-      body: { reason },
-    });
+  async voidCode(codeId: string): Promise<AppResult<RedemptionCode>> {
+    const res = await request<unknown>(`${BASE}/codes/${encodeURIComponent(codeId)}/void`, { method: 'POST' });
     return res.success ? parseOne(redemptionCodeSchema, res.data, '卡密') : res;
   }
 

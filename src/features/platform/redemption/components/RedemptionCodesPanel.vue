@@ -257,6 +257,12 @@ onMounted(() => void reload());
       >
         重置
       </el-button>
+      <div
+        v-if="$slots.actions"
+        class="toolbar-actions"
+      >
+        <slot name="actions" />
+      </div>
     </div>
 
     <div class="rd-panel__table">
@@ -320,18 +326,10 @@ onMounted(() => void reload());
           align="center"
         >
           <template #default="{ row }: { row: RedemptionCode }">
-            <el-tooltip
-              :disabled="!row.statusReason"
-              :content="row.statusReason ?? ''"
-              placement="top"
-            >
-              <span>
-                <StatusTag
-                  :label="CodeStatusLabel[row.status]"
-                  :tone="CodeStatusTone[row.status]"
-                />
-              </span>
-            </el-tooltip>
+            <StatusTag
+              :label="CodeStatusLabel[row.status]"
+              :tone="CodeStatusTone[row.status]"
+            />
           </template>
         </el-table-column>
 
@@ -483,6 +481,12 @@ onMounted(() => void reload());
 </template>
 
 <style scoped>
+/* 批次弹窗把批次级动作（导出）放进工具条最右侧。 */
+.toolbar-actions {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
 .code-input :deep(input) {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   text-transform: uppercase;

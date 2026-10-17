@@ -18,7 +18,7 @@ type Tone = 'success' | 'info' | 'warning' | 'danger' | 'primary';
 
 // ─── 批次 ───────────────────────────────────────────────────────────
 
-export const batchStatusValues = ['active', 'frozen', 'voided', 'expired'] as const;
+export const batchStatusValues = ['active', 'frozen', 'voided'] as const;
 export const batchStatusSchema = z.enum(batchStatusValues);
 export type BatchStatus = z.infer<typeof batchStatusSchema>;
 
@@ -26,11 +26,10 @@ export const BatchStatusLabel: Record<BatchStatus, string> = {
   active: '生效中',
   frozen: '已冻结',
   voided: '已作废',
-  expired: '已过期',
 };
 
 /**
- * 入账途径：批次生成时定下、之后不可改，决定兑换生成的充值单记在哪个来源下。
+ * 形式（入账途径）：批次生成时定下、之后不可改，决定兑换生成的充值单记在哪个来源下。
  * 账户充值记「兑换码」、算充值并按业务计推荐返利；活动奖励、客服补偿是免费发放，不算充值、不返利。
  */
 export const redemptionPurposeValues = ['recharge', 'reward', 'compensation'] as const;
@@ -49,17 +48,11 @@ export const RedemptionPurposeTone: Record<RedemptionPurpose, Tone> = {
   compensation: 'info',
 };
 
-const staffRefSchema = z.object({
-  uid: z.string(),
-  displayName: z.string(),
-});
-export type StaffRef = z.infer<typeof staffRefSchema>;
-
 export const redemptionBatchSchema = z.object({
   /** 批次号，如 RB20261017001。 */
   id: z.string(),
   name: z.string(),
-  /** 销售渠道：手填的卡密售卖去处（如某个发卡网店铺），按渠道对账、出问题时按渠道冻结。 */
+  /** 渠道：手填的卡密售卖去处（如某个发卡网店铺），按渠道对账、出问题时按渠道冻结。 */
   salesChannel: z.string().nullable(),
   purpose: redemptionPurposeSchema,
   /** 单张面值（CNY）。 */
@@ -73,11 +66,6 @@ export const redemptionBatchSchema = z.object({
   codePattern: z.string(),
   /** 单账户在本批次内最多兑换张数；null = 不限。 */
   perAccountLimit: z.number().int().positive().nullable(),
-  /** null = 生成即生效。 */
-  startsAtUtc: z.number().nullable(),
-  /** null = 长期有效。 */
-  expiresAtUtc: z.number().nullable(),
-  createdBy: staffRefSchema,
   createdAtUtc: z.number(),
 });
 export type RedemptionBatch = z.infer<typeof redemptionBatchSchema>;
@@ -86,24 +74,22 @@ export function batchUnusedCount(b: RedemptionBatch): number {
   return Math.max(0, b.quantity - b.redeemedCount - b.frozenCount - b.voidedCount);
 }
 
-/** 生效中且未过期：可以追加卡密、导出。 */
-export function isBatchLive(b: RedemptionBatch, now = Date.now()): boolean {
-  return b.status === 'active' && (b.expiresAtUtc === null || b.expiresAtUtc > now);
+/** 生效中：可以追加卡密、导出未兑换卡密。兑换码永久有效，没有过期。 */
+export function isBatchActive(b: RedemptionBatch): boolean {
+  return b.status === 'active';
 }
 
-/** 未生效（定时开售）只是 active 的一个时间窗，不单列状态，展示时再区分。 */
-export function batchDisplayStatus(b: RedemptionBatch, now = Date.now()): { label: string; tone: Tone } {
+/** 「已兑完」只是生效中的一种展示，不单列状态。 */
+export function batchDisplayStatus(b: RedemptionBatch): { label: string; tone: Tone } {
   if (b.status === 'voided') return { label: '已作废', tone: 'info' };
   if (b.status === 'frozen') return { label: '已冻结', tone: 'danger' };
-  if (b.status === 'expired' || (b.expiresAtUtc !== null && b.expiresAtUtc <= now)) return { label: '已过期', tone: 'info' };
-  if (b.startsAtUtc !== null && b.startsAtUtc > now) return { label: '未生效', tone: 'warning' };
   if (batchUnusedCount(b) === 0) return { label: '已兑完', tone: 'success' };
   return { label: '生效中', tone: 'primary' };
 }
 
 // ─── 卡密 ───────────────────────────────────────────────────────────
 
-export const codeStatusValues = ['unused', 'redeemed', 'frozen', 'voided', 'expired'] as const;
+export const codeStatusValues = ['unused', 'redeemed', 'frozen', 'voided'] as const;
 export const codeStatusSchema = z.enum(codeStatusValues);
 export type CodeStatus = z.infer<typeof codeStatusSchema>;
 
@@ -112,7 +98,6 @@ export const CodeStatusLabel: Record<CodeStatus, string> = {
   redeemed: '已兑换',
   frozen: '已冻结',
   voided: '已作废',
-  expired: '已过期',
 };
 
 export const CodeStatusTone: Record<CodeStatus, Tone> = {
@@ -120,7 +105,6 @@ export const CodeStatusTone: Record<CodeStatus, Tone> = {
   redeemed: 'success',
   frozen: 'danger',
   voided: 'info',
-  expired: 'info',
 };
 
 const accountRefSchema = z.object({
@@ -157,10 +141,7 @@ export const redemptionCodeSchema = z.object({
    * 通常意味着卡密被转卖或泄露，客诉时要优先看这一项。
    */
   failedAttempts: z.number().int().nonnegative(),
-  expiresAtUtc: z.number().nullable(),
   createdAtUtc: z.number(),
-  /** 冻结 / 作废原因。 */
-  statusReason: z.string().nullable(),
 });
 export type RedemptionCode = z.infer<typeof redemptionCodeSchema>;
 
@@ -172,8 +153,6 @@ export const attemptResultValues = [
   'already_redeemed',
   'frozen',
   'voided',
-  'expired',
-  'not_started',
   'limit_exceeded',
   'rate_limited',
 ] as const;
@@ -186,8 +165,6 @@ export const AttemptResultLabel: Record<AttemptResult, string> = {
   already_redeemed: '已被兑换',
   frozen: '卡密已冻结',
   voided: '卡密已作废',
-  expired: '卡密已过期',
-  not_started: '未到生效时间',
   limit_exceeded: '超出账户限兑',
   rate_limited: '触发频控',
 };
@@ -198,8 +175,6 @@ export const AttemptResultTone: Record<AttemptResult, Tone> = {
   already_redeemed: 'danger',
   frozen: 'warning',
   voided: 'info',
-  expired: 'info',
-  not_started: 'warning',
   limit_exceeded: 'warning',
   rate_limited: 'danger',
 };
@@ -259,7 +234,7 @@ export interface PageQuery<F> {
 
 export interface BatchFilter {
   batchId?: string;
-  /** 名称、销售渠道为模糊匹配。 */
+  /** 名称、渠道为模糊匹配。 */
   name?: string;
   salesChannel?: string;
   status?: BatchStatus | 'all';
@@ -310,8 +285,6 @@ export interface CreateBatchInput {
   /** 2–6 位大写字母数字，空串 = 无前缀。 */
   prefix: string;
   perAccountLimit: number | null;
-  startsAtUtc: number | null;
-  expiresAtUtc: number | null;
 }
 
 /** 编辑批次：面值与卡密格式不可改；数量只增不减，多出的部分由服务端生成新卡密。 */
@@ -320,8 +293,6 @@ export interface UpdateBatchInput {
   salesChannel: string | null;
   quantity: number;
   perAccountLimit: number | null;
-  startsAtUtc: number | null;
-  expiresAtUtc: number | null;
 }
 
 /** 明文卡密只在这里和导出响应里出现；关闭对话框后只能通过「导出」再取，且每次导出都会记审计。 */
@@ -354,14 +325,14 @@ export function batchExportCount(b: RedemptionBatch, scope: ExportScope): number
   return batchUnusedCount(b);
 }
 
-/** 未兑换卡密只在批次生效中时可导出：冻结 / 作废 / 过期的卡上架出去也兑不了。已兑换与全部任何状态都能导，对账不挑时候。 */
-export function canExportScope(b: RedemptionBatch, scope: ExportScope, now = Date.now()): boolean {
+/** 未兑换卡密只在批次生效中时可导出：冻结 / 作废的卡上架出去也兑不了。已兑换与全部任何状态都能导，对账不挑时候。 */
+export function canExportScope(b: RedemptionBatch, scope: ExportScope): boolean {
   if (batchExportCount(b, scope) === 0) return false;
-  return scope !== 'unused' || isBatchLive(b, now);
+  return scope !== 'unused' || isBatchActive(b);
 }
 
-export function canExportBatch(b: RedemptionBatch, now = Date.now()): boolean {
-  return exportScopeValues.some((s) => canExportScope(b, s, now));
+export function canExportBatch(b: RedemptionBatch): boolean {
+  return exportScopeValues.some((s) => canExportScope(b, s));
 }
 
 export const exportedCodeSchema = z.object({

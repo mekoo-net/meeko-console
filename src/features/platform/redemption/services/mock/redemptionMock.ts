@@ -7,7 +7,7 @@ import {
   CODE_LENGTH,
   codePattern,
   formatCode,
-  isBatchLive,
+  isBatchActive,
   maskCode,
   type AccountRef,
   type AttemptFilter,
@@ -25,7 +25,6 @@ import {
   type RedemptionBatch,
   type RedemptionCode,
   type RedemptionOverview,
-  type StaffRef,
   type UpdateBatchInput,
 } from '../../model/redemption.types';
 import type { RedemptionPort } from '../ports/redemptionPort';
@@ -45,9 +44,6 @@ function pick<T>(arr: readonly T[]): T {
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const NOW = Date.now();
-
-const ADMIN: StaffRef = { uid: '1', displayName: '系统管理员' };
-const FINANCE: StaffRef = { uid: '7', displayName: '财务 · 周宁' };
 
 const ACCOUNTS: AccountRef[] = Array.from({ length: 28 }, (_, i) => ({
   uid: String(100_000_120 + i * 7),
@@ -144,9 +140,7 @@ function mintCodes(batch: RedemptionBatch, quantity: number, createdAt: number, 
       status: 'unused',
       redeemed: null,
       failedAttempts: 0,
-      expiresAtUtc: batch.expiresAtUtc,
       createdAtUtc: createdAt,
-      statusReason: null,
       plain,
       prefix,
       frozenByBatch: false,
@@ -158,12 +152,7 @@ function mintCodes(batch: RedemptionBatch, quantity: number, createdAt: number, 
   return rows;
 }
 
-function generate(
-  input: CreateBatchInput,
-  createdBy: StaffRef,
-  createdAt: number,
-  rng: () => number = rand,
-): { batch: RedemptionBatch; rows: CodeRow[] } {
+function generate(input: CreateBatchInput, createdAt: number, rng: () => number = rand): { batch: RedemptionBatch; rows: CodeRow[] } {
   const batch: RedemptionBatch = {
     id: batchIdFor(createdAt),
     name: input.name.trim(),
@@ -177,9 +166,6 @@ function generate(
     status: 'active',
     codePattern: codePattern(input.prefix),
     perAccountLimit: input.perAccountLimit,
-    startsAtUtc: input.startsAtUtc,
-    expiresAtUtc: input.expiresAtUtc,
-    createdBy,
     createdAtUtc: createdAt,
   };
   batches.push(batch);
@@ -230,8 +216,7 @@ function redeem(row: CodeRow, account: AccountRef, ip: string, ua: string, at: n
 
 interface SeedSpec {
   daysAgo: number;
-  input: Omit<CreateBatchInput, 'startsAtUtc' | 'expiresAtUtc'> & { startsInDays?: number; expiresInDays?: number };
-  by: StaffRef;
+  input: CreateBatchInput;
   redeemRatio: number;
   /** 批次在多少天前停止兑换（冻结 / 作废）；兑换时间不能晚于它。 */
   endsDaysAgo?: number;
@@ -241,65 +226,49 @@ const seedSpecs: SeedSpec[] = [
   {
     daysAgo: 92,
     input: { name: '30 元充值卡 · 暑期', salesChannel: '发卡网 · Meeko 官方小店', purpose: 'recharge', faceValue: 30, quantity: 100, prefix: 'MK', perAccountLimit: null },
-    by: FINANCE,
     redeemRatio: 0.63,
     endsDaysAgo: 20,
   },
   {
     daysAgo: 120,
-    input: { name: '20 元卡 · 618 活动', salesChannel: '发卡网 · 代理店 A', purpose: 'recharge', faceValue: 20, quantity: 80, prefix: 'MK', perAccountLimit: 2, expiresInDays: -30 },
-    by: ADMIN,
+    input: { name: '20 元卡 · 618 活动', salesChannel: '发卡网 · 代理店 A', purpose: 'recharge', faceValue: 20, quantity: 80, prefix: 'MK', perAccountLimit: 2 },
     redeemRatio: 0.55,
   },
   {
     daysAgo: 42,
     input: { name: '100 元充值卡 · 9 月', salesChannel: '发卡网 · Meeko 官方小店', purpose: 'recharge', faceValue: 100, quantity: 200, prefix: 'MK', perAccountLimit: null },
-    by: FINANCE,
     redeemRatio: 0.92,
   },
   {
     daysAgo: 27,
     input: { name: '50 元充值卡', salesChannel: '发卡网 · Meeko 官方小店', purpose: 'recharge', faceValue: 50, quantity: 300, prefix: 'MK', perAccountLimit: null },
-    by: FINANCE,
     redeemRatio: 0.4,
   },
   {
     daysAgo: 16,
-    input: { name: '10 元体验卡 · 国庆', salesChannel: '国庆社群活动', purpose: 'reward', faceValue: 10, quantity: 500, prefix: 'MK', perAccountLimit: 3, expiresInDays: 14 },
-    by: ADMIN,
+    input: { name: '10 元体验卡 · 国庆', salesChannel: '国庆社群活动', purpose: 'reward', faceValue: 10, quantity: 500, prefix: 'MK', perAccountLimit: 3 },
     redeemRatio: 0.82,
   },
   {
     daysAgo: 9,
     input: { name: '200 元充值卡', salesChannel: '发卡网 · 代理店 B', purpose: 'recharge', faceValue: 200, quantity: 50, prefix: 'MK', perAccountLimit: null },
-    by: FINANCE,
     redeemRatio: 0.12,
     endsDaysAgo: 3,
   },
   {
     daysAgo: 2,
-    input: { name: '500 元充值卡 · 双十一预售', salesChannel: '发卡网 · Meeko 官方小店', purpose: 'recharge', faceValue: 500, quantity: 20, prefix: 'MK', perAccountLimit: 1, startsInDays: 15 },
-    by: ADMIN,
+    input: { name: '500 元充值卡 · 双十一预售', salesChannel: '发卡网 · Meeko 官方小店', purpose: 'recharge', faceValue: 500, quantity: 20, prefix: 'MK', perAccountLimit: 1 },
     redeemRatio: 0,
   },
 ];
 
 for (const spec of seedSpecs) {
   const createdAt = NOW - spec.daysAgo * DAY - Math.floor(rand() * 6 * HOUR);
-  const { startsInDays, expiresInDays, ...rest } = spec.input;
-  const { batch, rows } = generate(
-    {
-      ...rest,
-      startsAtUtc: startsInDays !== undefined ? NOW + startsInDays * DAY : null,
-      expiresAtUtc: expiresInDays !== undefined ? NOW + expiresInDays * DAY : null,
-    },
-    spec.by,
-    createdAt,
-  );
+  const { rows } = generate(spec.input, createdAt);
 
   // 兑换时间往近期偏：卡密售出后通常几天内就会被兑换。
   const endsAt = spec.endsDaysAgo !== undefined ? NOW - spec.endsDaysAgo * DAY : NOW;
-  const span = Math.min(endsAt, batch.expiresAtUtc ?? NOW) - createdAt - 4 * HOUR;
+  const span = endsAt - createdAt - 4 * HOUR;
   const redeemN = Math.round(rows.length * spec.redeemRatio);
   for (let i = 0; i < redeemN; i++) {
     const at = createdAt + 4 * HOUR + Math.floor(Math.pow(rand(), 0.6) * span);
@@ -329,7 +298,6 @@ for (const row of codes.filter((c) => c.status === 'redeemed' && c.batchId === b
   for (const row of codes.filter((c) => c.batchId === b.id && c.status === 'unused')) {
     row.status = 'frozen';
     row.frozenByBatch = true;
-    row.statusReason = '代理店 B 反馈卡密外泄，暂停兑换待核实';
   }
   b.status = 'frozen';
   const frozenCodes = codes.filter((c) => c.batchId === b.id && c.status === 'frozen');
@@ -340,23 +308,10 @@ for (const row of codes.filter((c) => c.status === 'redeemed' && c.batchId === b
 {
   const b = batches.find((x) => x.name.startsWith('30 元'))!;
   const at = NOW - 20 * DAY;
-  for (const row of codes.filter((c) => c.batchId === b.id && c.status === 'unused')) {
-    row.status = 'voided';
-    row.statusReason = '活动结束下架，剩余库存作废';
-  }
+  for (const row of codes.filter((c) => c.batchId === b.id && c.status === 'unused')) row.status = 'voided';
   b.status = 'voided';
   const voided = codes.filter((c) => c.batchId === b.id && c.status === 'voided');
   logAttempt(at + 5 * DAY, pick(ACCOUNTS), pick(IPS), pick(UAS), 'voided', voided[0]!);
-}
-
-// 618 批次过期：未兑换的卡转 expired。
-{
-  const b = batches.find((x) => x.name.startsWith('20 元'))!;
-  for (const row of codes.filter((c) => c.batchId === b.id && c.status === 'unused')) row.status = 'expired';
-  b.status = 'expired';
-  const expired = codes.filter((c) => c.batchId === b.id && c.status === 'expired');
-  logAttempt(NOW - 6 * DAY, pick(ACCOUNTS), pick(IPS), UAS[3], 'expired', expired[0]!);
-  logAttempt(NOW - 2 * DAY, pick(ACCOUNTS), pick(IPS), pick(UAS), 'expired', expired[1]!);
 }
 
 // 体验卡单账户限 3 张：超限被拒。
@@ -364,13 +319,6 @@ for (const row of codes.filter((c) => c.status === 'redeemed' && c.batchId === b
   const b = batches.find((x) => x.name.startsWith('10 元'))!;
   const row = codes.find((c) => c.batchId === b.id && c.status === 'unused')!;
   logAttempt(NOW - 5 * HOUR, ACCOUNTS[3]!, IPS[2]!, UAS[1], 'limit_exceeded', row);
-}
-
-// 预售批次：未到生效时间。
-{
-  const b = batches.find((x) => x.name.includes('预售'))!;
-  const row = codes.find((c) => c.batchId === b.id)!;
-  logAttempt(NOW - 30 * 60_000, ACCOUNTS[11]!, IPS[5]!, UAS[0], 'not_started', row);
 }
 
 // 枚举：脚本在 24h 内连续试错，被频控拦截。
@@ -408,9 +356,7 @@ function toPublic(row: CodeRow): RedemptionCode {
     status: row.status,
     redeemed: row.redeemed,
     failedAttempts: row.failedAttempts,
-    expiresAtUtc: row.expiresAtUtc,
     createdAtUtc: row.createdAtUtc,
-    statusReason: row.statusReason,
   });
 }
 
@@ -430,7 +376,7 @@ export class RedemptionMock implements RedemptionPort {
     await delay(120);
     const now = Date.now();
     const startOfDay = new Date(now).setHours(0, 0, 0, 0);
-    const live = new Set(batches.filter((b) => isBatchLive(b)).map((b) => b.id));
+    const live = new Set(batches.filter(isBatchActive).map((b) => b.id));
     const redeemed = codes.filter((c) => c.status === 'redeemed');
     const outstanding = codes.filter((c) => c.status === 'unused' && live.has(c.batchId));
     const today = redeemed.filter((c) => (c.redeemed?.atUtc ?? 0) >= startOfDay);
@@ -483,9 +429,7 @@ export class RedemptionMock implements RedemptionPort {
     if (!(input.faceValue > 0)) return fail({ code: 'validation', message: '面值必须大于 0' });
     if (input.quantity < 1 || input.quantity > 10_000) return fail({ code: 'validation', message: '单批数量 1–10000' });
     if (input.prefix && !/^[A-Z0-9]{2,6}$/.test(input.prefix)) return fail({ code: 'validation', message: '前缀须为 2–6 位大写字母或数字' });
-    if (input.startsAtUtc && input.expiresAtUtc && input.expiresAtUtc <= input.startsAtUtc)
-      return fail({ code: 'validation', message: '失效时间须晚于生效时间' });
-    const { batch } = generate(input, ADMIN, Date.now(), Math.random);
+    const { batch } = generate(input, Date.now(), Math.random);
     return ok({ batch: structuredClone(batch), codes: plainCodesOf(batch) });
   }
 
@@ -497,22 +441,12 @@ export class RedemptionMock implements RedemptionPort {
     if (!Number.isInteger(input.quantity) || input.quantity < b.quantity) return fail({ code: 'validation', message: `数量不能少于 ${b.quantity}` });
     const add = input.quantity - b.quantity;
     if (add > 10_000) return fail({ code: 'validation', message: '单次最多追加 10000 张' });
-    if (add > 0 && !isBatchLive(b)) return fail({ code: 'conflict', message: `批次${batchDisplayStatus(b).label}，不能追加` });
-    if (input.startsAtUtc && input.expiresAtUtc && input.expiresAtUtc <= input.startsAtUtc)
-      return fail({ code: 'validation', message: '失效时间须晚于生效时间' });
+    if (add > 0 && !isBatchActive(b)) return fail({ code: 'conflict', message: `批次${batchDisplayStatus(b).label}，不能追加` });
 
     b.name = input.name.trim();
     b.salesChannel = input.salesChannel?.trim() || null;
     b.perAccountLimit = input.perAccountLimit;
-    b.startsAtUtc = input.startsAtUtc;
-    b.expiresAtUtc = input.expiresAtUtc;
-    // 失效时间延后到未来，过期的批次与卡密恢复可兑换。
-    if (b.status === 'expired' && (b.expiresAtUtc === null || b.expiresAtUtc > Date.now())) b.status = 'active';
-    for (const c of codes.filter((x) => x.batchId === b.id)) {
-      c.batchName = b.name;
-      c.expiresAtUtc = b.expiresAtUtc;
-      if (c.status === 'expired' && b.status === 'active') c.status = 'unused';
-    }
+    for (const c of codes.filter((x) => x.batchId === b.id)) c.batchName = b.name;
 
     const rows = add > 0 ? mintCodes(b, add, Date.now(), Math.random) : [];
     b.quantity += add;
@@ -524,9 +458,9 @@ export class RedemptionMock implements RedemptionPort {
     await delay(300);
     const b = batches.find((x) => x.id === batchId);
     if (!b) return fail({ code: 'not_found', message: `批次 ${batchId} 不存在` });
-    if (scope === 'unused') {
-      if (b.status === 'frozen') return fail({ code: 'conflict', message: '批次已冻结，解冻后才能导出未兑换卡密' });
-      if (!isBatchLive(b)) return fail({ code: 'conflict', message: `批次${b.status === 'voided' ? '已作废' : '已过期'}，没有可导出的未兑换卡密` });
+    if (scope === 'unused' && !isBatchActive(b)) {
+      const message = b.status === 'frozen' ? '批次已冻结，解冻后才能导出未兑换卡密' : '批次已作废，没有可导出的未兑换卡密';
+      return fail({ code: 'conflict', message });
     }
     const rows = codes.filter((c) => c.batchId === b.id && (scope === 'all' || c.status === scope));
     if (rows.length === 0) return fail({ code: 'conflict', message: `该批次没有${ExportScopeLabel[scope]}卡密` });
@@ -542,11 +476,10 @@ export class RedemptionMock implements RedemptionPort {
     });
   }
 
-  async setBatchFrozen(batchId: string, frozen: boolean, reason = ''): Promise<AppResult<RedemptionBatch>> {
+  async setBatchFrozen(batchId: string, frozen: boolean): Promise<AppResult<RedemptionBatch>> {
     await delay(200);
     const b = batches.find((x) => x.id === batchId);
     if (!b) return fail({ code: 'not_found', message: `批次 ${batchId} 不存在` });
-    if (frozen && !reason.trim()) return fail({ code: 'validation', message: '请填写冻结原因' });
     if (frozen && b.status !== 'active') return fail({ code: 'conflict', message: '只有生效中的批次可以冻结' });
     if (!frozen && b.status !== 'frozen') return fail({ code: 'conflict', message: '批次未冻结' });
     const own = codes.filter((c) => c.batchId === b.id);
@@ -554,13 +487,11 @@ export class RedemptionMock implements RedemptionPort {
       for (const c of own.filter((x) => x.status === 'unused')) {
         c.status = 'frozen';
         c.frozenByBatch = true;
-        c.statusReason = reason.trim();
       }
     } else {
       for (const c of own.filter((x) => x.status === 'frozen' && x.frozenByBatch)) {
         c.status = 'unused';
         c.frozenByBatch = false;
-        c.statusReason = null;
       }
     }
     b.status = frozen ? 'frozen' : 'active';
@@ -568,17 +499,14 @@ export class RedemptionMock implements RedemptionPort {
     return ok(structuredClone(b));
   }
 
-  async voidBatch(batchId: string, reason: string): Promise<AppResult<RedemptionBatch>> {
+  async voidBatch(batchId: string): Promise<AppResult<RedemptionBatch>> {
     await delay(250);
     const b = batches.find((x) => x.id === batchId);
     if (!b) return fail({ code: 'not_found', message: `批次 ${batchId} 不存在` });
     if (b.status === 'voided') return fail({ code: 'conflict', message: '批次已作废' });
-    if (!reason.trim()) return fail({ code: 'validation', message: '请填写作废原因' });
-    const targets = codes.filter((c) => c.batchId === b.id && (c.status === 'unused' || c.status === 'frozen'));
-    for (const c of targets) {
+    for (const c of codes.filter((x) => x.batchId === b.id && (x.status === 'unused' || x.status === 'frozen'))) {
       c.status = 'voided';
       c.frozenByBatch = false;
-      c.statusReason = reason.trim();
     }
     b.status = 'voided';
     recount(b);
@@ -617,31 +545,27 @@ export class RedemptionMock implements RedemptionPort {
     return c ? ok(toPublic(c)) : fail({ code: 'not_found', message: '卡密不存在' });
   }
 
-  async setCodeFrozen(codeId: string, frozen: boolean, reason = ''): Promise<AppResult<RedemptionCode>> {
+  async setCodeFrozen(codeId: string, frozen: boolean): Promise<AppResult<RedemptionCode>> {
     await delay(150);
     const c = codes.find((x) => x.id === codeId);
     if (!c) return fail({ code: 'not_found', message: '卡密不存在' });
-    if (frozen && !reason.trim()) return fail({ code: 'validation', message: '请填写冻结原因' });
     if (frozen && c.status !== 'unused') return fail({ code: 'conflict', message: '只有未兑换的卡密可以冻结' });
     if (!frozen && c.status !== 'frozen') return fail({ code: 'conflict', message: '卡密未冻结' });
     const b = batches.find((x) => x.id === c.batchId)!;
     if (!frozen && b.status === 'frozen') return fail({ code: 'conflict', message: '所属批次已冻结，请先解冻批次' });
     c.status = frozen ? 'frozen' : 'unused';
     c.frozenByBatch = false;
-    c.statusReason = frozen ? reason.trim() : null;
     recount(b);
     return ok(toPublic(c));
   }
 
-  async voidCode(codeId: string, reason: string): Promise<AppResult<RedemptionCode>> {
+  async voidCode(codeId: string): Promise<AppResult<RedemptionCode>> {
     await delay(150);
     const c = codes.find((x) => x.id === codeId);
     if (!c) return fail({ code: 'not_found', message: '卡密不存在' });
     if (c.status !== 'unused' && c.status !== 'frozen') return fail({ code: 'conflict', message: '只有未兑换或已冻结的卡密可以作废' });
-    if (!reason.trim()) return fail({ code: 'validation', message: '请填写作废原因' });
     c.status = 'voided';
     c.frozenByBatch = false;
-    c.statusReason = reason.trim();
     recount(batches.find((x) => x.id === c.batchId)!);
     return ok(toPublic(c));
   }
