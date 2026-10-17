@@ -99,10 +99,28 @@ export const routes: RouteRecordRaw[] = [
             redirect: { name: 'billing-vouchers' },
           },
           {
+            // 兑换码 = 充值渠道「兑换码」的卡密管理，像券务一样拆成独立页面；旧链接都指向这个名字。
             path: 'redemption',
             name: 'billing-redemption',
+            redirect: { name: 'billing-redemption-batches' },
+          },
+          {
+            path: 'redemption/batches',
+            name: 'billing-redemption-batches',
+            component: () => import('@/features/platform/redemption/views/RedemptionBatchesView.vue'),
+            meta: { title: '兑换码批次', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'redemption/codes',
+            name: 'billing-redemption-codes',
             component: () => import('@/features/platform/redemption/views/RedemptionCodesView.vue'),
-            meta: { title: '兑换码', requiresAuth: true, roles: ['Admin'] },
+            meta: { title: '兑换记录', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'redemption/attempts',
+            name: 'billing-redemption-attempts',
+            component: () => import('@/features/platform/redemption/views/RedemptionAttemptsView.vue'),
+            meta: { title: '兑换日志', requiresAuth: true, roles: ['Admin'] },
           },
         ],
       },

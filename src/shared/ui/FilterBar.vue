@@ -2,7 +2,7 @@
 /**
  * 列表页统一过滤栏 —— 项目硬规范。详见 .cursor/rules/filter-bar.mdc。
  *
- * 行 1：账户 UID  +  邮箱 / 手机
+ * 行 1：账户 UID  +  邮箱 / 手机（不绑定 account-uid 时整行不渲染，用于与账户无关的列表）
  * 行 2：业务 slot（类型 / 状态 等，由父组件用 <el-form-item> 注入）
  * 行 2b（可选）：#extra-row —— 字段较多时追加一行业务筛选
  * 行 3：时间范围  +  最近 24 小时 / 7 天 / 30 天 快捷按钮  ··········  查询 / 重置
@@ -27,8 +27,8 @@ import { RefreshLeft, Search } from '@element-plus/icons-vue';
 
 import { toLocalDateTimeValue } from '@/shared/lib/date';
 
-const accountUid = defineModel<string>('accountUid', { required: true });
-const contactKeyword = defineModel<string>('contactKeyword', { required: true });
+const accountUid = defineModel<string>('accountUid');
+const contactKeyword = defineModel<string>('contactKeyword');
 /**
  * 时间范围可选 —— 未绑定时第 3 行只渲染查询 / 重置按钮，
  * 用于"按其他业务字段过滤、无需时间维度"的列表（如账户列表）。
@@ -128,11 +128,17 @@ function onReset(): void {
 
 <template>
   <el-form label-width="84px" class="filter-bar" @submit.prevent>
-    <div class="filter-bar__row">
+    <div
+      v-if="accountUid !== undefined"
+      class="filter-bar__row"
+    >
       <el-form-item label="账户 UID">
         <el-input v-model="accountUid" :prefix-icon="Search" placeholder="精确匹配" clearable />
       </el-form-item>
-      <el-form-item :label="props.contactKeywordLabel">
+      <el-form-item
+        v-if="contactKeyword !== undefined"
+        :label="props.contactKeywordLabel"
+      >
         <el-input v-model="contactKeyword" :prefix-icon="Search" placeholder="模糊匹配" clearable />
       </el-form-item>
     </div>

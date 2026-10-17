@@ -22,6 +22,7 @@
 > - `alipay`（支付宝，可多实例）
 > - `wechat_pay`（微信支付 V3，可多实例）
 > - `fkpay`（发卡付，可多实例）
+> - `redeem_code`（兑换码，单例；卡密在发卡网售卖、用户输入卡密入账，卡密管理见 [`17-billing-redemption.md`](./17-billing-redemption.md)）
 > - `manual`（手工入账，单例不可删除、无需配置，启动时自动种子化）
 >
 > **标识**：

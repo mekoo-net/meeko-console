@@ -32,6 +32,7 @@
 | 14 | 编辑邮件模板 `/notices/email/templates/:code/:locale` | Admin | [`14-notices-email-template-edit.md`](./14-notices-email-template-edit.md) |
 | 15 | 通知调试 `/notices/debug` | Admin | [`15-notices-debug.md`](./15-notices-debug.md) |
 | 16 | 平台令牌：下发抵扣券 / 查用户 / 查 Demux 用量 | Admin / API Key | [`16-ops-voucher-issue-and-usage.md`](./16-ops-voucher-issue-and-usage.md) |
+| 17 | 兑换码 `/billing/redemption/{batches,codes,attempts}`（充值渠道「兑换码」的卡密） | Admin | [`17-billing-redemption.md`](./17-billing-redemption.md) |
 
 ## BFF 域路由前缀（默认）
 
@@ -40,6 +41,7 @@
 | 账户 / IAM 后台 | `/api/admin/accounts`、`/api/admin/iam/users` | BFF 聚合，底层调 Keystone |
 | 计费 | `/api/billing` | 钱包 / 充值；账单流水见 `/api/admin/billing/bills` |
 | 充值渠道（平台配置） | `/api/admin/billing/channels` | 仅 Admin |
+| 兑换码（卡密批次 / 核销追踪） | `/api/admin/billing/redemption` | 仅 Admin |
 | DemuxAI 控制面 | `/demux/api/admin/*` | 供应商组目录、模型路由、Vendor、ModelMeta、Pricing |
 | DemuxAI 激活码 | `/demux/api/redemption` | CDK 批量生成 / 列表 / 删除 |
 | DemuxAI 数据面（日志） | `/demux/api/admin/logs` | 用量查询 + 日聚合 stats（KPI 扩展中） |

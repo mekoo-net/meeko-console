@@ -53,6 +53,30 @@ const drivers: DriverDef[] = [
     ],
   },
   {
+    // 卡密在发卡网售卖，用户在钱包输入卡密兑换；卡密本身在「兑换码」页按批次管理。
+    code: 'redeem_code',
+    displayName: '兑换码',
+    allowMultiple: false,
+    supportedScenes: ['redeem'],
+    fields: [
+      {
+        key: 'redeemTip',
+        label: '兑换说明',
+        type: 'TextArea',
+        isSecret: false,
+        required: false,
+      },
+      {
+        key: 'maxFailuresPerHour',
+        label: '每账户每小时失败上限',
+        type: 'Text',
+        isSecret: false,
+        required: true,
+        placeholder: '10',
+      },
+    ],
+  },
+  {
     code: 'manual',
     displayName: '手工入账',
     allowMultiple: false,
@@ -67,8 +91,8 @@ let nextId = 1;
 const channelStore = new Map<number, PaymentChannel>();
 const configStore = new Map<number, Record<string, string>>();
 
-// 种子：一个手工入账单例 + 一个未配置的支付宝实例，便于演示。
-function seed(driverCode: string, name: string, active: boolean, configured: boolean): void {
+// 种子：手工入账单例 + 未配置的支付宝实例 + 已启用的兑换码渠道，便于演示。
+function seed(driverCode: string, name: string, active: boolean, configured: boolean): number {
   const d = driverByCode.get(driverCode)!;
   const id = nextId++;
   channelStore.set(id, {
@@ -80,9 +104,14 @@ function seed(driverCode: string, name: string, active: boolean, configured: boo
     isConfigured: configured,
     supportedScenes: d.supportedScenes,
   });
+  return id;
 }
 seed('manual', '手工入账', true, true);
 seed('alipay', '支付宝-主账户', false, false);
+configStore.set(seed('redeem_code', '兑换码', true, true), {
+  redeemTip: '卡密格式 MK-XXXX-XXXX-XXXX-XXXX，兑换后即时到账。',
+  maxFailuresPerHour: '10',
+});
 
 export class PaymentChannelMock implements PaymentChannelPort {
   async listChannels(): Promise<AppResult<PaymentChannel[]>> {

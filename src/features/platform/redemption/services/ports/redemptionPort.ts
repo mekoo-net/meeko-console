@@ -1,25 +1,43 @@
 import type { AppResult } from '@/shared/api/httpTypes';
 
 import type {
-  CreateRedemptionsInput,
-  ListRedemptionsFilter,
-  Redemption,
+  AttemptFilter,
+  BatchEvent,
+  BatchFilter,
+  CodeFilter,
+  CreateBatchInput,
+  ExportedCodes,
+  ExportScope,
+  PageQuery,
+  Paged,
+  PlainCodes,
+  RedemptionAttempt,
+  RedemptionBatch,
+  RedemptionCode,
+  RedemptionOverview,
+  UpdateBatchInput,
 } from '../../model/redemption.types';
 
-export interface ListRedemptionsPage {
-  items: Redemption[];
-  total: number;
-}
-
 export interface RedemptionPort {
-  list(input: {
-    page: number;
-    pageSize: number;
-    filter: ListRedemptionsFilter;
-  }): Promise<AppResult<ListRedemptionsPage>>;
+  overview(): Promise<AppResult<RedemptionOverview>>;
 
-  /** 返回明文 key，仅此一次；列表里只给脱敏值。 */
-  create(input: CreateRedemptionsInput): Promise<AppResult<{ keys: string[] }>>;
+  listBatches(query: PageQuery<BatchFilter>): Promise<AppResult<Paged<RedemptionBatch>>>;
+  /** 下拉选项用：全部批次的轻量列表。 */
+  listBatchOptions(): Promise<AppResult<Pick<RedemptionBatch, 'id' | 'name' | 'faceValue'>[]>>;
+  getBatchEvents(batchId: string): Promise<AppResult<BatchEvent[]>>;
+  createBatch(input: CreateBatchInput): Promise<AppResult<PlainCodes>>;
+  /** 编辑批次；数量增加时自动生成新卡密，`codes` 只含本次新增的明文（没有追加则为空）。 */
+  updateBatch(batchId: string, input: UpdateBatchInput): Promise<AppResult<PlainCodes>>;
+  /** 按范围导出明文卡密；必须带原因，后端记审计并累加导出次数。 */
+  exportBatch(batchId: string, scope: ExportScope, reason: string): Promise<AppResult<ExportedCodes>>;
+  setBatchFrozen(batchId: string, frozen: boolean, reason: string): Promise<AppResult<RedemptionBatch>>;
+  /** 作废批次内全部未兑换卡密，不可恢复；已兑换的不受影响。 */
+  voidBatch(batchId: string, reason: string): Promise<AppResult<RedemptionBatch>>;
 
-  disable(id: string): Promise<AppResult<void>>;
+  listCodes(query: PageQuery<CodeFilter>): Promise<AppResult<Paged<RedemptionCode>>>;
+  getCode(codeId: string): Promise<AppResult<RedemptionCode>>;
+  setCodeFrozen(codeId: string, frozen: boolean, reason: string): Promise<AppResult<RedemptionCode>>;
+  voidCode(codeId: string, reason: string): Promise<AppResult<RedemptionCode>>;
+
+  listAttempts(query: PageQuery<AttemptFilter>): Promise<AppResult<Paged<RedemptionAttempt>>>;
 }

@@ -1,0 +1,128 @@
+/* 兑换码三个页面（批次 / 兑换记录 / 兑换日志）与批次弹窗共用：页面骨架 + 筛选（FilterBar / 弹窗工具条）+ 撑满的表格 + 分页。
+   非 scoped：el-table 的单元格内容由插槽渲染，scoped 选择器要层层 :deep，统一用 rd- 前缀更省事。 */
+
+.rd-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: calc(100vh - 56px - 52px);
+  min-height: 560px;
+}
+.rd-page .page-header {
+  margin-bottom: 0;
+}
+
+
+.rd-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+.rd-page > .rd-panel {
+  flex: 1;
+  height: auto;
+}
+/* FilterBar 自带 margin-bottom，面板里用 gap 控制间距。 */
+.rd-panel > form.filter-bar {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+
+/* 批次弹窗里的轻量工具条，与券务「发放记录」弹窗一致。 */
+.rd-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rd-toolbar .el-button + .el-button {
+  margin-left: 0;
+}
+
+
+.rd-panel__table {
+  flex: 1;
+  min-height: 0;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.rd-panel__footer {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rd-mono {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--el-text-color-regular);
+}
+
+code.rd-mono {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-secondary);
+  font-size: 11.5px;
+}
+
+.rd-code {
+  white-space: nowrap;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--el-text-color-primary);
+}
+
+.rd-money {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+.rd-money--success {
+  color: var(--el-color-success);
+}
+
+.rd-muted {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.rd-warn {
+  font-size: 12px;
+  color: var(--el-color-warning);
+}
+
+.rd-two-line {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.4;
+  min-width: 0;
+}
+.rd-two-line > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 脚本 UA（curl / python-requests 等）：兑换场景下基本等于机器刷卡，标红。 */
+.rd-script > span:first-child {
+  color: var(--el-color-danger);
+  font-weight: 600;
+}
+
+.rd-link {
+  cursor: pointer;
+  color: var(--el-color-primary);
+}
+.rd-link:hover {
+  text-decoration: underline;
+}

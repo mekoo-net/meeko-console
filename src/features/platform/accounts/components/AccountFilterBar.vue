@@ -32,8 +32,8 @@ function patch<K extends keyof AccountListFilter>(key: K, value: AccountListFilt
     :account-uid="filter.accountUid"
     :contact-keyword="filter.contactKeyword"
     :loading="loading"
-    @update:account-uid="(v: string) => patch('accountUid', v)"
-    @update:contact-keyword="(v: string) => patch('contactKeyword', v)"
+    @update:account-uid="(v?: string) => patch('accountUid', v ?? '')"
+    @update:contact-keyword="(v?: string) => patch('contactKeyword', v ?? '')"
     @refresh="emit('refresh')"
     @reset="emit('reset')"
   >

@@ -96,6 +96,7 @@ export const rechargeProviderValues = [
   'cs_compensation',
   'marketing_reward',
   'referral_rebate',
+  'redemption',
 ] as const;
 export type RechargeProvider = (typeof rechargeProviderValues)[number];
 
@@ -106,6 +107,7 @@ export const RechargeProviderLabel: Readonly<Record<RechargeProvider, string>> =
   cs_compensation: '客服补偿',
   marketing_reward: '营销奖励',
   referral_rebate: '邀请返利',
+  redemption: '兑换码',
 };
 
 /** UI 标签：业务单号在不同 provider 下的展示名 */
@@ -116,6 +118,7 @@ export const RechargeRefNoLabel: Readonly<Record<RechargeProvider, string>> = {
   cs_compensation: '工单号',
   marketing_reward: '活动号',
   referral_rebate: '返利单号',
+  redemption: '卡密 ID',
 };
 
 /**

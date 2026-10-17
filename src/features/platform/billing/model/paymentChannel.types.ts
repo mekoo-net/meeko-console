@@ -56,6 +56,7 @@ export const providerColor: Record<string, string> = {
   alipay: '#1677ff',
   wechat_pay: '#07c160',
   fkpay: '#722ed1',
+  redeem_code: '#ea580c',
   manual: '#8c8c8c',
 };
 
@@ -63,6 +64,7 @@ export const providerBg: Record<string, string> = {
   alipay: '#e8f3ff',
   wechat_pay: '#e8f9ef',
   fkpay: '#f3e8ff',
+  redeem_code: '#fff4e6',
   manual: '#f5f5f5',
 };
 
