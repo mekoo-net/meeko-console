@@ -14,7 +14,8 @@ export interface PaymentChannel {
   supportedScenes: string[];
 }
 
-export type ChannelFieldType = 'Text' | 'Password' | 'Url' | 'Boolean' | 'TextArea';
+/** `LinkList`：「名称 + 链接 + 说明」列表，值是 JSON 数组字符串（如兑换码渠道的发卡网）。 */
+export type ChannelFieldType = 'Text' | 'Password' | 'Url' | 'Boolean' | 'TextArea' | 'LinkList';
 
 export interface ChannelConfigField {
   key: string;

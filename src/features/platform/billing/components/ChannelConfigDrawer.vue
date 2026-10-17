@@ -10,6 +10,7 @@ import type {
 } from '../model/paymentChannel.types';
 import { channelColor } from '../model/paymentChannel.types';
 import { getPaymentChannelPort } from '../services';
+import LinkListInput from './LinkListInput.vue';
 
 const props = defineProps<{
   visible: boolean;
@@ -126,7 +127,15 @@ async function handleSave(): Promise<void> {
             {{ field.label }}
             <span v-if="field.help" class="field-help">{{ field.help }}</span>
           </template>
-          <div class="key-input-wrap">
+          <LinkListInput
+            v-if="field.type === 'LinkList'"
+            v-model="values[field.key]"
+            :item-label="field.label"
+          />
+          <div
+            v-else
+            class="key-input-wrap"
+          >
             <el-input
               v-model="values[field.key]"
               :type="fieldInputType(field)"

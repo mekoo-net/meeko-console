@@ -149,7 +149,7 @@
 | --- | --- | --- |
 | `key` | string | 配置项 key，PUT 时作为 values 的键。 |
 | `label` | string | 表单标签。 |
-| `type` | `Text \| Password \| Url \| Boolean \| TextArea` | 前端控件类型。 |
+| `type` | `Text \| Password \| Url \| Boolean \| TextArea \| LinkList` | 前端控件类型。`LinkList` 为「名称 + 链接 + 说明」行编辑器，值是 JSON 数组字符串 `[{ name, url, description? }]`。 |
 | `isSecret` | boolean | 敏感字段：GET config 时脱敏，表单默认隐藏（密码框 + 显隐切换）。 |
 | `required` | boolean | 是否必填。 |
 | `placeholder` / `help` | string? | 占位符 / 帮助文案（可选）。 |

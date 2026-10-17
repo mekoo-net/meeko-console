@@ -59,7 +59,7 @@
 
 | key | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `redeemTip` | TextArea | | 用户钱包兑换框下方的说明 |
+| `stores` | LinkList | | 发卡网，用户选兑换码充值时列出并点击跳转购买。值为 JSON 数组 `[{ name, url, description? }]`：名称 ≤ 32 字、链接须 http(s)、说明 ≤ 60 字，最多 10 个；不合规保存时返回 `validation` 并指明第几个 |
 | `maxFailuresPerHour` | Text | ✓ | 每账户每小时失败上限，超过后 1 小时内禁止兑换 |
 
 渠道是单例，Billing 启动时自动建好（停用状态），配置后由管理员启用。它不收款，不出现在用户充值面的付款方式里。
@@ -71,7 +71,7 @@
 
 | 业务动作 | HTTP | 端点 | 说明 |
 | --- | --- | --- | --- |
-| 兑换入口 | GET | `/` | `{ enabled, tip }`；`tip` 即渠道配置 `redeemTip` |
+| 兑换入口 | GET | `/` | `{ enabled, stores: [{ name, url, description }] }`；`stores` 即渠道配置的发卡网，`description` 可为 `null` |
 | 兑换 | POST | `/redeem` | 请求体 `{ code, productCode? }`；成功返回 `{ amount, rechargeId, codeMasked, redeemedAtUtc }` |
 
 - 输入忽略大小写、空格、各种横线和全角字符，前缀可省略；`O` 按 `0`、`I`/`L` 按 `1` 纠正（Crockford 规则，字符集里没有这几个字母）。

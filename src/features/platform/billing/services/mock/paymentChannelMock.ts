@@ -60,11 +60,12 @@ const drivers: DriverDef[] = [
     supportedScenes: ['redeem'],
     fields: [
       {
-        key: 'redeemTip',
-        label: '兑换说明',
-        type: 'TextArea',
+        key: 'stores',
+        label: '发卡网',
+        type: 'LinkList',
         isSecret: false,
         required: false,
+        help: '用户选兑换码充值时列出，点击跳转到发卡网购买；最多 10 个',
       },
       {
         key: 'maxFailuresPerHour',
@@ -109,7 +110,10 @@ function seed(driverCode: string, name: string, active: boolean, configured: boo
 seed('manual', '手工入账', true, true);
 seed('alipay', '支付宝-主账户', false, false);
 configStore.set(seed('redeem_code', '兑换码', true, true), {
-  redeemTip: '卡密格式 MK-XXXX-XXXX-XXXX-XXXX，兑换后即时到账。',
+  stores: JSON.stringify([
+    { name: 'Meeko 官方小店', url: 'https://shop.example.com/meeko', description: '支持支付宝、微信，自动发卡' },
+    { name: '闲鱼', url: 'https://2.taobao.com/item?id=1' },
+  ]),
   maxFailuresPerHour: '10',
 });
 
