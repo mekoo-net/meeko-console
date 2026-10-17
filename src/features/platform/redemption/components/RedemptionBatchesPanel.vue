@@ -304,25 +304,6 @@ onMounted(() => void reload());
         </el-table-column>
 
         <el-table-column
-          label="导出"
-          width="96"
-        >
-          <template #default="{ row }: { row: RedemptionBatch }">
-            <span
-              v-if="row.exportCount === 0"
-              class="rd-warn"
-            >未导出</span>
-            <el-tooltip
-              v-else
-              :content="`最近导出 ${formatDateTime(row.lastExportedAtUtc)}`"
-              placement="top"
-            >
-              <span class="rd-muted">{{ row.exportCount }} 次 · {{ formatDateTime(row.lastExportedAtUtc, 'MM-DD') }}</span>
-            </el-tooltip>
-          </template>
-        </el-table-column>
-
-        <el-table-column
           label="创建"
           width="128"
         >

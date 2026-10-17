@@ -4,18 +4,13 @@ import { useRouter } from 'vue-router';
 import { Delete, Download, EditPen, Lock, TopRight, Unlock } from '@element-plus/icons-vue';
 
 import StatusTag from '@/shared/ui/StatusTag.vue';
-import { formatDateTime } from '@/shared/lib/date';
 import { formatMoney } from '@/shared/lib/money';
 
 import { useRedemptionActions } from '../composables/useRedemptionActions';
 import {
   batchDisplayStatus,
-  BatchEventActionLabel,
   batchUnusedCount,
   canExportBatch,
-  RedemptionPurposeLabel,
-  type BatchEvent,
-  type BatchEventAction,
   type KeysPayload,
   type PlainMode,
   type RedemptionBatch,
@@ -39,30 +34,10 @@ const actions = useRedemptionActions();
 
 /** 弹窗里的动作会改批次，就地持有一份最新的，不依赖父组件回传。 */
 const current = ref<RedemptionBatch | null>(props.batch);
-const tab = ref<'codes' | 'info'>('codes');
-const events = ref<BatchEvent[]>([]);
-const eventsLoading = ref(false);
 const codesPanel = ref<InstanceType<typeof RedemptionCodesPanel> | null>(null);
 
 const codeDrawerVisible = ref(false);
 const activeCode = ref<RedemptionCode | null>(null);
-
-async function loadEvents(): Promise<void> {
-  if (!current.value) return;
-  eventsLoading.value = true;
-  try {
-    const r = await port.getBatchEvents(current.value.id);
-    events.value = r.success ? r.data : [];
-  } finally {
-    eventsLoading.value = false;
-  }
-}
-
-watch(visible, (open) => {
-  if (!open) return;
-  tab.value = 'codes';
-  void loadEvents();
-});
 
 // 编辑抽屉保存后父组件会换一份新的批次进来：计数、名称、卡密列表都要跟着刷新。
 watch(
@@ -70,7 +45,6 @@ watch(
   (b) => {
     if (!b) return;
     current.value = b;
-    void loadEvents();
     void codesPanel.value?.reload();
   },
   { immediate: true },
@@ -90,7 +64,6 @@ async function refreshBatch(): Promise<void> {
 function applyBatch(b: RedemptionBatch): void {
   current.value = b;
   emit('changed', b);
-  void loadEvents();
   void codesPanel.value?.reload();
 }
 
@@ -138,25 +111,6 @@ const stats = computed(() => {
     { key: 'voided', label: '已作废', count: b.voidedCount, tone: 'info' },
   ].map((s) => ({ ...s, value: s.count * b.faceValue, pct: b.quantity ? (s.count / b.quantity) * 100 : 0 }));
 });
-
-const eventTone: Record<BatchEventAction, 'primary' | 'success' | 'warning' | 'danger' | 'info'> = {
-  created: 'primary',
-  edited: 'warning',
-  appended: 'primary',
-  exported: 'success',
-  frozen: 'danger',
-  unfrozen: 'warning',
-  voided: 'info',
-  code_frozen: 'danger',
-  code_unfrozen: 'warning',
-  code_voided: 'info',
-};
-
-function validity(b: RedemptionBatch): string {
-  const start = b.startsAtUtc ? formatDateTime(b.startsAtUtc) : '生成即生效';
-  const end = b.expiresAtUtc ? formatDateTime(b.expiresAtUtc) : '长期有效';
-  return `${start} → ${end}`;
-}
 </script>
 
 <template>
@@ -210,105 +164,14 @@ function validity(b: RedemptionBatch): string {
         </div>
       </div>
 
-      <el-tabs
-        v-model="tab"
-        class="tabs"
-      >
-        <el-tab-pane
-          label="卡密使用情况"
-          name="codes"
-        >
-          <div class="codes">
-            <RedemptionCodesPanel
-              ref="codesPanel"
-              :fixed-batch-id="current.id"
-              @open="openCode"
-              @changed="refreshBatch"
-            />
-          </div>
-        </el-tab-pane>
-        <el-tab-pane
-          label="批次信息与操作记录"
-          name="info"
-        >
-          <div class="info">
-            <el-descriptions
-              :column="3"
-              size="small"
-              border
-            >
-              <el-descriptions-item label="面值">
-                {{ money(current.faceValue) }}
-              </el-descriptions-item>
-              <el-descriptions-item label="数量">
-                {{ current.quantity }} 张 · 共 {{ money(current.quantity * current.faceValue) }}
-              </el-descriptions-item>
-              <el-descriptions-item label="卡密格式">
-                <code>{{ current.codePattern }}</code>
-              </el-descriptions-item>
-              <el-descriptions-item label="入账途径">
-                {{ RedemptionPurposeLabel[current.purpose] }}
-              </el-descriptions-item>
-              <el-descriptions-item
-                label="销售渠道"
-                :span="2"
-              >
-                {{ current.salesChannel ?? '—' }}
-              </el-descriptions-item>
-              <el-descriptions-item label="每户限兑">
-                {{ current.perAccountLimit ? `${current.perAccountLimit} 张` : '不限' }}
-              </el-descriptions-item>
-              <el-descriptions-item
-                label="有效期"
-                :span="2"
-              >
-                {{ validity(current) }}
-              </el-descriptions-item>
-              <el-descriptions-item label="导出">
-                {{ current.exportCount ? `${current.exportCount} 次 · 最近 ${formatDateTime(current.lastExportedAtUtc)}` : '未导出' }}
-              </el-descriptions-item>
-              <el-descriptions-item
-                label="创建"
-                :span="3"
-              >
-                {{ current.createdBy.displayName }} · {{ formatDateTime(current.createdAtUtc) }}
-              </el-descriptions-item>
-            </el-descriptions>
-
-            <h4 class="section">
-              操作记录
-            </h4>
-            <div v-loading="eventsLoading">
-              <el-timeline v-if="events.length">
-                <el-timeline-item
-                  v-for="ev in events"
-                  :key="ev.id"
-                  :timestamp="formatDateTime(ev.atUtc)"
-                  :type="eventTone[ev.action]"
-                  placement="top"
-                >
-                  <div class="event">
-                    <strong>{{ BatchEventActionLabel[ev.action] }}</strong>
-                    <span class="event__by">{{ ev.operator.displayName }}</span>
-                  </div>
-                  <div
-                    v-if="ev.detail"
-                    class="event__detail"
-                  >
-                    {{ ev.detail }}
-                  </div>
-                </el-timeline-item>
-              </el-timeline>
-              <div
-                v-else-if="!eventsLoading"
-                class="empty"
-              >
-                暂无记录
-              </div>
-            </div>
-          </div>
-        </el-tab-pane>
-      </el-tabs>
+      <div class="codes">
+        <RedemptionCodesPanel
+          ref="codesPanel"
+          :fixed-batch-id="current.id"
+          @open="openCode"
+          @changed="refreshBatch"
+        />
+      </div>
     </template>
 
     <template #footer>
@@ -469,44 +332,10 @@ code {
   color: var(--el-text-color-primary);
 }
 
-.tabs {
-  margin-top: 8px;
-}
 .codes {
-  height: 52vh;
+  margin-top: 12px;
+  height: 56vh;
   min-height: 360px;
-}
-.info {
-  height: 52vh;
-  min-height: 360px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-.section {
-  margin: 18px 0 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-.event {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 13px;
-}
-.event__by {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-.event__detail {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--el-text-color-regular);
-}
-.empty {
-  padding: 16px 0;
-  font-size: 12px;
-  color: var(--el-text-color-placeholder);
 }
 .foot {
   display: flex;

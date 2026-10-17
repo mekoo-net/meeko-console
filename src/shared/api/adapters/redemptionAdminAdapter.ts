@@ -4,7 +4,6 @@ import { request } from '@/shared/api/httpClient';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 
 import {
-  batchEventSchema,
   exportedCodeSchema,
   exportScopeValues,
   redemptionAttemptSchema,
@@ -12,7 +11,6 @@ import {
   redemptionCodeSchema,
   redemptionOverviewSchema,
   type AttemptFilter,
-  type BatchEvent,
   type BatchFilter,
   type CodeFilter,
   type CreateBatchInput,
@@ -93,11 +91,6 @@ export class RedemptionAdminHttpAdapter implements RedemptionPort {
     return parseOne(schema, res.data, '批次选项');
   }
 
-  async getBatchEvents(batchId: string): Promise<AppResult<BatchEvent[]>> {
-    const res = await request<unknown>(`${BASE}/batches/${encodeURIComponent(batchId)}/events`);
-    return res.success ? parseOne(z.array(batchEventSchema), res.data, '操作记录') : res;
-  }
-
   async createBatch(input: CreateBatchInput): Promise<AppResult<PlainCodes>> {
     const res = await request<unknown>(`${BASE}/batches`, { method: 'POST', body: input });
     return res.success ? parsePlain(res.data) : res;
@@ -108,18 +101,18 @@ export class RedemptionAdminHttpAdapter implements RedemptionPort {
     return res.success ? parsePlain(res.data) : res;
   }
 
-  async exportBatch(batchId: string, scope: ExportScope, reason: string): Promise<AppResult<ExportedCodes>> {
+  async exportBatch(batchId: string, scope: ExportScope): Promise<AppResult<ExportedCodes>> {
     const res = await request<unknown>(`${BASE}/batches/${encodeURIComponent(batchId)}/export`, {
       method: 'POST',
-      body: { scope, reason },
+      body: { scope },
     });
     return res.success ? parseOne(exportedCodesSchema, res.data, '导出') : res;
   }
 
-  async setBatchFrozen(batchId: string, frozen: boolean, reason: string): Promise<AppResult<RedemptionBatch>> {
+  async setBatchFrozen(batchId: string, frozen: boolean, reason?: string): Promise<AppResult<RedemptionBatch>> {
     const res = await request<unknown>(`${BASE}/batches/${encodeURIComponent(batchId)}/${frozen ? 'freeze' : 'unfreeze'}`, {
       method: 'POST',
-      body: { reason },
+      body: frozen ? { reason } : undefined,
     });
     return res.success ? parseOne(redemptionBatchSchema, res.data, '批次') : res;
   }
@@ -146,10 +139,10 @@ export class RedemptionAdminHttpAdapter implements RedemptionPort {
     return res.success ? parseOne(redemptionCodeSchema, res.data, '卡密') : res;
   }
 
-  async setCodeFrozen(codeId: string, frozen: boolean, reason: string): Promise<AppResult<RedemptionCode>> {
+  async setCodeFrozen(codeId: string, frozen: boolean, reason?: string): Promise<AppResult<RedemptionCode>> {
     const res = await request<unknown>(`${BASE}/codes/${encodeURIComponent(codeId)}/${frozen ? 'freeze' : 'unfreeze'}`, {
       method: 'POST',
-      body: { reason },
+      body: frozen ? { reason } : undefined,
     });
     return res.success ? parseOne(redemptionCodeSchema, res.data, '卡密') : res;
   }

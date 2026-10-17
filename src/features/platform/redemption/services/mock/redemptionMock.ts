@@ -9,12 +9,9 @@ import {
   formatCode,
   isBatchLive,
   maskCode,
-  RedemptionPurposeLabel,
   type AccountRef,
   type AttemptFilter,
   type AttemptResult,
-  type BatchEvent,
-  type BatchEventAction,
   type BatchFilter,
   type CodeFilter,
   type CreateBatchInput,
@@ -97,12 +94,10 @@ interface CodeRow extends RedemptionCode {
 
 const batches: RedemptionBatch[] = [];
 const codes: CodeRow[] = [];
-const events: BatchEvent[] = [];
 const attempts: RedemptionAttempt[] = [];
 const plainIndex = new Map<string, CodeRow>();
 
 let codeSeq = 1;
-let eventSeq = 1;
 let attemptSeq = 1;
 let rechargeSeq = 1;
 
@@ -122,10 +117,6 @@ function rechargeIdFor(at: number): string {
   const d = new Date(at);
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
   return `RC${ymd}${String(rechargeSeq++).padStart(9, '0')}`;
-}
-
-function pushEvent(batchId: string, action: BatchEventAction, operator: StaffRef, detail: string | null, at = Date.now()): void {
-  events.push({ id: `${batchId}:${eventSeq++}`, action, operator, detail, atUtc: at });
 }
 
 function recount(b: RedemptionBatch): void {
@@ -188,8 +179,6 @@ function generate(
     perAccountLimit: input.perAccountLimit,
     startsAtUtc: input.startsAtUtc,
     expiresAtUtc: input.expiresAtUtc,
-    exportCount: 0,
-    lastExportedAtUtc: null,
     createdBy,
     createdAtUtc: createdAt,
   };
@@ -197,13 +186,6 @@ function generate(
   batchPrefix.set(batch.id, input.prefix);
 
   const rows = mintCodes(batch, input.quantity, createdAt, rng);
-  pushEvent(
-    batch.id,
-    'created',
-    createdBy,
-    `生成 ${input.quantity} 张 · 面值 ¥${input.faceValue} · ${RedemptionPurposeLabel[input.purpose]}`,
-    createdAt,
-  );
   return { batch, rows };
 }
 
@@ -251,7 +233,6 @@ interface SeedSpec {
   input: Omit<CreateBatchInput, 'startsAtUtc' | 'expiresAtUtc'> & { startsInDays?: number; expiresInDays?: number };
   by: StaffRef;
   redeemRatio: number;
-  exports: number;
   /** 批次在多少天前停止兑换（冻结 / 作废）；兑换时间不能晚于它。 */
   endsDaysAgo?: number;
 }
@@ -262,7 +243,6 @@ const seedSpecs: SeedSpec[] = [
     input: { name: '30 元充值卡 · 暑期', salesChannel: '发卡网 · Meeko 官方小店', purpose: 'recharge', faceValue: 30, quantity: 100, prefix: 'MK', perAccountLimit: null },
     by: FINANCE,
     redeemRatio: 0.63,
-    exports: 1,
     endsDaysAgo: 20,
   },
   {
@@ -270,35 +250,30 @@ const seedSpecs: SeedSpec[] = [
     input: { name: '20 元卡 · 618 活动', salesChannel: '发卡网 · 代理店 A', purpose: 'recharge', faceValue: 20, quantity: 80, prefix: 'MK', perAccountLimit: 2, expiresInDays: -30 },
     by: ADMIN,
     redeemRatio: 0.55,
-    exports: 1,
   },
   {
     daysAgo: 42,
     input: { name: '100 元充值卡 · 9 月', salesChannel: '发卡网 · Meeko 官方小店', purpose: 'recharge', faceValue: 100, quantity: 200, prefix: 'MK', perAccountLimit: null },
     by: FINANCE,
     redeemRatio: 0.92,
-    exports: 2,
   },
   {
     daysAgo: 27,
     input: { name: '50 元充值卡', salesChannel: '发卡网 · Meeko 官方小店', purpose: 'recharge', faceValue: 50, quantity: 300, prefix: 'MK', perAccountLimit: null },
     by: FINANCE,
     redeemRatio: 0.4,
-    exports: 1,
   },
   {
     daysAgo: 16,
     input: { name: '10 元体验卡 · 国庆', salesChannel: '国庆社群活动', purpose: 'reward', faceValue: 10, quantity: 500, prefix: 'MK', perAccountLimit: 3, expiresInDays: 14 },
     by: ADMIN,
     redeemRatio: 0.82,
-    exports: 1,
   },
   {
     daysAgo: 9,
     input: { name: '200 元充值卡', salesChannel: '发卡网 · 代理店 B', purpose: 'recharge', faceValue: 200, quantity: 50, prefix: 'MK', perAccountLimit: null },
     by: FINANCE,
     redeemRatio: 0.12,
-    exports: 1,
     endsDaysAgo: 3,
   },
   {
@@ -306,7 +281,6 @@ const seedSpecs: SeedSpec[] = [
     input: { name: '500 元充值卡 · 双十一预售', salesChannel: '发卡网 · Meeko 官方小店', purpose: 'recharge', faceValue: 500, quantity: 20, prefix: 'MK', perAccountLimit: 1, startsInDays: 15 },
     by: ADMIN,
     redeemRatio: 0,
-    exports: 0,
   },
 ];
 
@@ -322,13 +296,6 @@ for (const spec of seedSpecs) {
     spec.by,
     createdAt,
   );
-
-  for (let i = 0; i < spec.exports; i++) {
-    const at = createdAt + (i + 1) * 3 * HOUR;
-    batch.exportCount += 1;
-    batch.lastExportedAtUtc = at;
-    pushEvent(batch.id, 'exported', spec.by, i === 0 ? '首次上架' : '补货上架', at);
-  }
 
   // 兑换时间往近期偏：卡密售出后通常几天内就会被兑换。
   const endsAt = spec.endsDaysAgo !== undefined ? NOW - spec.endsDaysAgo * DAY : NOW;
@@ -365,7 +332,6 @@ for (const row of codes.filter((c) => c.status === 'redeemed' && c.batchId === b
     row.statusReason = '代理店 B 反馈卡密外泄，暂停兑换待核实';
   }
   b.status = 'frozen';
-  pushEvent(b.id, 'frozen', ADMIN, '代理店 B 反馈卡密外泄，暂停兑换待核实', frozenAt);
   const frozenCodes = codes.filter((c) => c.batchId === b.id && c.status === 'frozen');
   for (let i = 0; i < 4; i++) logAttempt(frozenAt + (i + 1) * 3 * HOUR, pick(ACCOUNTS), pick(IPS), pick(UAS), 'frozen', frozenCodes[i]!);
 }
@@ -379,7 +345,6 @@ for (const row of codes.filter((c) => c.status === 'redeemed' && c.batchId === b
     row.statusReason = '活动结束下架，剩余库存作废';
   }
   b.status = 'voided';
-  pushEvent(b.id, 'voided', FINANCE, '活动结束下架，剩余库存作废', at);
   const voided = codes.filter((c) => c.batchId === b.id && c.status === 'voided');
   logAttempt(at + 5 * DAY, pick(ACCOUNTS), pick(IPS), pick(UAS), 'voided', voided[0]!);
 }
@@ -512,11 +477,6 @@ export class RedemptionMock implements RedemptionPort {
     );
   }
 
-  async getBatchEvents(batchId: string): Promise<AppResult<BatchEvent[]>> {
-    await delay(100);
-    return ok(structuredClone(events.filter((e) => e.id.startsWith(`${batchId}:`)).sort((a, b) => b.atUtc - a.atUtc)));
-  }
-
   async createBatch(input: CreateBatchInput): Promise<AppResult<PlainCodes>> {
     await delay(400);
     if (!input.name.trim()) return fail({ code: 'validation', message: '批次名称必填' });
@@ -541,15 +501,8 @@ export class RedemptionMock implements RedemptionPort {
     if (input.startsAtUtc && input.expiresAtUtc && input.expiresAtUtc <= input.startsAtUtc)
       return fail({ code: 'validation', message: '失效时间须晚于生效时间' });
 
-    const changed: string[] = [];
-    const salesChannel = input.salesChannel?.trim() || null;
-    if (b.name !== input.name.trim()) changed.push('名称');
-    if (b.salesChannel !== salesChannel) changed.push('销售渠道');
-    if (b.perAccountLimit !== input.perAccountLimit) changed.push('每户限兑');
-    if (b.startsAtUtc !== input.startsAtUtc) changed.push('生效时间');
-    if (b.expiresAtUtc !== input.expiresAtUtc) changed.push('失效时间');
     b.name = input.name.trim();
-    b.salesChannel = salesChannel;
+    b.salesChannel = input.salesChannel?.trim() || null;
     b.perAccountLimit = input.perAccountLimit;
     b.startsAtUtc = input.startsAtUtc;
     b.expiresAtUtc = input.expiresAtUtc;
@@ -560,31 +513,23 @@ export class RedemptionMock implements RedemptionPort {
       c.expiresAtUtc = b.expiresAtUtc;
       if (c.status === 'expired' && b.status === 'active') c.status = 'unused';
     }
-    if (changed.length) pushEvent(b.id, 'edited', ADMIN, changed.join('、'));
 
     const rows = add > 0 ? mintCodes(b, add, Date.now(), Math.random) : [];
-    if (add > 0) {
-      b.quantity += add;
-      pushEvent(b.id, 'appended', ADMIN, `追加 ${add} 张`);
-    }
+    b.quantity += add;
     recount(b);
     return ok({ batch: structuredClone(b), codes: rows.map((r) => r.plain) });
   }
 
-  async exportBatch(batchId: string, scope: ExportScope, reason: string): Promise<AppResult<ExportedCodes>> {
+  async exportBatch(batchId: string, scope: ExportScope): Promise<AppResult<ExportedCodes>> {
     await delay(300);
     const b = batches.find((x) => x.id === batchId);
     if (!b) return fail({ code: 'not_found', message: `批次 ${batchId} 不存在` });
-    if (!reason.trim()) return fail({ code: 'validation', message: '请填写导出原因' });
     if (scope === 'unused') {
       if (b.status === 'frozen') return fail({ code: 'conflict', message: '批次已冻结，解冻后才能导出未兑换卡密' });
       if (!isBatchLive(b)) return fail({ code: 'conflict', message: `批次${b.status === 'voided' ? '已作废' : '已过期'}，没有可导出的未兑换卡密` });
     }
     const rows = codes.filter((c) => c.batchId === b.id && (scope === 'all' || c.status === scope));
     if (rows.length === 0) return fail({ code: 'conflict', message: `该批次没有${ExportScopeLabel[scope]}卡密` });
-    b.exportCount += 1;
-    b.lastExportedAtUtc = Date.now();
-    pushEvent(b.id, 'exported', ADMIN, `${reason.trim()} · ${ExportScopeLabel[scope]} ${rows.length} 张`);
     return ok({
       batch: structuredClone(b),
       scope,
@@ -597,10 +542,11 @@ export class RedemptionMock implements RedemptionPort {
     });
   }
 
-  async setBatchFrozen(batchId: string, frozen: boolean, reason: string): Promise<AppResult<RedemptionBatch>> {
+  async setBatchFrozen(batchId: string, frozen: boolean, reason = ''): Promise<AppResult<RedemptionBatch>> {
     await delay(200);
     const b = batches.find((x) => x.id === batchId);
     if (!b) return fail({ code: 'not_found', message: `批次 ${batchId} 不存在` });
+    if (frozen && !reason.trim()) return fail({ code: 'validation', message: '请填写冻结原因' });
     if (frozen && b.status !== 'active') return fail({ code: 'conflict', message: '只有生效中的批次可以冻结' });
     if (!frozen && b.status !== 'frozen') return fail({ code: 'conflict', message: '批次未冻结' });
     const own = codes.filter((c) => c.batchId === b.id);
@@ -608,7 +554,7 @@ export class RedemptionMock implements RedemptionPort {
       for (const c of own.filter((x) => x.status === 'unused')) {
         c.status = 'frozen';
         c.frozenByBatch = true;
-        c.statusReason = reason.trim() || null;
+        c.statusReason = reason.trim();
       }
     } else {
       for (const c of own.filter((x) => x.status === 'frozen' && x.frozenByBatch)) {
@@ -619,7 +565,6 @@ export class RedemptionMock implements RedemptionPort {
     }
     b.status = frozen ? 'frozen' : 'active';
     recount(b);
-    pushEvent(b.id, frozen ? 'frozen' : 'unfrozen', ADMIN, reason.trim() || null);
     return ok(structuredClone(b));
   }
 
@@ -637,7 +582,6 @@ export class RedemptionMock implements RedemptionPort {
     }
     b.status = 'voided';
     recount(b);
-    pushEvent(b.id, 'voided', ADMIN, `${reason.trim()} · ${targets.length} 张`);
     return ok(structuredClone(b));
   }
 
@@ -673,19 +617,19 @@ export class RedemptionMock implements RedemptionPort {
     return c ? ok(toPublic(c)) : fail({ code: 'not_found', message: '卡密不存在' });
   }
 
-  async setCodeFrozen(codeId: string, frozen: boolean, reason: string): Promise<AppResult<RedemptionCode>> {
+  async setCodeFrozen(codeId: string, frozen: boolean, reason = ''): Promise<AppResult<RedemptionCode>> {
     await delay(150);
     const c = codes.find((x) => x.id === codeId);
     if (!c) return fail({ code: 'not_found', message: '卡密不存在' });
+    if (frozen && !reason.trim()) return fail({ code: 'validation', message: '请填写冻结原因' });
     if (frozen && c.status !== 'unused') return fail({ code: 'conflict', message: '只有未兑换的卡密可以冻结' });
     if (!frozen && c.status !== 'frozen') return fail({ code: 'conflict', message: '卡密未冻结' });
     const b = batches.find((x) => x.id === c.batchId)!;
     if (!frozen && b.status === 'frozen') return fail({ code: 'conflict', message: '所属批次已冻结，请先解冻批次' });
     c.status = frozen ? 'frozen' : 'unused';
     c.frozenByBatch = false;
-    c.statusReason = frozen ? reason.trim() || null : null;
+    c.statusReason = frozen ? reason.trim() : null;
     recount(b);
-    pushEvent(b.id, frozen ? 'code_frozen' : 'code_unfrozen', ADMIN, `${c.codeMasked} · ${reason.trim()}`);
     return ok(toPublic(c));
   }
 
@@ -699,7 +643,6 @@ export class RedemptionMock implements RedemptionPort {
     c.frozenByBatch = false;
     c.statusReason = reason.trim();
     recount(batches.find((x) => x.id === c.batchId)!);
-    pushEvent(c.batchId, 'code_voided', ADMIN, `${c.codeMasked} · ${reason.trim()}`);
     return ok(toPublic(c));
   }
 

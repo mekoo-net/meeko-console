@@ -77,8 +77,6 @@ export const redemptionBatchSchema = z.object({
   startsAtUtc: z.number().nullable(),
   /** null = 长期有效。 */
   expiresAtUtc: z.number().nullable(),
-  exportCount: z.number().int().nonnegative(),
-  lastExportedAtUtc: z.number().nullable(),
   createdBy: staffRefSchema,
   createdAtUtc: z.number(),
 });
@@ -102,44 +100,6 @@ export function batchDisplayStatus(b: RedemptionBatch, now = Date.now()): { labe
   if (batchUnusedCount(b) === 0) return { label: '已兑完', tone: 'success' };
   return { label: '生效中', tone: 'primary' };
 }
-
-/** 单张卡的冻结 / 作废也记在所属批次下（code_*），批次时间线才完整。 */
-export const batchEventActionValues = [
-  'created',
-  'edited',
-  'appended',
-  'exported',
-  'frozen',
-  'unfrozen',
-  'voided',
-  'code_frozen',
-  'code_unfrozen',
-  'code_voided',
-] as const;
-export type BatchEventAction = (typeof batchEventActionValues)[number];
-
-export const BatchEventActionLabel: Record<BatchEventAction, string> = {
-  created: '生成批次',
-  edited: '编辑批次',
-  appended: '追加卡密',
-  exported: '导出卡密',
-  frozen: '冻结批次',
-  unfrozen: '解除冻结',
-  voided: '作废未兑换卡密',
-  code_frozen: '冻结卡密',
-  code_unfrozen: '解冻卡密',
-  code_voided: '作废卡密',
-};
-
-export const batchEventSchema = z.object({
-  id: z.string(),
-  action: z.enum(batchEventActionValues),
-  operator: staffRefSchema,
-  /** 原因 / 影响张数等附加说明。 */
-  detail: z.string().nullable(),
-  atUtc: z.number(),
-});
-export type BatchEvent = z.infer<typeof batchEventSchema>;
 
 // ─── 卡密 ───────────────────────────────────────────────────────────
 

@@ -7,9 +7,9 @@
 | 路由 | `/billing/redemption/batches`（批次管理）、`/billing/redemption/codes`（兑换记录）、`/billing/redemption/attempts`（兑换日志）；`/billing/redemption` 重定向到批次管理 |
 | 角色 | **Admin** |
 | 视图 | `src/features/platform/redemption/views/Redemption{Batches,Codes,Attempts}View.vue` |
-| 批次弹窗 | `RedemptionBatchDialog`：点批次弹出，内嵌该批次的卡密使用表格 + 批次信息与操作记录 |
+| 批次弹窗 | `RedemptionBatchDialog`：点批次弹出，显示该批次的卡密使用表格 |
 | Port | `src/features/platform/redemption/services/ports/redemptionPort.ts` |
-| 后端 | Billing `Domain/Redemptions`（表 `billing.redemption_batches` / `redemption_codes` / `redemption_batch_events` / `redemption_attempts`）+ BFF `BillingRedemptionAdminController`、`BillingRedemptionController` |
+| 后端 | Billing `Domain/Redemptions`（表 `billing.redemption_batches` / `redemption_codes` / `redemption_attempts`）+ BFF `BillingRedemptionAdminController`、`BillingRedemptionController` |
 | 权限 | 读 `billing.redemption.read`；写 `billing.redemption.write`，含导出明文卡密，按资金权限授予 |
 
 ## 业务定义
@@ -28,7 +28,7 @@
 ### 关键规则
 
 1. **明文只出现两次**：生成（含追加）批次的响应、导出批次的响应。其余接口一律只给脱敏卡密。
-   导出必须带原因，每次导出都写一条批次操作记录并累加 `exportCount`。
+   导出只读，不改批次、不留记录。
 2. **卡密格式**：16 位 Crockford Base32（字符集 `0123456789ABCDEFGHJKMNPQRSTVWXYZ`，去掉 I/L/O/U；80 位随机，取自 CSPRNG），
    4 位一组，前面加批次前缀，如 `MK-7Q2D-H8KX-PM3R-W4NT`。库里 `redemption_codes.code` 存不带前缀与分隔符的 16 位正文（唯一索引 + 格式 CHECK），兑换按它直接查。
    前缀只标识售卖批次，兑换时不参与匹配，用户漏写也能兑。
@@ -89,7 +89,6 @@
 | 概览 KPI | `overview` | GET | `/overview` |
 | 批次分页 | `listBatches` | GET | `/batches?page&pageSize&batchId&name&salesChannel&status&purpose&fromUtc&toUtc` |
 | 批次下拉 | `listBatchOptions` | GET | `/batches/options` |
-| 批次操作记录 | `getBatchEvents` | GET | `/batches/{id}/events` |
 | 生成批次 | `createBatch` | POST | `/batches` |
 | 编辑批次（含追加卡密） | `updateBatch` | PATCH | `/batches/{id}` |
 | 导出卡密（未兑换 / 已兑换 / 全部） | `exportBatch` | POST | `/batches/{id}/export` |
@@ -102,7 +101,7 @@
 | 兑换尝试分页 | `listAttempts` | GET | `/attempts?page&pageSize&result&accountUid&accountEmail&ip&codeId&batchId&fromUtc&toUtc` |
 
 批次分页的 `name`、`salesChannel` 为模糊匹配，`fromUtc` / `toUtc` 作用于创建时间。时间一律 **epoch ms（UTC）**，金额 CNY（decimal → number）。分页响应 `{ items, total }`。
-冻结 / 作废的请求体为 `{ "reason": "..." }`，导出为 `{ "scope": "...", "reason": "..." }`，`reason` 必填。
+冻结 / 作废的请求体为 `{ "reason": "..." }`，`reason` 必填，写在受影响的卡上（`statusReason`）；解冻没有请求体。导出为 `{ "scope": "..." }`。
 
 ## DTO
 
@@ -124,8 +123,6 @@
   "perAccountLimit": null,
   "startsAtUtc": null,
   "expiresAtUtc": null,
-  "exportCount": 2,
-  "lastExportedAtUtc": 1788000000000,
   "createdBy": { "uid": "7", "displayName": "财务 · 周宁" },
   "createdAtUtc": 1787000000000
 }
@@ -159,12 +156,12 @@
 - `expiresAtUtc` 须晚于 `startsAtUtc`。
 - 编辑：请求体 `{ name, salesChannel, quantity, perAccountLimit, startsAtUtc, expiresAtUtc }`。入账途径、面值、前缀不可改；
   `quantity` 只能大于等于原值，多出的张数由服务端按批次格式生成（单次最多 10000），仅生效中且未过期的批次可追加，否则 `conflict`。
-  资料变更写 `edited` 操作记录（detail 为改动的字段），追加写 `appended`。失效时间延后到未来时，已过期的批次与卡密恢复可兑换。
+  失效时间延后到未来时，已过期的批次与卡密恢复可兑换。
 - 生成与追加的响应是 `{ "batch": RedemptionBatchDto, "codes": ["MK-....", ...] }`；编辑只含本次追加的卡密（没有追加为空数组）。
 
 ### `POST /batches/{id}/export`
 
-请求体 `{ "scope": "unused" | "redeemed" | "all", "reason": "..." }`。
+请求体 `{ "scope": "unused" | "redeemed" | "all" }`。
 
 | scope | 导出哪些卡 | 前置条件 |
 | --- | --- | --- |
@@ -172,7 +169,7 @@
 | `redeemed` | 状态为 `redeemed` 的卡（对账用） | 任意批次状态 |
 | `all` | 批次内全部卡，含冻结、作废、过期（对账用） | 任意批次状态 |
 
-所选范围内没有卡时返回 `conflict`。每次导出写一条 `exported` 操作记录，`detail` 为「原因 · 范围 张数」，如「补货上架 · 未兑换 120 张」。
+所选范围内没有卡时返回 `conflict`。
 
 响应：
 
@@ -264,12 +261,6 @@
 | `todayRedeemedCount` / `todayRedeemedValue` | 当日兑换。「当日」从查询参数 `dayStartUtc`（浏览器本地零点，epoch ms）算起，不传按 UTC 零点 |
 | `failedAttempts24h` | 近 24 小时失败提交数 |
 | `suspiciousIps24h` | 近 24 小时失败 ≥ 10 次的 IP 数 |
-
-### `BatchEventDto`
-
-`{ id, action, operator: { uid, displayName }, detail, atUtc }`，`action` ∈ `created` / `edited` / `appended` / `exported` / `frozen` / `unfrozen` / `voided`，
-以及单张卡的 `code_frozen` / `code_unfrozen` / `code_voided`（记在所属批次下，`detail` 带脱敏卡密）。
-`detail` 写原因与影响张数，如「补货上架 · 未兑换 120 张」。
 
 ## 错误码
 
