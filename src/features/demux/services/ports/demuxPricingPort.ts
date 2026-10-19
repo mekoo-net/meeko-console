@@ -13,7 +13,7 @@ import type {
 } from '@demux/common';
 
 /**
- * 价格表端口 —— 对应 `/demux/api/admin/pricing`。
+ * 价格表端口 —— 对应 `/yomi/api/admin/pricing`。
  *
  * 管的是有效价上游的两个因子：基准价（价格表，美元）与渠道倍率。
  * 有效价(CNY) = 基准价(USD) × 倍率。不再另乘 7。

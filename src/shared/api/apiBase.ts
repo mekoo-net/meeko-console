@@ -7,7 +7,7 @@ function readEnvBase(key: string): string {
   return raw !== undefined && raw !== '' ? raw.replace(/\/$/, '') : '';
 }
 
-/** Meeko 平台 Gateway（BFF / Keystone / Meeko.Demux 控制面 `/demux/api/*`）。 */
+/** Meeko 平台 Gateway（BFF / Keystone / Meeko.Yomi 控制面 `/yomi/api/*`）。 */
 export function apiUrl(path: string): string {
   const base = readEnvBase('VITE_API_BASE');
   const normalized = normalizePath(path);

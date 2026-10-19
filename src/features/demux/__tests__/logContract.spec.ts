@@ -14,7 +14,7 @@ import {
  * 结果整行 parse 失败、详情抽屉的协议一栏渲染成空白。
  */
 
-/** 取自线上 `GET /demux/api/admin/logs` 的一行（已裁剪账户信息）。 */
+/** 取自线上 `GET /yomi/api/admin/logs` 的一行（已裁剪账户信息）。 */
 function wireRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: '901234567890123456',

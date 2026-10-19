@@ -18,16 +18,16 @@ export const demuxGatewayPaths = {
   pg: '/pg',
 } as const;
 
-/** Meeko.Demux 平台控制面（路径 `/demux/api/*`）。 */
+/** Meeko.Yomi 平台控制面（路径 `/yomi/api/*`）。 */
 export const demuxPlatformPaths = {
-  adminProviders: '/demux/api/admin/providers',
-  adminModels: '/demux/api/admin/models',
-  adminRate: '/demux/api/admin/rate',
-  adminVendorModel: '/demux/api/admin/vendor/model',
+  adminProviders: '/yomi/api/admin/providers',
+  adminModels: '/yomi/api/admin/models',
+  adminRate: '/yomi/api/admin/rate',
+  adminVendorModel: '/yomi/api/admin/vendor/model',
   /** 价格表 / 倍率 / 编译 / 拉价 */
-  adminPricing: '/demux/api/admin/pricing',
-  adminRoutes: '/demux/api/admin/routes',
-  adminLogs: '/demux/api/admin/logs',
-  adminBackends: '/demux/api/admin/backends',
-  publicRate: '/demux/api/rate',
+  adminPricing: '/yomi/api/admin/pricing',
+  adminRoutes: '/yomi/api/admin/routes',
+  adminLogs: '/yomi/api/admin/logs',
+  adminBackends: '/yomi/api/admin/backends',
+  publicRate: '/yomi/api/rate',
 } as const;

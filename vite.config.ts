@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
   //   /auth/**    → Keystone（匿名登录/注册/刷新）
   //   /staff/**   → Keystone（staff 登录）
   //   /me/**      → Keystone（当前用户自助）
-  //   /demux/** → Demux 产品门面
+  //   /yomi/**  → Yomi 产品门面（前端页面路由仍是 /demux/*，不经代理）
   //   /tavern/**  → Tavern 产品门面
   //   /toapi/**   → ToApi 产品门面（Meeko.ToApi 控制面）
   // 旧的 /accounts、/iam 已并入 /api/admin/**，不再需要独立 proxy 条目。
@@ -31,7 +31,7 @@ export default defineConfig(({ mode }) => {
     '/auth':    { target: gatewayTarget, changeOrigin: true },
     '/staff':   { target: gatewayTarget, changeOrigin: true },
     '/me':      { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
-    '/demux':  { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
+    '/yomi':   { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
     '/tavern': { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
     '/toapi':  { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
   };
