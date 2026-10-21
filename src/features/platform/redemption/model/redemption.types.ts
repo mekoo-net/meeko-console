@@ -122,7 +122,7 @@ const redeemContextSchema = z.object({
   userAgent: z.string().nullable(),
   /** 入账生成的充值单号。 */
   rechargeId: z.string(),
-  /** 在哪个业务里兑换（如 yomi）；未指定业务为 null。 */
+  /** 在哪个业务里兑换（如 demux）；未指定业务为 null。 */
   productCode: z.string().nullable().optional(),
 });
 export type RedeemContext = z.infer<typeof redeemContextSchema>;

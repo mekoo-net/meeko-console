@@ -212,7 +212,7 @@ onMounted(() => {
         <el-form-item label="产品">
           <el-input
             v-model="filter.productCode"
-            placeholder="产品代码，如 yomi"
+            placeholder="产品代码，如 demux"
             clearable
           />
         </el-form-item>
