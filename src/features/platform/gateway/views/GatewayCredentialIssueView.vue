@@ -1,24 +1,24 @@
 <script setup lang="ts">
 /**
- * 平台设置：给外部业务网关签发 RPC 凭据。Demux / Tavern 共用这一页。
+ * 平台设置：给外部业务网关签发 RPC 凭据。Yomi / Tavern 共用这一页。
  */
 import { computed, ref } from 'vue';
 
-import { getDemuxBackendPort } from '@/features/demux/services';
+import { getYomiBackendPort } from '@/features/yomi/services';
 import GatewayCredentialIssuePanel from '@/features/platform/gateway/components/GatewayCredentialIssuePanel.vue';
 import type { IssueBackendInput } from '@/features/platform/gateway/model/backend.types';
 import { rememberIssuedGateway } from '@/features/platform/gateway/model/issuedGatewayCredentials';
 import { GATEWAY_PRODUCTS, gatewayProductById, type GatewayProductId } from '@/features/platform/gateway/model/products';
 import { getTavernBackendPort } from '@/features/tavern/services';
 
-const productId = ref<GatewayProductId>('demux');
+const productId = ref<GatewayProductId>('yomi');
 const product = computed(() => gatewayProductById(productId.value));
 
 async function issue(input: IssueBackendInput) {
   const p = product.value;
   const r =
-    p.id === 'demux'
-      ? await getDemuxBackendPort().issue(input)
+    p.id === 'yomi'
+      ? await getYomiBackendPort().issue(input)
       : await getTavernBackendPort().issue({ name: input.name });
   if (r.success) {
     rememberIssuedGateway({

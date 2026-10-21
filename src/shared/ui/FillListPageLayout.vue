@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 列表页满高布局（opt-in）：Header + 筛选 + 表格(height 100%) + 分页。
- * 高度计算与 DemuxAI 定价页 provider-page 一致，不污染全局 table 样式。
+ * 高度计算与 Yomi 定价页 provider-page 一致，不污染全局 table 样式。
  */
 </script>
 

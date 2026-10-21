@@ -2,7 +2,7 @@
  * 外部业务网关接入产品。签发入口在平台设置，各产品共用同一套 UI，
  * 真正的 POST 仍打到各自控制面。
  */
-export type GatewayProductId = 'demux' | 'tavern';
+export type GatewayProductId = 'yomi' | 'tavern';
 
 export interface GatewayProduct {
   id: GatewayProductId;
@@ -14,11 +14,11 @@ export interface GatewayProduct {
 
 export const GATEWAY_PRODUCTS: readonly GatewayProduct[] = [
   {
-    id: 'demux',
-    label: 'Demux',
-    hint: 'Demux.Gateway → Meeko.Demux 7072 RPC',
+    id: 'yomi',
+    label: 'Yomi',
+    hint: 'Yomi.Gateway → Meeko.Yomi 7072 RPC',
     configHint:
-      '写入 Demux.Gateway 配置 DemuxAi:ClientId / DemuxAi:ClientSecret；主密钥 Meeko:Demux:LlmBackend:HmacKeyBase64 需在平台侧单独配置。',
+      '写入 Yomi.Gateway 配置 Yomi:ClientId / Yomi:ClientSecret；主密钥 Meeko:Yomi:LlmBackend:HmacKeyBase64 需在平台侧单独配置。',
     requireName: true,
   },
   {

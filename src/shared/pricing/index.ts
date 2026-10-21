@@ -1,6 +1,6 @@
 /**
- * 官方价格表：Demux / ToApi 共用的目录页与展示件。
- * 数据全站一份，当前走 Demux `/admin/pricing`；编译有效价仍在 Demux 业务里。
+ * 官方价格表：Yomi / ToApi 共用的目录页与展示件。
+ * 数据全站一份，当前走 Yomi `/admin/pricing`；编译有效价仍在 Yomi 业务里。
  */
 export type { PriceTablePort } from './port';
 

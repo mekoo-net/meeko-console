@@ -11,8 +11,8 @@ import type { ReferralSettingsPort } from '../ports/referralSettingsPort';
 let state: ReferralSettingsAdmin = {
   productRates: [
     {
-      productCode: 'demuxai',
-      productName: 'DemuxAI',
+      productCode: 'yomi',
+      productName: 'Yomi',
       enabled: true,
       rebateRatePercent: 5,
       minWithdrawAmount: 10,

@@ -20,7 +20,7 @@ import {
   type WalletSnapshot,
 } from '../../model/billing.types';
 import { referralRechargesForAccount } from '@/features/platform/accounts/services/mock/referralData';
-import { getDemuxStore } from '@/features/demux/services/mock/data';
+import { getYomiStore } from '@/features/yomi/services/mock/data';
 
 import type {
   BillingPort,
@@ -46,12 +46,12 @@ function formatSerial(prefix: string, at: Date, seq: number | string): string {
 
 /**
  * Mock 里扮演 BFF 的「业务号」组装：据账单号反查发起它的调用日志号（UsageLog.Id）。
- * 真实后端是 BFF 调 Demux 的 resolve-by-bill-serials（依赖 UsageLog.BillSerialNo）。
+ * 真实后端是 BFF 调 Yomi 的 resolve-by-bill-serials（依赖 UsageLog.BillSerialNo）。
  * Mock 日志的 `bill.id` 即账单号：优先精确匹配；跨 store 对不上时按账单号稳定哈希挑一条
  * **真实存在**的日志，保证业务号在调用日志页可查到。无产品扣费关联时返回 null。
  */
 function resolveOriginLogId(serial: string): string | null {
-  const logs = getDemuxStore().logs;
+  const logs = getYomiStore().logs;
   if (logs.length === 0) return null;
   const exact = logs.find((l) => l.bill?.id === serial);
   if (exact) return exact.id;
@@ -138,7 +138,7 @@ function seedAccount(uid: string): AccountBilling {
       subType: 'usage',
       refType: 'hold',
       refId: 'HD-5000001',
-      requestId: 'req-demux-5000001',
+      requestId: 'req-yomi-5000001',
       // 账单域不感知产品日志号；详情「业务号」运行时按 requestId 跨域解析回填（见 BillDetailDrawer）。
       originLogId: null,
     },

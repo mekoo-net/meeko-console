@@ -3,8 +3,8 @@
 import { computed } from 'vue';
 
 import { BILLING_FRACTION_DIGITS, formatMoney } from '@/shared/lib/money';
-import type { LogStats } from '@demux/common';
-import { shortNumber } from '@/features/demux/components/overview/chartUtils';
+import type { LogStats } from '@yomi/common';
+import { shortNumber } from '@/features/yomi/components/overview/chartUtils';
 
 const props = defineProps<{ stats: LogStats | null }>();
 

@@ -1,6 +1,6 @@
 import { ElMessage } from 'element-plus';
 
-import type { PriceCompileResult } from '@demux/common';
+import type { PriceCompileResult } from '@yomi/common';
 
 /**
  * 把一次编译结果压成一句话。写基准价 / 改倍率之后后端都会返回它，

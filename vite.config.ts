@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
   //   /auth/**    → Keystone（匿名登录/注册/刷新）
   //   /staff/**   → Keystone（staff 登录）
   //   /me/**      → Keystone（当前用户自助）
-  //   /yomi/**  → Yomi 产品门面（前端页面路由仍是 /demux/*，不经代理）
+  //   /yomi/**  → Yomi 产品门面（前端页面路由仍是 /yomi/*，不经代理）
   //   /tavern/**  → Tavern 产品门面
   //   /toapi/**   → ToApi 产品门面（Meeko.ToApi 控制面）
   // 旧的 /accounts、/iam 已并入 /api/admin/**，不再需要独立 proxy 条目。
@@ -41,8 +41,8 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
-        // 平台公共契约（@demux/common）以嵌套子模块源码（src/common）就地消费。
-        '@demux/common': fileURLToPath(new URL('./src/common/src/index.ts', import.meta.url)),
+        // 平台公共契约（@yomi/common）以嵌套子模块源码（src/common）就地消费。
+        '@yomi/common': fileURLToPath(new URL('./src/common/src/index.ts', import.meta.url)),
       },
     },
     server: {

@@ -34,7 +34,7 @@ function isRecord(v: unknown): v is IssuedGatewayRecord {
   if (v == null || typeof v !== 'object') return false;
   const o = v as Record<string, unknown>;
   return (
-    (o.productId === 'demux' || o.productId === 'tavern') &&
+    (o.productId === 'yomi' || o.productId === 'tavern') &&
     typeof o.productLabel === 'string' &&
     typeof o.clientId === 'string' &&
     typeof o.name === 'string' &&

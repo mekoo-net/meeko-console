@@ -216,65 +216,65 @@ export const routes: RouteRecordRaw[] = [
         ],
       },
       {
-        path: 'demux',
-        component: () => import('@/features/demux/views/DemuxLayout.vue'),
-        redirect: { name: 'demux-overview' },
-        meta: { title: 'Demux 管理', requiresAuth: true, roles: ['Admin'] },
+        path: 'yomi',
+        component: () => import('@/features/yomi/views/YomiLayout.vue'),
+        redirect: { name: 'yomi-overview' },
+        meta: { title: 'Yomi 管理', requiresAuth: true, roles: ['Admin'] },
         children: [
           {
             path: 'overview',
-            name: 'demux-overview',
-            component: () => import('@/features/demux/views/OverviewView.vue'),
+            name: 'yomi-overview',
+            component: () => import('@/features/yomi/views/OverviewView.vue'),
             meta: { title: '概览', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'report',
-            name: 'demux-report',
-            component: () => import('@/features/demux/views/ConsumptionReportView.vue'),
+            name: 'yomi-report',
+            component: () => import('@/features/yomi/views/ConsumptionReportView.vue'),
             meta: { title: '报表', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'vendors',
-            name: 'demux-vendors',
-            component: () => import('@/features/demux/views/ProviderGroupListView.vue'),
+            name: 'yomi-vendors',
+            component: () => import('@/features/yomi/views/ProviderGroupListView.vue'),
             meta: { title: '供应商组', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'providers',
-            redirect: { name: 'demux-vendors' },
+            redirect: { name: 'yomi-vendors' },
           },
           {
             path: 'catalog/import',
-            redirect: { name: 'demux-vendors' },
+            redirect: { name: 'yomi-vendors' },
           },
           {
             path: 'model-routes',
-            redirect: { name: 'demux-vendors' },
+            redirect: { name: 'yomi-vendors' },
           },
           {
             path: 'channels',
-            redirect: { name: 'demux-vendors' },
+            redirect: { name: 'yomi-vendors' },
           },
           {
             path: 'models',
-            redirect: { name: 'demux-vendors' },
+            redirect: { name: 'yomi-vendors' },
           },
           {
             path: 'pricing',
-            name: 'demux-pricing',
-            component: () => import('@/features/demux/views/ModelPriceView.vue'),
+            name: 'yomi-pricing',
+            component: () => import('@/features/yomi/views/ModelPriceView.vue'),
             meta: { title: '价格表', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'rate',
-            name: 'demux-rate',
-            component: () => import('@/features/demux/views/RateView.vue'),
+            name: 'yomi-rate',
+            component: () => import('@/features/yomi/views/RateView.vue'),
             meta: { title: '模型定价', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'logs',
-            name: 'demux-logs',
-            component: () => import('@/features/demux/views/LogQueryView.vue'),
+            name: 'yomi-logs',
+            component: () => import('@/features/yomi/views/LogQueryView.vue'),
             meta: { title: '调用日志', requiresAuth: true, roles: ['Admin'] },
           },
           {
@@ -287,7 +287,7 @@ export const routes: RouteRecordRaw[] = [
           },
           {
             path: 'settings',
-            redirect: { name: 'demux-settings-rate' },
+            redirect: { name: 'yomi-settings-rate' },
           },
           {
             path: 'settings/issue',
@@ -299,38 +299,47 @@ export const routes: RouteRecordRaw[] = [
           },
           {
             path: 'settings/rate',
-            component: () => import('@/features/demux/views/RateSettingsLayout.vue'),
+            component: () => import('@/features/yomi/views/RateSettingsLayout.vue'),
             meta: { title: '速率设置', requiresAuth: true, roles: ['Admin'] },
             children: [
               {
                 path: '',
-                name: 'demux-settings-rate',
-                component: () => import('@/features/demux/views/RateSwitchesView.vue'),
+                name: 'yomi-settings-rate',
+                component: () => import('@/features/yomi/views/RateSwitchesView.vue'),
                 meta: { title: '速率设置', requiresAuth: true, roles: ['Admin'] },
               },
               {
                 path: 'accounts',
-                name: 'demux-settings-rate-accounts',
-                component: () => import('@/features/demux/views/RateAccountSettingsView.vue'),
+                name: 'yomi-settings-rate-accounts',
+                component: () => import('@/features/yomi/views/RateAccountSettingsView.vue'),
                 meta: { title: '账户限速', requiresAuth: true, roles: ['Admin'] },
               },
               {
                 path: 'ip',
-                name: 'demux-settings-rate-ip',
-                component: () => import('@/features/demux/views/RateIpSettingsView.vue'),
+                name: 'yomi-settings-rate-ip',
+                component: () => import('@/features/yomi/views/RateIpSettingsView.vue'),
                 meta: { title: 'IP 限速', requiresAuth: true, roles: ['Admin'] },
               },
             ],
           },
         ],
       },
+      // 改名前的地址（Demux、更早的 DemuxAI），留着让旧书签和外部链接还能打开。
+      {
+        path: 'demux',
+        redirect: { name: 'yomi-overview' },
+      },
+      {
+        path: 'demux/:pathMatch(.*)+',
+        redirect: (to) => `/yomi/${String(to.params.pathMatch)}`,
+      },
       {
         path: 'demuxai',
-        redirect: { name: 'demux-overview' },
+        redirect: { name: 'yomi-overview' },
       },
       {
         path: 'demuxai/:pathMatch(.*)+',
-        redirect: (to) => `/demux/${String(to.params.pathMatch)}`,
+        redirect: (to) => `/yomi/${String(to.params.pathMatch)}`,
       },
       {
         path: 'tavern',
@@ -458,7 +467,7 @@ export const routes: RouteRecordRaw[] = [
             component: () => import('@/features/platform/settings/views/SettingsPlaceholderView.vue'),
             props: {
               title: 'AI 平台设置即将上线',
-              description: 'DemuxAI 等平台级策略将在此统一配置，与渠道、定价等运营功能分离。',
+              description: 'Yomi 等平台级策略将在此统一配置，与渠道、定价等运营功能分离。',
             },
             meta: { title: 'AI 平台', requiresAuth: true, permissions: ['platform.settings.read'] },
           },

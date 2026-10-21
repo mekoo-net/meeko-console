@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-import { makerLabel } from '@demux/common';
+import { makerLabel } from '@yomi/common';
 
 import { makerIconSrc } from '../model/makerIcons';
 

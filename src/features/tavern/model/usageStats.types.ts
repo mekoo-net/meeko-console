@@ -1,4 +1,4 @@
-import type { LogStats } from '@demux/common';
+import type { LogStats } from '@yomi/common';
 
 export interface TavernUsageStatsFilter {
   fromUtc?: number;

@@ -4,8 +4,8 @@
  * 六种计量方式（token / 张 / 秒 / 分钟 / 字符 / 次）的价格字段完全不同，但它们在表里只占一列：
  * 类型一列说这是 LLM 还是图像，价格列用 icon 摊开各档。单位不跟在后面——类型已经说明怎么计量。
  */
-import type { BillingType, ModelCapabilities, ModelPrice, RateBody } from '@demux/common';
-import { PRICE_CURRENCY } from '@demux/common';
+import type { BillingType, ModelCapabilities, ModelPrice, RateBody } from '@yomi/common';
+import { PRICE_CURRENCY } from '@yomi/common';
 import { formatMoney } from '@/shared/lib/money';
 
 /**

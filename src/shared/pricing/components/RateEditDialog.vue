@@ -5,7 +5,7 @@
  */
 import { computed, ref } from 'vue';
 
-import { MODEL_PRICE_CURRENCY, type BillingType, type ModelCapabilities } from '@demux/common';
+import { MODEL_PRICE_CURRENCY, type BillingType, type ModelCapabilities } from '@yomi/common';
 import RateBodyForm, { type RateDraft } from './RateBodyForm.vue';
 
 export type { RateDraft };

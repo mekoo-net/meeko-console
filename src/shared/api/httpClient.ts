@@ -93,7 +93,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   }
 }
 
-/** Demux / BFF 列表分页体（`ApiEnvelope.data` 内层）。 */
+/** Yomi / BFF 列表分页体（`ApiEnvelope.data` 内层）。 */
 export interface ItemsEnvelope<T> {
   items: T[];
   total: number;

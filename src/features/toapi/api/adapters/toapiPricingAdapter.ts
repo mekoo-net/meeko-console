@@ -57,7 +57,7 @@ export class ToApiPricingHttpAdapter implements ToApiPricingPort {
   }
 
   /**
-   * 由 Meeko.ToApi 控制面完成：读运行时侧 Consul KV 里网关发布的 provider catalog（与 Meeko.Demux
+   * 由 Meeko.ToApi 控制面完成：读运行时侧 Consul KV 里网关发布的 provider catalog（与 Meeko.Yomi
    * `ConsulGatewayDiscoveryClient` 同一来源），再对照自己的分组 / 模型表标出 alreadyImported。
    * 控制台不直连 OneApi.Gateway，Meeko.Gateway 也看不到运行时侧 Consul。
    */

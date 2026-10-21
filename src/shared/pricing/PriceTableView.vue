@@ -22,19 +22,19 @@ import {
   type ModelPrice,
   type ModelPriceMakerGroup,
   type UpsertModelPriceInput,
-} from '@demux/common';
-import { priceDisplay, type PriceModelKind } from '@/features/demux/model/priceTable';
-import { getDemuxPricingPort } from '@/features/demux/services';
-import ProviderWorkspaceLayout from '@/features/demux/components/provider/ProviderWorkspaceLayout.vue';
-import ProviderDetailPanel from '@/features/demux/components/provider/ProviderDetailPanel.vue';
-import RateEditDialog, { type RateDraft } from '@/features/demux/components/RateEditDialog.vue';
-import PriceSyncDialog from '@/features/demux/components/pricing/PriceSyncDialog.vue';
-import ModelKindMark from '@/features/demux/components/pricing/ModelKindMark.vue';
-import MakerMark from '@/features/demux/components/pricing/MakerMark.vue';
-import PriceCells from '@/features/demux/components/pricing/PriceCells.vue';
-import { notifyCompile } from '@/features/demux/components/pricing/compileFeedback';
+} from '@yomi/common';
+import { priceDisplay, type PriceModelKind } from '@/features/yomi/model/priceTable';
+import { getYomiPricingPort } from '@/features/yomi/services';
+import ProviderWorkspaceLayout from '@/features/yomi/components/provider/ProviderWorkspaceLayout.vue';
+import ProviderDetailPanel from '@/features/yomi/components/provider/ProviderDetailPanel.vue';
+import RateEditDialog, { type RateDraft } from '@/features/yomi/components/RateEditDialog.vue';
+import PriceSyncDialog from '@/features/yomi/components/pricing/PriceSyncDialog.vue';
+import ModelKindMark from '@/features/yomi/components/pricing/ModelKindMark.vue';
+import MakerMark from '@/features/yomi/components/pricing/MakerMark.vue';
+import PriceCells from '@/features/yomi/components/pricing/PriceCells.vue';
+import { notifyCompile } from '@/features/yomi/components/pricing/compileFeedback';
 
-const pricingPort = getDemuxPricingPort();
+const pricingPort = getYomiPricingPort();
 
 const groups = ref<ModelPriceMakerGroup[]>([]);
 const loading = ref(false);

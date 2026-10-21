@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * ToApi 调用日志：占用单读模型，形状对齐 Demux LogEntry。
+ * ToApi 调用日志：占用单读模型，形状对齐 Yomi LogEntry。
  * - 必须带时间范围（最长 7 天）；输入 TraceId 精确检索时例外
  * - 供应商筛选按 vendorKey 精确匹配；模型名模糊
  */
@@ -16,7 +16,7 @@ import {
   logErrorCodeText,
   logProtocolText,
   type AiUsageStatus,
-} from '@demux/common';
+} from '@yomi/common';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
 import FilterBar from '@/shared/ui/FilterBar.vue';

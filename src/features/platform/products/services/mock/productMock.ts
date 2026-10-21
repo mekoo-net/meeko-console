@@ -12,9 +12,9 @@ import type { ProductPort } from '../ports/productPort';
 const discoveredSeed: DiscoveredProduct[] = [
   {
     code: 'demux',
-    suggestedDisplayName: 'DemuxAI',
+    suggestedDisplayName: 'Yomi',
     alreadyRegistered: false,
-    serviceName: 'demuxai',
+    serviceName: 'yomi',
   },
 ];
 

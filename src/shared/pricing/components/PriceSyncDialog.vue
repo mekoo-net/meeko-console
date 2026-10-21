@@ -14,7 +14,7 @@ import {
   type FetchCandidate,
   type FetchPriceItem,
   type FetchPricesResult,
-} from '@demux/common';
+} from '@yomi/common';
 import { rateBodySummary } from '../model/rateSummary';
 import { notifyCompile } from '../model/compileFeedback';
 import type { PriceTablePort } from '../port';
@@ -24,7 +24,7 @@ interface Props {
   port: PriceTablePort;
   /** 只拉这家厂商；null = 全部。 */
   maker?: string | null;
-  /** 套用后是否汇报 Demux 编译结果。ToApi 关掉。 */
+  /** 套用后是否汇报 Yomi 编译结果。ToApi 关掉。 */
   reportCompile?: boolean;
 }
 

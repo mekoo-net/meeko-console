@@ -8,14 +8,14 @@ import {
   perVideoUsageSchema,
   uidString,
   type AiUsageStatus,
-} from '@demux/common';
+} from '@yomi/common';
 import { epochMillisSchema } from '@/shared/lib/epoch';
 
 /**
- * ToApi 调用日志，形状对齐 Demux `LogEntry`（`@demux/common` log.ts）：
+ * ToApi 调用日志，形状对齐 Yomi `LogEntry`（`@yomi/common` log.ts）：
  * 同名字段同义，`status` / `content` / `usage` 直接复用同一套 schema。
  *
- * 与 Demux 的差异只有三处：
+ * 与 Yomi 的差异只有三处：
  *  - `token` 多一个 `kind`：ToApi 的调用方可能是用户令牌，也可能是 IDE 接入会话
  *  - `cost` 只有 `estimated` / `total`：ToApi 按钉住的定价行整笔结算，不拆维度
  *  - 没有 `vendorPlug` / `vendorModel` / `bill`：ToApi 不做别名，也不产生 Bill
@@ -84,7 +84,7 @@ export interface ListUsageLogsFilter {
   tokenKind?: TokenKind | 'all';
 }
 
-/** 与 Demux `LogStats` 同名字段的子集；ToApi 不出分桶 / 排行。 */
+/** 与 Yomi `LogStats` 同名字段的子集；ToApi 不出分桶 / 排行。 */
 export const usageLogStatsSchema = z.object({
   totalCalls: z.number().int().nonnegative(),
   successCalls: z.number().int().nonnegative(),

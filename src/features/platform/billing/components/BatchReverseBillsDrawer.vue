@@ -22,7 +22,7 @@ import {
   BillReverseCodeHint,
   BillReverseCodeLabel,
   type BillReverseCode,
-} from '@demux/common';
+} from '@yomi/common';
 
 import {
   useBatchReverseBills,

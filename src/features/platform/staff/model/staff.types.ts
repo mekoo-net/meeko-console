@@ -7,7 +7,7 @@ import {
 
 // 注意：本模块不维护权限码全集。权限目录的唯一来源是
 // GET /api/admin/staff/permissions（Keystone staff_permissions 表）；
-// 各产品（Demux 等）启动时经 RegisterPermissionCatalogAsync 自注册自己的码与描述。
+// 各产品（Yomi 等）启动时经 RegisterPermissionCatalogAsync 自注册自己的码与描述。
 // mock 模式的样例全集在 services/mock/mockPermissions.ts。
 
 export const staffUserSchema = z.object({
@@ -85,7 +85,7 @@ export const PERMISSION_DOMAIN_LABELS: Record<string, string> = {
   billing: '计费账务',
   account: '账户管理',
   storage: '对象存储',
-  demux: 'Demux AI 网关',
+  demux: 'Yomi',
 };
 
 /** 权限资源（二级节点）中文名，key = `${domain}.${resource}`。 */

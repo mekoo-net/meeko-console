@@ -4,7 +4,7 @@
  */
 import { computed } from 'vue';
 
-import { AiUsageStatusLabel, billingTypeText, logErrorCodeText, logProtocolText } from '@demux/common';
+import { AiUsageStatusLabel, billingTypeText, logErrorCodeText, logProtocolText } from '@yomi/common';
 import StatusTag from '@/shared/ui/StatusTag.vue';
 import { formatDateTime } from '@/shared/lib/date';
 import { BILLING_FRACTION_DIGITS, formatMoney } from '@/shared/lib/money';

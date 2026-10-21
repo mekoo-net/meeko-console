@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 渠道分组：ToB 反代的计费单位。令牌绑定分组；一个供应商只落成一个分组（key = vendor_key）。
- * 表格形态对齐 sub2api Groups，不抄 Demux 的供应商目录工作区。
+ * 表格形态对齐 sub2api Groups，不抄 Yomi 的供应商目录工作区。
  */
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';

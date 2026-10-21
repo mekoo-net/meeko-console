@@ -1,24 +1,24 @@
 <script setup lang="ts">
 /**
- * Tavern 概览 — 仅展示 platform.usage_logs 调用统计（与 Demux 概览同构，无 TTFT）。
+ * Tavern 概览 — 仅展示 platform.usage_logs 调用统计（与 Yomi 概览同构，无 TTFT）。
  */
 import { onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
-import type { LogStats } from '@demux/common';
+import type { LogStats } from '@yomi/common';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 import { toLocalDateTimeValue } from '@/shared/lib/date';
 import { getTavernUsageStatsPort } from '../services';
 
-import DateRangeBar from '@/features/demux/components/overview/DateRangeBar.vue';
+import DateRangeBar from '@/features/yomi/components/overview/DateRangeBar.vue';
 import TavernOverviewKpi from '../components/overview/TavernOverviewKpi.vue';
-import OverviewTrafficChart from '@/features/demux/components/overview/OverviewTrafficChart.vue';
-import OverviewStatusDonut from '@/features/demux/components/overview/OverviewStatusDonut.vue';
-import OverviewCostTokensChart from '@/features/demux/components/overview/OverviewCostTokensChart.vue';
-import OverviewErrorTop from '@/features/demux/components/overview/OverviewErrorTop.vue';
-import OverviewTopModels from '@/features/demux/components/overview/OverviewTopModels.vue';
-import OverviewTopProviders from '@/features/demux/components/overview/OverviewTopProviders.vue';
+import OverviewTrafficChart from '@/features/yomi/components/overview/OverviewTrafficChart.vue';
+import OverviewStatusDonut from '@/features/yomi/components/overview/OverviewStatusDonut.vue';
+import OverviewCostTokensChart from '@/features/yomi/components/overview/OverviewCostTokensChart.vue';
+import OverviewErrorTop from '@/features/yomi/components/overview/OverviewErrorTop.vue';
+import OverviewTopModels from '@/features/yomi/components/overview/OverviewTopModels.vue';
+import OverviewTopProviders from '@/features/yomi/components/overview/OverviewTopProviders.vue';
 
 const statsPort = getTavernUsageStatsPort();
 

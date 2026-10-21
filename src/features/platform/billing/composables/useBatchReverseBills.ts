@@ -1,7 +1,7 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue';
 
-import { getDemuxLogsPort } from '@/features/demux/services';
-import type { BillReverseCode } from '@demux/common';
+import { getYomiLogsPort } from '@/features/yomi/services';
+import type { BillReverseCode } from '@yomi/common';
 
 /**
  * 批量驳回账单的前端编排。
@@ -104,7 +104,7 @@ export interface UseBatchReverseBills {
 }
 
 export function useBatchReverseBills(): UseBatchReverseBills {
-  const logsPort = getDemuxLogsPort();
+  const logsPort = getYomiLogsPort();
 
   const rows = ref<BatchReverseRow[]>([]);
   const duplicateCount = ref(0);

@@ -1,5 +1,5 @@
-import type { RateBody } from '@demux/common';
-import { MODEL_PRICE_CURRENCY } from '@demux/common';
+import type { RateBody } from '@yomi/common';
+import { MODEL_PRICE_CURRENCY } from '@yomi/common';
 import { formatMoney } from '@/shared/lib/money';
 
 /**

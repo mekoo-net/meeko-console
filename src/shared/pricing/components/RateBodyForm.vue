@@ -16,7 +16,7 @@ import {
   type PerImageTier,
   type PerVideoTier,
   type RateBody,
-} from '@demux/common';
+} from '@yomi/common';
 import {
   allowedManualBillingTypes,
   resolvePriceModelKind,

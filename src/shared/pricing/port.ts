@@ -8,11 +8,11 @@ import type {
   ModelPriceWriteResult,
   PriceCompileResult,
   UpsertModelPriceInput,
-} from '@demux/common';
+} from '@yomi/common';
 
 /**
- * 官方价格表端口。目录全站一份（当前由 Demux `/admin/pricing` 托管），
- * Demux / ToApi 控制台共用这一面；编译有效价是 Demux 自己的事，不在这里。
+ * 官方价格表端口。目录全站一份（当前由 Yomi `/admin/pricing` 托管），
+ * Yomi / ToApi 控制台共用这一面；编译有效价是 Yomi 自己的事，不在这里。
  */
 export interface PriceTablePort {
   listModelPricesByMaker(input: {

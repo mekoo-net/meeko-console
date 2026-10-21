@@ -1,4 +1,4 @@
-import { logIsSuccess } from '@demux/common';
+import { logIsSuccess } from '@yomi/common';
 import { ok, type AppResult } from '@/shared/api/httpTypes';
 import { delay } from '@/shared/lib/delay';
 

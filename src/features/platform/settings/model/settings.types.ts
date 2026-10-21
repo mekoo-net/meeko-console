@@ -61,9 +61,9 @@ export type UpdateEmailSettingsInput = z.infer<typeof updateEmailSettingsSchema>
 
 /** 单个注册产品 / 渠道的返利与提现配置。 */
 export const referralProductRateSchema = z.object({
-  /** 产品 / 渠道唯一标识（如 demuxai）。 */
+  /** 产品 / 渠道唯一标识（如 yomi）。 */
   productCode: z.string().min(1),
-  /** 展示名（如 DemuxAI）。 */
+  /** 展示名（如 Yomi）。 */
   productName: z.string().min(1),
   /** 是否对该产品启用返利。 */
   enabled: z.boolean(),
