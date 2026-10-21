@@ -101,7 +101,7 @@ function seedAccount(uid: string): AccountBilling {
       provider: 'alipay',
       scene: 0,
       refNo: '202605310001',
-      productCode: 'demux',
+      productCode: 'yomi',
     },
     amount: { value: 100, currency: 'CNY' },
     status: 'paid',
@@ -134,7 +134,7 @@ function seedAccount(uid: string): AccountBilling {
     owner: { accountUid: uid },
     operator: { accountUid: uid },
     business: {
-      productCode: 'demux',
+      productCode: 'yomi',
       subType: 'usage',
       refType: 'hold',
       refId: 'HD-5000001',

@@ -51,7 +51,7 @@ const ACCOUNTS: AccountRef[] = Array.from({ length: 28 }, (_, i) => ({
   displayName: null,
 }));
 /** 用户在哪个业务里兑换：决定推荐返利按哪个产品的费率算。 */
-const PRODUCTS = ['demux', 'tavern'] as const;
+const PRODUCTS = ['yomi', 'tavern'] as const;
 
 const RESELLER: AccountRef = { uid: '100000903', email: 'cardshop@reseller.test', displayName: null };
 const PROBER: AccountRef = { uid: '100000917', email: 'tmp8841@mailbox.test', displayName: null };

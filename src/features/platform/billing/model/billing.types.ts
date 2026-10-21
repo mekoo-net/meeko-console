@@ -134,7 +134,7 @@ export const rechargeSourceSchema = z.object({
    * 必填（每种 provider 都应有结构化业务关联）。
    */
   refNo: z.string(),
-  /** 充值归属产品代码（如 demux）；用户自助充值未指定业务时为空。 */
+  /** 充值归属产品代码（如 yomi）；用户自助充值未指定业务时为空。 */
   productCode: z.string().nullable().optional(),
 });
 
