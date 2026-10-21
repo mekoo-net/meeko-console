@@ -85,7 +85,7 @@ export const PERMISSION_DOMAIN_LABELS: Record<string, string> = {
   billing: '计费账务',
   account: '账户管理',
   storage: '对象存储',
-  demux: 'Yomi',
+  yomi: 'Yomi',
 };
 
 /** 权限资源（二级节点）中文名，key = `${domain}.${resource}`。 */
@@ -102,16 +102,16 @@ export const PERMISSION_RESOURCE_LABELS: Record<string, string> = {
   'billing.voucher': '代金券',
   'account.admin': '平台账户',
   'storage.backend': '存储后端',
-  'demux.redemption': '兑换码',
-  'demux.models': '模型目录',
-  'demux.providers': '模型通道',
-  'demux.rate': '定价',
-  'demux.routes': '路由',
-  'demux.backends': '接入后端',
-  'demux.usage': '用量日志',
-  'demux.users': '用户',
-  'demux.tasks': '异步任务',
-  'demux.ratelimit': '限流',
+  'yomi.redemption': '兑换码',
+  'yomi.models': '模型目录',
+  'yomi.providers': '模型通道',
+  'yomi.rate': '定价',
+  'yomi.routes': '路由',
+  'yomi.backends': '接入后端',
+  'yomi.usage': '用量日志',
+  'yomi.users': '用户',
+  'yomi.tasks': '异步任务',
+  'yomi.ratelimit': '限流',
 };
 
 /** 特殊码的完整中文名（无法按 资源+操作 组合出来的）。 */
@@ -176,7 +176,7 @@ export interface PermissionTreeNode {
   children?: PermissionTreeNode[];
 }
 
-const DOMAIN_ORDER = ['platform', 'account', 'billing', 'notice', 'storage', 'demux'];
+const DOMAIN_ORDER = ['platform', 'account', 'billing', 'notice', 'storage', 'yomi'];
 
 function domainRank(domain: string): number {
   const idx = DOMAIN_ORDER.indexOf(domain);
