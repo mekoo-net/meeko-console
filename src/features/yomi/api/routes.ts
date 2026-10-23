@@ -1,7 +1,7 @@
 /**
  * Yomi API 路由分域（与后端拆分对齐）。
  *
- * - Gateway — Yomi.Gateway Api 端口（8201），base：VITE_YOMI_API_BASE
+ * - Gateway — Yomi.Gateway（api.meeyo.org），base：VITE_YOMI_API_BASE
  * - Platform — Meeko.Yomi 控制面，经 Meeko.Gateway 前缀 /yomi，base：VITE_API_BASE
  */
 

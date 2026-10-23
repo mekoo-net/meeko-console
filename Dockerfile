@@ -7,7 +7,7 @@ WORKDIR /app
 
 # Vite 在构建期把 VITE_* 变量内联进产物，需在 build 之前注入
 ARG VITE_API_BASE=https://api.meeko.top
-ARG VITE_YOMI_API_BASE=https://console.meeyo.org
+ARG VITE_YOMI_API_BASE=https://api.meeyo.org
 ARG VITE_USE_MOCK=false
 
 ENV VITE_API_BASE=$VITE_API_BASE \

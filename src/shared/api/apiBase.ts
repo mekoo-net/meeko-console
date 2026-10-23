@@ -16,12 +16,12 @@ export function apiUrl(path: string): string {
 
 /**
  * Yomi.Gateway 业务 API（`/api/*`，如速率限制、sk- 令牌等）。
- * - 生产默认 `https://console.meeyo.org`
- * - 本地默认 `http://localhost:8201`（Gateway Api 端口）
+ * - 生产默认 `https://api.meeyo.org`
+ * - 本地默认 `http://localhost:80`
  */
 export function yomiApiUrl(path: string): string {
   const base =
     readEnvBase('VITE_YOMI_API_BASE') ||
-    (import.meta.env.DEV ? 'http://localhost:8201' : 'https://console.meeyo.org');
+    (import.meta.env.DEV ? 'http://localhost:80' : 'https://api.meeyo.org');
   return `${base}${normalizePath(path)}`;
 }
