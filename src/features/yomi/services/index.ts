@@ -9,6 +9,10 @@ import { YomiProviderMock } from './mock/yomiProviderMock';
 import { YomiBackendMock } from './mock/yomiBackendMock';
 import { YomiRateLimitMock } from './mock/yomiRateLimitMock';
 import { YomiPricingMock } from './mock/yomiPricingMock';
+import { YomiActivityMock } from './mock/yomiActivityMock';
+import { YomiActivityRewardMock } from './mock/yomiActivityRewardMock';
+import { YomiActivityHttpAdapter } from '@/features/yomi/api/adapters/yomiActivityAdapter';
+import { YomiActivityRewardHttpAdapter } from '@/features/yomi/api/adapters/yomiActivityRewardAdapter';
 import { YomiPricingHttpAdapter } from '@/features/yomi/api/adapters/yomiPricingAdapter';
 import { YomiBackendHttpAdapter } from '@/features/yomi/api/adapters/yomiBackendAdapter';
 import { YomiRateLimitHttpAdapter } from '@/features/yomi/api/adapters/yomiRateLimitAdapter';
@@ -27,6 +31,8 @@ import type { YomiProviderPort } from './ports/yomiProviderPort';
 import type { YomiBackendPort } from './ports/yomiBackendPort';
 import type { YomiRateLimitPort } from './ports/yomiRateLimitPort';
 import type { YomiPricingPort } from './ports/yomiPricingPort';
+import type { YomiActivityPort } from './ports/yomiActivityPort';
+import type { YomiActivityRewardPort } from './ports/yomiActivityRewardPort';
 
 /**
  * yomi 域端口工厂。
@@ -45,6 +51,8 @@ abstract class YomiServices {
   abstract readonly logs: YomiLogsPort;
   abstract readonly backend: YomiBackendPort;
   abstract readonly rateLimit: YomiRateLimitPort;
+  abstract readonly activities: YomiActivityPort;
+  abstract readonly activityRewards: YomiActivityRewardPort;
 }
 
 class YomiMockServices extends YomiServices {
@@ -57,6 +65,8 @@ class YomiMockServices extends YomiServices {
   readonly logs = new YomiLogsMock();
   readonly backend = new YomiBackendMock();
   readonly rateLimit = new YomiRateLimitMock();
+  readonly activities = new YomiActivityMock();
+  readonly activityRewards = new YomiActivityRewardMock();
 }
 
 class YomiHttpServices extends YomiServices {
@@ -69,6 +79,8 @@ class YomiHttpServices extends YomiServices {
   readonly logs = new YomiLogsHttpAdapter();
   readonly backend = new YomiBackendHttpAdapter();
   readonly rateLimit = new YomiRateLimitHttpAdapter();
+  readonly activities = new YomiActivityHttpAdapter();
+  readonly activityRewards = new YomiActivityRewardHttpAdapter();
 }
 
 const services: YomiServices = isMockMode ? new YomiMockServices() : new YomiHttpServices();
@@ -107,4 +119,12 @@ export function getYomiBackendPort(): YomiBackendPort {
 
 export function getYomiRateLimitPort(): YomiRateLimitPort {
   return services.rateLimit;
+}
+
+export function getYomiActivityPort(): YomiActivityPort {
+  return services.activities;
+}
+
+export function getYomiActivityRewardPort(): YomiActivityRewardPort {
+  return services.activityRewards;
 }

@@ -29,5 +29,7 @@ export const yomiPlatformPaths = {
   adminRoutes: '/yomi/api/admin/routes',
   adminLogs: '/yomi/api/admin/logs',
   adminBackends: '/yomi/api/admin/backends',
+  /** 官网活动中心（含封面直传的 sign / confirm） */
+  adminActivities: '/yomi/api/admin/activities',
   publicRate: '/yomi/api/rate',
 } as const;

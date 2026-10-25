@@ -20,6 +20,19 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('@/features/platform/auth/views/LoginView.vue'),
     meta: { title: '登录', requiresAuth: false },
   },
+  // 活动编辑器要整屏放代码与预览，不套 AppLayout 的侧边栏和顶栏。
+  {
+    path: '/yomi/activities/new',
+    name: 'yomi-activity-new',
+    component: () => import('@/features/yomi/views/ActivityEditorView.vue'),
+    meta: { title: '新建活动', requiresAuth: true, roles: ['Admin'] },
+  },
+  {
+    path: '/yomi/activities/:id/edit',
+    name: 'yomi-activity-edit',
+    component: () => import('@/features/yomi/views/ActivityEditorView.vue'),
+    meta: { title: '编辑活动', requiresAuth: true, roles: ['Admin'] },
+  },
   {
     path: '/',
     component: () => import('@/shared/ui/AppLayout.vue'),
@@ -276,6 +289,18 @@ export const routes: RouteRecordRaw[] = [
             name: 'yomi-logs',
             component: () => import('@/features/yomi/views/LogQueryView.vue'),
             meta: { title: '调用日志', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'activities',
+            name: 'yomi-activities',
+            component: () => import('@/features/yomi/views/ActivityListView.vue'),
+            meta: { title: '活动中心', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'activities/:id/claims',
+            name: 'yomi-activity-claims',
+            component: () => import('@/features/yomi/views/ActivityClaimsView.vue'),
+            meta: { title: '领取记录', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'backends',

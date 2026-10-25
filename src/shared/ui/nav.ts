@@ -118,6 +118,7 @@ export const navViews: readonly NavView[] = [
       { type: 'leaf', index: '/yomi/vendors', title: '供应商组', icon: Link },
       { type: 'leaf', index: '/yomi/rate', title: '模型定价', icon: PriceTag },
       { type: 'leaf', index: '/yomi/logs', title: '调用日志', icon: DataLine },
+      { type: 'leaf', index: '/yomi/activities', title: '活动中心', icon: Present },
       {
         type: 'group',
         index: '/yomi/settings',
