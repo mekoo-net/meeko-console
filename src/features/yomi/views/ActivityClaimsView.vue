@@ -151,7 +151,7 @@ async function submitShip(): Promise<void> {
       ElMessage.error(r.error.message);
       return;
     }
-    ElMessage.success('已登记发货，用户在「我的奖品」里能看到单号');
+    ElMessage.success('已登记发货，用户在「奖品」里能看到单号');
     ship.open = false;
     void list.refresh();
   } finally {
