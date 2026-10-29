@@ -20,12 +20,7 @@ import { ProviderGroupLabel } from '@yomi/common';
 import type { Rate, RouteRateEntry, VendorModelGroup } from '@yomi/common';
 import type { UnconfiguredRoute, VendorRateStatsMap } from '@yomi/common';
 import type { ProviderGroup } from '../model/catalog.types';
-import {
-  CREDIT_PRICING_LABEL,
-  formatVendorPricing,
-  routeCreditPricing,
-  type RouteCreditPricing,
-} from '../model/vendorPricing';
+import { formatVendorPricing } from '../model/vendorPricing';
 import { isEmbeddingPrice, rateBodyDisplay, type PriceDisplay } from '../model/priceTable';
 import { getYomiCatalogPort, getYomiRatePort } from '../services';
 import ProviderWorkspaceLayout from '../components/provider/ProviderWorkspaceLayout.vue';
@@ -87,8 +82,6 @@ interface PricedRow {
   vendorModel: string;
   entry: RouteRateEntry;
   display: Omit<PriceDisplay, 'price'>;
-  /** 积分渠道里这条是继承渠道单价还是单独定的价；倍率渠道是 none，不打标。 */
-  credit: RouteCreditPricing;
 }
 
 const pricedRows = computed<PricedRow[]>(() =>
@@ -97,7 +90,6 @@ const pricedRows = computed<PricedRow[]>(() =>
       vendorKey: group.vendorKey,
       vendorModel: group.vendorModel,
       entry,
-      credit: routeCreditPricing(entry.pricingMode, selectedGroup.value),
       display: rateBodyDisplay(
         entry.rate,
         isEmbeddingPrice({ modelKey: group.vendorModel, capabilities: null }),
@@ -354,19 +346,6 @@ onMounted(async () => {
             <AliasMap class="rate-row__alias" :alias="row.entry.routeKey" :target="row.vendorModel" />
             <div class="rate-row__price">
               <PriceCells :model="row.display" />
-              <el-tag
-                v-if="row.credit.kind !== 'none'"
-                size="small"
-                :type="row.credit.kind === 'inherit' ? 'info' : 'warning'"
-                effect="plain"
-                round
-              >
-                {{
-                  row.credit.kind === 'inherit'
-                    ? CREDIT_PRICING_LABEL.inherit
-                    : CREDIT_PRICING_LABEL.independent
-                }}
-              </el-tag>
             </div>
             <div class="rate-row__date">{{ formatDateTime(row.entry.rate.effectiveFromUtc) }}</div>
             <div class="rate-row__ops">

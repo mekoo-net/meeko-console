@@ -52,15 +52,16 @@ export function creditDetailRows(u: PerCreditUsage): CreditDetailRow[] {
     case 'embedding': {
       const d = u.detail;
       if (!d) return [];
-      // 零值维度不列：向量化根本没有出，对话多数没有音频，一排 0 只是噪音。主输入始终保留。
+      // 零值维度不列：向量化根本没有出，对话多数没有音频，一排 0 只是噪音。输入始终保留。
       const rows: CreditDetailRow[] = [{ label: '输入', value: `${int(d.input.tokens)} tok` }];
+      // 叫法与调用详情的计费明细一致：输入 / 缓存写 / 缓存读 / 语音输入，输出 / 推理 / 语音。
       const optional: [string, number][] = [
-        ['cached 读', d.input.cachedReadTokens],
-        ['cache 写', d.input.cachedWriteTokens],
-        ['输入 audio', d.input.audioTokens],
+        ['缓存写', d.input.cachedWriteTokens],
+        ['缓存读', d.input.cachedReadTokens],
+        ['语音输入', d.input.audioTokens],
         ['输出', d.output.tokens],
-        ['reasoning', d.output.reasoningTokens],
-        ['输出 audio', d.output.audioTokens],
+        ['推理', d.output.reasoningTokens],
+        ['语音', d.output.audioTokens],
       ];
       for (const [label, n] of optional) {
         if (n > 0) rows.push({ label, value: `${int(n)} tok` });

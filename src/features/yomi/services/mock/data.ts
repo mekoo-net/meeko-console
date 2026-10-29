@@ -835,6 +835,8 @@ function seedLogs(providers: Provider[]): LogEntry[] {
         error: errorCode
           ? { code: errorCode, message: `${errorCode}: upstream returned ${httpStatus}` }
           : null,
+        // 成功的多数正常停，隔几条一个撞长度上限，好看到截断的警示色。
+        stopReason: success ? (i % 7 === 3 ? 'length' : 'stop') : null,
       },
       billingType: 'per_token',
       usage: {
@@ -886,6 +888,71 @@ function seedLogs(providers: Provider[]): LogEntry[] {
         : null,
     });
   }
+
+  // 两条积分计费：生图（NovelAI 的 Anlas）和对话（Kiro 的 credits）。最后生成、id 最大，排在最前面好找。
+  const creditAccount = SEED_ACCOUNTS[0]!;
+  const creditContact = SEED_ACCOUNT_CONTACTS[creditAccount];
+  const creditLog = (
+    minutesAgo: number,
+    modelName: string,
+    vendorKey: string,
+    vendorModel: string,
+    usage: Extract<LogEntry, { billingType: 'per_credit' }>['usage'],
+    pricePerCredit: number,
+  ): LogEntry => {
+    const occurred = new Date(now.getTime() - minutesAgo * 60 * 1000);
+    return {
+      id: genLogUid(),
+      traceId: `${occurred.getTime().toString(16)}c`.padEnd(32, '0').slice(0, 32),
+      createAt: occurred.getTime(),
+      account: {
+        uid: creditAccount,
+        iamUid: SEED_IAM_USERS[0]!,
+        displayName: creditContact.displayName,
+        email: creditContact.email,
+        phone: creditContact.phone,
+      },
+      token: { id: mockTokenIds[0]!, name: mockTokenNames[0]! },
+      modelName,
+      vendorKey,
+      vendorPlug: vendorKey === 'kiro' ? 'nai' : vendorKey,
+      vendorModel,
+      status: 'success',
+      content: {
+        protocol: usage.detailKind === 'image' ? null : 'anthropic_messages',
+        statusCode: 200,
+        streamed: usage.detailKind !== 'image',
+        convId: null,
+        latencyMs: usage.detailKind === 'image' ? 8_400 : 640,
+        clientIp: '203.0.113.7',
+        error: null,
+        stopReason: usage.detailKind === 'image' ? null : 'end_turn',
+      },
+      billingType: 'per_credit',
+      usage,
+      cost: {
+        pricePerCredit,
+        total: Math.round(usage.credits * pricePerCredit * 1e6) / 1e6,
+      },
+      bill: { id: genBillSerial(occurred), status: 'completed' },
+    };
+  };
+  out.push(
+    creditLog(2, 'nai-diffusion-4-5', 'neko', 'nai-diffusion-4-5-full', {
+      credits: 20,
+      detailKind: 'image',
+      detail: { tier: { size: '832x1216', quality: 'standard' }, count: 1 },
+    }, 0.0012),
+    creditLog(1, 'yomi-claude-opus', 'kiro', 'claude-opus-4-6', {
+      credits: 2.238385,
+      detailKind: 'token',
+      detail: {
+        totalTokens: 18_230,
+        input: { tokens: 1_240, cachedReadTokens: 15_600, cachedWriteTokens: 0, audioTokens: 0 },
+        output: { tokens: 1_390, reasoningTokens: 0, audioTokens: 0 },
+      },
+    }, 0.028),
+  );
   return out.sort((a, b) => b.id.localeCompare(a.id));
 }
 

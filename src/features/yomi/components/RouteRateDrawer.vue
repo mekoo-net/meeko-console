@@ -5,7 +5,7 @@
  *  - 渠道定价：倍率渠道是有效价(CNY) = 价格表(USD) × 渠道倍率。
  *  - 自定义：自己填有效价，计量必须跟模型同类（LLM 按量/按次，生图只能档位）。
  *
- * 积分渠道两个选项换成「继承渠道积分价 / 独立定价」：继承不看价格表，
+ * 积分渠道两个选项换成「继承渠道 / 独立定价」：继承不看价格表，
  * 所以价格表里没有这条模型也能选；已经独立定价的再选继承就是「恢复」。
  */
 import { computed, ref, watch } from 'vue';
@@ -146,7 +146,7 @@ const customBillingType = computed<BillingType>(
   () => customInitial.value?.billingType ?? 'per_token',
 );
 
-// 继承渠道积分价不看价格表，价格表缺这条也照样能选。
+// 积分渠道的继承不看价格表，价格表缺这条也照样能选。
 const compiledDisabled = computed(
   () => creditPrice.value == null && (catalogMissing.value || !catalog.value),
 );
@@ -216,7 +216,7 @@ async function onSubmit(): Promise<void> {
       notifyCompile(
         creditState.value.kind === 'none'
           ? `${t.routeKey} 已按渠道定价重算`
-          : `${t.routeKey} 已${creditState.value.kind === 'independent' ? '恢复' : ''}继承渠道积分价`,
+          : `${t.routeKey} 已${creditState.value.kind === 'independent' ? '恢复' : ''}继承渠道`,
         r.data,
       );
       visible.value = false;

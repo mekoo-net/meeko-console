@@ -94,35 +94,24 @@ describe('logEntrySchema 对齐后端 wire 形状', () => {
     expect(parsed.success).toBe(true);
   });
 
-  it('按 token 计费的行也带上游积分（小数）和终止原因原文', () => {
+  it('终止原因按调用方协议原文带在 content 里', () => {
     const row = wireRow({ vendorKey: 'kiro', status: 'success' });
     Object.assign(row.content as Record<string, unknown>, {
       statusCode: 200,
       error: null,
-      credits: 0.028,
       stopReason: 'MAX_TOKENS',
     });
     const parsed = logEntrySchema.safeParse(row);
     expect(parsed.success).toBe(true);
     if (parsed.success) {
-      expect(parsed.data.content.credits).toBe(0.028);
       expect(parsed.data.content.stopReason).toBe('MAX_TOKENS');
     }
   });
 
-  it('改版前的行没有积分和终止原因，照样解析', () => {
+  it('改版前的行没有终止原因，照样解析', () => {
     const parsed = logEntrySchema.safeParse(wireRow());
     expect(parsed.success).toBe(true);
-    if (parsed.success) {
-      expect(parsed.data.content.credits).toBeUndefined();
-      expect(parsed.data.content.stopReason).toBeUndefined();
-    }
-  });
-
-  it('拒绝负的上游积分', () => {
-    const row = wireRow();
-    (row.content as Record<string, unknown>).credits = -1;
-    expect(logEntrySchema.safeParse(row).success).toBe(false);
+    if (parsed.success) expect(parsed.data.content.stopReason).toBeUndefined();
   });
 
   it('解析 per_credit 行：积分是小数，原始用量按 detailKind 嵌在 detail 里', () => {
@@ -176,7 +165,7 @@ describe('logEntrySchema 对齐后端 wire 形状', () => {
     );
     expect(parsed.success).toBe(true);
     if (!parsed.success || parsed.data.billingType !== 'per_credit') return;
-    expect(creditDetailRows(parsed.data.usage).map((r) => r.label)).toEqual(['输入', 'cached 读', '输出']);
+    expect(creditDetailRows(parsed.data.usage).map((r) => r.label)).toEqual(['输入', '缓存读', '输出']);
     expect(creditDetailSummary(parsed.data.usage)).toBe('入 1,000 · 出 300');
 
     const bare = logEntrySchema.safeParse(

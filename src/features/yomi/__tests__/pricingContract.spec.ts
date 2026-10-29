@@ -458,7 +458,7 @@ describe('vendor pricing display', () => {
 
   it('names the inherit option by where the route stands now', () => {
     expect(inheritOptionLabel({ kind: 'none' })).toBe('渠道定价');
-    expect(inheritOptionLabel({ kind: 'inherit', creditPrice: 1 })).toBe('继承渠道积分价');
-    expect(inheritOptionLabel({ kind: 'independent', creditPrice: 1 })).toBe('恢复继承渠道积分价');
+    expect(inheritOptionLabel({ kind: 'inherit', creditPrice: 1 })).toBe('继承渠道');
+    expect(inheritOptionLabel({ kind: 'independent', creditPrice: 1 })).toBe('恢复继承渠道');
   });
 });

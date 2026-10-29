@@ -62,10 +62,10 @@ export function routeCreditPricing(
 }
 
 export const CREDIT_PRICING_LABEL = {
-  inherit: '继承渠道积分价',
+  inherit: '继承渠道',
   independent: '独立定价',
   /** 已单独定过价的别名切回继承：点了会丢掉自己定的价，措辞得让人看出是「恢复」。 */
-  restore: '恢复继承渠道积分价',
+  restore: '恢复继承渠道',
 } as const;
 
 /** 定价抽屉里「跟渠道走」那个选项的名字；倍率渠道沿用原来的「渠道定价」。 */
