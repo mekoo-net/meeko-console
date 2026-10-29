@@ -961,11 +961,11 @@ export function seedImportedProviderGroups(): ProviderGroup[] {
   const t = epochMs(now);
   return [
     { id: genProviderGroupUid(), queueGroup: 'kiro', vendorSlug: 'nai', status: 'active', upstreamModelCount: 3,
-      priceMultiplier: 1.15, notes: null, createdAtUtc: t, updatedAtUtc: t },
+      pricingMode: 'multiplier', pricingValue: 1.15, notes: null, createdAtUtc: t, updatedAtUtc: t },
     { id: genProviderGroupUid(), queueGroup: 'gemini', vendorSlug: 'pa', status: 'active', upstreamModelCount: 3,
-      priceMultiplier: 1.2, notes: null, createdAtUtc: t, updatedAtUtc: t },
+      pricingMode: 'multiplier', pricingValue: 1.2, notes: null, createdAtUtc: t, updatedAtUtc: t },
     { id: genProviderGroupUid(), queueGroup: 'codex', vendorSlug: 'rong', status: 'active', upstreamModelCount: 3,
-      priceMultiplier: 1, notes: null, createdAtUtc: t, updatedAtUtc: t },
+      pricingMode: 'multiplier', pricingValue: 1, notes: null, createdAtUtc: t, updatedAtUtc: t },
   ];
 }
 
@@ -1092,16 +1092,33 @@ function seedCompiledRates(
 ): Rate[] {
   const t = epochMs(now);
   const priceByKey = new Map(prices.map((p) => [p.modelKey, p]));
-  const vendorMult = new Map(groups.map((g) => [g.queueGroup, g.priceMultiplier]));
+  const vendors = new Map(groups.map((g) => [g.queueGroup, g]));
   const out: Rate[] = [];
   const seen = new Set<string>();
   for (const route of routes) {
     if (!route.isPublished || route.pricingMode !== 'compiled') continue;
     if (seen.has(route.routeKey)) continue;
     seen.add(route.routeKey);
+    // 与 YomiPricingMock 的编译器同一口径：积分渠道直接用渠道积分单价，不看价格表和倍率。
+    const vendor = vendors.get(route.vendorKey);
+    if (vendor?.pricingMode === 'credit') {
+      out.push({
+        billingType: 'per_credit',
+        rate: { pricePerCredit: vendor.pricingValue },
+        id: genRateUid(),
+        modelId: route.routeKey,
+        currency: PRICE_CURRENCY,
+        effectiveFromUtc: t - 2 * 86_400_000,
+        updatedAtUtc: t,
+        updatedBy: { iamUid: '200000001' },
+        sourcePriceId: null,
+        multiplierApplied: null,
+      });
+      continue;
+    }
     const price = priceByKey.get(route.vendorModel.trim().toLowerCase());
     if (!price) continue;
-    const multiplier = (vendorMult.get(route.vendorKey) ?? 1) * (route.priceMultiplier ?? 1);
+    const multiplier = (vendor?.pricingValue ?? 1) * (route.priceMultiplier ?? 1);
     const body = scaleRateBody(
       { billingType: price.billingType, rate: price.rate } as RateBody,
       multiplier,

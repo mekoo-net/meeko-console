@@ -1,17 +1,25 @@
 <script setup lang="ts">
 /**
- * 渠道设置：对外名称（slug）和渠道倍率放在同一处改。
- * slug 走目录接口；倍率走定价接口，改完会重算该渠道下「渠道定价」的别名。
+ * 渠道设置：对外名称（slug）和渠道定价放在同一处改。
+ * slug 走目录接口；定价走定价接口，改完会重算该渠道下继承渠道定价的别名。
+ *
+ * 渠道定价先选方式（倍率 / 积分），再填一个值：倍率乘在价格表牌价上，积分单价直接乘上游报的积分。
+ * 后端只存一个值，所以切换方式时两种方式各自记着草稿，切回来不用重填；保存的只是当前方式那一个。
  */
 import { computed, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 
 import { ProviderGroupLabel } from '@yomi/common';
-import type { ProviderGroup } from '../../model/catalog.types';
+import type { ProviderGroup, VendorPricingMode } from '../../model/catalog.types';
 import { isValidVendorSlug, normalizeVendorSlug } from '../../model/vendorSlug';
-import { formatMultiplier } from '../../model/rateSummary';
+import {
+  VENDOR_PRICING_MODE_LABEL,
+  formatVendorPricing,
+  type VendorPricing,
+} from '../../model/vendorPricing';
 import { getYomiCatalogPort, getYomiPricingPort } from '../../services';
 import { notifyCompile } from '../pricing/compileFeedback';
+import PriceField from '../pricing/PriceField.vue';
 
 interface Props {
   modelValue: boolean;
@@ -38,8 +46,37 @@ const saving = ref(false);
 
 const form = reactive({
   vendorSlug: '',
+  pricingMode: 'multiplier' as VendorPricingMode,
+  /** 倍率草稿；渠道本来不是倍率方式时从 1 起步。 */
   multiplier: 1,
+  /** 积分单价草稿；渠道本来不是积分方式时留空，逼人填，不拿倍率的数去冒充单价。 */
+  creditPrice: null as number | null,
 });
+
+const pricingError = ref('');
+
+const modeOptions = (['multiplier', 'credit'] as const).map((value) => ({
+  value,
+  label: VENDOR_PRICING_MODE_LABEL[value],
+}));
+
+/** 当前方式下要保存的值；积分方式没填是 null。 */
+const draftValue = computed(() =>
+  form.pricingMode === 'credit' ? form.creditPrice : form.multiplier,
+);
+
+/** 顶部卡片里的预览，跟着草稿走。 */
+const pricingPreview = computed(() =>
+  draftValue.value == null
+    ? '—'
+    : formatVendorPricing({ pricingMode: form.pricingMode, pricingValue: draftValue.value }),
+);
+
+const pricingHint = computed(() =>
+  form.pricingMode === 'credit'
+    ? '继承渠道定价的模型按上游报的积分计费，每积分这个价，不看价格表也不乘倍率；单独定过价的模型不受影响。只对上游会报积分的渠道用：上游不报积分时，这些调用按 0 计费。'
+    : '继承渠道定价的模型：有效价 = 价格表牌价 × 这个倍率（× 路由倍率）。单独定过价的模型不受影响。',
+);
 
 const groupTitle = computed(() => {
   const g = props.group;
@@ -73,8 +110,12 @@ const rules: FormRules = {
 };
 
 function resetForm(): void {
-  form.vendorSlug = props.group?.vendorSlug?.trim() ?? '';
-  form.multiplier = props.group?.priceMultiplier ?? 1;
+  const g = props.group;
+  form.vendorSlug = g?.vendorSlug?.trim() ?? '';
+  form.pricingMode = g?.pricingMode ?? 'multiplier';
+  form.multiplier = g?.pricingMode === 'multiplier' ? g.pricingValue : 1;
+  form.creditPrice = g?.pricingMode === 'credit' ? g.pricingValue : null;
+  pricingError.value = '';
   formRef.value?.clearValidate();
 }
 
@@ -82,14 +123,21 @@ async function onSubmit(): Promise<void> {
   if (!props.group) return;
   const valid = await formRef.value?.validate().catch(() => false);
   if (!valid) return;
+  const value = draftValue.value;
+  if (value == null) {
+    pricingError.value = '填写每积分价格';
+    return;
+  }
 
   const trimmed = form.vendorSlug.trim();
   const slug = trimmed ? normalizeVendorSlug(trimmed) : null;
   const prevSlug = props.group.vendorSlug?.trim() || null;
   const slugChanged = slug !== prevSlug;
-  const multiplierChanged = form.multiplier !== props.group.priceMultiplier;
+  const next: VendorPricing = { pricingMode: form.pricingMode, pricingValue: value };
+  const pricingChanged =
+    next.pricingMode !== props.group.pricingMode || next.pricingValue !== props.group.pricingValue;
 
-  if (!slugChanged && !multiplierChanged) {
+  if (!slugChanged && !pricingChanged) {
     visible.value = false;
     return;
   }
@@ -103,17 +151,21 @@ async function onSubmit(): Promise<void> {
         return;
       }
     }
-    if (multiplierChanged) {
-      const r = await pricingPort.setVendorMultiplier({
+    if (pricingChanged) {
+      const r = await pricingPort.setVendorPricing({
         vendorId: props.group.id,
-        multiplier: form.multiplier,
+        mode: next.pricingMode,
+        value: next.pricingValue,
         reason: 'console vendor settings',
       });
       if (!r.success) {
         ElMessage.error(r.error.message);
         return;
       }
-      notifyCompile(`渠道倍率已设为 ${formatMultiplier(form.multiplier)}`, r.data);
+      notifyCompile(
+        `渠道定价已设为${VENDOR_PRICING_MODE_LABEL[next.pricingMode]} ${formatVendorPricing(next)}`,
+        r.data,
+      );
     } else {
       ElMessage.success(slug ? `渠道名称已设为「${slug}」` : '已清空渠道名称');
     }
@@ -123,6 +175,13 @@ async function onSubmit(): Promise<void> {
     saving.value = false;
   }
 }
+
+watch(
+  () => [form.pricingMode, form.creditPrice] as const,
+  () => {
+    pricingError.value = '';
+  },
+);
 
 watch(
   () => props.modelValue,
@@ -167,7 +226,7 @@ watch(
           <span class="vs-id__name">{{ groupTitle }}</span>
           <span v-if="showQueueGroup" class="vs-id__qg">{{ group.queueGroup }}</span>
         </div>
-        <span class="vs-id__mult">{{ formatMultiplier(form.multiplier) }}</span>
+        <span class="vs-id__mult">{{ pricingPreview }}</span>
       </div>
 
       <el-form-item label="渠道名称" prop="vendorSlug">
@@ -179,16 +238,36 @@ watch(
         />
       </el-form-item>
 
-      <el-form-item label="渠道倍率">
-        <el-input-number
-          v-model="form.multiplier"
-          :min="0"
-          :max="1000"
-          :precision="4"
-          :step="0.05"
-          controls-position="right"
-          class="vs-mult"
-        />
+      <el-form-item
+        label="渠道定价"
+        :error="pricingError"
+      >
+        <div class="vs-pricing">
+          <el-segmented
+            v-model="form.pricingMode"
+            :options="modeOptions"
+          />
+          <el-input-number
+            v-if="form.pricingMode === 'multiplier'"
+            v-model="form.multiplier"
+            :min="0"
+            :max="1000"
+            :precision="4"
+            :step="0.05"
+            controls-position="right"
+            class="vs-mult"
+          />
+          <PriceField
+            v-else
+            v-model="form.creditPrice"
+            label="每积分"
+            unit="人民币 · 每 1 上游积分，最多 6 位小数"
+            size="lg"
+          />
+          <p class="vs-note">
+            {{ pricingHint }}
+          </p>
+        </div>
       </el-form-item>
     </el-form>
 
@@ -287,6 +366,19 @@ watch(
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   letter-spacing: -0.02em;
+}
+.vs-pricing {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.vs-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
 }
 
 .vs-foot {

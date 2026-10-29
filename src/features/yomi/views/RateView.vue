@@ -2,7 +2,8 @@
 /**
  * 模型定价：左侧渠道，右侧每条别名的有效价。
  *
- * 别名要么走渠道定价（美元 × 渠道倍率 = 人民币），要么自定义按量 / 按次等。
+ * 别名要么继承渠道定价（倍率渠道：美元 × 渠道倍率 = 人民币；积分渠道：渠道积分单价），
+ * 要么自定义按量 / 按次等。
  */
 import { computed, onMounted, ref, watch } from 'vue';
 
@@ -19,7 +20,12 @@ import { ProviderGroupLabel } from '@yomi/common';
 import type { Rate, RouteRateEntry, VendorModelGroup } from '@yomi/common';
 import type { UnconfiguredRoute, VendorRateStatsMap } from '@yomi/common';
 import type { ProviderGroup } from '../model/catalog.types';
-import { formatMultiplier } from '../model/rateSummary';
+import {
+  CREDIT_PRICING_LABEL,
+  formatVendorPricing,
+  routeCreditPricing,
+  type RouteCreditPricing,
+} from '../model/vendorPricing';
 import { isEmbeddingPrice, rateBodyDisplay, type PriceDisplay } from '../model/priceTable';
 import { getYomiCatalogPort, getYomiRatePort } from '../services';
 import ProviderWorkspaceLayout from '../components/provider/ProviderWorkspaceLayout.vue';
@@ -49,7 +55,7 @@ const unconfiguredPagination = usePagination({ pageSize: 15, pageSizes: [10, 15,
 const routeRateOpen = ref(false);
 const routeRateTarget = ref<RouteRateTarget | null>(null);
 
-const vendorMultiplierOpen = ref(false);
+const vendorPricingOpen = ref(false);
 
 type TabName = 'priced' | 'unconfigured';
 const activeTab = ref<TabName>('priced');
@@ -81,6 +87,8 @@ interface PricedRow {
   vendorModel: string;
   entry: RouteRateEntry;
   display: Omit<PriceDisplay, 'price'>;
+  /** 积分渠道里这条是继承渠道单价还是单独定的价；倍率渠道是 none，不打标。 */
+  credit: RouteCreditPricing;
 }
 
 const pricedRows = computed<PricedRow[]>(() =>
@@ -89,6 +97,7 @@ const pricedRows = computed<PricedRow[]>(() =>
       vendorKey: group.vendorKey,
       vendorModel: group.vendorModel,
       entry,
+      credit: routeCreditPricing(entry.pricingMode, selectedGroup.value),
       display: rateBodyDisplay(
         entry.rate,
         isEmbeddingPrice({ modelKey: group.vendorModel, capabilities: null }),
@@ -196,7 +205,7 @@ async function onRouteRateSaved(): Promise<void> {
   await reloadAll();
 }
 
-async function onVendorMultiplierSaved(): Promise<void> {
+async function onVendorPricingSaved(): Promise<void> {
   await reloadAll();
 }
 
@@ -284,10 +293,10 @@ onMounted(async () => {
           v-if="selectedGroup"
           type="button"
           class="mult"
-          @click="vendorMultiplierOpen = true"
+          @click="vendorPricingOpen = true"
         >
-          <span class="mult__v">{{ formatMultiplier(selectedGroup.priceMultiplier) }}</span>
-          <span class="mult__k">渠道倍率</span>
+          <span class="mult__v">{{ formatVendorPricing(selectedGroup) }}</span>
+          <span class="mult__k">{{ selectedGroup.pricingMode === 'credit' ? '积分定价' : '渠道倍率' }}</span>
         </button>
       </template>
 
@@ -345,6 +354,19 @@ onMounted(async () => {
             <AliasMap class="rate-row__alias" :alias="row.entry.routeKey" :target="row.vendorModel" />
             <div class="rate-row__price">
               <PriceCells :model="row.display" />
+              <el-tag
+                v-if="row.credit.kind !== 'none'"
+                size="small"
+                :type="row.credit.kind === 'inherit' ? 'info' : 'warning'"
+                effect="plain"
+                round
+              >
+                {{
+                  row.credit.kind === 'inherit'
+                    ? CREDIT_PRICING_LABEL.inherit
+                    : CREDIT_PRICING_LABEL.independent
+                }}
+              </el-tag>
             </div>
             <div class="rate-row__date">{{ formatDateTime(row.entry.rate.effectiveFromUtc) }}</div>
             <div class="rate-row__ops">
@@ -421,14 +443,14 @@ onMounted(async () => {
     <RouteRateDrawer
       v-model="routeRateOpen"
       :target="routeRateTarget"
-      :vendor-multiplier="selectedGroup?.priceMultiplier ?? 1"
+      :vendor-pricing="selectedGroup"
       @saved="onRouteRateSaved"
     />
 
     <ProviderGroupEditDrawer
-      v-model="vendorMultiplierOpen"
+      v-model="vendorPricingOpen"
       :group="selectedGroup"
-      @refresh="onVendorMultiplierSaved"
+      @refresh="onVendorPricingSaved"
     />
   </ProviderWorkspaceLayout>
 </template>

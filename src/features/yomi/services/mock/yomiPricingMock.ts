@@ -25,6 +25,7 @@ import {
   type UpsertModelPriceInput,
 } from '@yomi/common';
 import type { YomiPricingPort } from '../ports/yomiPricingPort';
+import type { VendorPricingMode } from '../../model/catalog.types';
 
 import { genModelPriceUid, genRateUid, getYomiStore, type YomiStore } from './data';
 import {
@@ -43,7 +44,8 @@ function sameBody(a: RateBody, b: RateBody): boolean {
 }
 
 /**
- * Mock 版编译器：基准价(USD) × 渠道倍率 → store.rate（CNY）。不再另乘 7。
+ * Mock 版编译器，与后端同一口径：倍率渠道是基准价(USD) × 渠道倍率 → store.rate（CNY），不再另乘 7；
+ * 积分渠道直接编成 per_credit、单价取渠道积分单价，价格表和倍率都不参与。
  * 只处理 Compiled 路由；Manual 路由的有效价原样保留。
  */
 function compile(
@@ -55,7 +57,7 @@ function compile(
   const rids = scope.routeIds ? new Set(scope.routeIds) : null;
 
   const priceKeys = store.modelPrices.map((p) => p.modelKey);
-  const vendorMult = new Map(store.providerGroups.map((g) => [g.queueGroup, g.priceMultiplier]));
+  const vendorPricing = new Map(store.providerGroups.map((g) => [g.queueGroup, g]));
 
   let compiled = 0;
   let unchanged = 0;
@@ -68,18 +70,24 @@ function compile(
     if (vk && !vk.includes(route.vendorKey)) continue;
     if (mk && !mk.some((k) => modelKeyMatches(route.vendorModel, k))) continue;
 
-    const best = findBestModelKey(route.vendorModel, priceKeys);
-    const price = best ? store.modelPrices.find((p) => p.modelKey === best) : undefined;
-    if (!price) {
-      unmatched.add(normalizeModelKey(route.vendorModel));
-      continue;
+    const vendor = vendorPricing.get(route.vendorKey);
+    let body: RateBody;
+    let sourcePriceId: string | null = null;
+    let multiplier: number | null = null;
+    if (vendor?.pricingMode === 'credit') {
+      // 不找基准价：价格表里没有这条模型也照样定得出价，所以也不会算进 unmatched。
+      body = { billingType: 'per_credit', rate: { pricePerCredit: vendor.pricingValue } };
+    } else {
+      const best = findBestModelKey(route.vendorModel, priceKeys);
+      const price = best ? store.modelPrices.find((p) => p.modelKey === best) : undefined;
+      if (!price) {
+        unmatched.add(normalizeModelKey(route.vendorModel));
+        continue;
+      }
+      multiplier = (vendor?.pricingValue ?? 1) * (route.priceMultiplier ?? 1);
+      body = scaleRateBody({ billingType: price.billingType, rate: price.rate } as RateBody, multiplier);
+      sourcePriceId = price.id;
     }
-
-    const multiplier = (vendorMult.get(route.vendorKey) ?? 1) * (route.priceMultiplier ?? 1);
-    const body = scaleRateBody(
-      { billingType: price.billingType, rate: price.rate } as RateBody,
-      multiplier,
-    );
 
     const idx = store.rate.findIndex((r) => r.modelId === route.routeKey);
     const current = idx >= 0 ? store.rate[idx]! : null;
@@ -100,7 +108,7 @@ function compile(
       effectiveFromUtc: t,
       updatedAtUtc: t,
       updatedBy: null,
-      sourcePriceId: price.id,
+      sourcePriceId,
       multiplierApplied: multiplier,
     } as Rate;
     if (idx >= 0) store.rate[idx] = next;
@@ -199,17 +207,22 @@ export class YomiPricingMock implements YomiPricingPort {
     return ok(undefined);
   }
 
-  async setVendorMultiplier(input: {
+  async setVendorPricing(input: {
     vendorId: string;
-    multiplier: number;
+    mode: VendorPricingMode;
+    value: number;
   }): Promise<AppResult<PriceCompileResult>> {
     await delay();
     const g = this.store.providerGroups.find((x) => x.id === input.vendorId);
     if (!g) return fail({ code: 'not_found', message: '供应商组不存在' });
-    if (input.multiplier < 0 || input.multiplier > 1000) {
-      return fail({ code: 'validation', message: '倍率须在 [0, 1000] 内' });
+    // 与后端同一上限：倍率 1000，积分单价 10000，都只拦手滑。
+    const max = input.mode === 'credit' ? 10_000 : 1000;
+    if (!Number.isFinite(input.value) || input.value < 0 || input.value > max) {
+      return fail({ code: 'validation', message: `须在 [0, ${max}] 内` });
     }
-    g.priceMultiplier = input.multiplier;
+    g.pricingMode = input.mode;
+    // 后端按 6 位小数落库；mock 也取到 6 位，免得存出后端存不下的数。
+    g.pricingValue = Math.round(input.value * 1e6) / 1e6;
     g.updatedAtUtc = Date.now();
     return ok(compile(this.store, { vendorKeys: [g.queueGroup] }));
   }

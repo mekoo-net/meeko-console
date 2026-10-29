@@ -15,6 +15,8 @@ import {
 import { _resetYomiStore, getYomiStore } from '../services/mock/data';
 import { allowedManualBillingTypes, priceDisplay, rateBodyDisplay, resolvePriceModelKind } from '../model/priceTable';
 import { scaleRateBody } from '../model/rateScale';
+import { providerGroupSchema, type VendorPricingMode } from '../model/catalog.types';
+import { formatVendorPricing, inheritOptionLabel, routeCreditPricing } from '../model/vendorPricing';
 import { OFFICIAL_USD_PRICES } from '../services/mock/officialUsdPrices';
 import { YomiPricingMock } from '../services/mock/yomiPricingMock';
 
@@ -297,7 +299,7 @@ describe('pricing contract', () => {
     const price = store.modelPrices.find((p) => p.modelKey === route.vendorModel.trim().toLowerCase())!;
 
     const group = store.providerGroups.find((g) => g.queueGroup === route.vendorKey)!;
-    const setV = await port.setVendorMultiplier({ vendorId: group.id, multiplier: 1.5 });
+    const setV = await port.setVendorPricing({ vendorId: group.id, mode: 'multiplier', value: 1.5 });
     expect(setV.success).toBe(true);
     const setR = await port.setRoutePricing({ routeId: route.uid, mode: 'compiled', multiplier: 2 });
     expect(setR.success).toBe(true);
@@ -370,5 +372,93 @@ describe('pricing contract', () => {
 
     const scaled = scaleRateBody(body, 1.5);
     expect(scaled).toEqual({ billingType: 'per_credit', rate: { pricePerCredit: 0.003 } });
+  });
+
+  it('credit vendor: inheriting routes take its credit price, ignoring the catalog and multipliers', async () => {
+    const store = getYomiStore();
+    const port = new YomiPricingMock();
+
+    // 挑价格表里有牌价的：换回倍率时要能编回价格表。没牌价的编不出新价，按编译器的规矩保留旧价、报未匹配。
+    const route = store.vendorRoutes.find(
+      (v) =>
+        v.pricingMode === 'compiled' &&
+        store.providerGroups.some((g) => g.queueGroup === v.vendorKey) &&
+        store.modelPrices.some((p) => p.modelKey === v.vendorModel.trim().toLowerCase()),
+    );
+    expect(route).toBeDefined();
+    if (!route) return;
+    const group = store.providerGroups.find((g) => g.queueGroup === route.vendorKey)!;
+
+    const set = await port.setVendorPricing({ vendorId: group.id, mode: 'credit', value: 0.028 });
+    expect(set.success).toBe(true);
+    expect(group.pricingMode).toBe('credit');
+    expect(group.pricingValue).toBe(0.028);
+
+    const rate = store.rate.find((x) => x.modelId === route.routeKey)!;
+    expect(rate.billingType).toBe('per_credit');
+    expect(rate.billingType === 'per_credit' && rate.rate.pricePerCredit).toBe(0.028);
+    expect(rate.sourcePriceId).toBeNull();
+    expect(rate.multiplierApplied).toBeNull();
+
+    // 换回倍率：只存一个值，倍率要重新给；回到价格表 × 倍率。
+    const back = await port.setVendorPricing({ vendorId: group.id, mode: 'multiplier', value: 1 });
+    expect(back.success).toBe(true);
+    expect(store.rate.find((x) => x.modelId === route.routeKey)!.billingType).not.toBe('per_credit');
+  });
+
+  it('vendor pricing rejects negative values', async () => {
+    const store = getYomiStore();
+    const port = new YomiPricingMock();
+    const group = store.providerGroups[0]!;
+
+    expect((await port.setVendorPricing({ vendorId: group.id, mode: 'credit', value: -0.01 })).success).toBe(false);
+    expect(group.pricingMode).toBe('multiplier');
+  });
+});
+
+describe('vendor pricing display', () => {
+  const group = (pricingMode: VendorPricingMode, pricingValue: number) => ({ pricingMode, pricingValue });
+
+  it('reads mode and value off the wire, defaulting old rows to multiplier ×1', () => {
+    const base = {
+      id: 1,
+      queueGroup: 'kiro',
+      status: 'active',
+      upstreamModelCount: 0,
+      createdAtUtc: 0,
+      updatedAtUtc: 0,
+    };
+    const credit = providerGroupSchema.parse({ ...base, pricingMode: 'credit', pricingValue: 0.028 });
+    expect(credit.pricingMode).toBe('credit');
+    expect(credit.pricingValue).toBe(0.028);
+
+    const legacy = providerGroupSchema.parse(base);
+    expect(legacy.pricingMode).toBe('multiplier');
+    expect(legacy.pricingValue).toBe(1);
+
+    expect(providerGroupSchema.safeParse({ ...base, pricingMode: 'credit', pricingValue: -1 }).success).toBe(false);
+    expect(providerGroupSchema.safeParse({ ...base, pricingMode: 'per_token', pricingValue: 1 }).success).toBe(false);
+  });
+
+  it('formats the value with its unit', () => {
+    expect(formatVendorPricing(group('multiplier', 1.2))).toBe('×1.2');
+    expect(formatVendorPricing(group('credit', 0.028))).toBe('¥0.028 / 积分');
+    expect(formatVendorPricing(group('credit', 0.000125))).toBe('¥0.000125 / 积分');
+  });
+
+  it('a route inherits only when its vendor is credit-priced and the route follows the vendor', () => {
+    expect(routeCreditPricing('compiled', group('multiplier', 1.2))).toEqual({ kind: 'none' });
+    expect(routeCreditPricing('manual', group('multiplier', 1.2))).toEqual({ kind: 'none' });
+    expect(routeCreditPricing('compiled', null)).toEqual({ kind: 'none' });
+    expect(routeCreditPricing('compiled', group('credit', 0.028))).toEqual({ kind: 'inherit', creditPrice: 0.028 });
+    expect(routeCreditPricing('manual', group('credit', 0.028))).toEqual({ kind: 'independent', creditPrice: 0.028 });
+    // 0 是免费，不是「没设」：积分渠道照样继承。
+    expect(routeCreditPricing('compiled', group('credit', 0))).toEqual({ kind: 'inherit', creditPrice: 0 });
+  });
+
+  it('names the inherit option by where the route stands now', () => {
+    expect(inheritOptionLabel({ kind: 'none' })).toBe('渠道定价');
+    expect(inheritOptionLabel({ kind: 'inherit', creditPrice: 1 })).toBe('继承渠道积分价');
+    expect(inheritOptionLabel({ kind: 'independent', creditPrice: 1 })).toBe('恢复继承渠道积分价');
   });
 });

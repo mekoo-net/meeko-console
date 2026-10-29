@@ -2,8 +2,11 @@
 /**
  * 模型定价：一条别名怎么出价。
  *
- *  - 渠道定价：有效价(CNY) = 价格表(USD) × 渠道倍率。
+ *  - 渠道定价：倍率渠道是有效价(CNY) = 价格表(USD) × 渠道倍率。
  *  - 自定义：自己填有效价，计量必须跟模型同类（LLM 按量/按次，生图只能档位）。
+ *
+ * 积分渠道两个选项换成「继承渠道积分价 / 独立定价」：继承不看价格表，
+ * 所以价格表里没有这条模型也能选；已经独立定价的再选继承就是「恢复」。
  */
 import { computed, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
@@ -12,6 +15,13 @@ import type { ModelPrice, Rate, RateBody, RoutePricingMode } from '@yomi/common'
 import type { BillingType } from '@yomi/common';
 import { MODEL_PRICE_CURRENCY, PRICE_CURRENCY } from '@yomi/common';
 import { formatMultiplier } from '../model/rateSummary';
+import {
+  CREDIT_PRICING_LABEL,
+  formatCreditPrice,
+  inheritOptionLabel,
+  routeCreditPricing,
+  type VendorPricing,
+} from '../model/vendorPricing';
 import {
   allowedManualBillingTypes,
   isEmbeddingPrice,
@@ -36,7 +46,8 @@ export interface RouteRateTarget {
 interface Props {
   modelValue: boolean;
   target: RouteRateTarget | null;
-  vendorMultiplier: number;
+  /** 别名所在渠道的定价；null（渠道还没加载出来）按倍率 1 算。 */
+  vendorPricing: VendorPricing | null;
 }
 
 const props = defineProps<Props>();
@@ -61,6 +72,33 @@ const catalogMissing = ref(false);
 const saving = ref(false);
 const formRef = ref<{ buildRateBody: () => RateDraft } | null>(null);
 
+/** 积分渠道的每积分单价；倍率渠道是 null。 */
+const creditPrice = computed(() =>
+  props.vendorPricing?.pricingMode === 'credit' ? props.vendorPricing.pricingValue : null,
+);
+
+/** 倍率渠道的倍率；积分渠道不乘倍率，这里也就用不上。 */
+const vendorMultiplier = computed(() =>
+  props.vendorPricing?.pricingMode === 'multiplier' ? props.vendorPricing.pricingValue : 1,
+);
+
+/** 打开抽屉时这条路由的现状（继承 / 独立），不随下面选项切换变——「恢复」的措辞靠它。 */
+const creditState = computed(() =>
+  routeCreditPricing(props.target?.pricingMode ?? 'compiled', props.vendorPricing),
+);
+
+const inheritName = computed(() => inheritOptionLabel(creditState.value));
+
+const inheritHint = computed(() =>
+  creditPrice.value != null
+    ? `${formatCreditPrice(creditPrice.value)} / 积分`
+    : `价格表 ${formatMultiplier(vendorMultiplier.value)}`,
+);
+
+const manualName = computed(() =>
+  creditPrice.value != null ? CREDIT_PRICING_LABEL.independent : '自定义',
+);
+
 const catalogBody = computed<RateBody | null>(() => {
   const p = catalog.value;
   if (!p) return null;
@@ -70,7 +108,7 @@ const catalogBody = computed<RateBody | null>(() => {
 const previewBody = computed<RateBody | null>(() => {
   const body = catalogBody.value;
   if (!body) return null;
-  return scaleRateBody(body, props.vendorMultiplier);
+  return scaleRateBody(body, vendorMultiplier.value);
 });
 
 const embedding = computed(() =>
@@ -94,7 +132,13 @@ const compiledDisplay = computed(() => {
 
 const customInitial = computed<RateDraft | null>(() => {
   const r = props.target?.rate;
-  if (!r) return previewBody.value;
+  if (!r) {
+    // 积分渠道上单独定价，多半是想给这条换个积分单价：从渠道价起步比从价格表折算更顺手。
+    if (creditPrice.value != null) {
+      return { billingType: 'per_credit', rate: { pricePerCredit: creditPrice.value } };
+    }
+    return previewBody.value;
+  }
   return { billingType: r.billingType, rate: r.rate } as RateDraft;
 });
 
@@ -102,7 +146,10 @@ const customBillingType = computed<BillingType>(
   () => customInitial.value?.billingType ?? 'per_token',
 );
 
-const compiledDisabled = computed(() => catalogMissing.value || !catalog.value);
+// 继承渠道积分价不看价格表，价格表缺这条也照样能选。
+const compiledDisabled = computed(
+  () => creditPrice.value == null && (catalogMissing.value || !catalog.value),
+);
 
 async function loadCatalog(vendorModel: string): Promise<void> {
   catalogLoading.value = true;
@@ -129,7 +176,7 @@ watch(
     if (t.rate == null) {
       mode.value = 'compiled';
       void hasCatalogPromise.then(() => {
-        if (catalogMissing.value) mode.value = 'manual';
+        if (compiledDisabled.value) mode.value = 'manual';
       });
       return;
     }
@@ -151,7 +198,7 @@ async function onSubmit(): Promise<void> {
       ElMessage.error('这条别名没有路由主键，无法切到渠道定价');
       return;
     }
-    if (catalogMissing.value || !catalog.value) {
+    if (compiledDisabled.value) {
       ElMessage.error('价格表没有这条上游模型');
       return;
     }
@@ -166,7 +213,12 @@ async function onSubmit(): Promise<void> {
         ElMessage.error(r.error.message);
         return;
       }
-      notifyCompile(`${t.routeKey} 已按渠道定价重算`, r.data);
+      notifyCompile(
+        creditState.value.kind === 'none'
+          ? `${t.routeKey} 已按渠道定价重算`
+          : `${t.routeKey} 已${creditState.value.kind === 'independent' ? '恢复' : ''}继承渠道积分价`,
+        r.data,
+      );
       visible.value = false;
       emit('saved');
     } finally {
@@ -195,7 +247,7 @@ async function onSubmit(): Promise<void> {
       ElMessage.error(r.error.message);
       return;
     }
-    ElMessage.success(`${t.routeKey} 已设为自定义`);
+    ElMessage.success(`${t.routeKey} 已设为${manualName.value}`);
     visible.value = false;
     emit('saved');
   } finally {
@@ -235,8 +287,8 @@ async function onSubmit(): Promise<void> {
           :disabled="!catalogLoading && compiledDisabled"
           @click="pickMode('compiled')"
         >
-          <span class="rr-mode__name">渠道定价</span>
-          <span class="rr-mode__hint">价格表 {{ formatMultiplier(vendorMultiplier) }}</span>
+          <span class="rr-mode__name">{{ inheritName }}</span>
+          <span class="rr-mode__hint">{{ inheritHint }}</span>
         </button>
         <button
           type="button"
@@ -244,12 +296,31 @@ async function onSubmit(): Promise<void> {
           :class="{ 'rr-mode--on': mode === 'manual' }"
           @click="pickMode('manual')"
         >
-          <span class="rr-mode__name">自定义</span>
+          <span class="rr-mode__name">{{ manualName }}</span>
           <span class="rr-mode__hint">自己填有效价</span>
         </button>
       </div>
 
-      <div v-show="mode === 'compiled'" v-loading="catalogLoading" class="rr-compiled">
+      <!-- 积分渠道的继承不看价格表：没有「牌价 × 倍率」可展示，只有渠道那一个单价。 -->
+      <div
+        v-if="creditPrice != null"
+        v-show="mode === 'compiled'"
+        class="rr-compiled"
+      >
+        <div class="rr-credit">
+          <span class="rr-credit__price">{{ formatCreditPrice(creditPrice) }}</span>
+          <span class="rr-credit__unit">/ 积分</span>
+          <p class="rr-credit__note">
+            按上游报的积分计费，单价跟渠道走；改渠道积分单价时这条一起变。
+          </p>
+        </div>
+      </div>
+      <div
+        v-else
+        v-show="mode === 'compiled'"
+        v-loading="catalogLoading"
+        class="rr-compiled"
+      >
         <CompiledPriceCard
           v-if="compiledDisplay && catalogDisplay"
           :catalog="catalogDisplay"
@@ -376,6 +447,30 @@ async function onSubmit(): Promise<void> {
 .rr-miss {
   margin: 0;
   font-size: 13px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
+}
+.rr-credit {
+  padding: 16px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px;
+  background: var(--el-fill-color-extra-light);
+}
+.rr-credit__price {
+  font-size: 22px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: var(--el-text-color-primary);
+}
+.rr-credit__unit {
+  margin-left: 4px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+.rr-credit__note {
+  margin: 8px 0 0;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--el-text-color-secondary);
 }

@@ -11,12 +11,13 @@ import type {
   RoutePricingMode,
   UpsertModelPriceInput,
 } from '@yomi/common';
+import type { VendorPricingMode } from '../../model/catalog.types';
 
 /**
  * 价格表端口 —— 对应 `/yomi/api/admin/pricing`。
  *
- * 管的是有效价上游的两个因子：基准价（价格表，美元）与渠道倍率。
- * 有效价(CNY) = 基准价(USD) × 倍率。不再另乘 7。
+ * 管的是有效价上游的两个因子：基准价（价格表，美元）与渠道定价。
+ * 倍率渠道：有效价(CNY) = 基准价(USD) × 倍率，不再另乘 7；积分渠道：有效价就是渠道积分单价，不看价格表。
  * 每个写操作后端都会顺手编译受影响范围的有效价，并把编译结果返回，
  * 所以这里的写方法大多返回 `PriceCompileResult` 而不是 void。
  *
@@ -39,9 +40,14 @@ export interface YomiPricingPort {
 
   deleteModelPrice(id: string): Promise<AppResult<void>>;
 
-  setVendorMultiplier(input: {
+  /**
+   * 渠道定价方式 + 值（倍率，或人民币 / 积分；≥ 0，0 = 免费）。
+   * 写完后端重编该渠道继承渠道定价的别名，并返回编译结果。
+   */
+  setVendorPricing(input: {
     vendorId: string;
-    multiplier: number;
+    mode: VendorPricingMode;
+    value: number;
     reason?: string | null;
   }): Promise<AppResult<PriceCompileResult>>;
 

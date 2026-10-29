@@ -7,6 +7,16 @@ import { epochMillisSchema } from '@/shared/lib/epoch';
 const uidString = z.union([z.string(), z.number()]).transform((v) => String(v));
 
 /**
+ * 渠道定价方式，决定 `pricingValue` 怎么解释；只管「继承渠道定价」的别名，单独定过价的不受影响。
+ * 两种都是「值 × 用量」：倍率乘在价格表牌价上，积分单价直接乘上游报的积分。
+ * - `multiplier`：有效价(CNY) = 基准价(USD) × 值 × 路由倍率。
+ * - `credit`：值就是每 1 上游积分的人民币单价，不看价格表、不乘倍率。
+ */
+export const vendorPricingModeValues = ['multiplier', 'credit'] as const;
+export const vendorPricingModeSchema = z.enum(vendorPricingModeValues);
+export type VendorPricingMode = z.infer<typeof vendorPricingModeSchema>;
+
+/**
  * 已入库的供应商组（QueueGroup）—— admin 通过「接入」流程从网关拉取后选择导入。
  *
  * 字段与 NATS `gateway.chat.{queueGroup}` / ModelRouting 的 providerId 一致；
@@ -21,8 +31,13 @@ export const providerGroupSchema = z.object({
   /** 对外公开通道 slug（如 nai / pa）；未设置时不参与公开定价。 */
   vendorSlug: z.string().min(1).max(64).nullable().optional(),
   status: providerGroupStatusSchema,
-  /** 渠道倍率：该组下 Compiled 路由的有效价(CNY) = 基准价(USD) × 此倍率 × 路由倍率。 */
-  priceMultiplier: z.number().nonnegative().default(1),
+  /** 渠道定价方式，见 {@link vendorPricingModeSchema}。 */
+  pricingMode: vendorPricingModeSchema.default('multiplier'),
+  /**
+   * 渠道定价的值，含义随 `pricingMode`：倍率（默认 1）或积分单价（人民币 / 积分，最多 6 位小数）。
+   * 只存一份：换方式就是换这个值的含义。0 = 免费。
+   */
+  pricingValue: z.number().nonnegative().default(1),
   upstreamModelCount: z.number().int().nonnegative(),
   notes: z.string().nullable().optional(),
   createdAtUtc: epochMillisSchema,

@@ -20,6 +20,7 @@ import {
   type UpsertModelPriceInput,
 } from '@yomi/common';
 import type { YomiPricingPort } from '@/features/yomi/services/ports/yomiPricingPort';
+import type { VendorPricingMode } from '@/features/yomi/model/catalog.types';
 import { requestYomi, type ItemsEnvelope } from '@/features/yomi/api/http';
 import { yomiPlatformPaths } from '@/features/yomi/api/routes';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
@@ -245,14 +246,18 @@ export class YomiPricingHttpAdapter implements YomiPricingPort {
     });
   }
 
-  async setVendorMultiplier(input: {
+  async setVendorPricing(input: {
     vendorId: string;
-    multiplier: number;
+    mode: VendorPricingMode;
+    value: number;
     reason?: string | null;
   }): Promise<AppResult<PriceCompileResult>> {
     const res = await requestYomi<CompileResultWire>(
-      `${BASE}/vendors/${encodeURIComponent(input.vendorId)}/multiplier`,
-      { method: 'PATCH', body: { multiplier: input.multiplier, reason: input.reason ?? null } },
+      `${BASE}/vendors/${encodeURIComponent(input.vendorId)}/pricing`,
+      {
+        method: 'PATCH',
+        body: { mode: input.mode, value: input.value, reason: input.reason ?? null },
+      },
     );
     if (!res.success) return res;
     return ok(toCompileResult(res.data));
