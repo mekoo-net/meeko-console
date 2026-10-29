@@ -33,6 +33,11 @@ export function scaleRateBody(body: RateBody, factor: number): RateBody {
         billingType: 'per_call',
         rate: strip({ pricePerCall: mul(body.rate.pricePerCall)! }),
       };
+    case 'per_credit':
+      return {
+        billingType: 'per_credit',
+        rate: { pricePerCredit: mul(body.rate.pricePerCredit)! },
+      };
     case 'per_image':
       return {
         billingType: 'per_image',

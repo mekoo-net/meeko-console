@@ -1,7 +1,7 @@
 /**
  * 价格表的行形状：模型 · 类型 · 价格。
  *
- * 六种计量方式（token / 张 / 秒 / 分钟 / 字符 / 次）的价格字段完全不同，但它们在表里只占一列：
+ * 七种计量方式（token / 张 / 秒 / 分钟 / 字符 / 次 / 积分）的价格字段完全不同，但它们在表里只占一列：
  * 类型一列说这是 LLM 还是图像，价格列用 icon 摊开各档。单位不跟在后面——类型已经说明怎么计量。
  */
 import type { BillingType, ModelCapabilities, ModelPrice, RateBody } from '@yomi/common';
@@ -22,6 +22,7 @@ export const MODEL_KIND: Readonly<Record<PriceModelKind, { label: string; hint: 
   per_audio_minute: { label: '音频', hint: '转写 · 按分钟' },
   per_character: { label: '语音', hint: '合成 · 按字符' },
   per_call: { label: '按次', hint: '按次调用' },
+  per_credit: { label: '积分', hint: '按上游积分' },
 };
 
 /** 目录标了 embedding 就认；手加的没 capabilities，退回键名里带 embed。 */
@@ -39,16 +40,21 @@ export function priceModelKind(price: ModelPrice): PriceModelKind {
 /**
  * 自定义有效价只能换「同一类产品」的出法：LLM 按量↔按次，生图只能改档位。
  * 不能把对话模型改成按张——那是另一种计量对象。
+ *
+ * 积分是例外：它不是一种模态，而是上游自己报的结算点数（生图、对话、视频都可能按积分收），
+ * 所以向量以外的每一类都能改挂 per_credit；向量维持原约束，只认按 token。
  */
 export function allowedManualBillingTypes(kind: PriceModelKind): readonly BillingType[] {
   switch (kind) {
     case 'per_token':
     case 'per_call':
-      return ['per_token', 'per_call'];
+      return ['per_token', 'per_call', 'per_credit'];
     case 'embedding':
       return ['per_token'];
+    case 'per_credit':
+      return ['per_credit'];
     default:
-      return [kind];
+      return [kind, 'per_credit'];
   }
 }
 
@@ -81,7 +87,8 @@ export type PricePartKind =
   | 'reasoning'
   | 'image'
   | 'video'
-  | 'call';
+  | 'call'
+  | 'credit';
 
 export interface PricePart {
   /** tooltip 全文：入 / 出 / 1024x1024 hd。 */
@@ -172,6 +179,8 @@ function rateColumns(body: RateBody, embedding: boolean, currency: string): Pric
     }
     case 'per_call':
       return [[{ kind: 'call', label: '单价', text: m4(body.rate.pricePerCall, currency) }]];
+    case 'per_credit':
+      return [[{ kind: 'credit', label: '每积分', text: m4(body.rate.pricePerCredit, currency) }]];
     case 'per_image':
       return pairUp(
         body.rate.tiers.map((t) => ({

@@ -10,6 +10,7 @@ import {
   EditPen,
   Download,
   Headset,
+  Medal,
   Microphone,
   Picture,
   Reading,
@@ -38,6 +39,7 @@ const ICON: Readonly<Record<PricePartKind, Component>> = {
   image: Picture,
   video: VideoCamera,
   call: Ticket,
+  credit: Medal,
 };
 </script>
 
@@ -86,5 +88,8 @@ const ICON: Readonly<Record<PricePartKind, Component>> = {
 }
 .picon[data-kind='call'] {
   color: #e11d48;
+}
+.picon[data-kind='credit'] {
+  color: #c026d3;
 }
 </style>

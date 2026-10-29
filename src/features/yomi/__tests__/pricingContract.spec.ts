@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  BillingTypeLabel,
   MODEL_PRICE_CURRENCY,
   PRICE_CURRENCY,
+  billingTypeValues,
   inferMaker,
   modelPriceSchema,
+  rateBodySchema,
   rateSchema,
   upsertModelPriceInputSchema,
 } from '@yomi/common';
@@ -310,14 +313,16 @@ describe('pricing contract', () => {
     }
   });
 
-  it('custom rates can only switch metering within the same product family', () => {
-    expect(allowedManualBillingTypes('per_token')).toEqual(['per_token', 'per_call']);
-    expect(allowedManualBillingTypes('per_call')).toEqual(['per_token', 'per_call']);
+  it('custom rates can only switch metering within the same product family — credits cross every family', () => {
+    // 积分不是模态，是上游报的结算点数：除向量外每一类都能改挂 per_credit。
+    expect(allowedManualBillingTypes('per_token')).toEqual(['per_token', 'per_call', 'per_credit']);
+    expect(allowedManualBillingTypes('per_call')).toEqual(['per_token', 'per_call', 'per_credit']);
     expect(allowedManualBillingTypes('embedding')).toEqual(['per_token']);
-    expect(allowedManualBillingTypes('per_image')).toEqual(['per_image']);
-    expect(allowedManualBillingTypes('per_video')).toEqual(['per_video']);
-    expect(allowedManualBillingTypes('per_audio_minute')).toEqual(['per_audio_minute']);
-    expect(allowedManualBillingTypes('per_character')).toEqual(['per_character']);
+    expect(allowedManualBillingTypes('per_image')).toEqual(['per_image', 'per_credit']);
+    expect(allowedManualBillingTypes('per_video')).toEqual(['per_video', 'per_credit']);
+    expect(allowedManualBillingTypes('per_audio_minute')).toEqual(['per_audio_minute', 'per_credit']);
+    expect(allowedManualBillingTypes('per_character')).toEqual(['per_character', 'per_credit']);
+    expect(allowedManualBillingTypes('per_credit')).toEqual(['per_credit']);
 
     expect(
       resolvePriceModelKind({ modelKey: 'gpt-4o', catalogBillingType: 'per_token' }),
@@ -334,5 +339,36 @@ describe('pricing contract', () => {
     ).toBe('embedding');
     // 价格表缺失时不当成「什么都能选」，按对话模型只给按量/按次
     expect(resolvePriceModelKind({ modelKey: 'claude-internal-preview' })).toBe('per_token');
+    expect(
+      resolvePriceModelKind({ modelKey: 'nai-diffusion-4-5-full', catalogBillingType: 'per_credit' }),
+    ).toBe('per_credit');
+  });
+
+  it('per_credit rate body is { pricePerCredit } and must be a non-negative number', () => {
+    expect(billingTypeValues).toContain('per_credit');
+    expect(BillingTypeLabel.per_credit).toBe('积分计费');
+
+    const ok = rateBodySchema.safeParse({ billingType: 'per_credit', rate: { pricePerCredit: 0.01 } });
+    expect(ok.success).toBe(true);
+    expect(
+      rateBodySchema.safeParse({ billingType: 'per_credit', rate: { pricePerCredit: -0.01 } }).success,
+    ).toBe(false);
+    expect(rateBodySchema.safeParse({ billingType: 'per_credit', rate: {} }).success).toBe(false);
+    expect(
+      rateBodySchema.safeParse({ billingType: 'per_credit', rate: { pricePerCredit: '0.01' } }).success,
+    ).toBe(false);
+  });
+
+  it('per_credit renders as one 积分 price and scales like the other single-price types', () => {
+    const body = { billingType: 'per_credit' as const, rate: { pricePerCredit: 0.002 } };
+    const shown = rateBodyDisplay(body, false, MODEL_PRICE_CURRENCY);
+    expect(shown.kind).toBe('per_credit');
+    expect(shown.typeLabel).toBe('积分');
+    expect(shown.columns.map((c) => c.map((p) => p.kind))).toEqual([['credit']]);
+    expect(shown.compact).toBeNull();
+    expect(shown.note).toBeNull();
+
+    const scaled = scaleRateBody(body, 1.5);
+    expect(scaled).toEqual({ billingType: 'per_credit', rate: { pricePerCredit: 0.003 } });
   });
 });

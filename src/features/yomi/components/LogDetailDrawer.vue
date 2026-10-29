@@ -8,7 +8,11 @@
  *
  * `usage` / `cost` 形状随 `billingType` 变化（discriminated union）：
  *  - `per_token` → 详细 token + input/output/cached/reasoning 扣费拆分
+ *  - `per_credit` → 积分 × 每积分单价，再附底下那次调用的原始用量（按 detailKind，仅观测）
  *  - 其它类型    → 按各自 usage 维度展示（图片张数 / 视频秒数 / 音频分钟 / 字符数 / 次数）
+ *
+ * 不按积分计费、但上游报了积分的（Kiro 按 token 计费），另起一行「积分消耗」标明仅对账。
+ * 总 tokens 不展示：输入输出各组已有合计，再加一个混了缓存和推理的总数只会让人拿去乘单价。
  */
 import { computed } from 'vue';
 import { RefreshLeft } from '@element-plus/icons-vue';
@@ -25,8 +29,15 @@ import {
   logHasErrorCode,
   logIsSuccess,
   logProtocolText,
+  logStopReasonTruncated,
 } from '@yomi/common';
 import type { LogEntry } from '@yomi/common';
+import {
+  CREDIT_DETAIL_KIND_LABEL,
+  creditDetailRows,
+  formatCredits,
+  type CreditDetailRow,
+} from '../model/creditUsage';
 
 interface Props {
   modelValue: boolean;
@@ -96,6 +107,20 @@ const statusLabel = computed(() => {
   return showLogError.value ? logErrorCodeText(logError.value?.code) : AiUsageStatusLabel[l.status];
 });
 
+/** 终止原因按调用方协议原文展示（`MAX_TOKENS` 就显示 `MAX_TOKENS`），截断类另起警示色。 */
+const stopReason = computed(() => props.log?.content.stopReason?.trim() || null);
+const stopReasonTruncated = computed(() => logStopReasonTruncated(stopReason.value));
+
+/**
+ * 不按积分计费的路由上，上游报的积分（Kiro 按 token 计费，照样会报这次扣了多少积分）。
+ * 只用来对账上游成本，单列一行并标明不计费；per_credit 路由上积分就是计费数，在它自己那块里。
+ */
+const upstreamCredits = computed(() => {
+  const l = props.log;
+  if (!l || l.billingType === 'per_credit') return null;
+  return l.content.credits ?? null;
+});
+
 /** 耗时语义随流式切换：流式是首字延迟，非流式是端到端总耗时。 */
 const latencyHint = computed(() =>
   props.log?.content.streamed ? '首字延迟（TTFT）' : '端到端总耗时',
@@ -161,6 +186,11 @@ const outputDims = computed<DimRow[]>(() => {
     },
     { label: 'audio', tokens: u.audioTokens, perMToken: c.audio.perMToken, amount: c.audio.amount },
   ];
+});
+
+const creditRows = computed<CreditDetailRow[]>(() => {
+  const l = props.log;
+  return l?.billingType === 'per_credit' ? creditDetailRows(l.usage) : [];
 });
 </script>
 
@@ -261,6 +291,24 @@ const outputDims = computed<DimRow[]>(() => {
         <span class="num">{{ log.content.statusCode ?? '—' }}</span>
       </div>
       <div class="log-detail__row">
+        <span class="label">终止原因</span>
+        <template v-if="stopReason">
+          <el-tag
+            size="small"
+            :type="stopReasonTruncated ? 'warning' : 'info'"
+            effect="plain"
+            class="mono"
+          >
+            {{ stopReason }}
+          </el-tag>
+          <span
+            v-if="stopReasonTruncated"
+            class="row-hint"
+          >输出到了长度上限，被截断</span>
+        </template>
+        <span v-else>—</span>
+      </div>
+      <div class="log-detail__row">
         <span class="label">请求 IP</span>
         <span class="mono">{{ clientIpText }}</span>
       </div>
@@ -291,13 +339,7 @@ const outputDims = computed<DimRow[]>(() => {
         该调用未关联定价快照，单价明细不可用；总扣费取日志落库金额。
       </div>
       <template v-if="log.billingType === 'per_token' || log.billingType === 'unknown'">
-        <div class="log-detail__row">
-          <span class="label">总 tokens</span>
-          <span class="num">{{ log.usage.totalTokens.toLocaleString() }}</span>
-        </div>
-
         <!-- ── Input 分组 ── -->
-        <el-divider class="sub-divider" />
         <div class="dim-group-title">
           <span class="dim-group-name">Input</span>
           <span class="dim-group-totals">
@@ -449,6 +491,51 @@ const outputDims = computed<DimRow[]>(() => {
         <div class="log-detail__row">
           <span class="label">单价</span>
           <span class="num">{{ formatMoney(log.cost.pricePerKChar) }} / 1K 字符</span>
+        </div>
+      </template>
+
+      <!-- ============ per_credit ============ -->
+      <template v-else-if="log.billingType === 'per_credit'">
+        <!-- 积分是上游报的实际值，可以是小数；pending 行预扣阶段为 0。 -->
+        <div class="log-detail__row">
+          <span class="label">积分消耗</span>
+          <span class="num">{{ formatCredits(log.usage.credits) }} 积分</span>
+        </div>
+
+        <el-divider class="sub-divider" />
+        <div class="snapshot-hint">
+          调用时单价快照
+        </div>
+        <!-- 每积分单价常不足一分钱，按计费精度展示，免得显示成 ¥0.00。 -->
+        <div class="log-detail__row">
+          <span class="label">每积分单价</span>
+          <span class="num">
+            {{ formatMoney(log.cost.pricePerCredit, { fractionDigits: BILLING_FRACTION_DIGITS }) }} / 积分
+          </span>
+        </div>
+
+        <template v-if="creditRows.length">
+          <el-divider class="sub-divider" />
+          <div class="snapshot-hint">
+            原始用量 · {{ CREDIT_DETAIL_KIND_LABEL[log.usage.detailKind] }}（仅观测，不计费）
+          </div>
+          <div
+            v-for="r in creditRows"
+            :key="r.label"
+            class="log-detail__row"
+          >
+            <span class="label">{{ r.label }}</span>
+            <span :class="r.mono ? 'mono' : 'num'">{{ r.value }}</span>
+          </div>
+        </template>
+      </template>
+
+      <template v-if="upstreamCredits != null">
+        <el-divider class="sub-divider" />
+        <div class="log-detail__row">
+          <span class="label">积分消耗</span>
+          <span class="num">{{ formatCredits(upstreamCredits) }} 积分</span>
+          <span class="row-hint">上游扣的积分，仅对账，不计费</span>
         </div>
       </template>
 
@@ -606,6 +693,10 @@ const outputDims = computed<DimRow[]>(() => {
 }
 .snapshot-hint--warn {
   color: var(--el-color-warning);
+}
+.row-hint {
+  font-size: 11.5px;
+  color: var(--el-text-color-secondary);
 }
 .error-code-raw {
   font-size: 11.5px;

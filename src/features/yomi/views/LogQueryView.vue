@@ -40,6 +40,7 @@ import type {
   ReverseLogInput,
 } from '@yomi/common';
 import { getYomiLogsPort } from '../services';
+import { creditDetailSummary, formatCredits } from '../model/creditUsage';
 import LogDetailDrawer from '../components/LogDetailDrawer.vue';
 import LogReverseDialog from '../components/LogReverseDialog.vue';
 
@@ -288,6 +289,8 @@ function usageSummary(row: LogEntry): { main: string; sub: string } {
       return { main: `${row.usage.minutes} min`, sub: '' };
     case 'per_character':
       return { main: `${row.usage.characters.toLocaleString()} 字符`, sub: '' };
+    case 'per_credit':
+      return { main: `${formatCredits(row.usage.credits)} 积分`, sub: creditDetailSummary(row.usage) };
   }
 }
 

@@ -6,7 +6,10 @@ import {
   logErrorCodeText,
   logHasErrorCode,
   logProtocolText,
+  logStopReasonTruncated,
 } from '@yomi/common';
+
+import { creditDetailRows, creditDetailSummary, formatCredits } from '../model/creditUsage';
 
 /**
  * 这些用例钉的是「后端真发什么」而不是「前端希望收到什么」——
@@ -91,6 +94,111 @@ describe('logEntrySchema 对齐后端 wire 形状', () => {
     expect(parsed.success).toBe(true);
   });
 
+  it('按 token 计费的行也带上游积分（小数）和终止原因原文', () => {
+    const row = wireRow({ vendorKey: 'kiro', status: 'success' });
+    Object.assign(row.content as Record<string, unknown>, {
+      statusCode: 200,
+      error: null,
+      credits: 0.028,
+      stopReason: 'MAX_TOKENS',
+    });
+    const parsed = logEntrySchema.safeParse(row);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.content.credits).toBe(0.028);
+      expect(parsed.data.content.stopReason).toBe('MAX_TOKENS');
+    }
+  });
+
+  it('改版前的行没有积分和终止原因，照样解析', () => {
+    const parsed = logEntrySchema.safeParse(wireRow());
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.content.credits).toBeUndefined();
+      expect(parsed.data.content.stopReason).toBeUndefined();
+    }
+  });
+
+  it('拒绝负的上游积分', () => {
+    const row = wireRow();
+    (row.content as Record<string, unknown>).credits = -1;
+    expect(logEntrySchema.safeParse(row).success).toBe(false);
+  });
+
+  it('解析 per_credit 行：积分是小数，原始用量按 detailKind 嵌在 detail 里', () => {
+    const parsed = logEntrySchema.safeParse(
+      wireRow({
+        status: 'success',
+        content: { protocol: 'openai_images', statusCode: 200, streamed: false, latencyMs: 8123 },
+        billingType: 'per_credit',
+        usage: {
+          credits: 0.028,
+          detailKind: 'image',
+          detail: { tier: { size: '832x1216', quality: 'standard' }, count: 1 },
+        },
+        cost: { pricePerCredit: 0.01, total: 0.00028 },
+      }),
+    );
+    expect(parsed.success).toBe(true);
+    if (!parsed.success || parsed.data.billingType !== 'per_credit') return;
+    expect(parsed.data.usage.credits).toBe(0.028);
+    expect(parsed.data.cost.pricePerCredit).toBe(0.01);
+    expect(parsed.data.usage.detailKind).toBe('image');
+    if (parsed.data.usage.detailKind === 'image') {
+      expect(parsed.data.usage.detail?.count).toBe(1);
+      expect(parsed.data.usage.detail?.tier.size).toBe('832x1216');
+    }
+
+    expect(creditDetailRows(parsed.data.usage)).toEqual([
+      { label: '张数', value: '1' },
+      { label: '尺寸', value: '832x1216', mono: true },
+      { label: '画质', value: 'standard' },
+    ]);
+    expect(creditDetailSummary(parsed.data.usage)).toBe('1 张 · 832x1216 · standard');
+  });
+
+  it('per_credit 的 token 明细只列非零维度；没有明细时不捏造', () => {
+    const parsed = logEntrySchema.safeParse(
+      wireRow({
+        status: 'success',
+        billingType: 'per_credit',
+        usage: {
+          credits: 1.5,
+          detailKind: 'token',
+          detail: {
+            totalTokens: 1300,
+            input: { tokens: 1000, cachedReadTokens: 200, cachedWriteTokens: 0, audioTokens: 0 },
+            output: { tokens: 300, reasoningTokens: 0, audioTokens: 0 },
+          },
+        },
+        cost: { pricePerCredit: 0.2, total: 0.3 },
+      }),
+    );
+    expect(parsed.success).toBe(true);
+    if (!parsed.success || parsed.data.billingType !== 'per_credit') return;
+    expect(creditDetailRows(parsed.data.usage).map((r) => r.label)).toEqual(['输入', 'cached 读', '输出']);
+    expect(creditDetailSummary(parsed.data.usage)).toBe('入 1,000 · 出 300');
+
+    const bare = logEntrySchema.safeParse(
+      wireRow({
+        billingType: 'per_credit',
+        usage: { credits: 0, detailKind: 'none' },
+        cost: { pricePerCredit: 0.2, total: 0 },
+      }),
+    );
+    expect(bare.success).toBe(true);
+    if (!bare.success || bare.data.billingType !== 'per_credit') return;
+    expect(creditDetailRows(bare.data.usage)).toEqual([]);
+    expect(creditDetailSummary(bare.data.usage)).toBe('');
+  });
+
+  it('per_credit 拒绝负积分与缺单价', () => {
+    const row = (usage: unknown, cost: unknown) =>
+      logEntrySchema.safeParse(wireRow({ billingType: 'per_credit', usage, cost })).success;
+    expect(row({ credits: -1, detailKind: 'none' }, { pricePerCredit: 0.01, total: 0 })).toBe(false);
+    expect(row({ credits: 1, detailKind: 'none' }, { total: 0.01 })).toBe(false);
+  });
+
   it('接受账单驳回原因码为枚举外的开放取值', () => {
     const parsed = logEntrySchema.safeParse(
       wireRow({
@@ -130,6 +238,23 @@ describe('展示层兜底', () => {
 
   it('计费类型标签认得 unknown', () => {
     expect(billingTypeText('per_token')).toBe('按量计费');
+    expect(billingTypeText('per_credit')).toBe('积分计费');
     expect(billingTypeText('unknown')).toBe('未知计费');
+  });
+
+  it('积分按原值显示小数，不取整也不补零', () => {
+    expect(formatCredits(0.028)).toBe('0.028');
+    expect(formatCredits(20)).toBe('20');
+    expect(formatCredits(12345.5)).toBe('12,345.5');
+    expect(formatCredits(undefined)).toBe('—');
+  });
+
+  it('截断类终止原因四家拼法都认，别的不算', () => {
+    for (const reason of ['length', 'max_tokens', 'MAX_TOKENS', 'max_output_tokens']) {
+      expect(logStopReasonTruncated(reason)).toBe(true);
+    }
+    for (const reason of ['stop', 'end_turn', 'STOP', 'tool_calls', 'SAFETY', 'completed', '', null, undefined]) {
+      expect(logStopReasonTruncated(reason)).toBe(false);
+    }
   });
 });

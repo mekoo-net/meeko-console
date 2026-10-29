@@ -24,6 +24,8 @@ export function rateBodySummary(body: RateBody, currency: string = MODEL_PRICE_C
     }
     case 'per_call':
       return `${m4(body.rate.pricePerCall)} / 次`;
+    case 'per_credit':
+      return `${m4(body.rate.pricePerCredit)} / 积分`;
     case 'per_image': {
       const prices = body.rate.tiers.map((t) => t.pricePerImage);
       return `${body.rate.tiers.length} 档 / ${rangeText(prices, m4)} / 张`;

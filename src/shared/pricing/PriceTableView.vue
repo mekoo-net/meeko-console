@@ -107,6 +107,7 @@ const MODEL_TYPE_OPTIONS: readonly {
   { value: 'per_video', billingType: 'per_video', label: '视频', meter: '按秒' },
   { value: 'per_audio_minute', billingType: 'per_audio_minute', label: '音频转写', meter: '按分钟' },
   { value: 'per_character', billingType: 'per_character', label: '语音合成', meter: '按字符' },
+  { value: 'per_credit', billingType: 'per_credit', label: '积分', meter: '按上游积分' },
   { value: 'per_call', billingType: 'per_call', label: '其它', meter: '按次' },
 ];
 

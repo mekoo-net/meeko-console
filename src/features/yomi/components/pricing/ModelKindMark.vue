@@ -9,6 +9,7 @@ import {
   Coin,
   Grid,
   Headset,
+  Medal,
   Microphone,
   Picture,
   VideoCamera,
@@ -32,6 +33,7 @@ const ICON: Readonly<Record<PriceModelKind, Component>> = {
   per_audio_minute: Headset,
   per_character: Microphone,
   per_call: Coin,
+  per_credit: Medal,
 };
 </script>
 
@@ -119,5 +121,12 @@ const ICON: Readonly<Record<PriceModelKind, Component>> = {
 }
 .kind[data-kind='per_call'] .kind__label {
   color: #e11d48;
+}
+.kind[data-kind='per_credit'] .kind__icon {
+  color: #c026d3;
+  background: color-mix(in srgb, #c026d3 14%, transparent);
+}
+.kind[data-kind='per_credit'] .kind__label {
+  color: #c026d3;
 }
 </style>

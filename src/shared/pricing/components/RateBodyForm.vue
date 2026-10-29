@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * 一份 RateBody 的录入表单。价格表锁死计量方式；模型定价自定义时
- * LLM 可改按量 / 按次，生图只能改档位，不能跨产品换计量。
+ * LLM 可改按量 / 按次，生图只能改档位，不能跨产品换计量——积分除外，
+ * 它是上游报的结算点数、不绑模态，各类模型都能改挂（见 allowedManualBillingTypes）。
  *
  * cachedRead / cachedWrite 留空 = 按 input 价计。
  */
@@ -62,6 +63,7 @@ interface FormState {
   outputAudio: Money;
   reasoning: Money;
   pricePerCall: Money;
+  pricePerCredit: Money;
   imageTiers: PerImageTier[];
   videoTiers: PerVideoTier[];
   videoMinSeconds: Money;
@@ -80,6 +82,7 @@ const emptyForm = (billingType: BillingType): FormState => ({
   outputAudio: null,
   reasoning: null,
   pricePerCall: null,
+  pricePerCredit: null,
   imageTiers: [{ size: '1024x1024', quality: 'standard', pricePerImage: 0 }],
   videoTiers: [{ resolution: '1080p', pricePerSecond: 0 }],
   videoMinSeconds: null,
@@ -106,6 +109,9 @@ function loadRateIntoForm(p: RateDraft): FormState {
       break;
     case 'per_call':
       f.pricePerCall = p.rate.pricePerCall;
+      break;
+    case 'per_credit':
+      f.pricePerCredit = p.rate.pricePerCredit;
       break;
     case 'per_image':
       f.imageTiers = p.rate.tiers.map((t) => ({ ...t }));
@@ -226,6 +232,8 @@ function buildRateBody(): RateBody {
         billingType: 'per_call',
         rate: { pricePerCall: num(f.pricePerCall) },
       };
+    case 'per_credit':
+      return { billingType: 'per_credit', rate: { pricePerCredit: num(f.pricePerCredit) } };
     case 'per_image':
       return { billingType: 'per_image', rate: { tiers: f.imageTiers.map((t) => ({ ...t })) } };
     case 'per_video':
@@ -311,6 +319,20 @@ defineExpose({ buildRateBody });
         <PriceField :currency-symbol="moneySymbol" v-model="form.pricePerCall" label="单次调用" unit="每次请求" placeholder="0" size="lg" />
       </div>
     </template>
+
+    <div
+      v-else-if="form.billingType === 'per_credit'"
+      class="main-grid main-grid--one"
+    >
+      <PriceField
+        v-model="form.pricePerCredit"
+        :currency-symbol="moneySymbol"
+        label="每积分"
+        unit="每 1 积分"
+        placeholder="0"
+        size="lg"
+      />
+    </div>
 
     <div v-else-if="form.billingType === 'per_audio_minute'" class="main-grid main-grid--one">
       <PriceField :currency-symbol="moneySymbol" v-model="form.pricePerMinute" label="音频时长" unit="每分钟" placeholder="0" size="lg" />
