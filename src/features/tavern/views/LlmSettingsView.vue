@@ -5,7 +5,6 @@ import {
   ArrowRight,
   Bell,
   ChatLineRound,
-  Check,
   Clock,
   Cpu,
   Document,
@@ -16,21 +15,21 @@ import {
   Refresh,
   Sort,
   User,
+  VideoCamera,
   View,
 } from '@element-plus/icons-vue';
 import type { Component } from 'vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import { formatDateTime } from '@/shared/lib/date';
+import PipelineModelDialog from '../components/PipelineModelDialog.vue';
+import { sameModelId, splitModelId } from '../model/llmCatalog';
 import type {
   LlmPipelineAdmin,
-  LlmPipelinePurpose,
   LlmPlatformModelOption,
   LlmPlatformSettingsAdmin,
 } from '../model/llmSettings.types';
 import { getTavernLlmSettingsPort } from '../services';
-
-const FOLLOW_VALUE = '__follow__';
 
 const port = getTavernLlmSettingsPort();
 const loading = ref(false);
@@ -40,23 +39,44 @@ const draft = reactive<Record<string, string | null>>({});
 const snapshot = ref<Record<string, string | null>>({});
 
 const pickerPipeline = ref<LlmPipelineAdmin | null>(null);
-const drawerVisible = ref(false);
+const pickerVisible = ref(false);
 const catalog = ref<LlmPlatformModelOption[]>([]);
 const catalogLoading = ref(false);
+const catalogLoaded = ref(false);
 
-const SECTIONS = [
-  { key: 'actor', title: '角色侧', subtitle: '对话、互动与自主唤醒' },
-  { key: 'world', title: '世界侧', subtitle: '世界逻辑、事件与导演' },
-  { key: 'summary', title: '归纳侧', subtitle: '纪事、时间线与滚动摘要' },
-  { key: 'perception', title: '感知与检索', subtitle: '识图、向量化与重排' },
-] as const;
+interface Section {
+  key: string;
+  title: string;
+  subtitle: string;
+  ids: string[];
+}
 
-const SECTION_IDS: Record<(typeof SECTIONS)[number]['key'], string[]> = {
-  actor: ['dialogue', 'interaction', 'wake'],
-  world: ['worldLogic', 'events', 'director'],
-  summary: ['chronicle', 'timeline', 'summary'],
-  perception: ['vision', 'embeddings', 'ranking'],
-};
+const SECTIONS: Section[] = [
+  {
+    key: 'actor',
+    title: '角色侧',
+    subtitle: '对话、互动与自主唤醒',
+    ids: ['dialogue', 'interaction', 'wake'],
+  },
+  {
+    key: 'world',
+    title: '世界侧',
+    subtitle: '世界逻辑、事件与导演',
+    ids: ['worldLogic', 'events', 'showrunner', 'director'],
+  },
+  {
+    key: 'summary',
+    title: '归纳侧',
+    subtitle: '纪事、时间线与滚动摘要',
+    ids: ['chronicle', 'timeline', 'summary'],
+  },
+  {
+    key: 'perception',
+    title: '感知与检索',
+    subtitle: '识图、向量化与重排',
+    ids: ['vision', 'embeddings', 'ranking'],
+  },
+];
 
 const PIPELINE_META: Record<string, { icon: Component; tone: string }> = {
   dialogue: { icon: ChatLineRound, tone: 'blue' },
@@ -64,6 +84,7 @@ const PIPELINE_META: Record<string, { icon: Component; tone: string }> = {
   wake: { icon: Bell, tone: 'amber' },
   worldLogic: { icon: Cpu, tone: 'violet' },
   events: { icon: Flag, tone: 'rose' },
+  showrunner: { icon: VideoCamera, tone: 'amber' },
   director: { icon: Guide, tone: 'indigo' },
   chronicle: { icon: Document, tone: 'green' },
   timeline: { icon: Clock, tone: 'cyan' },
@@ -73,20 +94,31 @@ const PIPELINE_META: Record<string, { icon: Component; tone: string }> = {
   ranking: { icon: Sort, tone: 'amber' },
 };
 
-const pipelineById = computed(() => {
-  const map = new Map<string, LlmPipelineAdmin>();
-  for (const pipeline of status.value?.pipelines ?? []) {
-    map.set(pipeline.id, pipeline);
-  }
-  return map;
-});
+/** 服务端在 LlmPipelineRegistry 新加、这里还没归组的管线，不能因为没写进分组就看不见。 */
+const sections = computed(() => {
+  const pipelines = status.value?.pipelines ?? [];
+  const byId = new Map(pipelines.map((pipeline) => [pipeline.id, pipeline]));
+  const grouped = new Set(SECTIONS.flatMap((section) => section.ids));
 
-const modelLabelById = computed(() => {
-  const map = new Map<string, string>();
-  for (const model of catalog.value) {
-    map.set(model.id, model.label);
+  const result = SECTIONS.map((section) => ({
+    ...section,
+    pipelines: section.ids
+      .map((id) => byId.get(id))
+      .filter((pipeline): pipeline is LlmPipelineAdmin => pipeline != null),
+  }));
+
+  const rest = pipelines.filter((pipeline) => !grouped.has(pipeline.id));
+  if (rest.length > 0) {
+    result.push({
+      key: 'other',
+      title: '其他',
+      subtitle: '尚未归组的管线',
+      ids: rest.map((pipeline) => pipeline.id),
+      pipelines: rest,
+    });
   }
-  return map;
+
+  return result.filter((section) => section.pipelines.length > 0);
 });
 
 const isDirty = computed(() => {
@@ -98,73 +130,6 @@ const isDirty = computed(() => {
   return false;
 });
 
-const pickerValue = computed({
-  get: () => {
-    if (!pickerPipeline.value) return FOLLOW_VALUE;
-    return draft[pickerPipeline.value.id] ?? FOLLOW_VALUE;
-  },
-  set: (value: string) => {
-    if (!pickerPipeline.value) return;
-    draft[pickerPipeline.value.id] = value === FOLLOW_VALUE ? null : value;
-  },
-});
-
-function modelPurpose(model: LlmPlatformModelOption): 'chat' | 'embedding' | 'ranking' {
-  const name = `${model.id} ${model.label}`.toLowerCase();
-  if (name.includes('embed')) return 'embedding';
-  if (name.includes('rerank') || name.includes('ranker')) return 'ranking';
-  return 'chat';
-}
-
-function modelsForPurpose(purpose: LlmPipelinePurpose): LlmPlatformModelOption[] {
-  const models = catalog.value;
-  if (purpose === 'embedding') return models.filter((model) => modelPurpose(model) === 'embedding');
-  if (purpose === 'ranking') return models.filter((model) => modelPurpose(model) === 'ranking');
-  if (purpose === 'vision') {
-    return models.filter(
-      (model) =>
-        modelPurpose(model) === 'chat' &&
-        model.modalities.some((modality) => modality.toLowerCase() === 'vision'),
-    );
-  }
-  return models.filter((model) => modelPurpose(model) === 'chat');
-}
-
-function pickerModelIds(pipeline: LlmPipelineAdmin): string[] {
-  const ids = modelsForPurpose(pipeline.purpose).map((model) => model.id);
-  const configured = draft[pipeline.id];
-  if (configured && !ids.some((id) => id.toLowerCase() === configured.toLowerCase())) {
-    return [configured, ...ids];
-  }
-  return ids;
-}
-
-const pickerIds = computed(() =>
-  pickerPipeline.value ? pickerModelIds(pickerPipeline.value) : [],
-);
-
-const pickerAutoHint = computed(() => {
-  const pipeline = pickerPipeline.value;
-  if (!pipeline) return '不指定模型';
-  return pickerIds.value.length > 0 ? '不指定模型' : '目录里还没有适用的模型';
-});
-
-function selectPickerValue(value: string): void {
-  pickerValue.value = value;
-}
-
-function modelLabel(id: string | null | undefined): string {
-  if (!id) return '—';
-  const exact = modelLabelById.value.get(id);
-  if (exact) return exact;
-  const lower = id.toLowerCase();
-  for (const [key, label] of modelLabelById.value) {
-    if (key.toLowerCase() === lower) return label;
-  }
-  const slash = id.lastIndexOf('/');
-  return slash >= 0 && slash < id.length - 1 ? id.slice(slash + 1) : id;
-}
-
 function applyStatus(next: LlmPlatformSettingsAdmin): void {
   status.value = next;
   const configured: Record<string, string | null> = {};
@@ -175,10 +140,16 @@ function applyStatus(next: LlmPlatformSettingsAdmin): void {
   snapshot.value = { ...configured };
 }
 
-function pipelineValueLabel(pipeline: LlmPipelineAdmin): string {
-  const configured = draft[pipeline.id] ?? null;
-  if (configured) return modelLabel(configured);
-  return '自动';
+function pipelineValue(pipelineId: string): { channel: string; name: string } | null {
+  const configured = draft[pipelineId] ?? null;
+  return configured ? splitModelId(configured) : null;
+}
+
+/** 已保存的 id 在目录里找不到：供应商下线、改了渠道名，或者模型被撤。调用时会直接失败。 */
+function isMissingFromCatalog(pipelineId: string): boolean {
+  const configured = draft[pipelineId] ?? null;
+  if (!configured || !catalogLoaded.value) return false;
+  return !catalog.value.some((model) => sameModelId(model.id, configured));
 }
 
 function isExplicitlySet(pipelineId: string): boolean {
@@ -189,33 +160,34 @@ function isPipelineDirty(pipelineId: string): boolean {
   return (draft[pipelineId] ?? null) !== (snapshot.value[pipelineId] ?? null);
 }
 
-function sectionPipelines(key: (typeof SECTIONS)[number]['key']): LlmPipelineAdmin[] {
-  return SECTION_IDS[key]
-    .map((id) => pipelineById.value.get(id))
-    .filter((pipeline): pipeline is LlmPipelineAdmin => pipeline != null);
-}
-
-async function openPicker(pipeline: LlmPipelineAdmin): Promise<void> {
-  pickerPipeline.value = pipeline;
-  drawerVisible.value = true;
-  if (catalog.value.length > 0 || catalogLoading.value) return;
-
+async function loadCatalog(): Promise<void> {
+  if (catalogLoading.value) return;
   catalogLoading.value = true;
   try {
     const r = await port.listCatalog();
-    if (r.success) catalog.value = r.data;
-    else ElMessage.error(r.error.message);
+    if (r.success) {
+      catalog.value = r.data;
+      catalogLoaded.value = true;
+    } else {
+      ElMessage.error(r.error.message);
+    }
   } finally {
     catalogLoading.value = false;
   }
 }
 
-function closePicker(): void {
-  drawerVisible.value = false;
-  pickerPipeline.value = null;
+function openPicker(pipeline: LlmPipelineAdmin): void {
+  pickerPipeline.value = pipeline;
+  pickerVisible.value = true;
+  if (!catalogLoaded.value) void loadCatalog();
 }
 
-async function load(): Promise<void> {
+function applyPick(value: string | null): void {
+  if (!pickerPipeline.value) return;
+  draft[pickerPipeline.value.id] = value;
+}
+
+async function loadSettings(): Promise<void> {
   loading.value = true;
   try {
     const r = await port.get();
@@ -227,6 +199,11 @@ async function load(): Promise<void> {
   } finally {
     loading.value = false;
   }
+}
+
+function load(): void {
+  void loadSettings();
+  void loadCatalog();
 }
 
 function reset(): void {
@@ -256,9 +233,7 @@ async function save(): Promise<void> {
   }
 }
 
-onMounted(() => {
-  void load();
-});
+onMounted(load);
 </script>
 
 <template>
@@ -284,7 +259,7 @@ onMounted(() => {
 
     <div class="pipeline-settings__body">
       <section
-        v-for="section in SECTIONS"
+        v-for="section in sections"
         :key="section.key"
         class="pipeline-settings__section"
       >
@@ -295,7 +270,7 @@ onMounted(() => {
 
         <div class="pipeline-settings__card">
           <button
-            v-for="(pipeline, index) in sectionPipelines(section.key)"
+            v-for="(pipeline, index) in section.pipelines"
             :key="pipeline.id"
             type="button"
             class="pipeline-settings__cell"
@@ -322,11 +297,23 @@ onMounted(() => {
               <span class="pipeline-settings__cell-title">{{ pipeline.label }}</span>
               <span class="pipeline-settings__cell-hint">{{ pipeline.hint }}</span>
               <span
-                class="pipeline-settings__cell-value"
-                :class="{ 'pipeline-settings__cell-value--set': isExplicitlySet(pipeline.id) }"
+                v-if="pipelineValue(pipeline.id)"
+                class="pipeline-settings__cell-value pipeline-settings__cell-value--set"
               >
-                {{ pipelineValueLabel(pipeline) }}
+                <span
+                  v-if="pipelineValue(pipeline.id)!.channel"
+                  class="pipeline-settings__channel"
+                >{{ pipelineValue(pipeline.id)!.channel }}</span>
+                <span class="pipeline-settings__model">{{ pipelineValue(pipeline.id)!.name }}</span>
+                <span
+                  v-if="isMissingFromCatalog(pipeline.id)"
+                  class="pipeline-settings__missing"
+                >不在目录</span>
               </span>
+              <span
+                v-else
+                class="pipeline-settings__cell-value"
+              >自动</span>
             </span>
             <el-icon
               class="pipeline-settings__chev"
@@ -342,7 +329,8 @@ onMounted(() => {
         v-if="status"
         class="pipeline-settings__meta"
       >
-        最近更新 {{ formatDateTime(status.updatedAtUtc) }} · 「自动」表示这条管线不指定模型
+        最近更新 {{ formatDateTime(status.updatedAtUtc) }} · 「自动」表示这条管线不指定模型 ·
+        「不在目录」表示已保存的模型当前没有供应商发布，调用会失败
       </p>
     </div>
 
@@ -370,95 +358,35 @@ onMounted(() => {
       </footer>
     </transition>
 
-    <el-drawer
-      v-model="drawerVisible"
-      size="400px"
-      destroy-on-close
-      class="pipeline-settings__drawer"
-      @closed="closePicker"
+    <PipelineModelDialog
+      v-model="pickerVisible"
+      :pipeline="pickerPipeline"
+      :catalog="catalog"
+      :loading="catalogLoading"
+      :value="pickerPipeline ? (draft[pickerPipeline.id] ?? null) : null"
+      :saved="pickerPipeline ? (snapshot[pickerPipeline.id] ?? null) : null"
+      @confirm="applyPick"
     >
       <template #header>
         <div
           v-if="pickerPipeline"
-          class="pipeline-settings__drawer-head"
+          class="pipeline-settings__dialog-head"
         >
           <span
-            class="pipeline-settings__drawer-icon"
+            class="pipeline-settings__dialog-icon"
             :class="`pipeline-settings__icon--${PIPELINE_META[pickerPipeline.id]?.tone ?? 'blue'}`"
           >
             <el-icon :size="20">
               <component :is="PIPELINE_META[pickerPipeline.id]?.icon ?? ChatLineRound" />
             </el-icon>
           </span>
-          <div class="pipeline-settings__drawer-copy">
-            <h3 class="pipeline-settings__drawer-title">{{ pickerPipeline.label }}</h3>
-            <p class="pipeline-settings__drawer-sub">{{ pickerPipeline.hint }}</p>
+          <div class="pipeline-settings__dialog-copy">
+            <h3 class="pipeline-settings__dialog-title">{{ pickerPipeline.label }}</h3>
+            <p class="pipeline-settings__dialog-sub">{{ pickerPipeline.hint }}</p>
           </div>
         </div>
       </template>
-
-      <div
-        v-if="pickerPipeline"
-        v-loading="catalogLoading"
-        class="pipeline-settings__picker"
-      >
-        <button
-          type="button"
-          class="pipeline-settings__pick"
-          :class="{ 'pipeline-settings__pick--active': pickerValue === FOLLOW_VALUE }"
-          @click="selectPickerValue(FOLLOW_VALUE)"
-        >
-          <span class="pipeline-settings__pick-main">
-            <span class="pipeline-settings__pick-label">自动</span>
-            <span class="pipeline-settings__pick-hint">{{ pickerAutoHint }}</span>
-          </span>
-          <el-icon
-            v-if="pickerValue === FOLLOW_VALUE"
-            class="pipeline-settings__pick-check"
-            :size="18"
-          >
-            <Check />
-          </el-icon>
-        </button>
-
-        <p class="pipeline-settings__pick-section">指定模型</p>
-
-        <div class="pipeline-settings__pick-list">
-          <button
-            v-for="id in pickerIds"
-            :key="id"
-            type="button"
-            class="pipeline-settings__pick"
-            :class="{ 'pipeline-settings__pick--active': pickerValue === id }"
-            @click="selectPickerValue(id)"
-          >
-            <span class="pipeline-settings__pick-main">
-              <span class="pipeline-settings__pick-label">{{ modelLabel(id) }}</span>
-              <span class="pipeline-settings__pick-hint">{{ id }}</span>
-            </span>
-            <el-icon
-              v-if="pickerValue === id"
-              class="pipeline-settings__pick-check"
-              :size="18"
-            >
-              <Check />
-            </el-icon>
-          </button>
-        </div>
-      </div>
-
-      <template #footer>
-        <div class="pipeline-settings__drawer-foot">
-          <el-button @click="drawerVisible = false">取消</el-button>
-          <el-button
-            type="primary"
-            @click="drawerVisible = false"
-          >
-            完成
-          </el-button>
-        </div>
-      </template>
-    </el-drawer>
+    </PipelineModelDialog>
   </div>
 </template>
 
@@ -614,8 +542,34 @@ onMounted(() => {
 }
 
 .pipeline-settings__cell-value--set {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
   color: var(--el-color-primary);
   font-weight: 500;
+}
+
+.pipeline-settings__channel {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--el-text-color-regular);
+  background: var(--el-fill-color);
+}
+
+.pipeline-settings__model {
+  word-break: break-all;
+}
+
+.pipeline-settings__missing {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--el-color-warning-dark-2);
+  background: color-mix(in srgb, var(--el-color-warning) 14%, transparent);
 }
 
 .pipeline-settings__chev {
@@ -667,23 +621,14 @@ onMounted(() => {
   transform: translateY(12px);
 }
 
-.pipeline-settings__drawer :deep(.el-drawer__header) {
-  margin-bottom: 0;
-  padding-bottom: 12px;
-}
-
-.pipeline-settings__drawer :deep(.el-drawer__body) {
-  padding-top: 4px;
-}
-
-.pipeline-settings__drawer-head {
+.pipeline-settings__dialog-head {
   display: flex;
   align-items: flex-start;
   gap: 12px;
   min-width: 0;
 }
 
-.pipeline-settings__drawer-icon {
+.pipeline-settings__dialog-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -693,108 +638,21 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.pipeline-settings__drawer-copy {
+.pipeline-settings__dialog-copy {
   min-width: 0;
 }
 
-.pipeline-settings__drawer-title {
+.pipeline-settings__dialog-title {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
   color: var(--el-text-color-primary);
 }
 
-.pipeline-settings__drawer-sub {
+.pipeline-settings__dialog-sub {
   margin: 4px 0 0;
   font-size: 12px;
   line-height: 1.5;
   color: var(--el-text-color-secondary);
-}
-
-.pipeline-settings__picker {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.pipeline-settings__pick-section {
-  margin: 6px 0 0;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--el-text-color-secondary);
-}
-
-.pipeline-settings__pick-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: calc(100vh - 320px);
-  overflow-y: auto;
-  padding-right: 2px;
-}
-
-.pipeline-settings__pick {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 12px 14px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 12px;
-  background: var(--el-bg-color);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color 0.15s,
-    background-color 0.15s,
-    box-shadow 0.15s;
-}
-
-.pipeline-settings__pick:hover {
-  border-color: var(--el-color-primary-light-5);
-  background: var(--el-fill-color-light);
-}
-
-.pipeline-settings__pick--active {
-  border-color: var(--el-color-primary-light-3);
-  background: color-mix(in srgb, var(--el-color-primary) 8%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--el-color-primary) 12%, transparent);
-}
-
-.pipeline-settings__pick-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.pipeline-settings__pick-label {
-  display: block;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--el-text-color-primary);
-}
-
-.pipeline-settings__pick--active .pipeline-settings__pick-label {
-  color: var(--el-color-primary);
-}
-
-.pipeline-settings__pick-hint {
-  display: block;
-  margin-top: 3px;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--el-text-color-secondary);
-  word-break: break-all;
-}
-
-.pipeline-settings__pick-check {
-  flex-shrink: 0;
-  color: var(--el-color-primary);
-}
-
-.pipeline-settings__drawer-foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 </style>
