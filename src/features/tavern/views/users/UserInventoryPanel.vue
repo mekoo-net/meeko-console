@@ -153,7 +153,7 @@ onMounted(() => void load());
           <el-tag
             size="small"
             effect="plain"
-            :type="row.item.kind === 'world_book' ? 'success' : 'primary'"
+            :type="row.item.kind === 'world_line' ? 'success' : 'primary'"
           >
             {{ MarketItemKindLabel[row.item.kind] }}
           </el-tag>

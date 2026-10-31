@@ -14,7 +14,7 @@ import {
   MagicStick,
   Message,
   Money,
-  Notebook,
+  Share,
   Operation,
   FolderOpened,
   Files,
@@ -148,7 +148,7 @@ export const navViews: readonly NavView[] = [
         icon: Shop,
         children: [
           { type: 'leaf', index: '/tavern/market/cards', title: '角色卡', icon: Postcard },
-          { type: 'leaf', index: '/tavern/market/world-books', title: '世界书', icon: Notebook },
+          { type: 'leaf', index: '/tavern/market/world-lines', title: '世界线', icon: Share },
           { type: 'leaf', index: '/tavern/market/orders', title: '订单', icon: Tickets },
           { type: 'leaf', index: '/tavern/market/withdrawals', title: '提现', icon: Money },
         ],

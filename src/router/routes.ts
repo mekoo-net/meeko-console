@@ -451,7 +451,7 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '积分价目', requiresAuth: true, roles: ['Admin'] },
           },
           {
-            // 角色卡、世界书两类商品同一张列表，按类别分页面。
+            // 角色卡、世界线两类商品同一张列表，按类别分页面。
             path: 'market/cards',
             name: 'tavern-market-cards',
             component: () => import('@/features/tavern/views/market/MarketItemsView.vue'),
@@ -459,11 +459,11 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '角色卡', requiresAuth: true, roles: ['Admin'] },
           },
           {
-            path: 'market/world-books',
-            name: 'tavern-market-world-books',
+            path: 'market/world-lines',
+            name: 'tavern-market-world-lines',
             component: () => import('@/features/tavern/views/market/MarketItemsView.vue'),
-            props: { kind: 'world_book' },
-            meta: { title: '世界书', requiresAuth: true, roles: ['Admin'] },
+            props: { kind: 'world_line' },
+            meta: { title: '世界线', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'market/withdrawals',

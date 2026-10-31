@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 商品行「评价」：一件商品（角色卡或世界书）的评价，新的在前。外壳见 MarketRecordsDialog。
+ * 商品行「评价」：一件商品（角色卡或世界线）的评价，新的在前。外壳见 MarketRecordsDialog。
  * 上面一行按买家搜、按好评 / 中评 / 差评分类看（好评 4–5 星、中评 3 星、差评 1–2 星），分类按钮上带条数。
  */
 import { computed, ref, watch } from 'vue';

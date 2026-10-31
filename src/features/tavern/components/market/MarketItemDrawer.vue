@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 商品详情，版式同角色卡抽屉：摘要表在上，门面、在卖的内容分段往下（都按条目，点开看正文），下架 / 恢复放底栏。
- * 内容按类别分：角色卡是预设和描写；世界书是一整套世界模板（时间、叙事、世界书、规则书）。
+ * 内容按类别分：角色卡是预设和描写；世界线是一整套世界模板（时间、叙事、世界书、规则书）。
  * 底栏是处置，按状态给：在售可下架；已下架可上架、删除；已删除可恢复（同列表行上的「⋯」，都走 useItemModeration）。
  * 评价和订单在列表行上的「操作」里另开弹窗看。
  * 只给在卖的那一版——员工判断要不要下架看的就是它；版本是创作者和买家之间的事，这里不露。
@@ -40,7 +40,7 @@ const loading = ref(false);
 const item = computed(() => detail.value?.item ?? null);
 const onSale = computed(() => detail.value?.onSale ?? null);
 const kindLabel = computed(() => (item.value ? MarketItemKindLabel[item.value.listing.kind] : '商品'));
-/** 角色卡露头像，世界书露封面。 */
+/** 角色卡露头像，世界线露封面。 */
 const image = computed(() => {
   const l = item.value?.listing;
   return (l?.kind === 'character_card' ? l.character.avatar : l?.face.cover) ?? undefined;
@@ -90,7 +90,7 @@ function faceLines(content: MarketItemContent): { label: string; value: string }
   <el-drawer
     v-model="visible"
     direction="rtl"
-    :size="onSale?.kind === 'world_book' ? '720px' : '600px'"
+    :size="onSale?.kind === 'world_line' ? '720px' : '600px'"
   >
     <template #header>
       <div class="drawer-title">

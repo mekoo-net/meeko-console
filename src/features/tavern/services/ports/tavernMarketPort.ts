@@ -22,7 +22,7 @@ import type {
   WithdrawalRow,
 } from '../../model/market.types';
 
-/** 市场管理：商品（角色卡 / 世界书）、下架 / 恢复、订单、分成设置、卖家收益与提现审核。动作都回改完的那一行。 */
+/** 市场管理：商品（角色卡 / 世界线）、下架 / 恢复、订单、分成设置、卖家收益与提现审核。动作都回改完的那一行。 */
 export interface TavernMarketPort {
   items(query: MarketItemQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketItemRow>>>;
   item(itemId: string): Promise<AppResult<MarketItemDetail>>;

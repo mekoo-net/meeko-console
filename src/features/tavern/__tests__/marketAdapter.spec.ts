@@ -78,8 +78,8 @@ describe('TavernMarketHttpAdapter', () => {
     expect(r.success && r.data.onSale.kind === 'character_card' && r.data.onSale.preset.systemPrompt).toBe('你是沈惟行。');
   });
 
-  it('reads a world book on sale as a whole world template', async () => {
-    const book = { kind: 'world_book', face: { ...FACE, name: '雾港 1931' }, summary: { narratives: 1, settings: 1, rules: 0, time: TIME } };
+  it('reads a world line on sale as a whole world template', async () => {
+    const book = { kind: 'world_line', face: { ...FACE, name: '雾港 1931' }, summary: { narratives: 1, settings: 1, rules: 0, time: TIME } };
     request.mockResolvedValueOnce(
       ok({
         item: wireItem({ listing: book }),
@@ -92,14 +92,14 @@ describe('TavernMarketHttpAdapter', () => {
             // 创作者的世界没写过规则书：服务端原样给空对象。
             rulebook: {},
           },
-          kind: 'world_book',
+          kind: 'world_line',
         },
       }),
     );
     const r = await new TavernMarketHttpAdapter().item(ITEM_ID);
     expect(r.success).toBe(true);
-    if (!r.success || r.data.onSale.kind !== 'world_book') return;
-    expect(r.data.item.listing.kind).toBe('world_book');
+    if (!r.success || r.data.onSale.kind !== 'world_line') return;
+    expect(r.data.item.listing.kind).toBe('world_line');
     expect(r.data.onSale.world.time.mode).toBe('turnbased');
     expect(r.data.onSale.world.rulebook.rules).toEqual([]);
     expect(r.data.onSale.world.worldBook.nodes[0]).toMatchObject({ type: 'lore', enabled: true, audience: 'all' });
@@ -135,7 +135,7 @@ describe('TavernMarketHttpAdapter', () => {
             id: '0193f5a0-0000-7000-8000-000000000001',
             serialNo: 'MO20261031000000002',
             source: 'purchase',
-            item: { id: ITEM_ID, kind: 'world_book', name: '雾港 1931' },
+            item: { id: ITEM_ID, kind: 'world_line', name: '雾港 1931' },
             buyer: ACCOUNT,
             seller: ACCOUNT,
             price: { amount: 9.9, currency: 'CNY' },
@@ -149,12 +149,12 @@ describe('TavernMarketHttpAdapter', () => {
         pageSize: 20,
       }),
     );
-    const r = await new TavernMarketHttpAdapter().orders({ buyerUid: 100004120, kind: 'world_book' }, { p: 1, pageSize: 20 });
+    const r = await new TavernMarketHttpAdapter().orders({ buyerUid: 100004120, kind: 'world_line' }, { p: 1, pageSize: 20 });
     expect(request).toHaveBeenCalledWith('/tavern/api/admin/market/orders', {
-      query: { p: 1, pageSize: 20, buyerUid: 100004120, kind: 'world_book' },
+      query: { p: 1, pageSize: 20, buyerUid: 100004120, kind: 'world_line' },
     });
     expect(r.success && r.data.items[0]?.serialNo).toBe('MO20261031000000002');
-    expect(r.success && r.data.items[0]?.item.kind).toBe('world_book');
+    expect(r.success && r.data.items[0]?.item.kind).toBe('world_line');
     expect(r.success && r.data.items[0]?.stage).toBe('settling');
   });
 

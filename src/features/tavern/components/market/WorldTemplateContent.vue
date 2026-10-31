@@ -1,17 +1,17 @@
 <script setup lang="ts">
 /**
- * 世界书商品在卖的那一版：一整套世界模板，按客户端世界设置的叫法分块——时间、叙事、世界书、规则书。
+ * 世界线商品在卖的那一版：一整套世界模板，按客户端世界设置的叫法分块——时间、叙事、世界书、规则书。
  * 叙事和设定按条目，点开看正文；规则书同世界详情里的变量表和规则表，只是模板没有当前值。
  */
 import { computed } from 'vue';
 
-import { TemplateTimeModeLabel, type WorldBookContent } from '../../model/market.types';
+import { TemplateTimeModeLabel, type WorldLineContent } from '../../model/market.types';
 import { narrativeItems, worldBookNodeItems } from '../../model/promptEntries';
 import PromptEntryList from '../content/PromptEntryList.vue';
 import RulebookDocumentView from '../content/RulebookDocumentView.vue';
 import { timePace } from '../../model/marketFormat';
 
-const props = defineProps<{ content: WorldBookContent }>();
+const props = defineProps<{ content: WorldLineContent }>();
 
 const narratives = computed(() => narrativeItems(props.content.world.narratives));
 const settings = computed(() => worldBookNodeItems(props.content.world.worldBook.nodes));

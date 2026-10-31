@@ -14,7 +14,7 @@ import type { StatusTone } from './metering.types';
 
 /**
  * Tavern 市场（C2C）的管理面（后端 `market.*`，wire camelCase、枚举 snake_case、时间 epoch 毫秒）。
- * 卖两类商品：角色卡、世界书（一整套世界模板，买了用它开新世界）。
+ * 卖两类商品：角色卡、世界线（一整套世界模板，买了用它开新世界）。
  * 玩家发布即上架；员工只能事后下架 / 恢复，下架只是停售，已买的照常用。
  * 员工看的是市场上在卖的东西：没发布过的不列，版本不露——只给在卖的那一版。
  * C2C：买家付人民币进平台钱包，卖家拿钱（人民币，记在 Tavern 账上）：平台抽成后先冻结，期满转可提现，提现由员工审核打款。
@@ -22,12 +22,12 @@ import type { StatusTone } from './metering.types';
 
 // ---------- 类别 ----------
 
-export const marketItemKindSchema = z.enum(['character_card', 'world_book']);
+export const marketItemKindSchema = z.enum(['character_card', 'world_line']);
 export type MarketItemKind = z.infer<typeof marketItemKindSchema>;
 
 export const MarketItemKindLabel: Readonly<Record<MarketItemKind, string>> = {
   character_card: '角色卡',
-  world_book: '世界书',
+  world_line: '世界线',
 };
 
 // ---------- 门面与目录上露的样子 ----------
@@ -74,7 +74,7 @@ export const worldTimeTemplateSchema = z.object({
 });
 export type WorldTimeTemplate = z.infer<typeof worldTimeTemplateSchema>;
 
-/** 世界书的规模：几段叙事、几条设定、几条规则，时间怎么走。 */
+/** 世界线的规模：几段叙事、几条设定、几条规则，时间怎么走。 */
 export const worldTemplateSummarySchema = z.object({
   narratives: z.number().int(),
   settings: z.number().int(),
@@ -91,7 +91,7 @@ export const marketListingSchema = z.discriminatedUnion('kind', [
     capabilities: cardCapabilitiesSchema,
   }),
   z.object({
-    kind: z.literal('world_book'),
+    kind: z.literal('world_line'),
     face: itemFaceSchema,
     summary: worldTemplateSummarySchema,
   }),
@@ -165,7 +165,7 @@ export const templateRulebookSchema = z.looseObject({
 /**
  * 在卖那一版的内容，按类别分：
  * - 角色卡：预设、描写与导入卡同形；
- * - 世界书：叙事、世界书、规则书、时间。
+ * - 世界线：叙事、世界书、规则书、时间。
  */
 export const marketItemContentSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -177,7 +177,7 @@ export const marketItemContentSchema = z.discriminatedUnion('kind', [
     capabilities: cardCapabilitiesSchema,
   }),
   z.object({
-    kind: z.literal('world_book'),
+    kind: z.literal('world_line'),
     face: itemFaceSchema,
     world: z.object({
       narratives: z.array(narrativeEntrySchema),
@@ -189,7 +189,7 @@ export const marketItemContentSchema = z.discriminatedUnion('kind', [
 ]);
 export type MarketItemContent = z.infer<typeof marketItemContentSchema>;
 export type CharacterCardContent = Extract<MarketItemContent, { kind: 'character_card' }>;
-export type WorldBookContent = Extract<MarketItemContent, { kind: 'world_book' }>;
+export type WorldLineContent = Extract<MarketItemContent, { kind: 'world_line' }>;
 
 export const marketReviewSchema = z.object({
   id: z.number().int(),
@@ -307,7 +307,7 @@ export type MarketOrderQuery = {
 /** 仓库里的一件：商品、在售状态、创作者、获得方式（购买 / 创作）、对应订单、获得时间。 */
 export const inventoryRowSchema = z.object({
   item: z.object({ id: z.string().min(1), kind: marketItemKindSchema, name: z.string() }),
-  /** 角色卡是头像，世界书是封面。 */
+  /** 角色卡是头像，世界线是封面。 */
   image: z.string().nullable(),
   itemState: marketItemStateSchema,
   creator: accountRefSchema,

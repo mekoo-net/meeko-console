@@ -71,9 +71,9 @@ function card(f: ItemFace, greetings: string[], systemPrompt: string): MarketIte
   };
 }
 
-/** 世界书按服务端的样子写，再过一遍 schema 补齐节点、规则的默认值。 */
+/** 世界线按服务端的样子写，再过一遍 schema 补齐节点、规则的默认值。 */
 const FOG_HARBOR = marketItemContentSchema.parse({
-  kind: 'world_book',
+  kind: 'world_line',
   face: {
     ...face('雾港 1931', '一座永远在下雨的港口城市，旧警署、码头帮派和失踪的货船。', ['悬疑', '民国', '黑色电影']),
     description: '从雾港警署的一个雨夜开始。适合推理、潜入和多方周旋。',
@@ -133,7 +133,7 @@ const FOG_HARBOR = marketItemContentSchema.parse({
 });
 
 const ARK = marketItemContentSchema.parse({
-  kind: 'world_book',
+  kind: 'world_line',
   face: face('方舟', '海平面上升后的最后一座浮城，配给、轮值和一台不该醒来的主机。', ['末日', '科幻', '生存']),
   world: {
     narratives: [{ name: '方舟', content: '你是方舟的新任轮值官。资源永远不够，每个决定都有人付出代价。' }],
@@ -239,7 +239,7 @@ const orders: MockOrder[] = [
 
 let settings: MarketSettingsView = { settings: { commissionRate: 0.3, settlementDays: 7 }, updatedAt: null };
 
-/** 同服务端的 `ToListing()`：角色卡露头像开场白和能力，世界书露规模和时间。 */
+/** 同服务端的 `ToListing()`：角色卡露头像开场白和能力，世界线露规模和时间。 */
 function listingOf(c: MarketItemContent): MarketListing {
   if (c.kind === 'character_card') return { kind: c.kind, face: c.face, character: c.character, capabilities: c.capabilities };
   return {
@@ -438,8 +438,8 @@ async function actOnWithdrawal(
   return ok({ ...w });
 }
 
-/** 同服务端的说法：角色卡论张，世界书论本。 */
-const thisOne = (i: MockItem) => (i.onSale.kind === 'world_book' ? '这本世界书' : '这张角色卡');
+/** 同服务端的说法：角色卡论张，世界线论条。 */
+const thisOne = (i: MockItem) => (i.onSale.kind === 'world_line' ? '这条世界线' : '这张角色卡');
 
 const notFound = () => fail({ code: 'not_found', message: '商品不存在。' });
 
@@ -462,9 +462,9 @@ async function moveItem(
 /** 同服务端：好评 4–5 星、中评 3 星、差评 1–2 星。 */
 const sentimentOf = (rating: number): ReviewSentiment => (rating >= 4 ? 'good' : rating === 3 ? 'neutral' : 'bad');
 
-const REVIEW_TEXT: Readonly<Record<'character_card' | 'world_book', Record<ReviewSentiment, string | null>>> = {
+const REVIEW_TEXT: Readonly<Record<'character_card' | 'world_line', Record<ReviewSentiment, string | null>>> = {
   character_card: { good: '人设很稳，推理戏好看。', neutral: '还行，开场有点慢。', bad: '人设崩了，说话一点不像督察。' },
-  world_book: { good: '设定扎实，开局就有戏。', neutral: null, bad: '规则太多，开出来的世界跑不动。' },
+  world_line: { good: '设定扎实，开局就有戏。', neutral: null, bad: '规则太多，开出来的世界跑不动。' },
 };
 
 /** 每条评价轮流算在林夏、0123 名下，新的在前。 */

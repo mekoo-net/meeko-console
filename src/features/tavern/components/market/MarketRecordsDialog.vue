@@ -18,7 +18,7 @@ const page = defineModel<number>('page', { required: true });
 const pageSize = defineModel<number>('pageSize', { required: true });
 const props = defineProps<{ title: string; item: MarketItemRow | null; stats: RecordStat[]; total: number }>();
 
-/** 角色卡露头像，世界书露封面。 */
+/** 角色卡露头像，世界线露封面。 */
 const image = computed(() => {
   const l = props.item?.listing;
   return (l?.kind === 'character_card' ? l.character.avatar : l?.face.cover) ?? undefined;
@@ -55,7 +55,7 @@ const image = computed(() => {
             <el-tag
               size="small"
               effect="plain"
-              :type="item.listing.kind === 'world_book' ? 'success' : 'primary'"
+              :type="item.listing.kind === 'world_line' ? 'success' : 'primary'"
             >
               {{ MarketItemKindLabel[item.listing.kind] }}
             </el-tag>
