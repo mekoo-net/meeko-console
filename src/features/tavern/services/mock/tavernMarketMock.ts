@@ -30,8 +30,9 @@ interface MockCard {
   creator: AccountRef;
   state: MarketCardState;
   price: number;
-  versions: { version: number; price: number; content: CardVersionContent; publishedAt: number }[];
-  draft: { content: CardVersionContent; price: number } | null;
+  /** 在卖的那一版。 */
+  onSale: CardVersionContent;
+  publishedAt: number;
   purchases: number;
   ratings: number[];
   takedown: { reason: string; staffUid: number; atUtc: number } | null;
@@ -61,12 +62,8 @@ const cards: MockCard[] = [
     creator: ASAKO,
     state: 'listed',
     price: 9.9,
-    versions: [
-      { version: 3, price: 9.9, content: content(SHEN, '你是沈惟行，雾港警署督察。说话简短，对细节过目不忘。'), publishedAt: NOW - 2 * DAY },
-      { version: 2, price: 9.9, content: content(SHEN, '你是沈惟行，雾港警署督察。'), publishedAt: NOW - 20 * DAY },
-      { version: 1, price: 6, content: content(SHEN, '你是沈惟行。'), publishedAt: NOW - 50 * DAY },
-    ],
-    draft: { content: content({ ...SHEN, tagline: '雾港最年轻的督察。' }, '你是沈惟行，雾港警署督察。说话简短。'), price: 12 },
+    onSale: content(SHEN, '你是沈惟行，雾港警署督察。说话简短，对细节过目不忘。'),
+    publishedAt: NOW - 50 * DAY,
     purchases: 128,
     ratings: [5, 5, 4, 5, 3],
     takedown: null,
@@ -77,8 +74,8 @@ const cards: MockCard[] = [
     creator: ASAKO,
     state: 'listed',
     price: 0,
-    versions: [{ version: 1, price: 0, content: content(SU, '你是苏晚，苏记茶馆的老板娘。'), publishedAt: NOW - 40 * DAY }],
-    draft: null,
+    onSale: content(SU, '你是苏晚，苏记茶馆的老板娘。'),
+    publishedAt: NOW - 40 * DAY,
     purchases: 451,
     ratings: [4, 5],
     takedown: null,
@@ -89,24 +86,12 @@ const cards: MockCard[] = [
     creator: PLAYER_0123,
     state: 'taken_down',
     price: 3,
-    versions: [{ version: 1, price: 3, content: content(face('某明星', '……', ['真人'], []), '你是某明星本人。'), publishedAt: NOW - 9 * DAY }],
-    draft: null,
+    onSale: content(face('某明星', '……', ['真人'], []), '你是某明星本人。'),
+    publishedAt: NOW - 9 * DAY,
     purchases: 4,
     ratings: [],
     takedown: { reason: '冒充真人，侵犯肖像权。', staffUid: STAFF_UID, atUtc: NOW - 6 * DAY },
     updatedAt: NOW - 6 * DAY,
-  },
-  {
-    id: mockUuid(804),
-    creator: LINXIA,
-    state: 'draft',
-    price: 5,
-    versions: [],
-    draft: { content: content(face('陆川', '退休的灯塔守夜人。', ['灯塔'], []), '你是陆川。'), price: 5 },
-    purchases: 0,
-    ratings: [],
-    takedown: null,
-    updatedAt: NOW - 5 * HOUR,
   },
 ];
 
@@ -114,7 +99,6 @@ interface MockOrder {
   id: string;
   source: MarketOrderRow['source'];
   cardId: string;
-  cardVersion: number;
   buyer: AccountRef;
   price: number;
   status: MarketOrderRow['status'];
@@ -123,24 +107,22 @@ interface MockOrder {
 }
 
 const orders: MockOrder[] = [
-  { id: mockUuid(901), source: 'creator', cardId: mockUuid(801), cardVersion: 1, buyer: ASAKO, price: 0, status: 'active', failureReason: null, at: NOW - 50 * DAY },
-  { id: mockUuid(902), source: 'purchase', cardId: mockUuid(801), cardVersion: 1, buyer: LINXIA, price: 6, status: 'active', failureReason: null, at: NOW - 42 * DAY },
-  { id: mockUuid(903), source: 'creator', cardId: mockUuid(802), cardVersion: 1, buyer: ASAKO, price: 0, status: 'active', failureReason: null, at: NOW - 40 * DAY },
-  { id: mockUuid(904), source: 'purchase', cardId: mockUuid(802), cardVersion: 1, buyer: LINXIA, price: 0, status: 'active', failureReason: null, at: NOW - 40 * DAY },
-  { id: mockUuid(905), source: 'purchase', cardId: mockUuid(803), cardVersion: 1, buyer: LINXIA, price: 3, status: 'failed', failureReason: '钱包余额不足，请先充值。', at: NOW - 8 * DAY },
-  { id: mockUuid(906), source: 'purchase', cardId: mockUuid(801), cardVersion: 3, buyer: PLAYER_0123, price: 9.9, status: 'active', failureReason: null, at: NOW - 1 * DAY },
+  { id: mockUuid(901), source: 'creator', cardId: mockUuid(801), buyer: ASAKO, price: 0, status: 'active', failureReason: null, at: NOW - 50 * DAY },
+  { id: mockUuid(902), source: 'purchase', cardId: mockUuid(801), buyer: LINXIA, price: 6, status: 'active', failureReason: null, at: NOW - 42 * DAY },
+  { id: mockUuid(903), source: 'creator', cardId: mockUuid(802), buyer: ASAKO, price: 0, status: 'active', failureReason: null, at: NOW - 40 * DAY },
+  { id: mockUuid(904), source: 'purchase', cardId: mockUuid(802), buyer: LINXIA, price: 0, status: 'active', failureReason: null, at: NOW - 40 * DAY },
+  { id: mockUuid(905), source: 'purchase', cardId: mockUuid(803), buyer: LINXIA, price: 3, status: 'failed', failureReason: '钱包余额不足，请先充值。', at: NOW - 8 * DAY },
+  { id: mockUuid(906), source: 'purchase', cardId: mockUuid(801), buyer: PLAYER_0123, price: 9.9, status: 'active', failureReason: null, at: NOW - 1 * DAY },
 ];
 
 let settings: MarketSettingsView = { settings: { commissionRate: 0.3, creditsPerYuan: 100 }, updatedAt: null };
 
 function row(c: MockCard): MarketCardRow {
-  const latest = c.versions[0];
   return {
     cardId: c.id,
     creator: c.creator,
-    face: latest?.content.face ?? c.draft!.content.face,
+    face: c.onSale.face,
     price: { amount: c.price, currency: 'CNY' },
-    version: latest?.version ?? 0,
     stats: {
       purchases: c.purchases,
       rating: c.ratings.length ? Math.round((c.ratings.reduce((a, b) => a + b, 0) / c.ratings.length) * 10) / 10 : 0,
@@ -148,8 +130,7 @@ function row(c: MockCard): MarketCardRow {
     },
     state: c.state,
     takedown: c.takedown,
-    hasDraft: c.draft != null,
-    publishedAt: c.versions.at(-1)?.publishedAt ?? null,
+    publishedAt: c.publishedAt,
     updatedAt: c.updatedAt,
   };
 }
@@ -161,7 +142,6 @@ function orderRow(o: MockOrder): MarketOrderRow {
     id: o.id,
     source: o.source,
     card: { id: card.id, name: row(card).face.name },
-    cardVersion: o.cardVersion,
     buyer: o.buyer,
     seller: card.creator,
     price: { amount: o.price, currency: 'CNY' },
@@ -194,14 +174,12 @@ export class TavernMarketMock implements TavernMarketPort {
     if (!c) return notFound();
     return ok({
       card: row(c),
-      draft: c.draft,
-      versions: c.versions,
+      onSale: c.onSale,
       reviews: c.ratings.map((rating, i) => ({
         id: i + 1,
         account: i % 2 ? PLAYER_0123 : LINXIA,
         rating,
         content: rating >= 4 ? '人设很稳，推理戏好看。' : null,
-        cardVersion: c.versions[0]?.version ?? 1,
         updatedAt: NOW - (i + 1) * DAY,
       })),
     });

@@ -159,7 +159,6 @@ onMounted(() => void load());
           >
             {{ row.card.name }}
           </router-link>
-          <span class="sub num">v{{ row.cardVersion }}</span>
         </template>
       </el-table-column>
 
@@ -256,12 +255,6 @@ onMounted(() => void load());
 <style scoped>
 .num {
   font-variant-numeric: tabular-nums;
-}
-
-.sub {
-  margin-left: 6px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
 }
 
 .link {

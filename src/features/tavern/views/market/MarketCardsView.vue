@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 市场 › 商品：玩家发布到市场的卡，版式同调用日志页，详情在抽屉里看（每个版本的人设和世界书都在）。
+ * 市场 › 商品：玩家发布到市场的卡，版式同调用日志页，详情在抽屉里看（在卖的卡面、人设、世界书）。
  * 发布即上架，员工只能事后下架 / 恢复；下架只是停售，已买的照常用手里的版本。
  * `?cardId=` 进来直接打开那张卡（角色卡抽屉里的市场卡号点过来）。
  * 也是用户视角「发布的」：传了 `creatorUid` 就只看这个人发布的，创作者筛选和创作者列都不要。
@@ -211,32 +211,6 @@ onMounted(() => {
       </el-table-column>
 
       <el-table-column
-        label="版本"
-        width="110"
-      >
-        <template #default="{ row }: { row: MarketCardRow }">
-          <span
-            v-if="row.version > 0"
-            class="num"
-          >v{{ row.version }}</span>
-          <span
-            v-else
-            class="cell-muted"
-          >—</span>
-          <el-tag
-            v-if="row.hasDraft && row.version > 0"
-            size="small"
-            type="warning"
-            effect="plain"
-            class="tag-gap"
-            title="创作者有还没发布的改动"
-          >
-            改动中
-          </el-tag>
-        </template>
-      </el-table-column>
-
-      <el-table-column
         label="销量"
         width="72"
         align="right"
@@ -333,10 +307,6 @@ onMounted(() => {
 <style scoped>
 .num {
   font-variant-numeric: tabular-nums;
-}
-
-.tag-gap {
-  margin-left: 6px;
 }
 
 .cell-card {

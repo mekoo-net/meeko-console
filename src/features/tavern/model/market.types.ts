@@ -8,6 +8,7 @@ import type { StatusTone } from './metering.types';
 /**
  * Tavern 角色卡市场（C2C）的管理面（后端 `market.*`，wire camelCase、枚举 snake_case、时间 epoch 毫秒）。
  * 玩家发布即上架；员工只能事后下架 / 恢复，下架只是停售，已买的照常用手里的版本。
+ * 员工看的是市场上在卖的东西：没发布过的卡不列，版本不露——只给在卖的那一版。
  * 买家付人民币进平台钱包，卖家按「市场分成」拿积分。
  */
 
@@ -41,18 +42,17 @@ export const marketStatsSchema = z.object({
   ratingCount: z.number().int().nonnegative(),
 });
 
-export const marketCardStateSchema = z.enum(['draft', 'listed', 'taken_down']);
+/** 管理面只列发布过的卡，所以只有这两种。 */
+export const marketCardStateSchema = z.enum(['listed', 'taken_down']);
 export type MarketCardState = z.infer<typeof marketCardStateSchema>;
 export const marketCardStateValues = marketCardStateSchema.options;
 
 export const MarketCardStateLabel: Readonly<Record<MarketCardState, string>> = {
-  draft: '未发布',
   listed: '在售',
   taken_down: '已下架',
 };
 
 export const MarketCardStateTone: Readonly<Record<MarketCardState, StatusTone>> = {
-  draft: 'info',
   listed: 'success',
   taken_down: 'danger',
 };
@@ -66,22 +66,18 @@ export const cardTakedownSchema = z.object({
 export const marketCardRowSchema = z.object({
   cardId: z.string().min(1),
   creator: accountRefSchema,
-  /** 发布过的是在售卡面，没发布过的是草稿的。 */
+  /** 在卖那一版的卡面。 */
   face: cardFaceSchema,
   price: marketPriceSchema,
-  /** 最新发布的版本；没发布过为 0。 */
-  version: z.number().int().nonnegative(),
   stats: marketStatsSchema,
   state: marketCardStateSchema,
   takedown: cardTakedownSchema.nullable(),
-  /** 创作者有没发布的改动。 */
-  hasDraft: z.boolean(),
   publishedAt: epochMillisNullableSchema,
   updatedAt: epochMillisSchema,
 });
 export type MarketCardRow = z.infer<typeof marketCardRowSchema>;
 
-/** 一个版本的内容：preset / worldBook 与导入卡同形，原样展示。 */
+/** 在卖的内容：preset / worldBook 与导入卡同形，原样展示。 */
 export const cardVersionContentSchema = z.object({
   face: cardFaceSchema,
   preset: presetSchema,
@@ -90,30 +86,18 @@ export const cardVersionContentSchema = z.object({
 });
 export type CardVersionContent = z.infer<typeof cardVersionContentSchema>;
 
-export const marketCardVersionSchema = z.object({
-  version: z.number().int(),
-  price: z.number(),
-  content: cardVersionContentSchema,
-  publishedAt: epochMillisSchema,
-});
-export type MarketCardVersion = z.infer<typeof marketCardVersionSchema>;
-
 export const marketReviewSchema = z.object({
   id: z.number().int(),
   account: accountRefSchema,
   rating: z.number().int(),
   content: z.string().nullable(),
-  cardVersion: z.number().int(),
   updatedAt: epochMillisSchema,
 });
 export type MarketReview = z.infer<typeof marketReviewSchema>;
 
 export const marketCardDetailSchema = z.object({
   card: marketCardRowSchema,
-  /** 创作者还没发布的下一版。 */
-  draft: z.object({ content: cardVersionContentSchema, price: z.number() }).nullable(),
-  /** 最新在前。 */
-  versions: z.array(marketCardVersionSchema),
+  onSale: cardVersionContentSchema,
   reviews: z.array(marketReviewSchema),
 });
 export type MarketCardDetail = z.infer<typeof marketCardDetailSchema>;
@@ -162,7 +146,6 @@ export const marketOrderRowSchema = z.object({
   id: z.string().min(1),
   source: marketOrderSourceSchema,
   card: z.object({ id: z.string().min(1), name: z.string() }),
-  cardVersion: z.number().int(),
   buyer: accountRefSchema,
   seller: accountRefSchema,
   price: marketPriceSchema,

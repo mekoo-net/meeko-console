@@ -13,7 +13,7 @@ vi.mock('@/features/tavern/api/http', async (importOriginal) => ({
 
 const request = vi.mocked(http.requestTavern);
 
-/** 钉住市场管理接口「后端真发什么」：snake_case 枚举、epoch 毫秒、价格带币种、版本内容原样嵌着。 */
+/** 钉住市场管理接口「后端真发什么」：snake_case 枚举、epoch 毫秒、价格带币种、在卖的内容原样嵌着、不带版本。 */
 const CARD_ID = '0193f5a0-7c1e-7d2a-9b3c-4e5f60718293';
 const ACCOUNT = { uid: 100004120, displayName: '麻子', email: 'asako@example.com', phone: null };
 const FACE = { name: '沈惟行', avatar: null, cover: null, tagline: '督察', description: null, tags: ['推理'], greetings: [] };
@@ -24,11 +24,9 @@ function wireCard(overrides: Record<string, unknown> = {}): Record<string, unkno
     creator: ACCOUNT,
     face: FACE,
     price: { amount: 9.9, currency: 'CNY' },
-    version: 3,
     stats: { purchases: 128, rating: 4.4, ratingCount: 5 },
     state: 'listed',
     takedown: null,
-    hasDraft: true,
     publishedAt: 1758600000000,
     updatedAt: 1761877649000,
     ...overrides,
@@ -47,31 +45,23 @@ describe('TavernMarketHttpAdapter', () => {
     expect(r.success && r.data.items[0]?.price).toEqual({ amount: 9.9, currency: 'CNY' });
   });
 
-  it('reads every version with its preset and world book', async () => {
+  it('reads what is on sale with its preset and world book', async () => {
     request.mockResolvedValueOnce(
       ok({
         card: wireCard({ state: 'taken_down', takedown: { reason: '侵权', staffUid: 1, atUtc: 1761877649000 } }),
-        draft: null,
-        versions: [
-          {
-            version: 3,
-            price: 9.9,
-            content: {
-              face: FACE,
-              preset: { systemPrompt: '你是沈惟行。', personality: '克制' },
-              worldBook: [{ keys: ['雾港'] }],
-              capabilities: { moments: false, mcpMemory: false, imageGen: false },
-            },
-            publishedAt: 1761877649000,
-          },
-        ],
+        onSale: {
+          face: FACE,
+          preset: { systemPrompt: '你是沈惟行。', personality: '克制' },
+          worldBook: [{ keys: ['雾港'] }],
+          capabilities: { moments: false, mcpMemory: false, imageGen: false },
+        },
         reviews: [],
       }),
     );
     const r = await new TavernMarketHttpAdapter().card(CARD_ID);
     expect(request).toHaveBeenCalledWith(`/tavern/api/admin/market/cards/${CARD_ID}`);
     expect(r.success && r.data.card.takedown?.reason).toBe('侵权');
-    expect(r.success && r.data.versions[0]?.content.preset.systemPrompt).toBe('你是沈惟行。');
+    expect(r.success && r.data.onSale.preset.systemPrompt).toBe('你是沈惟行。');
   });
 
   it('takes a card down with a reason and gets the changed row back', async () => {
@@ -92,7 +82,6 @@ describe('TavernMarketHttpAdapter', () => {
             id: '0193f5a0-0000-7000-8000-000000000001',
             source: 'purchase',
             card: { id: CARD_ID, name: '沈惟行' },
-            cardVersion: 3,
             buyer: ACCOUNT,
             seller: ACCOUNT,
             price: { amount: 9.9, currency: 'CNY' },

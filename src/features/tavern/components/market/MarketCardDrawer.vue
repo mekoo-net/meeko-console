@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * 市场卡详情，版式同角色卡抽屉：摘要表在上，卡面、版本历史、未发布的改动、最近评价分段往下，下架 / 恢复放底栏。
- * 每个版本的人设和世界书原样给——员工判断要不要下架，看的就是这些。
+ * 市场卡详情，版式同角色卡抽屉：摘要表在上，卡面、在卖的人设与世界书、最近评价分段往下，下架 / 恢复放底栏。
+ * 只给在卖的那一版——员工判断要不要下架看的就是它；版本是创作者和买家之间的事，这里不露。
  */
 import { computed, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -26,8 +26,6 @@ const port = getTavernMarketPort();
 const detail = ref<MarketCardDetail | null>(null);
 const loading = ref(false);
 const acting = ref(false);
-/** 展开的版本：默认只开最新一版。 */
-const openVersions = ref<number[]>([]);
 
 const card = computed(() => detail.value?.card ?? null);
 
@@ -36,12 +34,8 @@ async function load(id: string): Promise<void> {
   try {
     const r = await port.card(id);
     if (id !== props.cardId) return;
-    if (r.success) {
-      detail.value = r.data;
-      openVersions.value = r.data.versions.slice(0, 1).map((v) => v.version);
-    } else {
-      ElMessage.error(r.error.message);
-    }
+    if (r.success) detail.value = r.data;
+    else ElMessage.error(r.error.message);
   } finally {
     loading.value = false;
   }
@@ -160,10 +154,10 @@ function faceLines(face: CardFace): { label: string; value: string }[] {
           <el-descriptions-item label="价格">
             {{ formatPrice(card.price) }}
           </el-descriptions-item>
-          <el-descriptions-item label="版本">
-            {{ card.version > 0 ? `v${card.version}` : '未发布' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="销量 / 评分">
+          <el-descriptions-item
+            label="销量 / 评分"
+            :span="2"
+          >
             {{ card.stats.purchases }} / {{ card.stats.ratingCount ? `${card.stats.rating.toFixed(1)}（${card.stats.ratingCount}）` : '—' }}
           </el-descriptions-item>
           <el-descriptions-item label="首次发布">
@@ -197,36 +191,8 @@ function faceLines(face: CardFace): { label: string; value: string }[] {
           </template>
         </dl>
 
-        <template v-if="detail.versions.length">
-          <el-divider />
-          <h4 class="section-title">
-            版本历史
-          </h4>
-          <el-collapse v-model="openVersions">
-            <el-collapse-item
-              v-for="v in detail.versions"
-              :key="v.version"
-              :name="v.version"
-            >
-              <template #title>
-                <span class="version-title">
-                  <span class="num">v{{ v.version }}</span>
-                  <span class="sub">{{ formatPrice({ amount: v.price, currency: card.price.currency }) }} · {{ formatDateTime(v.publishedAt, 'YYYY-MM-DD HH:mm') }}</span>
-                </span>
-              </template>
-              <ImportedCardContent :content="v.content" />
-            </el-collapse-item>
-          </el-collapse>
-        </template>
-
-        <template v-if="detail.draft">
-          <el-divider />
-          <h4 class="section-title">
-            未发布的改动
-            <span class="sub">{{ formatPrice({ amount: detail.draft.price, currency: card.price.currency }) }}</span>
-          </h4>
-          <ImportedCardContent :content="detail.draft.content" />
-        </template>
+        <el-divider />
+        <ImportedCardContent :content="detail.onSale" />
 
         <el-divider />
         <h4 class="section-title">
@@ -249,7 +215,7 @@ function faceLines(face: CardFace): { label: string; value: string }[] {
               disabled
               size="small"
             />
-            <span class="sub">v{{ r.cardVersion }} · {{ formatDateTime(r.updatedAt) }}</span>
+            <span class="sub">{{ formatDateTime(r.updatedAt) }}</span>
           </div>
           <p
             v-if="r.content"
@@ -351,12 +317,6 @@ function faceLines(face: CardFace): { label: string; value: string }[] {
   color: var(--el-text-color-regular);
 }
 
-.version-title {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
 .review {
   padding: 8px 0;
   border-bottom: 1px solid var(--el-border-color-extra-light);
@@ -372,10 +332,6 @@ function faceLines(face: CardFace): { label: string; value: string }[] {
   margin: 4px 0 0;
   color: var(--el-text-color-regular);
   white-space: pre-wrap;
-}
-
-.num {
-  font-variant-numeric: tabular-nums;
 }
 
 .sub {
