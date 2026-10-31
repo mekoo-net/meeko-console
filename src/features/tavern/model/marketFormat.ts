@@ -32,3 +32,10 @@ export function timeText(time: WorldTimeTemplate): string {
 export function itemPage(kind: MarketItemKind): string {
   return kind === 'world_book' ? 'tavern-market-world-books' : 'tavern-market-cards';
 }
+
+/** 商品行上记录弹窗（评价、订单）头部的一格统计；`rating` 给了就在数字后面画星。 */
+export interface RecordStat {
+  label: string;
+  value: string;
+  rating?: number;
+}

@@ -1,15 +1,18 @@
 <script setup lang="ts">
 /**
- * 商品行「评价」：一件商品（角色卡或世界书）的评价，版式同平台「领取记录」弹窗——上面一行摘要，下面定高表格，分页贴右下。
+ * 商品行「评价」：一件商品（角色卡或世界书）的评价，新的在前。外壳见 MarketRecordsDialog。
  */
 import { computed, watch } from 'vue';
 
+import EmptyState from '@/shared/ui/EmptyState.vue';
 import { formatDateTime } from '@/shared/lib/date';
 
 import { usePagedList } from '../../composables/usePagedList';
 import type { MarketItemRow, MarketReview } from '../../model/market.types';
+import type { RecordStat } from '../../model/marketFormat';
 import { getTavernMarketPort } from '../../services';
 import AccountCell from '../content/AccountCell.vue';
+import MarketRecordsDialog from './MarketRecordsDialog.vue';
 
 const visible = defineModel<boolean>('visible', { required: true });
 const props = defineProps<{ item: MarketItemRow | null }>();
@@ -19,7 +22,15 @@ const { items, total, page, pageSize, loading, load } = usePagedList<MarketRevie
   port.reviews(props.item?.itemId ?? '', p),
 );
 
-const title = computed(() => (props.item ? `评价 · ${props.item.listing.face.name}` : '评价'));
+const stats = computed<RecordStat[]>(() => {
+  const s = props.item?.stats;
+  if (!s) return [];
+  return [
+    s.ratingCount ? { label: '平均评分', value: s.rating.toFixed(1), rating: s.rating } : { label: '平均评分', value: '—' },
+    { label: '评价数', value: String(s.ratingCount) },
+    { label: '销量', value: String(s.purchases) },
+  ];
+});
 
 watch(visible, (open) => {
   if (!open || !props.item) return;
@@ -29,49 +40,27 @@ watch(visible, (open) => {
 </script>
 
 <template>
-  <el-dialog
-    v-model="visible"
-    :title="title"
-    width="65%"
-    top="7vh"
-    destroy-on-close
+  <MarketRecordsDialog
+    v-model:visible="visible"
+    v-model:page="page"
+    v-model:page-size="pageSize"
+    title="评价"
+    :item="item"
+    :stats="stats"
+    :total="total"
   >
-    <el-descriptions
-      v-if="item"
-      :column="3"
-      border
-      size="small"
-      class="summary"
-    >
-      <el-descriptions-item label="平均评分">
-        <span
-          v-if="item.stats.ratingCount"
-          class="summary__accent"
-        >{{ item.stats.rating.toFixed(1) }}</span>
-        <span
-          v-else
-          class="muted"
-        >—</span>
-      </el-descriptions-item>
-      <el-descriptions-item label="评价数">
-        {{ item.stats.ratingCount }}
-      </el-descriptions-item>
-      <el-descriptions-item label="销量">
-        {{ item.stats.purchases }}
-      </el-descriptions-item>
-    </el-descriptions>
-
     <el-table
       v-loading="loading"
       :data="items"
       row-key="id"
-      max-height="480"
-      class="records-table"
-      empty-text="还没有评价"
+      size="small"
+      class="compact-table"
+      height="100%"
+      :empty-text="' '"
     >
       <el-table-column
         label="买家"
-        min-width="200"
+        width="240"
       >
         <template #default="{ row }: { row: MarketReview }">
           <AccountCell :account="row.account" />
@@ -91,7 +80,7 @@ watch(visible, (open) => {
       </el-table-column>
       <el-table-column
         label="评价"
-        min-width="280"
+        min-width="360"
       >
         <template #default="{ row }: { row: MarketReview }">
           <span
@@ -100,70 +89,33 @@ watch(visible, (open) => {
           >{{ row.content }}</span>
           <span
             v-else
-            class="muted"
+            class="cell-muted"
           >只打了分</span>
         </template>
       </el-table-column>
       <el-table-column
         label="时间"
-        width="160"
+        width="170"
       >
         <template #default="{ row }: { row: MarketReview }">
-          <span class="muted-date">{{ formatDateTime(row.updatedAt) }}</span>
+          <span class="cell-date">{{ formatDateTime(row.updatedAt) }}</span>
         </template>
       </el-table-column>
-    </el-table>
 
-    <div class="records-pager">
-      <el-pagination
-        v-model:current-page="page"
-        v-model:page-size="pageSize"
-        :total="total"
-        :page-sizes="[20, 50, 100]"
-        layout="total, sizes, prev, pager, next"
-        background
-        small
-      />
-    </div>
-  </el-dialog>
+      <template #empty>
+        <EmptyState
+          title="还没有评价"
+          description="买过的玩家评价以后会出现在这里。"
+        />
+      </template>
+    </el-table>
+  </MarketRecordsDialog>
 </template>
 
 <style scoped>
-.summary {
-  margin-bottom: 16px;
-}
-
-.summary :deep(.el-descriptions__label) {
-  width: 88px;
-  color: var(--el-text-color-secondary);
-}
-
-.summary__accent {
-  font-weight: 600;
-  color: var(--el-color-primary);
-}
-
 .review-text {
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-.muted {
-  color: var(--el-text-color-placeholder);
-}
-
-.muted-date {
   color: var(--el-text-color-regular);
-  font-variant-numeric: tabular-nums;
-}
-
-.records-table :deep(.el-table__row) {
-  height: 56px;
-}
-
-.records-pager {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 14px;
 }
 </style>
