@@ -8,6 +8,7 @@
  *    管线 / 状态 / 耗时这些它没有的格子留空
  *  - 表格里可点的字段（管线 / 状态 / 渠道 / 模型 / 账户）写入筛选条件，筛选一变就重查
  *  - 驳回：行尾、详情抽屉驳回单个回合；「批量驳回」进勾选模式，勾这一页里能驳回的一次驳掉
+ *  - 也是用户视角的「调用日志」标签页：传了 `accountUid` 就只看这个人，账户筛选和账户列都不要，默认看近 7 天
  */
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
@@ -52,6 +53,8 @@ import {
 
 import { getTavernCallLogPort, getTavernLlmSettingsPort } from '../services';
 
+const props = defineProps<{ accountUid?: number }>();
+
 const port = getTavernCallLogPort();
 
 type BilledFilter = '' | 'billed' | 'unbilled';
@@ -75,9 +78,10 @@ function filterFromRoute(): PageFilter {
   return traceId ? { ...defaultFilter(), traceId, dateRange: lastDays(30) } : defaultFilter();
 }
 
+/** 一个人的调用稀疏，近 24 小时多半是空的。 */
 const defaultFilter = (): PageFilter => ({
   accountUid: '',
-  dateRange: last24h(),
+  dateRange: props.accountUid == null ? last24h() : lastDays(7),
   traceId: '',
   pipeline: '',
   model: '',
@@ -101,7 +105,7 @@ async function fetchData(): Promise<void> {
     ElMessage.warning(range.message);
     return;
   }
-  const uid = parseAccountUid(f.accountUid);
+  const uid = props.accountUid == null ? parseAccountUid(f.accountUid) : { ok: true as const, value: props.accountUid };
   if (!uid.ok) {
     ElMessage.warning('账户 UID 只能是数字');
     return;
@@ -153,6 +157,13 @@ function resetFilter(): void {
 function filterBy(patch: Partial<PageFilter>): void {
   Object.assign(filter.value, patch);
 }
+
+/** 用户视角里账户是定的，筛选栏不出账户那一行（FilterBar 没绑 account-uid 就不渲染它）。 */
+const accountFilter = computed(() =>
+  props.accountUid == null
+    ? { accountUid: filter.value.accountUid, 'onUpdate:accountUid': (v?: string) => (filter.value.accountUid = v ?? '') }
+    : {},
+);
 
 async function loadPipelines(): Promise<void> {
   const r = await getTavernLlmSettingsPort().get();
@@ -331,8 +342,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <FillListPageLayout>
-    <template #header>
+  <FillListPageLayout :embedded="accountUid != null">
+    <template
+      v-if="accountUid == null"
+      #header
+    >
       <PageHeader title="调用日志">
         <template #actions>
           <el-button
@@ -348,8 +362,21 @@ onMounted(() => {
     </template>
 
     <template #filters>
+      <div
+        v-if="accountUid != null"
+        class="toolbar"
+      >
+        <el-button
+          :icon="RefreshLeft"
+          type="danger"
+          :plain="!selecting"
+          @click="toggleSelecting"
+        >
+          {{ selecting ? '退出批量驳回' : '批量驳回' }}
+        </el-button>
+      </div>
       <FilterBar
-        v-model:account-uid="filter.accountUid"
+        v-bind="accountFilter"
         v-model:date-range="filter.dateRange"
         :loading="loading"
         @refresh="fetchData"
@@ -734,6 +761,7 @@ onMounted(() => {
       </el-table-column>
 
       <el-table-column
+        v-if="accountUid == null"
         label="账户"
         width="120"
       >
@@ -808,6 +836,11 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .mono {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }

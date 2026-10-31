@@ -1,22 +1,19 @@
 <script setup lang="ts">
 /**
- * Tavern 角色卡列表，版式同世界列表：筛选栏 + 满高表格 + 分页，详情在抽屉里看。
- * 账户可以带 `?uid=` 过来；账户格子点一下按这个账户筛。只读：卡归玩家，市场卡在市场下架；
- * 玩家自己删掉的，状态选「已删除」能看到。
+ * 用户视角 › 角色卡：这个玩家的卡，版式同世界页：筛选栏 + 满高表格 + 分页，详情在抽屉里看。
+ * 只读：卡归玩家，市场卡在市场下架；玩家自己删掉的，状态选「已删除」能看到。
  */
 import { onMounted, ref } from 'vue';
 import { Search } from '@element-plus/icons-vue';
 
-import PageHeader from '@/shared/ui/PageHeader.vue';
 import StatusTag from '@/shared/ui/StatusTag.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import FilterBar from '@/shared/ui/FilterBar.vue';
 import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
 import { formatDateTime } from '@/shared/lib/date';
 
-import AccountCell from '../components/content/AccountCell.vue';
-import PersonaDrawer from '../components/content/PersonaDrawer.vue';
-import { useContentList } from '../composables/useContentList';
+import PersonaDrawer from '../../components/content/PersonaDrawer.vue';
+import { useContentList } from '../../composables/useContentList';
 import {
   CardSourceLabel,
   CardSourceTone,
@@ -24,16 +21,20 @@ import {
   LifecycleStateTone,
   lifecycleStateValues,
   type PersonaRow,
-} from '../model/content.types';
-import { initialOf } from '../model/contentFormat';
-import { getTavernContentPort } from '../services';
+} from '../../model/content.types';
+import { initialOf } from '../../model/contentFormat';
+import { getTavernContentPort } from '../../services';
+
+const props = defineProps<{ accountUid: number }>();
 
 const port = getTavernContentPort();
 
 /** 列表里标签只露几个，全部在详情里。 */
 const TAG_LIMIT = 3;
 
-const { filter, reset, items, total, page, pageSize, loading, load } = useContentList((query, p) => port.personas(query, p));
+const { filter, reset, items, total, page, pageSize, loading, load } = useContentList(props.accountUid, (query, p) =>
+  port.personas(query, p),
+);
 
 const detailOpen = ref(false);
 const detailId = ref<number | null>(null);
@@ -47,14 +48,9 @@ onMounted(() => void load());
 </script>
 
 <template>
-  <FillListPageLayout>
-    <template #header>
-      <PageHeader title="角色卡" />
-    </template>
-
+  <FillListPageLayout embedded>
     <template #filters>
       <FilterBar
-        v-model:account-uid="filter.accountUid"
         :loading="loading"
         @refresh="load"
         @reset="reset"
@@ -118,18 +114,6 @@ onMounted(() => void load());
               <span class="cell-uid">{{ row.id }}</span>
             </div>
           </div>
-        </template>
-      </el-table-column>
-
-      <el-table-column
-        label="账户"
-        min-width="180"
-      >
-        <template #default="{ row }: { row: PersonaRow }">
-          <AccountCell
-            :account="row.account"
-            @filter="(uid) => (filter.accountUid = String(uid))"
-          />
         </template>
       </el-table-column>
 

@@ -51,9 +51,9 @@ export type PageQuery = {
   pageSize: number;
 };
 
-/** 世界 / 角色卡列表的筛选；`keyword` 对世界是标题、对角色卡是名字。 */
+/** 一个用户的世界 / 角色卡列表的筛选；`keyword` 对世界是标题、对角色卡是名字。 */
 export type ContentQuery = {
-  accountUid?: number;
+  accountUid: number;
   keyword?: string;
   state: LifecycleState;
 };

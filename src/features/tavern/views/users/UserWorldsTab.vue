@@ -1,40 +1,36 @@
 <script setup lang="ts">
 /**
- * Tavern 世界列表，版式同调用日志页：筛选栏 + 满高表格 + 分页。
- *
- *  - 账户可以从账户页、积分账户页带 `?uid=` 过来
- *  - 账户格子点一下按这个账户筛，旁边的箭头去平台账户页
- *  - 删除是软删：默认只列没删的，状态选「已删除」能看到删掉的世界和它的内容
+ * 用户视角 › 世界：这个玩家的世界，版式同调用日志页：筛选栏 + 满高表格 + 分页。
+ * 删除是软删：默认只列没删的，状态选「已删除」能看到删掉的世界和它的内容。
  */
 import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { Search } from '@element-plus/icons-vue';
 
-import PageHeader from '@/shared/ui/PageHeader.vue';
 import StatusTag from '@/shared/ui/StatusTag.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import FilterBar from '@/shared/ui/FilterBar.vue';
 import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
 import { formatDateTime } from '@/shared/lib/date';
 
-import AccountCell from '../components/content/AccountCell.vue';
-import CopyableId from '../components/metering/CopyableId.vue';
-import { deleteWorld } from '../composables/contentActions';
-import { useContentList } from '../composables/useContentList';
-import { LifecycleStateLabel, LifecycleStateTone, lifecycleStateValues, type WorldRow } from '../model/content.types';
-import { shortId } from '../model/meteringFormat';
-import { getTavernContentPort } from '../services';
+import CopyableId from '../../components/metering/CopyableId.vue';
+import { deleteWorld } from '../../composables/contentActions';
+import { useContentList } from '../../composables/useContentList';
+import { LifecycleStateLabel, LifecycleStateTone, lifecycleStateValues, type WorldRow } from '../../model/content.types';
+import { shortId } from '../../model/meteringFormat';
+import { getTavernContentPort } from '../../services';
+
+const props = defineProps<{ accountUid: number }>();
 
 const port = getTavernContentPort();
 const router = useRouter();
 
-const { filter, reset, items, total, page, pageSize, loading, load } = useContentList((query, p) => port.worlds(query, p));
+const { filter, reset, items, total, page, pageSize, loading, load } = useContentList(props.accountUid, (query, p) =>
+  port.worlds(query, p),
+);
 
 function openDetail(row: WorldRow): void {
-  void router.push({
-    name: 'tavern-world-detail',
-    params: { accountUid: String(row.account.uid), worldId: row.id },
-  });
+  void router.push({ name: 'tavern-user-world', params: { uid: String(props.accountUid), worldId: row.id } });
 }
 
 async function remove(row: WorldRow): Promise<void> {
@@ -45,14 +41,9 @@ onMounted(() => void load());
 </script>
 
 <template>
-  <FillListPageLayout>
-    <template #header>
-      <PageHeader title="世界" />
-    </template>
-
+  <FillListPageLayout embedded>
     <template #filters>
       <FilterBar
-        v-model:account-uid="filter.accountUid"
         :loading="loading"
         @refresh="load"
         @reset="reset"
@@ -111,18 +102,6 @@ onMounted(() => void load());
               class="cell-sub"
             />
           </div>
-        </template>
-      </el-table-column>
-
-      <el-table-column
-        label="账户"
-        min-width="200"
-      >
-        <template #default="{ row }: { row: WorldRow }">
-          <AccountCell
-            :account="row.account"
-            @filter="(uid) => (filter.accountUid = String(uid))"
-          />
         </template>
       </el-table-column>
 

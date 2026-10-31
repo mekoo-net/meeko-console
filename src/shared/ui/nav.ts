@@ -1,5 +1,4 @@
 import {
-  Avatar,
   Bell,
   ChatLineRound,
   Connection,
@@ -20,7 +19,6 @@ import {
   Files,
   List,
   Picture,
-  Place,
   Present,
   PriceTag,
   Lock,
@@ -136,15 +134,21 @@ export const navViews: readonly NavView[] = [
     title: 'Tavern',
     icon: ChatLineRound,
     roles: ['Admin'],
+    // 按运营对象分：用户（进去看他的世界、卡、调用、积分）/ 市场 / 财务。
     menu: [
       { type: 'leaf', index: '/tavern/overview', title: '概览', icon: DataAnalysis },
-      { type: 'leaf', index: '/tavern/worlds', title: '世界', icon: Place },
-      { type: 'leaf', index: '/tavern/personas', title: '角色卡', icon: Avatar },
-      { type: 'leaf', index: '/tavern/pipeline', title: '管线设置', icon: MagicStick },
-      { type: 'leaf', index: '/tavern/logs', title: '调用日志', icon: DataLine },
-      { type: 'leaf', index: '/tavern/credit-rates', title: '积分价目', icon: PriceTag },
-      { type: 'leaf', index: '/tavern/credit-packs', title: '积分包', icon: Money },
-      { type: 'leaf', index: '/tavern/credit-accounts', title: '积分账户', icon: Wallet },
+      { type: 'leaf', index: '/tavern/users', title: '用户', icon: User },
+      {
+        type: 'group',
+        index: '/tavern/finance',
+        title: '财务',
+        icon: Wallet,
+        children: [
+          { type: 'leaf', index: '/tavern/logs', title: '调用日志', icon: DataLine },
+          { type: 'leaf', index: '/tavern/credit-rates', title: '积分价目', icon: PriceTag },
+          { type: 'leaf', index: '/tavern/credit-packs', title: '积分包', icon: Money },
+        ],
+      },
     ],
   },
   {
@@ -240,6 +244,7 @@ export const navViews: readonly NavView[] = [
         children: [
           { type: 'leaf', index: '/settings/gateway/issue', title: '签发凭据', icon: Key, roles: ['Admin'] },
           { type: 'leaf', index: '/settings/gateway/credentials', title: '凭据列表', icon: Tickets, roles: ['Admin'] },
+          { type: 'leaf', index: '/settings/gateway/tavern-pipeline', title: 'Tavern 管线', icon: MagicStick, roles: ['Admin'] },
         ],
       },
     ],

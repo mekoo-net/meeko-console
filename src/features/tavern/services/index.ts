@@ -6,6 +6,7 @@ import { TavernContentHttpAdapter } from '@/features/tavern/api/adapters/tavernC
 import { TavernLlmSettingsHttpAdapter } from '@/features/tavern/api/adapters/tavernLlmSettingsAdapter';
 import { TavernCreditsHttpAdapter } from '@/features/tavern/api/adapters/tavernCreditsAdapter';
 import { TavernUsageStatsHttpAdapter } from '@/features/tavern/api/adapters/tavernUsageStatsAdapter';
+import { TavernUsersHttpAdapter } from '@/features/tavern/api/adapters/tavernUsersAdapter';
 
 import { TavernBackendMock } from './mock/tavernBackendMock';
 import { TavernBillingMock } from './mock/tavernBillingMock';
@@ -14,6 +15,7 @@ import { TavernContentMock } from './mock/tavernContentMock';
 import { TavernLlmSettingsMock } from './mock/tavernLlmSettingsMock';
 import { TavernCreditsMock } from './mock/tavernCreditsMock';
 import { TavernUsageStatsMock } from './mock/tavernUsageStatsMock';
+import { TavernUsersMock } from './mock/tavernUsersMock';
 import type { TavernBackendPort } from './ports/tavernBackendPort';
 import type { TavernBillingPort } from './ports/tavernBillingPort';
 import type { TavernCallLogPort } from './ports/tavernCallLogPort';
@@ -21,6 +23,7 @@ import type { TavernContentPort } from './ports/tavernContentPort';
 import type { TavernLlmSettingsPort } from './ports/tavernLlmSettingsPort';
 import type { TavernCreditsPort } from './ports/tavernCreditsPort';
 import type { TavernUsageStatsPort } from './ports/tavernUsageStatsPort';
+import type { TavernUsersPort } from './ports/tavernUsersPort';
 
 abstract class TavernServices {
   abstract readonly backend: TavernBackendPort;
@@ -30,6 +33,7 @@ abstract class TavernServices {
   abstract readonly billing: TavernBillingPort;
   abstract readonly credits: TavernCreditsPort;
   abstract readonly content: TavernContentPort;
+  abstract readonly users: TavernUsersPort;
 }
 
 class TavernMockServices extends TavernServices {
@@ -40,6 +44,7 @@ class TavernMockServices extends TavernServices {
   readonly billing = new TavernBillingMock();
   readonly credits = new TavernCreditsMock();
   readonly content = new TavernContentMock();
+  readonly users = new TavernUsersMock();
 }
 
 class TavernHttpServices extends TavernServices {
@@ -50,6 +55,7 @@ class TavernHttpServices extends TavernServices {
   readonly billing = new TavernBillingHttpAdapter();
   readonly credits = new TavernCreditsHttpAdapter();
   readonly content = new TavernContentHttpAdapter();
+  readonly users = new TavernUsersHttpAdapter();
 }
 
 const services: TavernServices = isMockMode ? new TavernMockServices() : new TavernHttpServices();
@@ -80,4 +86,8 @@ export function getTavernCreditsPort(): TavernCreditsPort {
 
 export function getTavernContentPort(): TavernContentPort {
   return services.content;
+}
+
+export function getTavernUsersPort(): TavernUsersPort {
+  return services.users;
 }

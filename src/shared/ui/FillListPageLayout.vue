@@ -2,11 +2,17 @@
 /**
  * 列表页满高布局（opt-in）：Header + 筛选 + 表格(height 100%) + 分页。
  * 高度计算与 Yomi 定价页 provider-page 一致，不污染全局 table 样式。
+ *
+ * `embedded`：嵌在详情页的标签页里（如 Tavern 用户视角），撑满父容器而不是视口——父容器已经扣掉了头部的高度。
  */
+defineProps<{ embedded?: boolean }>();
 </script>
 
 <template>
-  <div class="fill-list-page">
+  <div
+    class="fill-list-page"
+    :class="{ 'fill-list-page--embedded': embedded }"
+  >
     <div v-if="$slots.header" class="fill-list-page__header">
       <slot name="header" />
     </div>
@@ -31,6 +37,12 @@
   gap: 16px;
   height: calc(100vh - 56px - 52px);
   min-height: 480px;
+}
+
+.fill-list-page--embedded {
+  flex: 1;
+  height: auto;
+  min-height: 0;
 }
 
 .fill-list-page__header,

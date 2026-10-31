@@ -1,46 +1,36 @@
 <script setup lang="ts">
 /**
- * Tavern 积分账户：按账户 UID 看余额和全部流水（含回合的预扣与退回），员工发放 / 调减。
- * UID 跟着 `?uid=` 走，调用日志等处可以直接带过来；回合流水点得回调用日志看那一回合。
+ * 用户视角 › 积分：全部流水（含回合的预扣与退回），员工发放 / 调减。余额在头部。
+ * 回合流水点得回调用日志看那一回合。
  */
-import { computed, onMounted, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { inject, onMounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
-import { Search } from '@element-plus/icons-vue';
 
-import PageHeader from '@/shared/ui/PageHeader.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
 import { formatDateTime } from '@/shared/lib/date';
 
-import { CREDIT_TXN_IN, CreditTxnKindLabel, type CreditAccount, type CreditTxn } from '../model/credits.types';
-import { formatCredits, parseAccountUid } from '../model/meteringFormat';
-import { getTavernCreditsPort } from '../services';
+import { TavernUserKey } from '../../composables/tavernUserContext';
+import { CREDIT_TXN_IN, CreditTxnKindLabel, type CreditAccount, type CreditTxn } from '../../model/credits.types';
+import { formatCredits } from '../../model/meteringFormat';
+import { getTavernCreditsPort } from '../../services';
+
+const props = defineProps<{ accountUid: number }>();
 
 const port = getTavernCreditsPort();
-const route = useRoute();
 const router = useRouter();
+const user = inject(TavernUserKey);
 
-const uidInput = ref('');
 const account = ref<CreditAccount | null>(null);
 const loading = ref(false);
 const page = ref(1);
 const pageSize = ref(20);
 
-const uid = computed<number | null>(() => {
-  const raw = route.query.uid;
-  const text = Array.isArray(raw) ? raw[0] : raw;
-  return text && /^\d+$/.test(text) ? Number(text) : null;
-});
-
 async function load(): Promise<void> {
-  if (uid.value == null) {
-    account.value = null;
-    return;
-  }
   loading.value = true;
   try {
-    const r = await port.account(uid.value, page.value, pageSize.value);
+    const r = await port.account(props.accountUid, page.value, pageSize.value);
     if (r.success) account.value = r.data;
     else ElMessage.error(r.error.message);
   } finally {
@@ -48,20 +38,6 @@ async function load(): Promise<void> {
   }
 }
 
-function search(): void {
-  const parsed = parseAccountUid(uidInput.value);
-  if (!parsed.ok || parsed.value == null) {
-    ElMessage.warning('账户 UID 只能是数字');
-    return;
-  }
-  page.value = 1;
-  void router.replace({ query: { ...route.query, uid: String(parsed.value) } });
-}
-
-watch(uid, (v) => {
-  uidInput.value = v == null ? '' : String(v);
-  void load();
-});
 watch([page, pageSize], () => void load());
 
 function signed(t: CreditTxn): string {
@@ -80,7 +56,7 @@ function sourceText(t: CreditTxn): string {
 }
 
 function openTurn(t: CreditTxn): void {
-  void router.push({ path: '/tavern/logs', query: { traceId: t.source.ref } });
+  void router.push({ name: 'tavern-user-logs', params: { uid: String(props.accountUid) }, query: { traceId: t.source.ref } });
 }
 
 // ─── 发放 / 调减 ─────────────────────────────────────────
@@ -109,11 +85,11 @@ function openAdjust(): void {
 }
 
 async function submitAdjust(): Promise<void> {
-  if (uid.value == null || !(await adjustRef.value?.validate().catch(() => false))) return;
+  if (!(await adjustRef.value?.validate().catch(() => false))) return;
   const { direction, amount, note } = adjustForm.value;
   adjusting.value = true;
   try {
-    const r = await port.adjust(uid.value, {
+    const r = await port.adjust(props.accountUid, {
       delta: direction === 'grant' ? amount : -amount,
       note: note.trim(),
       requestId,
@@ -124,63 +100,28 @@ async function submitAdjust(): Promise<void> {
     }
     ElMessage.success(`已${direction === 'grant' ? '发放' : '调减'}，可用 ${formatCredits(r.data.available)}`);
     adjustOpen.value = false;
-    page.value = 1;
-    await load();
+    user?.refresh();
+    if (page.value === 1) await load();
+    else page.value = 1;
   } finally {
     adjusting.value = false;
   }
 }
 
-onMounted(() => {
-  uidInput.value = uid.value == null ? '' : String(uid.value);
-  void load();
-});
+onMounted(() => void load());
 </script>
 
 <template>
-  <FillListPageLayout>
-    <template #header>
-      <PageHeader title="积分账户" />
-    </template>
-
+  <FillListPageLayout embedded>
     <template #filters>
-      <div class="lookup">
-        <el-input
-          v-model="uidInput"
-          :prefix-icon="Search"
-          placeholder="账户 UID"
-          clearable
-          class="mono-input"
-          style="width: 240px"
-          @keyup.enter="search"
-        />
+      <div class="toolbar">
         <el-button
           type="primary"
-          @click="search"
-        >
-          查询
-        </el-button>
-      </div>
-
-      <section
-        v-if="account"
-        class="balance"
-      >
-        <div class="balance__item">
-          <span class="balance__label">可用</span>
-          <span class="balance__value num">{{ formatCredits(account.balance.available) }}</span>
-        </div>
-        <div class="balance__item">
-          <span class="balance__label">预扣中</span>
-          <span class="balance__value balance__value--sub num">{{ formatCredits(account.balance.held) }}</span>
-        </div>
-        <el-button
-          class="balance__action"
           @click="openAdjust"
         >
           发放 / 调减
         </el-button>
-      </section>
+      </div>
     </template>
 
     <el-table
@@ -264,8 +205,8 @@ onMounted(() => {
 
       <template #empty>
         <EmptyState
-          :title="uid == null ? '输入账户 UID 查询' : '这个账户还没有积分流水'"
-          :description="uid == null ? '' : '玩家买积分包或员工发放之后才会有。'"
+          title="这个账户还没有积分流水"
+          description="玩家买积分包或员工发放之后才会有。"
         />
       </template>
     </el-table>
@@ -299,7 +240,7 @@ onMounted(() => {
       label-width="64px"
     >
       <el-form-item label="账户">
-        <span class="mono">{{ uid }}</span>
+        <span class="mono">{{ accountUid }}</span>
       </el-form-item>
       <el-form-item label="方向">
         <el-radio-group v-model="adjustForm.direction">
@@ -358,8 +299,9 @@ onMounted(() => {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
 
-.mono-input :deep(.el-input__inner) {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .num {
@@ -386,49 +328,6 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   min-width: 0;
-}
-
-.lookup {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.balance {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.balance__item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 160px;
-  padding: 10px 14px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  background: var(--el-bg-color);
-}
-
-.balance__label {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.balance__value {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-.balance__value--sub {
-  font-weight: 500;
-  color: var(--el-text-color-regular);
-}
-
-.balance__action {
-  margin-left: auto;
 }
 
 .is-in {

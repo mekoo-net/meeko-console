@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * 列表里的账户格子：名字点一下按这个账户筛，旁边的箭头去平台账户页，下面露邮箱。
+ * 列表里的账户格子：名字进这个人的 Tavern 用户视角，旁边的箭头去平台账户页，下面露邮箱。
+ * 要按人筛选用筛选栏的 UID 框。
  */
 import { TopRight } from '@element-plus/icons-vue';
 
@@ -8,21 +9,18 @@ import type { AccountRef } from '../../model/content.types';
 import { accountName } from '../../model/contentFormat';
 
 defineProps<{ account: AccountRef }>();
-defineEmits<{ filter: [uid: number] }>();
 </script>
 
 <template>
   <div class="cell-stack">
     <div class="cell-account">
-      <el-button
-        link
-        type="primary"
+      <router-link
+        :to="{ name: 'tavern-user', params: { uid: String(account.uid) } }"
         class="cell-link"
-        :title="`按账户 UID「${account.uid}」过滤`"
-        @click="$emit('filter', account.uid)"
+        title="进入用户视角"
       >
         {{ accountName(account) }}
-      </el-button>
+      </router-link>
       <router-link
         :to="`/accounts/${account.uid}`"
         class="cell-jump"
@@ -55,9 +53,13 @@ defineEmits<{ filter: [uid: number] }>();
 }
 
 .cell-link {
-  padding: 0;
-  height: auto;
   font-size: 12.5px;
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+
+.cell-link:hover {
+  text-decoration: underline;
 }
 
 .cell-jump {

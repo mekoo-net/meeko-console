@@ -10,7 +10,7 @@ import { ElMessage } from 'element-plus';
 import { formatDateTime } from '@/shared/lib/date';
 
 import { CardSourceLabel, type CardContent, type PersonaDetail } from '../../model/content.types';
-import { accountName, initialOf } from '../../model/contentFormat';
+import { initialOf } from '../../model/contentFormat';
 import { getTavernContentPort } from '../../services';
 import CopyableId from '../metering/CopyableId.vue';
 import ImportedCardContent from './ImportedCardContent.vue';
@@ -93,19 +93,14 @@ watch(
           size="small"
           class="log-detail__summary"
         >
-          <el-descriptions-item label="角色卡 ID">
+          <el-descriptions-item
+            label="角色卡 ID"
+            :span="2"
+          >
             <CopyableId
               :value="persona.id"
               label="角色卡 ID"
             />
-          </el-descriptions-item>
-          <el-descriptions-item label="账户">
-            <router-link
-              :to="`/accounts/${persona.account.uid}`"
-              class="link"
-            >
-              {{ accountName(persona.account) }}
-            </router-link>
           </el-descriptions-item>
           <el-descriptions-item label="创建时间">
             {{ formatDateTime(persona.createdAt, 'YYYY-MM-DD HH:mm:ss') }}
@@ -231,11 +226,6 @@ watch(
 
 .log-detail__summary :deep(.el-descriptions__label) {
   width: 88px;
-}
-
-.link {
-  color: var(--el-color-primary);
-  text-decoration: none;
 }
 
 .cell-muted {

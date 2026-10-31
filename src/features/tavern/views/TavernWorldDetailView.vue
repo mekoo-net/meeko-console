@@ -97,6 +97,9 @@ const tabs: readonly [Tab, ...Tab[]] = [
 const activeTab = ref(tabs[0].key);
 const tab = computed(() => tabs.find((t) => t.key === activeTab.value) ?? tabs[0]);
 
+/** 世界挂在用户视角下面：面包屑和账户都回这个用户的世界页。 */
+const userWorlds = computed(() => ({ name: 'tavern-user-worlds', params: { uid: String(props.accountUid) } }));
+
 const stats = computed(() => {
   const d = detail.value;
   if (!d) return [];
@@ -122,8 +125,11 @@ onMounted(() => void load());
   <div class="world-page">
     <section class="world-head">
       <el-breadcrumb class="world-head__crumb">
-        <el-breadcrumb-item :to="{ name: 'tavern-worlds' }">
-          世界
+        <el-breadcrumb-item :to="{ name: 'tavern-users' }">
+          用户
+        </el-breadcrumb-item>
+        <el-breadcrumb-item :to="userWorlds">
+          {{ world ? accountName(world.account) : accountUid }}
         </el-breadcrumb-item>
         <el-breadcrumb-item>{{ title }}</el-breadcrumb-item>
       </el-breadcrumb>
@@ -156,7 +162,7 @@ onMounted(() => void load());
             <template v-if="world">
               <span class="meta">
                 <router-link
-                  :to="`/accounts/${world.account.uid}`"
+                  :to="userWorlds"
                   class="meta__link"
                 >{{ accountName(world.account) }}</router-link>
                 <span

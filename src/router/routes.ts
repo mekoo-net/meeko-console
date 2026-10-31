@@ -379,30 +379,57 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '概览', requiresAuth: true, roles: ['Admin'] },
           },
           {
-            path: 'worlds',
-            name: 'tavern-worlds',
-            component: () => import('@/features/tavern/views/TavernWorldsView.vue'),
-            meta: { title: '世界', requiresAuth: true, roles: ['Admin'] },
+            path: 'users',
+            name: 'tavern-users',
+            component: () => import('@/features/tavern/views/users/TavernUsersView.vue'),
+            meta: { title: '用户', requiresAuth: true, roles: ['Admin'] },
           },
           {
-            // 挂在 /tavern/worlds 下面，侧边菜单按前缀高亮「世界」。UID 只认数字，页面拿到的就是数。
-            path: 'worlds/:accountUid(\\d+)/:worldId',
-            name: 'tavern-world-detail',
+            // 用户视角：头部 + 标签页，标签页拿到的 uid 就是数。挂在 /tavern/users 下面，侧边菜单按前缀高亮「用户」。
+            path: 'users/:uid(\\d+)',
+            name: 'tavern-user',
+            component: () => import('@/features/tavern/views/users/TavernUserLayout.vue'),
+            props: (route) => ({ uid: Number(route.params.uid) }),
+            redirect: (to) => `/tavern/users/${String(to.params.uid)}/worlds`,
+            meta: { title: '用户', requiresAuth: true, roles: ['Admin'] },
+            children: [
+              {
+                path: 'worlds',
+                name: 'tavern-user-worlds',
+                component: () => import('@/features/tavern/views/users/UserWorldsTab.vue'),
+                props: (route) => ({ accountUid: Number(route.params.uid) }),
+                meta: { title: '世界', requiresAuth: true, roles: ['Admin'] },
+              },
+              {
+                path: 'cards',
+                name: 'tavern-user-cards',
+                component: () => import('@/features/tavern/views/users/UserCardsTab.vue'),
+                props: (route) => ({ accountUid: Number(route.params.uid) }),
+                meta: { title: '角色卡', requiresAuth: true, roles: ['Admin'] },
+              },
+              {
+                path: 'logs',
+                name: 'tavern-user-logs',
+                component: () => import('@/features/tavern/views/TavernCallLogsView.vue'),
+                props: (route) => ({ accountUid: Number(route.params.uid) }),
+                meta: { title: '调用日志', requiresAuth: true, roles: ['Admin'] },
+              },
+              {
+                path: 'credits',
+                name: 'tavern-user-credits',
+                component: () => import('@/features/tavern/views/users/UserCreditsTab.vue'),
+                props: (route) => ({ accountUid: Number(route.params.uid) }),
+                meta: { title: '积分', requiresAuth: true, roles: ['Admin'] },
+              },
+            ],
+          },
+          {
+            // 世界详情是整页，不嵌在用户视角的标签页里；面包屑回这个用户。
+            path: 'users/:uid(\\d+)/worlds/:worldId',
+            name: 'tavern-user-world',
             component: () => import('@/features/tavern/views/TavernWorldDetailView.vue'),
-            props: (route) => ({ accountUid: Number(route.params.accountUid), worldId: route.params.worldId }),
+            props: (route) => ({ accountUid: Number(route.params.uid), worldId: route.params.worldId }),
             meta: { title: '世界详情', requiresAuth: true, roles: ['Admin'] },
-          },
-          {
-            path: 'personas',
-            name: 'tavern-personas',
-            component: () => import('@/features/tavern/views/TavernPersonasView.vue'),
-            meta: { title: '角色卡', requiresAuth: true, roles: ['Admin'] },
-          },
-          {
-            path: 'pipeline',
-            name: 'tavern-pipeline',
-            component: () => import('@/features/tavern/views/LlmSettingsView.vue'),
-            meta: { title: '管线设置', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'logs',
@@ -423,15 +450,24 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '积分包', requiresAuth: true, roles: ['Admin'] },
           },
           {
-            path: 'credit-accounts',
-            name: 'tavern-credit-accounts',
-            component: () => import('@/features/tavern/views/TavernCreditAccountsView.vue'),
-            meta: { title: '积分账户', requiresAuth: true, roles: ['Admin'] },
-          },
-          {
             path: 'backends',
             redirect: { name: 'settings-gateway-issue' },
           },
+          // 改版前的地址：世界、角色卡、积分账户都进了用户视角，管线设置去了系统设置。
+          { path: 'worlds', redirect: { name: 'tavern-users' } },
+          { path: 'personas', redirect: { name: 'tavern-users' } },
+          {
+            path: 'worlds/:uid(\\d+)/:worldId',
+            redirect: (to) => `/tavern/users/${String(to.params.uid)}/worlds/${String(to.params.worldId)}`,
+          },
+          {
+            path: 'credit-accounts',
+            redirect: (to) =>
+              typeof to.query.uid === 'string' && /^\d+$/.test(to.query.uid)
+                ? { path: `/tavern/users/${to.query.uid}/credits`, query: {} }
+                : { name: 'tavern-users', query: {} },
+          },
+          { path: 'pipeline', redirect: { name: 'settings-tavern-pipeline' } },
         ],
       },
       {
@@ -601,6 +637,12 @@ export const routes: RouteRecordRaw[] = [
             name: 'settings-gateway-credentials',
             component: () => import('@/features/platform/gateway/views/GatewayCredentialListView.vue'),
             meta: { title: '凭据列表', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'gateway/tavern-pipeline',
+            name: 'settings-tavern-pipeline',
+            component: () => import('@/features/tavern/views/LlmSettingsView.vue'),
+            meta: { title: 'Tavern 管线', requiresAuth: true, roles: ['Admin'] },
           },
         ],
       },

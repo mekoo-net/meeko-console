@@ -44,6 +44,7 @@ import {
   type worldBookDocumentSchema,
 } from '../../model/content.types';
 import type { TavernContentPort } from '../ports/tavernContentPort';
+import { LINXIA, PLAYER_0123 } from './tavernMockAccounts';
 import { pageOf } from './tavernMeteringMockData';
 
 const MINUTE = 60_000;
@@ -64,8 +65,6 @@ function mockUuid(seed: number): string {
 
 // ─── 账户与角色卡 ────────────────────────────────────────
 
-const LINXIA: AccountRef = { uid: 100002333, displayName: '林夏', email: 'linxia@example.com', phone: null };
-const PLAYER_0123: AccountRef = { uid: 100000123, displayName: null, email: 'player0123@example.com', phone: '138****0123' };
 
 interface MockPersona {
   id: number;

@@ -20,7 +20,7 @@ import {
 } from '@element-plus/icons-vue';
 import type { Component } from 'vue';
 
-import PageHeader from '@/shared/ui/PageHeader.vue';
+import SettingsPanelShell from '@/shared/ui/SettingsPanelShell.vue';
 import { formatDateTime } from '@/shared/lib/date';
 import PipelineModelDialog from '../components/PipelineModelDialog.vue';
 import { sameModelId, splitModelId } from '../model/llmCatalog';
@@ -237,27 +237,24 @@ onMounted(load);
 </script>
 
 <template>
-  <div
-    v-loading="loading"
-    class="pipeline-settings"
-    :class="{ 'pipeline-settings--dirty': isDirty }"
+  <SettingsPanelShell
+    title="Tavern 管线"
+    description="为每条职能管线指定平台全局默认模型；世界与演员可在各自层级覆盖。"
   >
-    <PageHeader
-      title="管线设置"
-      description="为每条职能管线指定平台全局默认模型；世界与演员可在各自层级覆盖。"
-    >
-      <template #actions>
-        <el-button
-          :icon="Refresh"
-          :disabled="loading || saving"
-          @click="load"
-        >
-          刷新
-        </el-button>
-      </template>
-    </PageHeader>
+    <template #actions>
+      <el-button
+        :icon="Refresh"
+        :disabled="loading || saving"
+        @click="load"
+      >
+        刷新
+      </el-button>
+    </template>
 
-    <div class="pipeline-settings__body">
+    <div
+      v-loading="loading"
+      class="pipeline-settings__body"
+    >
       <section
         v-for="section in sections"
         :key="section.key"
@@ -334,11 +331,11 @@ onMounted(load);
       </p>
     </div>
 
-    <transition name="pipeline-settings-bar">
-      <footer
-        v-if="isDirty"
-        class="pipeline-settings__bar"
-      >
+    <template
+      v-if="isDirty"
+      #footer
+    >
+      <div class="pipeline-settings__bar">
         <span class="pipeline-settings__bar-text">有未保存的更改</span>
         <div class="pipeline-settings__bar-actions">
           <el-button
@@ -355,8 +352,8 @@ onMounted(load);
             保存
           </el-button>
         </div>
-      </footer>
-    </transition>
+      </div>
+    </template>
 
     <PipelineModelDialog
       v-model="pickerVisible"
@@ -387,22 +384,20 @@ onMounted(load);
         </div>
       </template>
     </PipelineModelDialog>
-  </div>
+  </SettingsPanelShell>
 </template>
 
 <style scoped>
-.pipeline-settings {
-  padding: 0 4px 24px;
-}
 
-.pipeline-settings--dirty {
-  padding-bottom: 88px;
-}
-
+/* 设置页的面板不滚，内容区自己滚，保存条贴在面板底栏。 */
 .pipeline-settings__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 24px;
+  padding-bottom: 24px;
 }
 
 .pipeline-settings__section-head {
@@ -584,20 +579,11 @@ onMounted(load);
 }
 
 .pipeline-settings__bar {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  left: calc(var(--meeko-sider-width, 220px) + 24px);
-  z-index: 20;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 12px 16px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 12px;
-  background: var(--el-bg-color);
-  box-shadow: var(--el-box-shadow-light);
 }
 
 .pipeline-settings__bar-text {
@@ -608,17 +594,6 @@ onMounted(load);
 .pipeline-settings__bar-actions {
   display: flex;
   gap: 8px;
-}
-
-.pipeline-settings-bar-enter-active,
-.pipeline-settings-bar-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.pipeline-settings-bar-enter-from,
-.pipeline-settings-bar-leave-to {
-  opacity: 0;
-  transform: translateY(12px);
 }
 
 .pipeline-settings__dialog-head {
