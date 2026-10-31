@@ -444,6 +444,13 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '积分价目', requiresAuth: true, roles: ['Admin'] },
           },
           {
+            // Tavern 自己的业务设置，不放进平台的系统设置。
+            path: 'settings/pipeline',
+            name: 'tavern-pipeline',
+            component: () => import('@/features/tavern/views/LlmSettingsView.vue'),
+            meta: { title: '管线设置', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
             path: 'credit-packs',
             name: 'tavern-credit-packs',
             component: () => import('@/features/tavern/views/TavernCreditPacksView.vue'),
@@ -453,7 +460,7 @@ export const routes: RouteRecordRaw[] = [
             path: 'backends',
             redirect: { name: 'settings-gateway-issue' },
           },
-          // 改版前的地址：世界、角色卡、积分账户都进了用户视角，管线设置去了系统设置。
+          // 改版前的地址：世界、角色卡、积分账户都进了用户视角，管线设置进了 Tavern 的系统设置。
           { path: 'worlds', redirect: { name: 'tavern-users' } },
           { path: 'personas', redirect: { name: 'tavern-users' } },
           {
@@ -467,7 +474,7 @@ export const routes: RouteRecordRaw[] = [
                 ? { path: `/tavern/users/${to.query.uid}/credits`, query: {} }
                 : { name: 'tavern-users', query: {} },
           },
-          { path: 'pipeline', redirect: { name: 'settings-tavern-pipeline' } },
+          { path: 'pipeline', redirect: { name: 'tavern-pipeline' } },
         ],
       },
       {
@@ -637,12 +644,6 @@ export const routes: RouteRecordRaw[] = [
             name: 'settings-gateway-credentials',
             component: () => import('@/features/platform/gateway/views/GatewayCredentialListView.vue'),
             meta: { title: '凭据列表', requiresAuth: true, roles: ['Admin'] },
-          },
-          {
-            path: 'gateway/tavern-pipeline',
-            name: 'settings-tavern-pipeline',
-            component: () => import('@/features/tavern/views/LlmSettingsView.vue'),
-            meta: { title: 'Tavern 管线', requiresAuth: true, roles: ['Admin'] },
           },
         ],
       },

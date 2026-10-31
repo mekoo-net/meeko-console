@@ -134,7 +134,7 @@ export const navViews: readonly NavView[] = [
     title: 'Tavern',
     icon: ChatLineRound,
     roles: ['Admin'],
-    // 按运营对象分：用户（进去看他的世界、卡、调用、积分）/ 市场 / 财务。
+    // 按运营对象分：用户（进去看他的世界、卡、调用、积分）/ 市场 / 财务；Tavern 自己的业务设置在最后的系统设置里。
     menu: [
       { type: 'leaf', index: '/tavern/overview', title: '概览', icon: DataAnalysis },
       { type: 'leaf', index: '/tavern/users', title: '用户', icon: User },
@@ -148,6 +148,13 @@ export const navViews: readonly NavView[] = [
           { type: 'leaf', index: '/tavern/credit-rates', title: '积分价目', icon: PriceTag },
           { type: 'leaf', index: '/tavern/credit-packs', title: '积分包', icon: Money },
         ],
+      },
+      {
+        type: 'group',
+        index: '/tavern/settings',
+        title: '系统设置',
+        icon: Setting,
+        children: [{ type: 'leaf', index: '/tavern/settings/pipeline', title: '管线设置', icon: MagicStick }],
       },
     ],
   },
@@ -244,7 +251,6 @@ export const navViews: readonly NavView[] = [
         children: [
           { type: 'leaf', index: '/settings/gateway/issue', title: '签发凭据', icon: Key, roles: ['Admin'] },
           { type: 'leaf', index: '/settings/gateway/credentials', title: '凭据列表', icon: Tickets, roles: ['Admin'] },
-          { type: 'leaf', index: '/settings/gateway/tavern-pipeline', title: 'Tavern 管线', icon: MagicStick, roles: ['Admin'] },
         ],
       },
     ],
