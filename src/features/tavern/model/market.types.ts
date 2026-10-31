@@ -105,6 +105,9 @@ export type MarketCardQuery = {
   keyword?: string;
   creatorUid?: number;
   state?: MarketCardState;
+  /** 上架时间范围，epoch 毫秒，可只给一头。 */
+  fromUtc?: number;
+  toUtc?: number;
 };
 
 // ---------- 订单 ----------
@@ -161,6 +164,9 @@ export type MarketOrderQuery = {
   buyerUid?: number;
   sellerUid?: number;
   source?: MarketOrderSource;
+  /** 下单时间范围，epoch 毫秒，可只给一头。 */
+  fromUtc?: number;
+  toUtc?: number;
 };
 
 // ---------- 分成设置 ----------

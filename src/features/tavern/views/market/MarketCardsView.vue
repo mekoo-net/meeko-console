@@ -5,7 +5,7 @@
  * `?cardId=` 进来直接打开那张卡（角色卡抽屉里的市场卡号点过来）。
  * 也是用户视角「发布的」：传了 `creatorUid` 就只看这个人发布的，创作者筛选和创作者列都不要。
  */
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { Search } from '@element-plus/icons-vue';
 
@@ -16,6 +16,7 @@ import FilterBar from '@/shared/ui/FilterBar.vue';
 import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
 import { fail } from '@/shared/api/httpTypes';
 import { formatDateTime } from '@/shared/lib/date';
+import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 
 import AccountCell from '../../components/content/AccountCell.vue';
 import MarketCardDrawer from '../../components/market/MarketCardDrawer.vue';
@@ -41,18 +42,32 @@ const route = useRoute();
 /** 列表里标签只露几个，全部在详情里。 */
 const TAG_LIMIT = 3;
 
-const blank = () => ({ creatorUid: '', keyword: '', state: '' as '' | MarketCardState });
+/** 同调用日志页：账户（这里是创作者）一行、业务条件一行、时间一行。上架时间默认不限。 */
+const blank = () => ({
+  creatorUid: '',
+  keyword: '',
+  state: undefined as MarketCardState | undefined,
+  dateRange: null as [string, string] | null,
+});
 const filter = ref(blank());
 
 const { items, total, page, pageSize, loading, load, reload } = usePagedList<MarketCardRow>((p) => {
-  const creator = props.creatorUid == null ? parseAccountUid(filter.value.creatorUid) : { ok: true as const, value: props.creatorUid };
+  const f = filter.value;
+  const creator = props.creatorUid == null ? parseAccountUid(f.creatorUid) : { ok: true as const, value: props.creatorUid };
   return creator.ok
     ? port.cards(
-        { creatorUid: creator.value, keyword: filter.value.keyword.trim() || undefined, state: filter.value.state || undefined },
+        { creatorUid: creator.value, keyword: f.keyword.trim() || undefined, state: f.state, ...dateRangeToEpochMillis(f.dateRange) },
         p,
       )
     : Promise.resolve(fail({ code: 'validation', message: '创作者 UID 只能是数字' }));
 }, filter);
+
+/** 用户视角里创作者是定的，筛选栏不出账户那一行（FilterBar 没绑 account-uid 就不渲染它）。 */
+const creatorFilter = computed(() =>
+  props.creatorUid == null
+    ? { accountUid: filter.value.creatorUid, 'onUpdate:accountUid': (v?: string) => (filter.value.creatorUid = v ?? '') }
+    : {},
+);
 
 const detailOpen = ref(false);
 const detailId = ref<string | null>(null);
@@ -89,38 +104,30 @@ onMounted(() => {
 
     <template #filters>
       <FilterBar
+        v-bind="creatorFilter"
+        v-model:date-range="filter.dateRange"
+        account-uid-label="创作者 UID"
+        date-range-label="上架时间"
         :loading="loading"
         @refresh="reload"
         @reset="filter = blank()"
       >
-        <el-form-item
-          v-if="creatorUid == null"
-          label="创作者 UID"
-        >
-          <el-input
-            v-model="filter.creatorUid"
-            placeholder="精确匹配"
-            clearable
-            style="width: 160px"
-          />
-        </el-form-item>
         <el-form-item label="卡名 / 标签">
           <el-input
             v-model="filter.keyword"
             :prefix-icon="Search"
-            placeholder="模糊匹配"
+            placeholder="模糊匹配卡名、简介、标签"
             clearable
+            style="width: 300px"
           />
         </el-form-item>
         <el-form-item label="状态">
           <el-select
             v-model="filter.state"
+            placeholder="全部"
+            clearable
             style="width: 140px"
           >
-            <el-option
-              label="全部"
-              value=""
-            />
             <el-option
               v-for="s in marketCardStateValues"
               :key="s"

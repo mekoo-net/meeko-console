@@ -40,8 +40,12 @@ const props = withDefaults(
     loading: boolean;
     /** 第二列标签；账户列表传「账户邮箱」，账单等仍用默认「邮箱 / 手机」。 */
     contactKeywordLabel?: string;
+    /** 第一列标签；这个账户在列表里另有身份时说清楚（「创作者 UID」「买家 UID」）。 */
+    accountUidLabel?: string;
+    /** 时间行标签；按哪个时间筛不言自明时才用默认的「时间范围」。 */
+    dateRangeLabel?: string;
   }>(),
-  { contactKeywordLabel: '邮箱 / 手机' },
+  { contactKeywordLabel: '邮箱 / 手机', accountUidLabel: '账户 UID', dateRangeLabel: '时间范围' },
 );
 
 const emit = defineEmits<{
@@ -132,7 +136,7 @@ function onReset(): void {
       v-if="accountUid !== undefined"
       class="filter-bar__row"
     >
-      <el-form-item label="账户 UID">
+      <el-form-item :label="props.accountUidLabel">
         <el-input v-model="accountUid" :prefix-icon="Search" placeholder="精确匹配" clearable />
       </el-form-item>
       <el-form-item
@@ -158,7 +162,7 @@ function onReset(): void {
     </div>
 
     <div v-if="dateRange !== undefined" class="filter-bar__row filter-bar__row--date">
-      <el-form-item label="时间范围" class="filter-bar__date-item">
+      <el-form-item :label="props.dateRangeLabel" class="filter-bar__date-item">
         <el-date-picker
           v-model="dateRange"
           type="datetimerange"

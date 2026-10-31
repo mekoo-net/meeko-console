@@ -5,7 +5,8 @@
  * 也是用户视角「购买的」：传了 `buyerUid` 就只看这个人买的，买家筛选和买家列都不要；
  * 也是商品行「订单」弹窗里的表：传了 `cardId` 就只看这张卡的，卡号筛选和卡列都不要。
  */
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
+import { Search } from '@element-plus/icons-vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import StatusTag from '@/shared/ui/StatusTag.vue';
@@ -14,6 +15,7 @@ import FilterBar from '@/shared/ui/FilterBar.vue';
 import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
 import { fail } from '@/shared/api/httpTypes';
 import { formatDateTime } from '@/shared/lib/date';
+import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 
 import AccountCell from '../../components/content/AccountCell.vue';
 import CopyableId from '../../components/metering/CopyableId.vue';
@@ -37,24 +39,40 @@ const embedded = props.buyerUid != null || props.cardId != null;
 
 const port = getTavernMarketPort();
 
-const blank = () => ({ buyerUid: '', sellerUid: '', cardId: '', source: '' as '' | MarketOrderSource });
+/** 同调用日志页：账户（这里是买家）一行、业务条件一行、时间一行。下单时间默认不限。 */
+const blank = () => ({
+  buyerUid: '',
+  sellerUid: '',
+  cardId: '',
+  source: undefined as MarketOrderSource | undefined,
+  dateRange: null as [string, string] | null,
+});
 const filter = ref(blank());
 
 const { items, total, page, pageSize, loading, load, reload } = usePagedList<MarketOrderRow>((p) => {
-  const buyer = props.buyerUid == null ? parseAccountUid(filter.value.buyerUid) : { ok: true as const, value: props.buyerUid };
-  const seller = parseAccountUid(filter.value.sellerUid);
+  const f = filter.value;
+  const buyer = props.buyerUid == null ? parseAccountUid(f.buyerUid) : { ok: true as const, value: props.buyerUid };
+  const seller = parseAccountUid(f.sellerUid);
   return buyer.ok && seller.ok
     ? port.orders(
         {
           buyerUid: buyer.value,
           sellerUid: seller.value,
-          cardId: props.cardId ?? (filter.value.cardId.trim() || undefined),
-          source: filter.value.source || undefined,
+          cardId: props.cardId ?? (f.cardId.trim() || undefined),
+          source: f.source,
+          ...dateRangeToEpochMillis(f.dateRange),
         },
         p,
       )
     : Promise.resolve(fail({ code: 'validation', message: 'UID 只能是数字' }));
 }, filter);
+
+/** 用户视角里买家是定的，筛选栏不出账户那一行。 */
+const buyerFilter = computed(() =>
+  props.buyerUid == null
+    ? { accountUid: filter.value.buyerUid, 'onUpdate:accountUid': (v?: string) => (filter.value.buyerUid = v ?? '') }
+    : {},
+);
 
 onMounted(() => void load());
 </script>
@@ -70,27 +88,20 @@ onMounted(() => void load());
 
     <template #filters>
       <FilterBar
+        v-bind="buyerFilter"
+        v-model:date-range="filter.dateRange"
+        account-uid-label="买家 UID"
+        date-range-label="下单时间"
         :loading="loading"
         @refresh="reload"
         @reset="filter = blank()"
       >
-        <el-form-item
-          v-if="buyerUid == null"
-          label="买家 UID"
-        >
-          <el-input
-            v-model="filter.buyerUid"
-            placeholder="精确匹配"
-            clearable
-            style="width: 160px"
-          />
-        </el-form-item>
         <el-form-item label="卖家 UID">
           <el-input
             v-model="filter.sellerUid"
+            :prefix-icon="Search"
             placeholder="精确匹配"
             clearable
-            style="width: 160px"
           />
         </el-form-item>
         <el-form-item
@@ -99,20 +110,19 @@ onMounted(() => void load());
         >
           <el-input
             v-model="filter.cardId"
+            :prefix-icon="Search"
             placeholder="精确匹配"
             clearable
-            style="width: 220px"
+            style="width: 300px"
           />
         </el-form-item>
         <el-form-item label="来源">
           <el-select
             v-model="filter.source"
-            style="width: 120px"
+            placeholder="全部"
+            clearable
+            style="width: 140px"
           >
-            <el-option
-              label="全部"
-              value=""
-            />
             <el-option
               v-for="s in marketOrderSourceSchema.options"
               :key="s"

@@ -164,6 +164,8 @@ export class TavernMarketMock implements TavernMarketPort {
       .map(row)
       .filter((r) => query.creatorUid == null || r.creator.uid === query.creatorUid)
       .filter((r) => query.state == null || r.state === query.state)
+      .filter((r) => query.fromUtc == null || (r.publishedAt ?? 0) >= query.fromUtc)
+      .filter((r) => query.toUtc == null || (r.publishedAt ?? 0) <= query.toUtc)
       .filter((r) => !keyword || r.face.name.toLowerCase().includes(keyword) || r.face.tags.some((t) => t.includes(keyword)))
       .sort((a, b) => b.updatedAt - a.updatedAt);
     return ok(pageOf(rows, page.p, page.pageSize));
@@ -220,6 +222,8 @@ export class TavernMarketMock implements TavernMarketPort {
       .filter((o) => query.buyerUid == null || o.buyer.uid === query.buyerUid)
       .filter((o) => query.sellerUid == null || o.seller.uid === query.sellerUid)
       .filter((o) => query.source == null || o.source === query.source)
+      .filter((o) => query.fromUtc == null || o.createdAt >= query.fromUtc)
+      .filter((o) => query.toUtc == null || o.createdAt <= query.toUtc)
       .sort((a, b) => b.createdAt - a.createdAt);
     return ok(pageOf(rows, page.p, page.pageSize));
   }
