@@ -46,30 +46,16 @@ function wireCall(overrides: Record<string, unknown> = {}): Record<string, unkno
       output: { tokens: 735, reasoningTokens: 0, audioTokens: 0, imageTokens: 0 },
     },
     cost: { multiplier: 1, baseline: 0.000002, billableQuantity: 16_067, amount: 0.032134 },
-    bill: { usageLogId: 52300626, status: 'charged', amount: 0.06145 },
+    bill: {
+      usageLogId: 52300626,
+      status: 'charged',
+      amount: 0.06145,
+      billSerialNo: 'TVB20261031300626',
+      reversible: true,
+      reversal: null,
+      calls: 2,
+    },
     createdAt: 1761877649000,
-    ...overrides,
-  };
-}
-
-/** 取自 `UsageLogDto` 的一行：token 与按件两种用量形状并存。 */
-function wireTurn(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    id: 52300626,
-    traceId: 'd270f7a19db0fc8aa173ad1896b150fb',
-    accountUid: 100002333,
-    sessionId: null,
-    proactive: false,
-    status: 'charged',
-    amount: 0.06145,
-    billSerialNo: 'TVB20261031300626',
-    reversible: true,
-    reversal: null,
-    usages: [
-      { unit: 'token', modelName: 'claude-opus-5.5', vendorKey: 'kiro', kind: 'chat', promptTokens: 13_862, completionTokens: 735 },
-      { unit: 'image', modelName: 'nai-diffusion-5-full', vendorKey: 'neko', kind: 'generation', quantity: 1 },
-    ],
-    createdAt: 1761877673000,
     ...overrides,
   };
 }
@@ -130,93 +116,50 @@ describe('tavern metering adapters', () => {
     expect(!r.success && r.error.code).toBe('validation');
   });
 
-  it('parses the call summary as sent, without re-deriving platform-borne cost', async () => {
-    const tally = {
-      calls: 10,
-      failures: 0,
-      tokens: { input: 187_600, output: 6_500 },
-      cost: { billed: 0, platformBorne: 0.4143, total: 0.4143 },
-    };
-    request.mockResolvedValueOnce(ok({ pipelines: [{ pipeline: { id: 'summary', label: '滚动摘要' }, tally }], total: tally }));
-    const r = await new TavernCallLogHttpAdapter().summary({ fromUtc: 1, toUtc: 2, accountUid: 100000123 });
-    expect(request).toHaveBeenCalledWith('/tavern/api/admin/calls/summary', {
-      query: { fromUtc: 1, toUtc: 2, accountUid: 100000123 },
-    });
-    expect(r.success && r.data.pipelines[0]?.tally.cost.platformBorne).toBe(0.4143);
-  });
-
-  it('discriminates token and counted usages by unit', async () => {
-    request.mockResolvedValueOnce(ok({ items: [wireTurn()], total: 1, page: 1, pageSize: 20 }));
-    const r = await new TavernBillingHttpAdapter().list({ fromUtc: 1, toUtc: 2, status: 'charged', page: 1, pageSize: 20 });
-    expect(request).toHaveBeenCalledWith('/tavern/api/admin/billing/usage', {
-      query: expect.objectContaining({ p: 1, pageSize: 20, status: 'charged' }),
+  it('reads the bill hung on a call: reversed carries its reversal, others do not', async () => {
+    const reversal = { atUtc: 1761880000000, by: 900000001, code: 'metering_error', remark: '工单 #1' };
+    const reversedBill = { ...(wireCall().bill as object), status: 'reversed', reversible: false, reversal };
+    request.mockResolvedValueOnce(ok({ items: [wireCall({ bill: reversedBill })], total: 1, page: 1, pageSize: 20 }));
+    const r = await new TavernCallLogHttpAdapter().list({ fromUtc: 1, toUtc: 2, traceId: 'd270f7a1', page: 1, pageSize: 20 });
+    expect(request).toHaveBeenCalledWith('/tavern/api/admin/calls', {
+      query: expect.objectContaining({ traceId: 'd270f7a1' }),
     });
     if (!r.success) throw new Error(r.error.message);
-    const [tokens, image] = r.data.items[0]!.usages;
-    expect(tokens?.unit === 'token' && tokens.completionTokens).toBe(735);
-    expect(image?.unit === 'image' && image.quantity).toBe(1);
+    const bill = r.data.items[0]?.bill;
+    expect(bill?.status === 'reversed' && bill.reversal.code).toBe('metering_error');
+    expect(bill?.calls).toBe(2);
   });
 
-  it('rejects a usage whose fields do not match its unit', async () => {
-    const usages = [{ unit: 'token', modelName: 'x', vendorKey: null, kind: 'chat', quantity: 3 }];
-    request.mockResolvedValueOnce(ok({ items: [wireTurn({ usages })], total: 1, page: 1, pageSize: 20 }));
-    const r = await new TavernBillingHttpAdapter().list({ fromUtc: 1, toUtc: 2, page: 1, pageSize: 20 });
+  it('rejects a reversed bill that lacks its reversal record', async () => {
+    const bill = { ...(wireCall().bill as object), status: 'reversed', reversible: false };
+    request.mockResolvedValueOnce(ok({ items: [wireCall({ bill })], total: 1, page: 1, pageSize: 20 }));
+    const r = await new TavernCallLogHttpAdapter().list({ fromUtc: 1, toUtc: 2, page: 1, pageSize: 20 });
     expect(!r.success && r.error.code).toBe('validation');
-  });
-
-  it('reads the turn detail with server quotes', async () => {
-    request.mockResolvedValueOnce(
-      ok({
-        turn: wireTurn(),
-        lines: [
-          {
-            usage: (wireTurn().usages as unknown[])[0],
-            quote: { multiplier: 1, baseline: 0.000002, billableQuantity: 16_067, amount: 0.032134 },
-          },
-        ],
-        amountAtCurrentPricing: 0.082134,
-        calls: [wireCall()],
-      }),
-    );
-    const r = await new TavernBillingHttpAdapter().get(52300626);
-    expect(request).toHaveBeenCalledWith('/tavern/api/admin/billing/usage/52300626');
-    if (!r.success) throw new Error(r.error.message);
-    expect(r.data.amountAtCurrentPricing).toBe(0.082134);
-    expect(r.data.lines[0]?.quote.billableQuantity).toBe(16_067);
-    expect(r.data.calls).toHaveLength(1);
   });
 
   it('reverses a batch and reads one outcome per turn', async () => {
     const reversal = { atUtc: 1761880000000, by: 900000001, code: 'metering_error', remark: null };
     request.mockResolvedValueOnce(
       ok([
-        { outcome: 'reversed', id: 52300626, turn: wireTurn({ status: 'reversed', reversible: false, reversal }) },
+        { outcome: 'reversed', id: 52300626, reversal },
         { outcome: 'rejected', id: 52300627, reason: '已经驳回过了。' },
       ]),
     );
     const r = await new TavernBillingHttpAdapter().reverse({ ids: [52300626, 52300627], reasonCode: 'metering_error' });
-    expect(request).toHaveBeenCalledWith('/tavern/api/admin/billing/usage/reverse', {
+    expect(request).toHaveBeenCalledWith('/tavern/api/admin/billing/reverse', {
       method: 'POST',
       body: { ids: [52300626, 52300627], reasonCode: 'metering_error' },
     });
     if (!r.success) throw new Error(r.error.message);
     const [done, rejected] = r.data;
-    expect(done?.outcome === 'reversed' && done.turn.status === 'reversed' && done.turn.reversal.code).toBe(
-      'metering_error',
-    );
+    expect(done?.outcome === 'reversed' && done.reversal.code).toBe('metering_error');
     expect(rejected?.outcome === 'rejected' && rejected.reason).toBe('已经驳回过了。');
-  });
-
-  it('rejects a reversed turn that lacks its reversal record', async () => {
-    request.mockResolvedValueOnce(ok({ items: [wireTurn({ status: 'reversed' })], total: 1, page: 1, pageSize: 20 }));
-    const r = await new TavernBillingHttpAdapter().list({ fromUtc: 1, toUtc: 2, page: 1, pageSize: 20 });
-    expect(!r.success && r.error.code).toBe('validation');
   });
 
   it('passes transport failures through untouched', async () => {
     const failure = fail({ code: 'unknown', message: '时间范围最长 31 天。' });
     request.mockResolvedValueOnce(failure);
-    expect(await new TavernBillingHttpAdapter().summary({ fromUtc: 1, toUtc: 2 })).toBe(failure);
+    expect(await new TavernCallLogHttpAdapter().list({ fromUtc: 1, toUtc: 2, page: 1, pageSize: 20 })).toBe(failure);
   });
 
   it('round-trips pricing as { rules, version }', async () => {

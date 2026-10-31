@@ -2,15 +2,7 @@ import { parseTavern, requestTavern, type ItemsEnvelope } from '@/features/taver
 import type { TavernCallLogPort } from '@/features/tavern/services/ports/tavernCallLogPort';
 import type { AppResult } from '@/shared/api/httpTypes';
 
-import {
-  callLogSchema,
-  callSummarySchema,
-  pageSchema,
-  type CallLog,
-  type CallLogQuery,
-  type CallSummary,
-  type RangeQuery,
-} from '../../model/metering.types';
+import { callLogSchema, pageSchema, type CallLog, type CallLogQuery } from '../../model/metering.types';
 
 const BASE = '/tavern/api/admin/calls';
 
@@ -25,6 +17,7 @@ export class TavernCallLogHttpAdapter implements TavernCallLogPort {
         fromUtc: query.fromUtc,
         toUtc: query.toUtc,
         accountUid: query.accountUid,
+        traceId: query.traceId,
         pipeline: query.pipeline,
         model: query.model,
         status: query.status,
@@ -32,12 +25,5 @@ export class TavernCallLogHttpAdapter implements TavernCallLogPort {
       },
     });
     return parseTavern(callLogPageSchema, res, '调用日志');
-  }
-
-  async summary(query: RangeQuery): Promise<AppResult<CallSummary>> {
-    const res = await requestTavern<unknown>(`${BASE}/summary`, {
-      query: { fromUtc: query.fromUtc, toUtc: query.toUtc, accountUid: query.accountUid },
-    });
-    return parseTavern(callSummarySchema, res, '管线汇总');
   }
 }

@@ -8,14 +8,7 @@
 import { billReverseCodeValues } from '@yomi/common';
 import type { ItemsEnvelope } from '@/features/tavern/api/http';
 
-import type {
-  CallLog,
-  CallStatus,
-  MeteredUsage,
-  TurnReversal,
-  UsageLog,
-  UsageLogDetail,
-} from '../../model/metering.types';
+import type { CallBill, CallLog, CallStatus, MeteredUsage, TurnReversal } from '../../model/metering.types';
 import type { PricingModel, PricingRules } from '../../model/meteringPricing.types';
 import { applyProactive, quoteUsage, roundTo } from '../../model/pricingPreview';
 
@@ -207,9 +200,9 @@ function pickAccount(): number {
 
 type MockCall = Omit<CallLog, 'cost' | 'bill'> & { usageLogId: number | null };
 export const MOCK_STAFF_UID = 900000001;
+/** 服务端 `usage_logs` 一行，已是挂到调用上的形状。 */
 interface MockTurn {
-  log: UsageLog;
-  callIds: string[];
+  bill: CallBill;
 }
 
 const calls: MockCall[] = [];
@@ -329,21 +322,15 @@ function generateTurn(start: number): void {
 
   calls.push(...own);
   turns.push({
-    log: {
-      id: turnId,
-      traceId: ctx.traceId,
-      accountUid,
-      sessionId: ctx.sessionId,
-      proactive: ctx.proactive,
+    bill: {
+      usageLogId: turnId,
       status,
       // 作废 / 失败没收到钱，金额按设计为 0。
       amount: status === 'charged' ? applyProactive(chargedRules, subtotal, ctx.proactive) : 0,
       billSerialNo: status === 'charged' ? serialNo(t, turnId) : null,
       reversible: status === 'charged',
-      usages,
-      createdAt: t,
+      calls: own.length,
     },
-    callIds: own.map((c) => c.id),
   });
 
   if (status === 'charged' && rand() < 0.02) {
@@ -380,10 +367,7 @@ for (let t = NOW - SPAN_DAYS * DAY; t < NOW - 2 * MINUTE; t += between(4, 40) * 
 }
 
 calls.sort((a, b) => b.createdAt - a.createdAt);
-turns.sort((a, b) => b.log.id - a.log.id);
-
-const callById = new Map(calls.map((c) => [c.id, c]));
-const turnById = new Map(turns.map((t) => [t.log.id, t]));
+const turnById = new Map(turns.map((t) => [t.bill.usageLogId, t]));
 
 // ─── 服务端视图 ──────────────────────────────────────────
 
@@ -399,35 +383,11 @@ export function callCost(c: MockCall): CallLog['cost'] {
 export function toCallLog(c: MockCall): CallLog {
   const { usageLogId, ...call } = c;
   const turn = usageLogId != null ? turnById.get(usageLogId) : undefined;
-  return {
-    ...call,
-    cost: callCost(c),
-    bill: turn ? { usageLogId: turn.log.id, status: turn.log.status, amount: turn.log.amount } : null,
-  };
-}
-
-export function toUsageLogDetail(t: MockTurn): UsageLogDetail {
-  const { log } = t;
-  const lines = log.usages.map((usage) => ({ usage, quote: quoteUsage(rules, usage) }));
-  const subtotal = roundTo(lines.reduce((s, l) => s + l.quote.amount, 0), 6);
-  const amountAtCurrentPricing = applyProactive(rules, subtotal, log.proactive);
-  return {
-    turn: log,
-    lines,
-    amountAtCurrentPricing,
-    calls: t.callIds
-      .map((id) => callById.get(id))
-      .filter((c): c is MockCall => c != null)
-      .map(toCallLog),
-  };
+  return { ...call, cost: callCost(c), bill: turn?.bill ?? null };
 }
 
 export function mockCalls(): readonly MockCall[] {
   return calls;
-}
-
-export function mockTurns(): readonly MockTurn[] {
-  return turns;
 }
 
 export function findTurn(id: number): MockTurn | undefined {
@@ -436,7 +396,7 @@ export function findTurn(id: number): MockTurn | undefined {
 
 /** 同服务端 `TavernUsageLog.Reverse`：状态改成已驳回，金额不动——退回的就是它。 */
 export function markReversed(t: MockTurn, reversal: TurnReversal): void {
-  t.log = { ...t.log, status: 'reversed', reversible: false, reversal };
+  t.bill = { ...t.bill, status: 'reversed', reversible: false, reversal };
 }
 
 /** 同服务端 `AdminPageQuery`：p 从 1 起，pageSize 夹在 1..200。 */

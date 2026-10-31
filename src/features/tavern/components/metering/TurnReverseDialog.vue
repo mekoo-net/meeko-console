@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
- * 驳回已扣费的回合，一个（详情抽屉）或一批（列表勾选）：Billing 把每笔全额退回钱包，回合标成已驳回，不可撤销。
- * 一批共用一个原因：一次批量就是一个事由，真要分事由就分两批。原因码与 Yomi 调用日志的驳回同一套。
- * 服务端逐个处理、逐个回结果：成了的交给父组件就地换掉，没成的留在框里列出来。
+ * 驳回扣费：Billing 把回合的扣费全额退回钱包，回合标成已驳回，不可撤销。
+ * 驳的是回合不是调用——一回合多次调用（工具轮次）挂同一笔钱，所以按回合去重，从抽屉来一个、从勾选来一批。
+ * 一批共用一个原因：一次批量就是一个事由。原因码与 Yomi 调用日志的驳回同一套。
+ * 服务端逐个处理、逐个回结果：成了的交给父组件贴到行上，没成的留在框里列出来。
  */
 import { computed, ref, watch } from 'vue';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
@@ -14,18 +15,25 @@ import {
   type BillReverseCode,
 } from '@yomi/common';
 
-import type { TurnReversalRejected, UsageLog } from '../../model/metering.types';
+import type { CallLog, TurnReversalRejected, TurnReversed } from '../../model/metering.types';
 import { formatCny } from '../../model/meteringFormat';
 import { roundTo } from '../../model/pricingPreview';
 import { getTavernBillingPort } from '../../services';
 
 const visible = defineModel<boolean>('visible', { required: true });
-const props = defineProps<{ turns: readonly UsageLog[] }>();
-const emit = defineEmits<{ reversed: [turns: UsageLog[]] }>();
+const props = defineProps<{ calls: readonly CallLog[] }>();
+const emit = defineEmits<{ reversed: [done: TurnReversed[]] }>();
 
 interface FormState {
   reasonCode: BillReverseCode | '';
   remark: string;
+}
+
+interface Turn {
+  id: number;
+  accountUid: number;
+  amount: number;
+  billSerialNo: string | null;
 }
 
 const port = getTavernBillingPort();
@@ -38,12 +46,20 @@ const rules: FormRules<FormState> = {
   reasonCode: [{ required: true, message: '选一个驳回原因', trigger: 'change' }],
 };
 
-const single = computed(() => (props.turns.length === 1 ? props.turns[0]! : null));
-const accounts = computed(() => new Set(props.turns.map((t) => t.accountUid)).size);
-const totalAmount = computed(() => sumAmount(props.turns));
+const turns = computed<Turn[]>(() => {
+  const byId = new Map<number, Turn>();
+  for (const { accountUid, bill } of props.calls) {
+    if (!bill?.reversible) continue;
+    byId.set(bill.usageLogId, { id: bill.usageLogId, accountUid, amount: bill.amount, billSerialNo: bill.billSerialNo });
+  }
+  return [...byId.values()];
+});
+const single = computed(() => (turns.value.length === 1 ? turns.value[0]! : null));
+const accounts = computed(() => new Set(turns.value.map((t) => t.accountUid)).size);
+const totalAmount = computed(() => sumAmount(turns.value));
 
-function sumAmount(turns: readonly UsageLog[]): number {
-  return roundTo(turns.reduce((s, t) => s + t.amount, 0), 6);
+function sumAmount(list: readonly Turn[]): number {
+  return roundTo(list.reduce((s, t) => s + t.amount, 0), 6);
 }
 
 watch(visible, (open) => {
@@ -61,7 +77,7 @@ async function submit(): Promise<void> {
   submitting.value = true;
   try {
     const r = await port.reverse({
-      ids: props.turns.map((t) => t.id),
+      ids: turns.value.map((t) => t.id),
       reasonCode,
       remark: remark.trim() || undefined,
     });
@@ -70,11 +86,14 @@ async function submit(): Promise<void> {
       return;
     }
 
-    const done = r.data.flatMap((o) => (o.outcome === 'reversed' ? [o.turn] : []));
+    const done = r.data.filter((o): o is TurnReversed => o.outcome === 'reversed');
     rejected.value = r.data.filter((o): o is TurnReversalRejected => o.outcome === 'rejected');
     if (done.length > 0) {
+      const ids = new Set(done.map((o) => o.id));
+      ElMessage.success(
+        `已驳回 ${done.length} 个回合，退回 ${formatCny(sumAmount(turns.value.filter((t) => ids.has(t.id))))}`,
+      );
       emit('reversed', done);
-      ElMessage.success(`已驳回 ${done.length} 个回合，退回 ${formatCny(sumAmount(done))}`);
     }
     if (rejected.value.length === 0) visible.value = false;
   } finally {
@@ -99,7 +118,7 @@ async function submit(): Promise<void> {
       class="reverse__meta"
     >
       <template v-if="single">
-        <dt>账号</dt>
+        <dt>账户</dt>
         <dd class="mono">
           {{ single.accountUid }}
         </dd>
@@ -111,7 +130,7 @@ async function submit(): Promise<void> {
       <template v-else>
         <dt>回合</dt>
         <dd class="num">
-          {{ turns.length }} 个，涉及 {{ accounts }} 个账号
+          {{ turns.length }} 个，涉及 {{ accounts }} 个账户
         </dd>
       </template>
       <dt>退回</dt>
@@ -125,7 +144,7 @@ async function submit(): Promise<void> {
       class="reverse__rejected"
     >
       <h4 class="reverse__rejected-title">
-        {{ rejected.length }} 个没驳回
+        {{ rejected.length }} 个回合没驳回
       </h4>
       <ul>
         <li

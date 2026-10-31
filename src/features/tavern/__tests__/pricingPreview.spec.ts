@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { MeteredUsage } from '../model/metering.types';
 import type { PricingRules } from '../model/meteringPricing.types';
-import { checkRange, digestUsages, formatCny, formatUsage } from '../model/meteringFormat';
+import { checkRange, formatCny } from '../model/meteringFormat';
 import {
   applyProactive,
   describePricingChanges,
@@ -147,12 +147,6 @@ describe('meteringFormat', () => {
     expect(formatCny(2)).toBe('¥2.00');
     expect(formatCny(0.0288)).toBe('¥0.0288');
     expect(formatCny(0.1234567)).toBe('¥0.123457');
-  });
-
-  it('reads each usage shape in its own words', () => {
-    expect(formatUsage(OPUS_CALL)).toBe('入 12,000 · 出 800');
-    expect(formatUsage(IMAGE)).toBe('2 张');
-    expect(digestUsages([OPUS_CALL, OPUS_CALL, IMAGE])).toEqual({ input: 24_000, output: 1_600, counted: ['2 张'] });
   });
 
   it('rejects ranges over 31 days or reversed', () => {

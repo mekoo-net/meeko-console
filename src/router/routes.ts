@@ -391,12 +391,6 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '调用日志', requiresAuth: true, roles: ['Admin'] },
           },
           {
-            path: 'billing',
-            name: 'tavern-billing',
-            component: () => import('@/features/tavern/views/TavernBillingView.vue'),
-            meta: { title: '计费明细', requiresAuth: true, roles: ['Admin'] },
-          },
-          {
             path: 'pricing',
             name: 'tavern-pricing',
             component: () => import('@/features/tavern/views/TavernPricingView.vue'),
