@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 驳回扣费：Billing 把回合的扣费全额退回钱包，回合标成已驳回，不可撤销。
- * 驳的是回合不是调用——一回合多次调用（工具轮次）挂同一笔钱，所以按回合去重，从抽屉来一个、从勾选来一批。
+ * 驳的是回合不是行——一回合多次调用（工具轮次）挂同一笔钱，所以按回合去重，从抽屉来一个、从勾选来一批。
  * 一批共用一个原因：一次批量就是一个事由。原因码与 Yomi 调用日志的驳回同一套。
  * 服务端逐个处理、逐个回结果：成了的交给父组件贴到行上，没成的留在框里列出来。
  */
@@ -15,13 +15,13 @@ import {
   type BillReverseCode,
 } from '@yomi/common';
 
-import type { CallLog, TurnReversalRejected, TurnReversed } from '../../model/metering.types';
+import type { LogRow, TurnReversalRejected, TurnReversed } from '../../model/metering.types';
 import { formatCny } from '../../model/meteringFormat';
 import { roundTo } from '../../model/pricingPreview';
 import { getTavernBillingPort } from '../../services';
 
 const visible = defineModel<boolean>('visible', { required: true });
-const props = defineProps<{ calls: readonly CallLog[] }>();
+const props = defineProps<{ rows: readonly LogRow[] }>();
 const emit = defineEmits<{ reversed: [done: TurnReversed[]] }>();
 
 interface FormState {
@@ -48,7 +48,7 @@ const rules: FormRules<FormState> = {
 
 const turns = computed<Turn[]>(() => {
   const byId = new Map<number, Turn>();
-  for (const { accountUid, bill } of props.calls) {
+  for (const { accountUid, bill } of props.rows) {
     if (!bill?.reversible) continue;
     byId.set(bill.usageLogId, { id: bill.usageLogId, accountUid, amount: bill.amount, billSerialNo: bill.billSerialNo });
   }

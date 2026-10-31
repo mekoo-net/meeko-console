@@ -8,7 +8,14 @@
 import { billReverseCodeValues } from '@yomi/common';
 import type { ItemsEnvelope } from '@/features/tavern/api/http';
 
-import type { CallBill, CallLog, CallStatus, MeteredUsage, TurnReversal } from '../../model/metering.types';
+import type {
+  CallBill,
+  CallLog,
+  CallStatus,
+  MeteredUsage,
+  TurnLog,
+  TurnReversal,
+} from '../../model/metering.types';
 import type { PricingModel, PricingRules } from '../../model/meteringPricing.types';
 import { applyProactive, quoteUsage, roundTo } from '../../model/pricingPreview';
 
@@ -198,11 +205,16 @@ function pickAccount(): number {
 
 // ─── 生成 ────────────────────────────────────────────────
 
-type MockCall = Omit<CallLog, 'cost' | 'bill'> & { usageLogId: number | null };
+type MockCall = Omit<CallLog, 'kind' | 'cost' | 'bill'> & { usageLogId: number | null };
 export const MOCK_STAFF_UID = 900000001;
-/** 服务端 `usage_logs` 一行，已是挂到调用上的形状。 */
+
+/** 调用日志开始记的时刻（同线上 2026-10-31）：之前的回合只有扣费记录，没有调用明细。 */
+const CALL_LOG_SINCE = NOW - 3 * DAY;
+
+/** 服务端 `usage_logs` 一行。没有调用明细的回合另带列表行要的字段。 */
 interface MockTurn {
   bill: CallBill;
+  withoutCalls: Omit<TurnLog, 'kind' | 'bill'> | null;
 }
 
 const calls: MockCall[] = [];
@@ -320,7 +332,8 @@ function generateTurn(start: number): void {
   const chargedRules = rulesAt(start);
   const subtotal = roundTo(usages.reduce((s, u) => s + quoteUsage(chargedRules, u).amount, 0), 6);
 
-  calls.push(...own);
+  const logged = start >= CALL_LOG_SINCE;
+  if (logged) calls.push(...own);
   turns.push({
     bill: {
       usageLogId: turnId,
@@ -329,8 +342,19 @@ function generateTurn(start: number): void {
       amount: status === 'charged' ? applyProactive(chargedRules, subtotal, ctx.proactive) : 0,
       billSerialNo: status === 'charged' ? serialNo(t, turnId) : null,
       reversible: status === 'charged',
-      calls: own.length,
+      calls: logged ? own.length : 1,
     },
+    withoutCalls: logged
+      ? null
+      : {
+          id: turnId,
+          traceId: ctx.traceId,
+          accountUid,
+          sessionId: ctx.sessionId,
+          proactive: ctx.proactive,
+          usages,
+          createdAt: t,
+        },
   });
 
   if (status === 'charged' && rand() < 0.02) {
@@ -358,7 +382,7 @@ function generateBackground(start: number): void {
     traceId: hex(32),
     proactive,
   };
-  calls.push(makeCall(real, model, start, ctx, 0, true));
+  if (start >= CALL_LOG_SINCE) calls.push(makeCall(real, model, start, ctx, 0, true));
 }
 
 for (let t = NOW - SPAN_DAYS * DAY; t < NOW - 2 * MINUTE; t += between(4, 40) * MINUTE) {
@@ -383,7 +407,12 @@ export function callCost(c: MockCall): CallLog['cost'] {
 export function toCallLog(c: MockCall): CallLog {
   const { usageLogId, ...call } = c;
   const turn = usageLogId != null ? turnById.get(usageLogId) : undefined;
-  return { ...call, cost: callCost(c), bill: turn?.bill ?? null };
+  return { kind: 'call', ...call, cost: callCost(c), bill: turn?.bill ?? null };
+}
+
+/** 没有调用明细的回合，按现在的账单状态（驳回过的带驳回记录）。 */
+export function mockTurnsWithoutCalls(): TurnLog[] {
+  return turns.flatMap(({ bill, withoutCalls }) => (withoutCalls ? [{ kind: 'turn' as const, ...withoutCalls, bill }] : []));
 }
 
 export function mockCalls(): readonly MockCall[] {

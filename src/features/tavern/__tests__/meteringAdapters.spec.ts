@@ -23,6 +23,7 @@ const request = vi.mocked(http.requestTavern);
 /** 取自 `CallLogDto` 的一行。 */
 function wireCall(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    kind: 'call',
     id: '0199a3c4-5e6f-7a8b-9c0d-1e2f3a4b5c6d',
     traceId: 'd270f7a19db0fc8aa173ad1896b150fb',
     accountUid: 100002333,
@@ -104,8 +105,9 @@ describe('tavern metering adapters', () => {
     );
     const r = await new TavernCallLogHttpAdapter().list({ fromUtc: 1, toUtc: 2, page: 1, pageSize: 20 });
     if (!r.success) throw new Error(r.error.message);
-    expect(r.data.items[0]?.bill).toBeNull();
-    expect(r.data.items[0]?.content.error).toEqual({ code: null, message: 'stream interrupted' });
+    const [call] = r.data.items;
+    expect(call?.bill).toBeNull();
+    expect(call?.kind === 'call' && call.content.error).toEqual({ code: null, message: 'stream interrupted' });
   });
 
   it('turns contract drift into a validation failure instead of half-parsed rows', async () => {
@@ -128,6 +130,29 @@ describe('tavern metering adapters', () => {
     const bill = r.data.items[0]?.bill;
     expect(bill?.status === 'reversed' && bill.reversal.code).toBe('metering_error');
     expect(bill?.calls).toBe(2);
+  });
+
+  it('reads a turn recorded before call logs existed, with its usages and bill', async () => {
+    const turn = {
+      kind: 'turn',
+      id: 418,
+      traceId: '9b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e',
+      accountUid: 100002333,
+      sessionId: null,
+      proactive: false,
+      usages: [
+        { unit: 'token', modelName: 'claude-opus-4.6', vendorKey: 'kiro', kind: 'chat', promptTokens: 13_862, completionTokens: 735 },
+        { unit: 'image', modelName: 'nai-diffusion-5-full', vendorKey: 'neko', kind: 'generation', quantity: 1 },
+      ],
+      bill: { ...(wireCall().bill as object), usageLogId: 418, calls: 1 },
+      createdAt: 1761872338000,
+    };
+    request.mockResolvedValueOnce(ok({ items: [wireCall(), turn], total: 2, page: 1, pageSize: 20 }));
+    const r = await new TavernCallLogHttpAdapter().list({ fromUtc: 1, toUtc: 2, page: 1, pageSize: 20 });
+    if (!r.success) throw new Error(r.error.message);
+    const [, row] = r.data.items;
+    expect(row?.kind === 'turn' && row.usages.map((u) => u.unit)).toEqual(['token', 'image']);
+    expect(row?.kind === 'turn' && row.bill.usageLogId).toBe(418);
   });
 
   it('rejects a reversed bill that lacks its reversal record', async () => {

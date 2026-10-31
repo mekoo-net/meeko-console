@@ -4,6 +4,8 @@
 import { toLocalDateTimeValue } from '@/shared/lib/date';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 
+import { CountedUnitLabel, type MeteredUsage } from './metering.types';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** 与后端校验一致：超出就会被拒，提前在页面上拦。 */
@@ -76,4 +78,14 @@ export function shortId(id: string | null): string {
   const head = /^([0-9a-f]{8}-[0-9a-f]{4})/i.exec(id)?.[1];
   if (head && id.length > head.length) return `${head}…`;
   return id.length > 14 ? `${id.slice(0, 14)}…` : id;
+}
+
+/** 一条计价用量的读法：token 写输入 / 输出，按件写数量与单位。 */
+export function formatUsage(usage: MeteredUsage): string {
+  switch (usage.unit) {
+    case 'token':
+      return `入 ${usage.promptTokens.toLocaleString()} · 出 ${usage.completionTokens.toLocaleString()}`;
+    default:
+      return `${usage.quantity.toLocaleString()} ${CountedUnitLabel[usage.unit]}`;
+  }
 }

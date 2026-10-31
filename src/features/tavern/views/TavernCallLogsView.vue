@@ -4,6 +4,8 @@
  *
  *  - Tavern 按回合扣费：一回合多次调用（工具轮次）挂同一笔钱，「扣费」列在这几行上重复，标出共几次调用；
  *    没挂回合的由平台承担，「扣费」列给按现行价目的折算
+ *  - 调用日志 2026-10-31 才开始记，之前的回合没有调用明细，整回合占一行（`kind: 'turn'`）按时间插在中间，
+ *    管线 / 状态 / 耗时这些它没有的格子留空
  *  - 表格里可点的字段（管线 / 状态 / 渠道 / 模型 / 账户）写入筛选条件，筛选一变就重查
  *  - 驳回：行尾、详情抽屉驳回单个回合；「批量驳回」进勾选模式，勾这一页里能驳回的一次驳掉
  */
@@ -26,7 +28,9 @@ import {
   callStatusValues,
   type CallLog,
   type CallStatus,
+  type LogRow,
   type PipelineRef,
+  type TurnLog,
   type TurnReversed,
 } from '../model/metering.types';
 import {
@@ -34,6 +38,7 @@ import {
   formatCny,
   formatDuration,
   formatTokens,
+  formatUsage,
   last24h,
   parseAccountUid,
   shortId,
@@ -67,7 +72,7 @@ const defaultFilter = (): PageFilter => ({
 });
 
 const filter = ref<PageFilter>(defaultFilter());
-const records = ref<CallLog[]>([]);
+const records = ref<LogRow[]>([]);
 const total = ref(0);
 const page = ref(1);
 const pageSize = ref(20);
@@ -140,13 +145,18 @@ async function loadPipelines(): Promise<void> {
   if (r.success) pipelines.value = r.data.pipelines.map(({ id, label }) => ({ id, label }));
 }
 
+/** 调用 id 是 uuid、回合 id 是数字，两种行合在一张表里要带上种类才唯一。 */
+function rowKey(row: LogRow): string {
+  return `${row.kind}:${row.id}`;
+}
+
 // ─── 详情 ────────────────────────────────────────────────
 
 const detailOpen = ref(false);
-const detailCall = ref<CallLog | null>(null);
+const detailRow = ref<LogRow | null>(null);
 
-function openDetail(row: CallLog): void {
-  detailCall.value = row;
+function openDetail(row: LogRow): void {
+  detailRow.value = row;
   detailOpen.value = true;
 }
 
@@ -154,12 +164,12 @@ function openDetail(row: CallLog): void {
 
 const tableRef = ref<TableInstance>();
 const selecting = ref(false);
-const selected = ref<CallLog[]>([]);
+const selected = ref<LogRow[]>([]);
 const reverseOpen = ref(false);
-/** 打开对话框那一刻要驳的调用；提交途中列表变了也不影响。 */
-const reverseCalls = ref<CallLog[]>([]);
+/** 打开对话框那一刻要驳的行；提交途中列表变了也不影响。 */
+const reverseRows = ref<LogRow[]>([]);
 
-/** 勾的是调用，驳的是回合：同一回合的几行只算一次。 */
+/** 勾的是行，驳的是回合：同一回合的几行只算一次。 */
 const selectedTurns = computed(() => {
   const byTurn = new Map<number, number>();
   for (const { bill } of selected.value) if (bill) byTurn.set(bill.usageLogId, bill.amount);
@@ -171,25 +181,25 @@ function toggleSelecting(): void {
   if (!selecting.value) tableRef.value?.clearSelection();
 }
 
-function onRowClick(row: CallLog): void {
+function onRowClick(row: LogRow): void {
   if (selecting.value && row.bill?.reversible) tableRef.value?.toggleRowSelection(row);
 }
 
-function openReverse(calls: CallLog[]): void {
-  reverseCalls.value = calls;
+function openReverse(rows: LogRow[]): void {
+  reverseRows.value = rows;
   reverseOpen.value = true;
 }
 
 /** 抽屉里点驳回：先收抽屉再开对话框，免得两层浮层抢焦点。 */
-function onDrawerReverse(call: CallLog): void {
+function onDrawerReverse(row: LogRow): void {
   detailOpen.value = false;
-  setTimeout(() => openReverse([call]), 200);
+  setTimeout(() => openReverse([row]), 200);
 }
 
 /** 回合其余不变，只把驳回记录贴到挂这些回合的每一行上。 */
 function onReversed(done: TurnReversed[]): void {
   const byTurn = new Map(done.map((o) => [o.id, o.reversal]));
-  records.value = records.value.map((r): CallLog => {
+  records.value = records.value.map((r): LogRow => {
     const reversal = r.bill && byTurn.get(r.bill.usageLogId);
     return r.bill && reversal
       ? { ...r, bill: { ...r.bill, status: 'reversed', reversible: false, reversal } }
@@ -203,6 +213,11 @@ function onReversed(done: TurnReversed[]): void {
 function statusLabel(row: CallLog): string {
   const code = row.content.error?.code;
   return row.status === 'failure' && code ? logErrorCodeText(code) : AiUsageStatusLabel[row.status];
+}
+
+/** 回合行里出现过的模型 / 渠道，去重保序。 */
+function distinct(values: readonly (string | null)[]): string[] {
+  return [...new Set(values.filter((v): v is string => !!v))];
 }
 
 /** 同 Yomi：模型名哈希到固定色板，同名同色，便于扫读。 */
@@ -234,11 +249,15 @@ interface UsageTag {
   title: string;
 }
 
+function tokenTag(key: 'in' | 'out', tokens: number): UsageTag {
+  return key === 'in'
+    ? { key, arrow: '▲', value: formatTokens(tokens), kind: 'in', title: `输入 ${tokens.toLocaleString()} tokens` }
+    : { key, arrow: '▼', value: formatTokens(tokens), kind: 'out', title: `输出 ${tokens.toLocaleString()} tokens` };
+}
+
 /** 同 Yomi 两行用量：第一行输入 + 缓存读，第二行输出 + 缓存写 + 推理。 */
-function usageTagRows({ usage: { input, output } }: CallLog): UsageTag[][] {
-  const inputRow: UsageTag[] = [
-    { key: 'in', arrow: '▲', value: formatTokens(input.tokens), kind: 'in', title: `输入 ${input.tokens.toLocaleString()} tokens` },
-  ];
+function callUsageTags({ usage: { input, output } }: CallLog): UsageTag[][] {
+  const inputRow: UsageTag[] = [tokenTag('in', input.tokens)];
   if (input.cachedReadTokens > 0) {
     inputRow.push({
       key: 'cache',
@@ -248,9 +267,7 @@ function usageTagRows({ usage: { input, output } }: CallLog): UsageTag[][] {
       title: `缓存命中 ${input.cachedReadTokens.toLocaleString()} tokens`,
     });
   }
-  const outputRow: UsageTag[] = [
-    { key: 'out', arrow: '▼', value: formatTokens(output.tokens), kind: 'out', title: `输出 ${output.tokens.toLocaleString()} tokens` },
-  ];
+  const outputRow: UsageTag[] = [tokenTag('out', output.tokens)];
   if (input.cachedWriteTokens > 0) {
     outputRow.push({
       key: 'cachew',
@@ -270,6 +287,22 @@ function usageTagRows({ usage: { input, output } }: CallLog): UsageTag[][] {
     });
   }
   return [inputRow, outputRow];
+}
+
+/** 回合行：token 合成一组，按件的（生图等）另起文字。 */
+function turnUsage({ usages }: TurnLog): { tags: UsageTag[][]; counted: string[] } {
+  let input = 0;
+  let output = 0;
+  const counted: string[] = [];
+  for (const u of usages) {
+    if (u.unit === 'token') {
+      input += u.promptTokens;
+      output += u.completionTokens;
+    } else {
+      counted.push(formatUsage(u));
+    }
+  }
+  return { tags: [[tokenTag('in', input)], [tokenTag('out', output)]], counted };
 }
 
 onMounted(() => {
@@ -396,7 +429,7 @@ onMounted(() => {
       ref="tableRef"
       v-loading="loading"
       :data="records"
-      row-key="id"
+      :row-key="rowKey"
       size="small"
       stripe
       class="log-table"
@@ -404,14 +437,14 @@ onMounted(() => {
       height="100%"
       :empty-text="' '"
       @row-click="onRowClick"
-      @selection-change="(rows: CallLog[]) => (selected = rows)"
+      @selection-change="(rows: LogRow[]) => (selected = rows)"
     >
       <el-table-column
         v-if="selecting"
         type="selection"
         width="40"
         fixed
-        :selectable="(row: CallLog) => row.bill?.reversible === true"
+        :selectable="(row: LogRow) => row.bill?.reversible === true"
       />
 
       <el-table-column
@@ -420,7 +453,7 @@ onMounted(() => {
         align="center"
         fixed
       >
-        <template #default="{ row }: { row: CallLog }">
+        <template #default="{ row }: { row: LogRow }">
           <el-button
             :icon="View"
             link
@@ -436,7 +469,7 @@ onMounted(() => {
         width="172"
         fixed
       >
-        <template #default="{ row }: { row: CallLog }">
+        <template #default="{ row }: { row: LogRow }">
           <span class="cell-time mono">{{ formatDateTime(row.createdAt, 'YYYY-MM-DD HH:mm:ss') }}</span>
         </template>
       </el-table-column>
@@ -445,9 +478,9 @@ onMounted(() => {
         label="日志编号"
         min-width="190"
       >
-        <template #default="{ row }: { row: CallLog }">
+        <template #default="{ row }: { row: LogRow }">
           <div class="cell-ids">
-            <span class="cell-logid mono">{{ row.id }}</span>
+            <span class="cell-logid mono">{{ row.kind === 'call' ? row.id : `回合 #${row.id}` }}</span>
             <span
               v-if="row.traceId"
               class="cell-trace mono"
@@ -464,10 +497,11 @@ onMounted(() => {
         label="调用"
         min-width="150"
       >
-        <template #default="{ row }: { row: CallLog }">
+        <template #default="{ row }: { row: LogRow }">
           <div class="cell-call">
             <div class="cell-call__meta">
               <el-button
+                v-if="row.kind === 'call'"
                 link
                 type="primary"
                 class="cell-link"
@@ -477,7 +511,16 @@ onMounted(() => {
                 {{ row.pipeline.label }}
               </el-button>
               <el-tag
-                v-if="row.content.proactive"
+                v-else
+                size="small"
+                type="info"
+                effect="plain"
+                title="调用日志开始记录之前的回合，只有扣费与用量"
+              >
+                历史回合
+              </el-tag>
+              <el-tag
+                v-if="row.kind === 'call' ? row.content.proactive : row.proactive"
                 size="small"
                 type="warning"
                 effect="plain"
@@ -486,9 +529,15 @@ onMounted(() => {
               </el-tag>
             </div>
             <span
+              v-if="row.kind === 'call'"
               class="cell-conv mono"
               :title="row.content.sessionId ?? '世界级调用，没有会话'"
             >{{ shortId(row.content.sessionId) }}</span>
+            <span
+              v-else
+              class="cell-conv mono"
+              :title="row.sessionId ?? undefined"
+            >{{ shortId(row.sessionId) }}</span>
           </div>
         </template>
       </el-table-column>
@@ -498,8 +547,9 @@ onMounted(() => {
         width="88"
         align="center"
       >
-        <template #default="{ row }: { row: CallLog }">
+        <template #default="{ row }: { row: LogRow }">
           <button
+            v-if="row.kind === 'call'"
             type="button"
             class="cell-status"
             :title="`按状态「${AiUsageStatusLabel[row.status]}」过滤`"
@@ -510,6 +560,10 @@ onMounted(() => {
               :tone="row.status === 'success' ? 'success' : row.status === 'cancelled' ? 'info' : 'danger'"
             />
           </button>
+          <span
+            v-else
+            class="cell-muted"
+          >—</span>
         </template>
       </el-table-column>
 
@@ -517,8 +571,9 @@ onMounted(() => {
         label="渠道"
         width="110"
       >
-        <template #default="{ row }: { row: CallLog }">
+        <template #default="{ row }: { row: LogRow }">
           <el-button
+            v-if="row.kind === 'call'"
             link
             type="primary"
             class="cell-link"
@@ -527,6 +582,10 @@ onMounted(() => {
           >
             {{ row.vendorKey }}
           </el-button>
+          <span
+            v-else
+            class="cell-vendor"
+          >{{ distinct(row.usages.map((u) => u.vendorKey)).join(' · ') || '—' }}</span>
         </template>
       </el-table-column>
 
@@ -534,13 +593,25 @@ onMounted(() => {
         label="模型"
         min-width="200"
       >
-        <template #default="{ row }: { row: CallLog }">
+        <template #default="{ row }: { row: LogRow }">
           <span
-            class="model-pill mono"
+            v-if="row.kind === 'call'"
+            class="model-pill model-pill--link mono"
             :style="modelTagStyle(row.modelName)"
             :title="`按模型「${row.modelName}」过滤`"
             @click.stop="filterBy({ model: row.modelName })"
           >{{ row.modelName }}</span>
+          <div
+            v-else
+            class="cell-models"
+          >
+            <span
+              v-for="m in distinct(row.usages.map((u) => u.modelName))"
+              :key="m"
+              class="model-pill mono"
+              :style="modelTagStyle(m)"
+            >{{ m }}</span>
+          </div>
         </template>
       </el-table-column>
 
@@ -548,10 +619,10 @@ onMounted(() => {
         label="用量"
         min-width="200"
       >
-        <template #default="{ row }: { row: CallLog }">
+        <template #default="{ row }: { row: LogRow }">
           <div class="usage-tags">
             <div
-              v-for="(line, i) in usageTagRows(row)"
+              v-for="(line, i) in row.kind === 'call' ? callUsageTags(row) : turnUsage(row).tags"
               :key="i"
               class="usage-tags__line"
             >
@@ -565,6 +636,13 @@ onMounted(() => {
                 <span class="usage-tag__arrow">{{ t.arrow }}</span><span class="usage-tag__value">{{ t.value }}</span><span class="usage-tag__unit">Token</span>
               </span>
             </div>
+            <template v-if="row.kind === 'turn'">
+              <span
+                v-for="text in turnUsage(row).counted"
+                :key="text"
+                class="cell-usage__sub"
+              >{{ text }}</span>
+            </template>
           </div>
         </template>
       </el-table-column>
@@ -574,7 +652,7 @@ onMounted(() => {
         width="128"
         align="right"
       >
-        <template #default="{ row }: { row: CallLog }">
+        <template #default="{ row }: { row: LogRow }">
           <div
             v-if="row.bill"
             class="cell-cost"
@@ -599,7 +677,7 @@ onMounted(() => {
             >整回合 · {{ row.bill.calls }} 次调用</span>
           </div>
           <div
-            v-else
+            v-else-if="row.kind === 'call'"
             class="cell-cost"
           >
             <span
@@ -623,11 +701,16 @@ onMounted(() => {
         width="100"
         align="right"
       >
-        <template #default="{ row }: { row: CallLog }">
+        <template #default="{ row }: { row: LogRow }">
           <span
+            v-if="row.kind === 'call'"
             class="cell-latency num"
             :title="row.content.latencyMs != null ? `首字 ${formatDuration(row.content.latencyMs)}` : undefined"
           >{{ formatDuration(row.content.durationMs) }}</span>
+          <span
+            v-else
+            class="cell-muted"
+          >—</span>
         </template>
       </el-table-column>
 
@@ -635,7 +718,7 @@ onMounted(() => {
         label="账户"
         width="120"
       >
-        <template #default="{ row }: { row: CallLog }">
+        <template #default="{ row }: { row: LogRow }">
           <el-button
             link
             type="primary"
@@ -654,7 +737,7 @@ onMounted(() => {
         align="center"
         fixed="right"
       >
-        <template #default="{ row }: { row: CallLog }">
+        <template #default="{ row }: { row: LogRow }">
           <el-button
             v-if="row.bill?.reversible"
             :icon="RefreshLeft"
@@ -693,14 +776,14 @@ onMounted(() => {
 
   <CallLogDrawer
     v-model:visible="detailOpen"
-    :call="detailCall"
+    :row="detailRow"
     @reverse="onDrawerReverse"
     @trace="(traceId) => filterBy({ traceId })"
   />
 
   <TurnReverseDialog
     v-model:visible="reverseOpen"
-    :calls="reverseCalls"
+    :rows="reverseRows"
     @reversed="onReversed"
   />
 </template>
@@ -794,6 +877,11 @@ onMounted(() => {
   font-size: 12.5px;
 }
 
+.cell-vendor {
+  font-size: 12.5px;
+  color: var(--el-text-color-regular);
+}
+
 .cell-status {
   margin: 0;
   padding: 0;
@@ -805,6 +893,13 @@ onMounted(() => {
 
 .cell-muted {
   color: var(--el-text-color-placeholder);
+}
+
+.cell-models {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
 }
 
 .model-pill {
@@ -819,11 +914,14 @@ onMounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.model-pill--link {
   cursor: pointer;
   transition: filter 0.15s ease;
 }
 
-.model-pill:hover {
+.model-pill--link:hover {
   filter: brightness(0.95);
 }
 
@@ -891,6 +989,11 @@ onMounted(() => {
   background: var(--el-color-info-light-9);
   border-color: var(--el-color-info-light-7);
   color: var(--el-color-info);
+}
+
+.cell-usage__sub {
+  font-size: 11.5px;
+  color: var(--el-text-color-secondary);
 }
 
 .cell-cost {

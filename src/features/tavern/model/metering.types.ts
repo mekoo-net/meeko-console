@@ -4,9 +4,11 @@ import { aiUsageStatusSchema, billReverseCodeSchema, perTokenUsageSchema, type B
 import { epochMillisSchema } from '@/shared/lib/epoch';
 
 /**
- * Tavern 调用日志（对应后端 `CallLogDto`，wire camelCase），一行一次上游模型调用，形状对齐 Yomi `LogEntry`。
+ * Tavern 调用日志（对应后端 `LogRowDto`，wire camelCase），按 `kind` 分两种行：
+ *  - `call`：一次上游模型调用，形状对齐 Yomi `LogEntry`；
+ *  - `turn`：没有调用明细的扣费回合——调用日志 2026-10-31 才开始记，之前的回合只有扣费与用量。
  * 扣费挂在行上：Tavern 按回合（`usage_logs` 一行）扣费，回合可含多次调用（工具轮次），这几行挂同一个 `bill`；
- * 没挂回合的由平台承担。折算、扣费、能否驳回都由服务端算好下发。
+ * 没挂回合的调用由平台承担。折算、扣费、能否驳回都由服务端算好下发。
  */
 
 // ---------- 状态 ----------
@@ -108,7 +110,7 @@ const callBillBase = {
   billSerialNo: z.string().nullable(),
   /** 服务端判定能不能驳回：给不给勾、给不给按钮都看它。 */
   reversible: z.boolean(),
-  /** 这个回合一共几次调用；大于 1 时同一笔金额挂在每一行上，不能逐行相加。 */
+  /** 这笔挂在几行上（回合有几次调用）；大于 1 时同一笔金额在每一行上都有，不能逐行相加。 */
   calls: z.number().int().positive(),
 };
 
@@ -120,6 +122,7 @@ export const callBillSchema = z.discriminatedUnion('status', [
 export type CallBill = z.infer<typeof callBillSchema>;
 
 export const callLogSchema = z.object({
+  kind: z.literal('call'),
   id: z.string().min(1),
   traceId: z.string().nullable(),
   accountUid: z.number().int(),
@@ -170,6 +173,33 @@ export const meteredUsageSchema = z.discriminatedUnion('unit', [
   }),
 ]);
 export type MeteredUsage = z.infer<typeof meteredUsageSchema>;
+
+export const UsageKindLabel: Readonly<Record<string, string>> = {
+  chat: '对话',
+  wake: '自主唤醒',
+  embedding: '向量化',
+  generation: '媒体生成',
+};
+
+// ---------- 没有调用明细的回合 ----------
+
+/** 一整个扣费回合占一行：用量是回合内各次调用的明细，钱和驳回与调用行同一个 `bill`。 */
+export const turnLogSchema = z.object({
+  kind: z.literal('turn'),
+  /** `usage_logs` 的 id，与 `bill.usageLogId` 相同。 */
+  id: z.number().int(),
+  traceId: z.string(),
+  accountUid: z.number().int(),
+  sessionId: z.string().nullable(),
+  proactive: z.boolean(),
+  usages: z.array(meteredUsageSchema),
+  bill: callBillSchema,
+  createdAt: epochMillisSchema,
+});
+export type TurnLog = z.infer<typeof turnLogSchema>;
+
+export const logRowSchema = z.discriminatedUnion('kind', [callLogSchema, turnLogSchema]);
+export type LogRow = z.infer<typeof logRowSchema>;
 
 // ---------- 分页与查询 ----------
 

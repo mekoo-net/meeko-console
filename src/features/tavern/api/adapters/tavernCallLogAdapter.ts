@@ -2,14 +2,14 @@ import { parseTavern, requestTavern, type ItemsEnvelope } from '@/features/taver
 import type { TavernCallLogPort } from '@/features/tavern/services/ports/tavernCallLogPort';
 import type { AppResult } from '@/shared/api/httpTypes';
 
-import { callLogSchema, pageSchema, type CallLog, type CallLogQuery } from '../../model/metering.types';
+import { logRowSchema, pageSchema, type CallLogQuery, type LogRow } from '../../model/metering.types';
 
 const BASE = '/tavern/api/admin/calls';
 
-const callLogPageSchema = pageSchema(callLogSchema);
+const logRowPageSchema = pageSchema(logRowSchema);
 
 export class TavernCallLogHttpAdapter implements TavernCallLogPort {
-  async list(query: CallLogQuery): Promise<AppResult<ItemsEnvelope<CallLog>>> {
+  async list(query: CallLogQuery): Promise<AppResult<ItemsEnvelope<LogRow>>> {
     const res = await requestTavern<unknown>(BASE, {
       query: {
         p: query.page,
@@ -24,6 +24,6 @@ export class TavernCallLogHttpAdapter implements TavernCallLogPort {
         billed: query.billed,
       },
     });
-    return parseTavern(callLogPageSchema, res, '调用日志');
+    return parseTavern(logRowPageSchema, res, '调用日志');
   }
 }
