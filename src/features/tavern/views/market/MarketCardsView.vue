@@ -5,7 +5,7 @@
  * `?cardId=` 进来直接打开那张卡（角色卡抽屉里的市场卡号点过来）。
  * 也是用户视角「发布的」：传了 `creatorUid` 就只看这个人发布的，创作者筛选和创作者列都不要。
  */
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { Search } from '@element-plus/icons-vue';
 
@@ -53,13 +53,6 @@ const { items, total, page, pageSize, loading, load, reload } = usePagedList<Mar
     : Promise.resolve(fail({ code: 'validation', message: '创作者 UID 只能是数字' }));
 }, filter);
 
-/** 用户视角里创作者是定的，筛选栏不出账户那一行。 */
-const creatorFilter = computed(() =>
-  props.creatorUid == null
-    ? { accountUid: filter.value.creatorUid, 'onUpdate:accountUid': (v?: string) => (filter.value.creatorUid = v ?? '') }
-    : {},
-);
-
 const detailOpen = ref(false);
 const detailId = ref<string | null>(null);
 
@@ -85,11 +78,21 @@ onMounted(() => {
 
     <template #filters>
       <FilterBar
-        v-bind="creatorFilter"
         :loading="loading"
         @refresh="reload"
         @reset="filter = blank()"
       >
+        <el-form-item
+          v-if="creatorUid == null"
+          label="创作者 UID"
+        >
+          <el-input
+            v-model="filter.creatorUid"
+            placeholder="精确匹配"
+            clearable
+            style="width: 160px"
+          />
+        </el-form-item>
         <el-form-item label="卡名 / 标签">
           <el-input
             v-model="filter.keyword"

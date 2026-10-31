@@ -4,7 +4,7 @@
  * 创作者第一次发布时自己得的那一单（0 元）也在这里。
  * 也是用户视角「购买的」：传了 `buyerUid` 就只看这个人买的，买家筛选和买家列都不要。
  */
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import StatusTag from '@/shared/ui/StatusTag.vue';
@@ -52,13 +52,6 @@ const { items, total, page, pageSize, loading, load, reload } = usePagedList<Mar
     : Promise.resolve(fail({ code: 'validation', message: 'UID 只能是数字' }));
 }, filter);
 
-/** 用户视角里买家是定的，筛选栏不出账户那一行。 */
-const buyerFilter = computed(() =>
-  props.buyerUid == null
-    ? { accountUid: filter.value.buyerUid, 'onUpdate:accountUid': (v?: string) => (filter.value.buyerUid = v ?? '') }
-    : {},
-);
-
 onMounted(() => void load());
 </script>
 
@@ -73,11 +66,21 @@ onMounted(() => void load());
 
     <template #filters>
       <FilterBar
-        v-bind="buyerFilter"
         :loading="loading"
         @refresh="reload"
         @reset="filter = blank()"
       >
+        <el-form-item
+          v-if="buyerUid == null"
+          label="买家 UID"
+        >
+          <el-input
+            v-model="filter.buyerUid"
+            placeholder="精确匹配"
+            clearable
+            style="width: 160px"
+          />
+        </el-form-item>
         <el-form-item label="卖家 UID">
           <el-input
             v-model="filter.sellerUid"

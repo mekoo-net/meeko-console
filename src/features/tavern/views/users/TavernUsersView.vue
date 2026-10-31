@@ -49,7 +49,7 @@ onMounted(() => void load());
       <FilterBar
         v-model:account-uid="filter.uid"
         v-model:contact-keyword="filter.keyword"
-        contact-keyword-label="名字 / 邮箱 / 手机"
+        contact-keyword-label="关键字"
         :loading="loading"
         @refresh="reload"
         @reset="filter = blank()"
