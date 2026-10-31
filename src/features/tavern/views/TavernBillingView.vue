@@ -3,12 +3,14 @@
  * Tavern 计费明细：每行一个向用户扣费的回合（platform.usage_logs）。
  *
  *  - 详情抽屉跟着 `?id=` 走：调用日志里点「查看计费回合」直接带 id 跳进来，行点击也写进地址，链接可分享
- *  - 金额是扣费当时的价目算的；抽屉里另给服务端按现行价目重算的数，价目改过会标出来
+ *  - 金额是扣费当时的价目算的；抽屉里另给服务端按现行价目重算的数
+ *  - 驳回：抽屉里驳回单个；「批量驳回」进勾选模式，勾这一页里能驳回的（服务端给的 `reversible`）一次驳掉。
+ *    服务端回的新状态就地换掉这些行，汇总重拉
  */
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
-import { Search } from '@element-plus/icons-vue';
+import { ElMessage, type TableInstance } from 'element-plus';
+import { RefreshLeft, Search } from '@element-plus/icons-vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import StatusTag from '@/shared/ui/StatusTag.vue';
@@ -18,6 +20,7 @@ import DateRangeBar from '@/features/yomi/components/overview/DateRangeBar.vue';
 
 import BillingTurnDrawer from '../components/metering/BillingTurnDrawer.vue';
 import CopyableId from '../components/metering/CopyableId.vue';
+import TurnReverseDialog from '../components/metering/TurnReverseDialog.vue';
 import {
   TurnStatusLabel,
   TurnStatusTone,
@@ -38,6 +41,7 @@ import {
   shortId,
   type TurnUsageDigest,
 } from '../model/meteringFormat';
+import { roundTo } from '../model/pricingPreview';
 import { getTavernBillingPort } from '../services';
 
 const port = getTavernBillingPort();
@@ -166,6 +170,38 @@ function openDetail(row: TurnRow): void {
   void router.replace({ query: { ...route.query, id: String(row.id) } });
 }
 
+// ─── 驳回（勾选模式） ─────────────────────────────────────
+
+const tableRef = ref<TableInstance>();
+const selecting = ref(false);
+const selected = ref<TurnRow[]>([]);
+const selectedAmount = computed(() => roundTo(selected.value.reduce((s, t) => s + t.amount, 0), 6));
+const reverseOpen = ref(false);
+/** 打开对话框那一刻的勾选，提交途中列表变了也不影响要驳的是哪些。 */
+const reverseTargets = ref<UsageLog[]>([]);
+
+function toggleSelecting(): void {
+  selecting.value = !selecting.value;
+  if (!selecting.value) tableRef.value?.clearSelection();
+}
+
+function onRowClick(row: TurnRow): void {
+  if (!selecting.value) openDetail(row);
+  else if (row.reversible) tableRef.value?.toggleRowSelection(row);
+}
+
+function openBatchReverse(): void {
+  reverseTargets.value = [...selected.value];
+  reverseOpen.value = true;
+}
+
+function onReversed(turns: UsageLog[]): void {
+  const next = new Map(turns.map((t) => [t.id, t]));
+  records.value = records.value.map((r) => next.get(r.id) ?? r);
+  tableRef.value?.clearSelection();
+  if (activeFilters) void loadSummary(activeFilters);
+}
+
 function closeDetail(): void {
   const query = { ...route.query };
   delete query.id;
@@ -173,10 +209,10 @@ function closeDetail(): void {
 }
 
 /** 列表行的展示派生：每页算一次，模板里直接读。 */
-interface TurnRow extends UsageLog {
+type TurnRow = UsageLog & {
   models: string[];
   digest: TurnUsageDigest;
-}
+};
 
 const rows = computed<TurnRow[]>(() =>
   records.value.map((log) => ({
@@ -186,8 +222,8 @@ const rows = computed<TurnRow[]>(() =>
   })),
 );
 
-function rowClass(): string {
-  return 'turn-row';
+function rowClass({ row }: { row: TurnRow }): string {
+  return selecting.value && !row.reversible ? 'turn-row is-locked' : 'turn-row';
 }
 
 onMounted(search);
@@ -198,7 +234,18 @@ onMounted(search);
     <PageHeader
       title="计费明细"
       description="每行一个向用户扣费的回合，金额按扣费当时的价目。作废 / 扣费失败的回合金额为 0。"
-    />
+    >
+      <template #actions>
+        <el-button
+          :icon="RefreshLeft"
+          type="danger"
+          :plain="!selecting"
+          @click="toggleSelecting"
+        >
+          {{ selecting ? '退出批量驳回' : '批量驳回' }}
+        </el-button>
+      </template>
+    </PageHeader>
 
     <DateRangeBar
       v-model:date-range="filter.dateRange"
@@ -266,6 +313,14 @@ onMounted(search);
           <span class="kpi__sub">均未收费</span>
         </div>
         <div class="kpi__item">
+          <span class="kpi__label">已驳回</span>
+          <span class="kpi__value num">{{ summary?.turns.reversed.toLocaleString() ?? '—' }}</span>
+          <span
+            v-if="summary"
+            class="kpi__sub"
+          >退回 {{ formatCny(summary.reversedAmount, 4) }}</span>
+        </div>
+        <div class="kpi__item">
           <span class="kpi__label">付费账号数</span>
           <span class="kpi__value num">{{ summary?.payingAccounts.toLocaleString() ?? '—' }}</span>
         </div>
@@ -324,7 +379,25 @@ onMounted(search);
     </div>
 
     <section class="card list">
+      <div
+        v-if="selecting"
+        class="list__bar"
+      >
+        <span>
+          已选 <strong class="num">{{ selected.length }}</strong> 个回合<template v-if="selected.length">，退回
+            <strong class="num">{{ formatCny(selectedAmount) }}</strong></template>
+        </span>
+        <el-button
+          type="danger"
+          size="small"
+          :disabled="!selected.length"
+          @click="openBatchReverse"
+        >
+          驳回所选
+        </el-button>
+      </div>
       <el-table
+        ref="tableRef"
         v-loading="loading"
         :data="rows"
         row-key="id"
@@ -332,8 +405,16 @@ onMounted(search);
         stripe
         :row-class-name="rowClass"
         :empty-text="' '"
-        @row-click="openDetail"
+        @row-click="onRowClick"
+        @selection-change="(rows: TurnRow[]) => (selected = rows)"
       >
+        <el-table-column
+          v-if="selecting"
+          type="selection"
+          width="40"
+          :selectable="(row: TurnRow) => row.reversible"
+        />
+
         <el-table-column
           label="时间"
           width="132"
@@ -431,7 +512,7 @@ onMounted(search);
           <template #default="{ row }: { row: TurnRow }">
             <span
               class="num cell-amount"
-              :class="{ 'is-muted': row.status !== 'charged' }"
+              :class="{ 'is-muted': row.status !== 'charged', 'is-struck': row.status === 'reversed' }"
             >{{ formatCny(row.amount) }}</span>
           </template>
         </el-table-column>
@@ -489,6 +570,13 @@ onMounted(search);
     <BillingTurnDrawer
       v-model:visible="detailOpen"
       :usage-log-id="detailId"
+      @reversed="onReversed"
+    />
+
+    <TurnReverseDialog
+      v-model:visible="reverseOpen"
+      :turns="reverseTargets"
+      @reversed="onReversed"
     />
   </div>
 </template>
@@ -575,6 +663,23 @@ onMounted(search);
   cursor: pointer;
 }
 
+.list :deep(.turn-row.is-locked) {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.list__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  background: var(--el-color-danger-light-9);
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+
 .list__foot {
   display: flex;
   justify-content: flex-end;
@@ -606,6 +711,10 @@ onMounted(search);
 
 .is-muted {
   color: var(--el-text-color-placeholder);
+}
+
+.is-struck {
+  text-decoration: line-through;
 }
 
 .cell-time {

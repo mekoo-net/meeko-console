@@ -5,13 +5,14 @@
  * Mock 扮演服务端：折算、报价、汇总都按查询时的价目现算（同 `pricingPreview`），
  * 所以在计费配置页改了价，回到调用日志能看到折算跟着变。数据用固定种子生成，刷新页面不变。
  */
+import { billReverseCodeValues } from '@yomi/common';
 import type { ItemsEnvelope } from '@/features/tavern/api/http';
 
 import type {
   CallLog,
   CallStatus,
   MeteredUsage,
-  TurnStatus,
+  TurnReversal,
   UsageLog,
   UsageLogDetail,
 } from '../../model/metering.types';
@@ -79,7 +80,7 @@ const INITIAL_RULES: PricingRules = {
   proactiveRateMultiplier: 1,
 };
 
-/** 3 天前输出权重从 2 调到 3：更早的回合按旧价扣过费，详情里能看到「价目在扣费后改过」。 */
+/** 3 天前输出权重从 2 调到 3：更早的回合按旧价扣过费，详情里实扣与按现行价目重算的数对不上。 */
 const PRICING_CHANGED_AT = NOW - 3 * DAY;
 const LEGACY_RULES: PricingRules = { ...INITIAL_RULES, completionWeight: 2 };
 
@@ -205,6 +206,7 @@ function pickAccount(): number {
 // ─── 生成 ────────────────────────────────────────────────
 
 type MockCall = Omit<CallLog, 'cost' | 'bill'> & { usageLogId: number | null };
+export const MOCK_STAFF_UID = 900000001;
 interface MockTurn {
   log: UsageLog;
   callIds: string[];
@@ -316,7 +318,7 @@ function generateTurn(start: number): void {
   }
 
   const last = own[own.length - 1]!;
-  const status: TurnStatus = last.status !== 'success' ? 'voided' : rand() < 0.04 ? 'failed' : 'charged';
+  const status = last.status !== 'success' ? 'voided' : rand() < 0.04 ? 'failed' : 'charged';
   const usages: MeteredUsage[] = own.map((c) => meteredTokens(c));
   if (status === 'charged' && rand() < 0.06) {
     usages.push({ unit: 'image', ...NAI, kind: 'generation', quantity: 1 });
@@ -337,11 +339,21 @@ function generateTurn(start: number): void {
       // 作废 / 失败没收到钱，金额按设计为 0。
       amount: status === 'charged' ? applyProactive(chargedRules, subtotal, ctx.proactive) : 0,
       billSerialNo: status === 'charged' ? serialNo(t, turnId) : null,
+      reversible: status === 'charged',
       usages,
       createdAt: t,
     },
     callIds: own.map((c) => c.id),
   });
+
+  if (status === 'charged' && rand() < 0.02) {
+    markReversed(turns[turns.length - 1]!, {
+      atUtc: Math.min(NOW, t + between(10, 600) * MINUTE),
+      by: MOCK_STAFF_UID,
+      code: pick(billReverseCodeValues),
+      remark: rand() < 0.5 ? '工单 #' + between(1000, 9999) : null,
+    });
+  }
 }
 
 function generateBackground(start: number): void {
@@ -403,7 +415,6 @@ export function toUsageLogDetail(t: MockTurn): UsageLogDetail {
     turn: log,
     lines,
     amountAtCurrentPricing,
-    repriced: log.status === 'charged' && log.amount !== amountAtCurrentPricing,
     calls: t.callIds
       .map((id) => callById.get(id))
       .filter((c): c is MockCall => c != null)
@@ -421,6 +432,11 @@ export function mockTurns(): readonly MockTurn[] {
 
 export function findTurn(id: number): MockTurn | undefined {
   return turnById.get(id);
+}
+
+/** 同服务端 `TavernUsageLog.Reverse`：状态改成已驳回，金额不动——退回的就是它。 */
+export function markReversed(t: MockTurn, reversal: TurnReversal): void {
+  t.log = { ...t.log, status: 'reversed', reversible: false, reversal };
 }
 
 /** 同服务端 `AdminPageQuery`：p 从 1 起，pageSize 夹在 1..200。 */

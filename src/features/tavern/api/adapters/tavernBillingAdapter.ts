@@ -2,12 +2,17 @@ import { parseTavern, requestTavern, type ItemsEnvelope } from '@/features/taver
 import type { TavernBillingPort } from '@/features/tavern/services/ports/tavernBillingPort';
 import type { AppResult } from '@/shared/api/httpTypes';
 
+import { z } from 'zod';
+
 import {
   pageSchema,
+  turnReversalOutcomeSchema,
   usageLogDetailSchema,
   usageLogSchema,
   usageSummarySchema,
   type RangeQuery,
+  type ReverseTurnsInput,
+  type TurnReversalOutcome,
   type UsageLog,
   type UsageLogDetail,
   type UsageLogQuery,
@@ -17,6 +22,7 @@ import {
 const BASE = '/tavern/api/admin/billing/usage';
 
 const usageLogPageSchema = pageSchema(usageLogSchema);
+const reversalOutcomesSchema = z.array(turnReversalOutcomeSchema);
 
 export class TavernBillingHttpAdapter implements TavernBillingPort {
   async list(query: UsageLogQuery): Promise<AppResult<ItemsEnvelope<UsageLog>>> {
@@ -43,5 +49,10 @@ export class TavernBillingHttpAdapter implements TavernBillingPort {
   async get(id: number): Promise<AppResult<UsageLogDetail>> {
     const res = await requestTavern<unknown>(`${BASE}/${id}`);
     return parseTavern(usageLogDetailSchema, res, '计费回合');
+  }
+
+  async reverse(input: ReverseTurnsInput): Promise<AppResult<TurnReversalOutcome[]>> {
+    const res = await requestTavern<unknown>(`${BASE}/reverse`, { method: 'POST', body: input });
+    return parseTavern(reversalOutcomesSchema, res, '驳回');
   }
 }

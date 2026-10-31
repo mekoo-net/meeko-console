@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { aiUsageStatusSchema, perTokenUsageSchema } from '@yomi/common';
+import { aiUsageStatusSchema, billReverseCodeSchema, perTokenUsageSchema, type BillReverseCode } from '@yomi/common';
 import { epochMillisSchema } from '@/shared/lib/epoch';
 
 /**
@@ -25,21 +25,25 @@ export const CallStatusTone: Readonly<Record<CallStatus, StatusTone>> = {
   cancelled: 'info',
 };
 
-export const turnStatusSchema = z.enum(['charged', 'voided', 'failed']);
+/** 驳回是扣过费之后的事，所以单列：只有已驳回的回合带驳回记录，见 {@link usageLogSchema}。 */
+const unreversedTurnStatusSchema = z.enum(['charged', 'voided', 'failed']);
+export const turnStatusSchema = z.enum([...unreversedTurnStatusSchema.options, 'reversed']);
 export type TurnStatus = z.infer<typeof turnStatusSchema>;
 export const turnStatusValues = turnStatusSchema.options;
 
-/** 作废 / 失败的回合金额按设计为 0（没收到钱），不是漏记。 */
+/** 作废 / 失败的回合金额按设计为 0（没收到钱），不是漏记；驳回的金额是退回的数。 */
 export const TurnStatusLabel: Readonly<Record<TurnStatus, string>> = {
   charged: '已扣费',
   voided: '已作废',
   failed: '扣费失败',
+  reversed: '已驳回',
 };
 
 export const TurnStatusTone: Readonly<Record<TurnStatus, StatusTone>> = {
   charged: 'success',
   voided: 'info',
   failed: 'warning',
+  reversed: 'danger',
 };
 
 // ---------- 报价 ----------
@@ -176,18 +180,36 @@ export const UsageKindLabel: Readonly<Record<string, string>> = {
   generation: '媒体生成',
 };
 
-export const usageLogSchema = z.object({
+/** 谁、何时、为什么驳回；钱已由 Billing 全额退回钱包。 */
+export const turnReversalSchema = z.object({
+  atUtc: epochMillisSchema,
+  /** 操作的员工 uid。 */
+  by: z.number().int(),
+  /** 与 Yomi 调用日志、平台账单同一套原因码。 */
+  code: billReverseCodeSchema,
+  remark: z.string().nullable(),
+});
+export type TurnReversal = z.infer<typeof turnReversalSchema>;
+
+const usageLogBase = {
   id: z.number().int(),
   traceId: z.string(),
   accountUid: z.number().int(),
   sessionId: z.string().nullable(),
   proactive: z.boolean(),
-  status: turnStatusSchema,
+  /** 实扣金额；驳回的回合是退回的数。 */
   amount: z.number(),
   billSerialNo: z.string().nullable(),
+  /** 服务端判定能不能驳回：给不给勾、给不给按钮都看它。 */
+  reversible: z.boolean(),
   usages: z.array(meteredUsageSchema),
   createdAt: epochMillisSchema,
-});
+};
+
+export const usageLogSchema = z.discriminatedUnion('status', [
+  z.object({ ...usageLogBase, status: unreversedTurnStatusSchema }),
+  z.object({ ...usageLogBase, status: z.literal('reversed'), reversal: turnReversalSchema }),
+]);
 export type UsageLog = z.infer<typeof usageLogSchema>;
 
 export const usageLogDetailSchema = z.object({
@@ -196,8 +218,6 @@ export const usageLogDetailSchema = z.object({
   lines: z.array(z.object({ usage: meteredUsageSchema, quote: usageQuoteSchema })),
   /** 用现在的价目重算整回合（含自主倍率）。 */
   amountAtCurrentPricing: z.number(),
-  /** 实扣过、且与现行价目算出来的不一样：扣费之后改过价。作废 / 失败的回合恒为 false。 */
-  repriced: z.boolean(),
   /** 同一 trace 下的全部调用，按发生顺序。 */
   calls: z.array(callLogSchema),
 });
@@ -210,8 +230,12 @@ export const usageSummarySchema = z.object({
     charged: z.number().int().nonnegative(),
     voided: z.number().int().nonnegative(),
     failed: z.number().int().nonnegative(),
+    reversed: z.number().int().nonnegative(),
   }),
+  /** 仍扣着的金额，已驳回的不算。 */
   chargedAmount: z.number(),
+  /** 驳回退回的金额。 */
+  reversedAmount: z.number(),
   payingAccounts: z.number().int().nonnegative(),
   tokens: tokenTotalsSchema,
   /** 按实扣金额降序。 */
@@ -258,3 +282,18 @@ export interface CallLogQuery extends PageQuery {
 export interface UsageLogQuery extends PageQuery {
   status?: TurnStatus;
 }
+
+/** 驳回一个或一批回合：一批共用一个原因码，备注可选（≤200 字）。 */
+export interface ReverseTurnsInput {
+  ids: number[];
+  reasonCode: BillReverseCode;
+  remark?: string;
+}
+
+/** 服务端逐个处理、逐个回结果：成了带回新状态，没成带原因。 */
+export const turnReversalOutcomeSchema = z.discriminatedUnion('outcome', [
+  z.object({ outcome: z.literal('reversed'), id: z.number().int(), turn: usageLogSchema }),
+  z.object({ outcome: z.literal('rejected'), id: z.number().int(), reason: z.string() }),
+]);
+export type TurnReversalOutcome = z.infer<typeof turnReversalOutcomeSchema>;
+export type TurnReversalRejected = Extract<TurnReversalOutcome, { outcome: 'rejected' }>;

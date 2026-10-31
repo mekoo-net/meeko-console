@@ -63,6 +63,8 @@ function wireTurn(overrides: Record<string, unknown> = {}): Record<string, unkno
     status: 'charged',
     amount: 0.06145,
     billSerialNo: 'TVB20261031300626',
+    reversible: true,
+    reversal: null,
     usages: [
       { unit: 'token', modelName: 'claude-opus-5.5', vendorKey: 'kiro', kind: 'chat', promptTokens: 13_862, completionTokens: 735 },
       { unit: 'image', modelName: 'nai-diffusion-5-full', vendorKey: 'neko', kind: 'generation', quantity: 1 },
@@ -162,7 +164,7 @@ describe('tavern metering adapters', () => {
     expect(!r.success && r.error.code).toBe('validation');
   });
 
-  it('reads the turn detail with server quotes and the repriced flag', async () => {
+  it('reads the turn detail with server quotes', async () => {
     request.mockResolvedValueOnce(
       ok({
         turn: wireTurn(),
@@ -173,16 +175,42 @@ describe('tavern metering adapters', () => {
           },
         ],
         amountAtCurrentPricing: 0.082134,
-        repriced: true,
         calls: [wireCall()],
       }),
     );
     const r = await new TavernBillingHttpAdapter().get(52300626);
     expect(request).toHaveBeenCalledWith('/tavern/api/admin/billing/usage/52300626');
     if (!r.success) throw new Error(r.error.message);
-    expect(r.data.repriced).toBe(true);
+    expect(r.data.amountAtCurrentPricing).toBe(0.082134);
     expect(r.data.lines[0]?.quote.billableQuantity).toBe(16_067);
     expect(r.data.calls).toHaveLength(1);
+  });
+
+  it('reverses a batch and reads one outcome per turn', async () => {
+    const reversal = { atUtc: 1761880000000, by: 900000001, code: 'metering_error', remark: null };
+    request.mockResolvedValueOnce(
+      ok([
+        { outcome: 'reversed', id: 52300626, turn: wireTurn({ status: 'reversed', reversible: false, reversal }) },
+        { outcome: 'rejected', id: 52300627, reason: '已经驳回过了。' },
+      ]),
+    );
+    const r = await new TavernBillingHttpAdapter().reverse({ ids: [52300626, 52300627], reasonCode: 'metering_error' });
+    expect(request).toHaveBeenCalledWith('/tavern/api/admin/billing/usage/reverse', {
+      method: 'POST',
+      body: { ids: [52300626, 52300627], reasonCode: 'metering_error' },
+    });
+    if (!r.success) throw new Error(r.error.message);
+    const [done, rejected] = r.data;
+    expect(done?.outcome === 'reversed' && done.turn.status === 'reversed' && done.turn.reversal.code).toBe(
+      'metering_error',
+    );
+    expect(rejected?.outcome === 'rejected' && rejected.reason).toBe('已经驳回过了。');
+  });
+
+  it('rejects a reversed turn that lacks its reversal record', async () => {
+    request.mockResolvedValueOnce(ok({ items: [wireTurn({ status: 'reversed' })], total: 1, page: 1, pageSize: 20 }));
+    const r = await new TavernBillingHttpAdapter().list({ fromUtc: 1, toUtc: 2, page: 1, pageSize: 20 });
+    expect(!r.success && r.error.code).toBe('validation');
   });
 
   it('passes transport failures through untouched', async () => {

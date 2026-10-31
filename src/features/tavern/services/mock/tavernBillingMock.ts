@@ -5,6 +5,8 @@ import { delay } from '@/shared/lib/delay';
 import type {
   AccountSpend,
   RangeQuery,
+  ReverseTurnsInput,
+  TurnReversalOutcome,
   UsageLog,
   UsageLogDetail,
   UsageLogQuery,
@@ -12,7 +14,7 @@ import type {
 } from '../../model/metering.types';
 import { roundTo } from '../../model/pricingPreview';
 import type { TavernBillingPort } from '../ports/tavernBillingPort';
-import { findTurn, mockTurns, pageOf, toUsageLogDetail } from './tavernMeteringMockData';
+import { findTurn, markReversed, mockTurns, MOCK_STAFF_UID, pageOf, toUsageLogDetail } from './tavernMeteringMockData';
 
 const TOP_ACCOUNTS = 10;
 
@@ -34,11 +36,12 @@ export class TavernBillingMock implements TavernBillingPort {
     return ok(pageOf(rows, query.page, query.pageSize));
   }
 
-  /** 同服务端 `SummaryAsync`：付费账号与排行只看实扣过的回合。 */
+  /** 同服务端 `SummaryAsync`：付费账号与排行只看仍扣着的回合，驳回的单算。 */
   async summary(query: RangeQuery): Promise<AppResult<UsageSummary>> {
     await delay();
     const rows = turnsIn(query);
     const charged = rows.filter((t) => t.status === 'charged');
+    const reversed = rows.filter((t) => t.status === 'reversed');
     const tokens = rows.flatMap((t) => t.usages).filter((u) => u.unit === 'token');
 
     const byAccount = new Map<number, AccountSpend>();
@@ -55,8 +58,10 @@ export class TavernBillingMock implements TavernBillingPort {
         charged: charged.length,
         voided: rows.filter((t) => t.status === 'voided').length,
         failed: rows.filter((t) => t.status === 'failed').length,
+        reversed: reversed.length,
       },
       chargedAmount: roundTo(charged.reduce((s, t) => s + t.amount, 0), 6),
+      reversedAmount: roundTo(reversed.reduce((s, t) => s + t.amount, 0), 6),
       payingAccounts: byAccount.size,
       tokens: {
         input: tokens.reduce((s, u) => s + u.promptTokens, 0),
@@ -70,5 +75,22 @@ export class TavernBillingMock implements TavernBillingPort {
     await delay();
     const turn = findTurn(id);
     return turn ? ok(toUsageLogDetail(turn)) : fail({ code: 'not_found', message: `计费回合 ${id} 不存在` });
+  }
+
+  /** 同服务端 `ReverseAsync`：逐个过关、逐个回结果，一个没成不牵连其它。 */
+  async reverse(input: ReverseTurnsInput): Promise<AppResult<TurnReversalOutcome[]>> {
+    await delay();
+    if (input.ids.length === 0) return fail({ code: 'validation', message: '没有选中回合。' });
+    const remark = input.remark?.trim() || null;
+    return ok(
+      [...new Set(input.ids)].map((id): TurnReversalOutcome => {
+        const turn = findTurn(id);
+        if (!turn) return { outcome: 'rejected', id, reason: '计费记录不存在。' };
+        if (turn.log.status === 'reversed') return { outcome: 'rejected', id, reason: '已经驳回过了。' };
+        if (!turn.log.reversible) return { outcome: 'rejected', id, reason: '只有已扣费、有账单的回合能驳回。' };
+        markReversed(turn, { atUtc: Date.now(), by: MOCK_STAFF_UID, code: input.reasonCode, remark });
+        return { outcome: 'reversed', id, turn: turn.log };
+      }),
+    );
   }
 }

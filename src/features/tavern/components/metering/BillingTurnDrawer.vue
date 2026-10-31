@@ -1,12 +1,12 @@
 <script setup lang="ts">
 /**
- * 计费回合详情：每条用量按现行价目的报价，以及这个回合里的每次上游调用。
+ * 计费回合详情：每条用量按现行价目的报价，以及这个回合里的每次上游调用；已扣费的回合在这里驳回。
  * 列表行不带报价，抽屉按 id 自己拉，所以从调用日志带 `?id=` 跳进来也能直接打开。
  */
 import { ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 
-import { AiUsageStatusLabel } from '@yomi/common';
+import { AiUsageStatusLabel, BillReverseCodeLabel } from '@yomi/common';
 import StatusTag from '@/shared/ui/StatusTag.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import { formatDateTime } from '@/shared/lib/date';
@@ -19,15 +19,18 @@ import {
   UsageKindLabel,
   type CallLog,
   type UsageLine,
+  type UsageLog,
   type UsageLogDetail,
 } from '../../model/metering.types';
 import { formatCny, formatDuration, formatTokens, formatUsage } from '../../model/meteringFormat';
 import { perMillionFromPerToken } from '../../model/pricingPreview';
 import { getTavernBillingPort } from '../../services';
 import CopyableId from './CopyableId.vue';
+import TurnReverseDialog from './TurnReverseDialog.vue';
 
 const visible = defineModel<boolean>('visible', { required: true });
 const props = defineProps<{ usageLogId: number | null }>();
+const emit = defineEmits<{ reversed: [turns: UsageLog[]] }>();
 
 const port = getTavernBillingPort();
 const detail = ref<UsageLogDetail | null>(null);
@@ -62,6 +65,15 @@ watch(
   },
   { immediate: true },
 );
+
+const reverseOpen = ref(false);
+
+// 驳回只改回合本身；报价和调用不变，不必重拉。
+function onReversed([turn]: UsageLog[]): void {
+  if (!detail.value || !turn) return;
+  detail.value = { ...detail.value, turn };
+  emit('reversed', [turn]);
+}
 
 function baselineText({ usage, quote }: UsageLine): string {
   switch (usage.unit) {
@@ -109,6 +121,16 @@ function modelText({ usage }: UsageLine): string {
             自主
           </el-tag>
           <span class="mono turn-detail__id">#{{ detail.turn.id }}</span>
+          <el-button
+            v-if="detail.turn.reversible"
+            class="turn-detail__reverse"
+            type="danger"
+            size="small"
+            plain
+            @click="reverseOpen = true"
+          >
+            驳回
+          </el-button>
         </div>
 
         <el-descriptions
@@ -163,6 +185,18 @@ function modelText({ usage }: UsageLine): string {
               </span>
             </div>
           </template>
+          <template v-else-if="detail.turn.status === 'reversed'">
+            <div class="turn-detail__figure">
+              <span class="turn-detail__figure-label">已退回</span>
+              <strong class="turn-detail__figure-value num">{{ formatCny(detail.turn.amount) }}</strong>
+            </div>
+            <div class="turn-detail__figure">
+              <span class="turn-detail__figure-label">按现行价目</span>
+              <span class="turn-detail__figure-value turn-detail__figure-value--sub num">
+                {{ formatCny(detail.amountAtCurrentPricing) }}
+              </span>
+            </div>
+          </template>
           <template v-else>
             <div class="turn-detail__figure">
               <span class="turn-detail__figure-label">金额</span>
@@ -178,14 +212,25 @@ function modelText({ usage }: UsageLine): string {
           </template>
         </section>
 
-        <el-alert
-          v-if="detail.repriced"
-          type="warning"
-          show-icon
-          :closable="false"
-          title="价目在扣费后改过"
-          description="实扣按扣费当时的价目，不追溯；「按现行价目」是用现在的价目重算的。"
-        />
+        <el-descriptions
+          v-if="detail.turn.status === 'reversed'"
+          :column="2"
+          size="small"
+          border
+        >
+          <el-descriptions-item label="驳回原因">
+            {{ BillReverseCodeLabel[detail.turn.reversal.code] }}
+          </el-descriptions-item>
+          <el-descriptions-item label="驳回时间">
+            {{ formatDateTime(detail.turn.reversal.atUtc, 'YYYY-MM-DD HH:mm:ss') }}
+          </el-descriptions-item>
+          <el-descriptions-item label="操作员">
+            <span class="mono">{{ detail.turn.reversal.by }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="备注">
+            {{ detail.turn.reversal.remark ?? '—' }}
+          </el-descriptions-item>
+        </el-descriptions>
 
         <h4 class="turn-detail__title">
           用量报价
@@ -344,6 +389,13 @@ function modelText({ usage }: UsageLine): string {
             </template>
           </el-table-column>
         </el-table>
+
+        <TurnReverseDialog
+          v-if="detail.turn.reversible"
+          v-model:visible="reverseOpen"
+          :turns="[detail.turn]"
+          @reversed="onReversed"
+        />
       </template>
     </div>
   </el-drawer>
@@ -366,6 +418,10 @@ function modelText({ usage }: UsageLine): string {
 .turn-detail__id {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+
+.turn-detail__reverse {
+  margin-left: auto;
 }
 
 .turn-detail__link {
