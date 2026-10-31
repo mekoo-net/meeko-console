@@ -3,18 +3,20 @@ import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { delay } from '@/shared/lib/delay';
 
 import type { AccountRef, PageQuery } from '../../model/content.types';
-import type {
-  CardFace,
-  CardVersionContent,
-  MarketCardDetail,
-  MarketCardQuery,
-  MarketCardRow,
-  MarketCardState,
-  MarketOrderQuery,
-  MarketOrderRow,
-  MarketReview,
-  MarketSettings,
-  MarketSettingsView,
+import {
+  marketItemContentSchema,
+  type ItemFace,
+  type MarketItemContent,
+  type MarketItemDetail,
+  type MarketItemQuery,
+  type MarketItemRow,
+  type MarketItemState,
+  type MarketListing,
+  type MarketOrderQuery,
+  type MarketOrderRow,
+  type MarketReview,
+  type MarketSettings,
+  type MarketSettingsView,
 } from '../../model/market.types';
 import type { TavernMarketPort } from '../ports/tavernMarketPort';
 import { mockUuid } from './tavernContentMock';
@@ -26,13 +28,13 @@ const DAY = 24 * HOUR;
 const NOW = Date.now();
 const STAFF_UID = 1;
 
-interface MockCard {
+interface MockItem {
   id: string;
   creator: AccountRef;
-  state: MarketCardState;
+  state: MarketItemState;
   price: number;
   /** 在卖的那一版。 */
-  onSale: CardVersionContent;
+  onSale: MarketItemContent;
   publishedAt: number;
   purchases: number;
   ratings: number[];
@@ -40,30 +42,106 @@ interface MockCard {
   updatedAt: number;
 }
 
-function face(name: string, tagline: string, tags: string[], greetings: string[]): CardFace {
-  return { name, avatar: null, cover: null, tagline, description: null, tags, greetings };
+function face(name: string, tagline: string, tags: string[]): ItemFace {
+  return { name, cover: null, tagline, description: null, tags };
 }
 
-function content(f: CardFace, systemPrompt: string): CardVersionContent {
+function card(f: ItemFace, greetings: string[], systemPrompt: string): MarketItemContent {
   return {
+    kind: 'character_card',
     face: f,
+    character: { avatar: null, greetings },
     preset: { systemPrompt },
     worldBook: [],
     capabilities: { moments: false, mcpMemory: false, imageGen: false },
   };
 }
 
-const SHEN = face('沈惟行', '雾港警署的年轻督察，话少，记性好得吓人。', ['推理', '克制', '警察', '雾港'], ['“又是你。”']);
-const SU = face('苏晚', '码头茶馆老板娘，消息比谁都灵通。', ['茶馆', '八卦', '温柔'], ['“来啦？”']);
+/** 世界书按服务端的样子写，再过一遍 schema 补齐节点、规则的默认值。 */
+const FOG_HARBOR = marketItemContentSchema.parse({
+  kind: 'world_book',
+  face: {
+    ...face('雾港 1931', '一座永远在下雨的港口城市，旧警署、码头帮派和失踪的货船。', ['悬疑', '民国', '黑色电影']),
+    description: '从雾港警署的一个雨夜开始。适合推理、潜入和多方周旋。',
+  },
+  world: {
+    narratives: [
+      { name: '基调', content: '冷硬派侦探小说的笔调。少形容词，多动作和对白；雨和雾是常驻的背景。' },
+      { name: '时代与地点', content: '1931 年深秋的雾港：租界、华界和码头三块地盘，各有各的规矩。' },
+    ],
+    worldBook: {
+      nodes: [
+        { id: 'geo', type: 'group', title: '地理' },
+        { id: 'harbor', type: 'lore', parent: 'geo', title: '雾港', content: '港口城市，常年起雾，入夜后码头只认帮派的灯号。', activation: { mode: 'always' } },
+        {
+          id: 'old-station',
+          type: 'lore',
+          parent: 'geo',
+          title: '旧警署',
+          content: '三层灰楼，地下室有一间不在图纸上的档案室。',
+          activation: { mode: 'keyword', keywords: ['警署', '档案室'] },
+        },
+        { id: 'powers', type: 'group', title: '势力' },
+        {
+          id: 'qingbang',
+          type: 'lore',
+          parent: 'powers',
+          title: '青帮',
+          content: '控制码头装卸。老大姓杜，从不在白天露面。',
+          activation: { mode: 'keyword', keywords: ['青帮', '码头', '杜'] },
+        },
+        {
+          id: 'culprit',
+          type: 'lore',
+          title: '货船失踪的真相',
+          content: '货船没有沉，被改了船名停在三号船坞。',
+          audience: 'director',
+          when: 'world.chapter >= 2',
+        },
+      ],
+    },
+    rulebook: {
+      variables: [
+        { key: 'chapter', scope: 'world', type: 'int', label: '章节', min: 1, max: 5, default: 1 },
+        { key: 'trust', scope: 'character', type: 'int', label: '信任', min: 0, max: 100, default: 50, actorAdjust: 10 },
+      ],
+      rules: [
+        {
+          id: 'midnight_bell',
+          title: '午夜钟声',
+          on: { clock: '00:00' },
+          do: [{ narrate: '远处的海关大楼敲了十二下。' }],
+        },
+      ],
+    },
+    time: { mode: 'turnbased', ratio: 1, turnMinutes: 30, storyStart: '1931-11-02T21:00:00' },
+  },
+});
 
-/** 前两张与内容 mock 里林夏的市场联系人是同一张卡。 */
-const cards: MockCard[] = [
+const ARK = marketItemContentSchema.parse({
+  kind: 'world_book',
+  face: face('方舟', '海平面上升后的最后一座浮城，配给、轮值和一台不该醒来的主机。', ['末日', '科幻', '生存']),
+  world: {
+    narratives: [{ name: '方舟', content: '你是方舟的新任轮值官。资源永远不够，每个决定都有人付出代价。' }],
+    worldBook: {
+      nodes: [{ id: 'ration', type: 'lore', title: '配给制', content: '每人每天两张餐票，黑市一张换一节电池。', activation: { mode: 'always' } }],
+    },
+    rulebook: {},
+    time: { mode: 'realtime', ratio: 24, turnMinutes: 10, storyStart: null },
+  },
+});
+
+const SHEN = face('沈惟行', '雾港警署的年轻督察，话少，记性好得吓人。', ['推理', '克制', '警察', '雾港']);
+const SU = face('苏晚', '码头茶馆老板娘，消息比谁都灵通。', ['茶馆', '八卦', '温柔']);
+
+/** 前两张角色卡与内容 mock 里林夏的市场联系人是同一张。 */
+const items: MockItem[] = [
   {
     id: mockUuid(801),
     creator: ASAKO,
     state: 'listed',
     price: 9.9,
-    onSale: content(SHEN, '你是沈惟行，雾港警署督察。说话简短，对细节过目不忘。'),
+    onSale: card(SHEN, ['“又是你。”'], '你是沈惟行，雾港警署督察。说话简短，对细节过目不忘。'),
     publishedAt: NOW - 50 * DAY,
     purchases: 128,
     ratings: [5, 5, 4, 5, 3],
@@ -75,7 +153,7 @@ const cards: MockCard[] = [
     creator: ASAKO,
     state: 'listed',
     price: 0,
-    onSale: content(SU, '你是苏晚，苏记茶馆的老板娘。'),
+    onSale: card(SU, ['“来啦？”'], '你是苏晚，苏记茶馆的老板娘。'),
     publishedAt: NOW - 40 * DAY,
     purchases: 451,
     ratings: [4, 5],
@@ -87,19 +165,43 @@ const cards: MockCard[] = [
     creator: PLAYER_0123,
     state: 'taken_down',
     price: 3,
-    onSale: content(face('某明星', '……', ['真人'], []), '你是某明星本人。'),
+    onSale: card(face('某明星', '……', ['真人']), [], '你是某明星本人。'),
     publishedAt: NOW - 9 * DAY,
     purchases: 4,
     ratings: [],
     takedown: { reason: '冒充真人，侵犯肖像权。', staffUid: STAFF_UID, atUtc: NOW - 6 * DAY },
     updatedAt: NOW - 6 * DAY,
   },
+  {
+    id: mockUuid(811),
+    creator: ASAKO,
+    state: 'listed',
+    price: 19.9,
+    onSale: FOG_HARBOR,
+    publishedAt: NOW - 30 * DAY,
+    purchases: 57,
+    ratings: [5, 4, 5],
+    takedown: null,
+    updatedAt: NOW - 2 * DAY,
+  },
+  {
+    id: mockUuid(812),
+    creator: LINXIA,
+    state: 'listed',
+    price: 0,
+    onSale: ARK,
+    publishedAt: NOW - 12 * DAY,
+    purchases: 203,
+    ratings: [4],
+    takedown: null,
+    updatedAt: NOW - 12 * DAY,
+  },
 ];
 
 interface MockOrder {
   id: string;
   source: MarketOrderRow['source'];
-  cardId: string;
+  itemId: string;
   buyer: AccountRef;
   price: number;
   status: MarketOrderRow['status'];
@@ -108,43 +210,62 @@ interface MockOrder {
 }
 
 const orders: MockOrder[] = [
-  { id: mockUuid(901), source: 'creator', cardId: mockUuid(801), buyer: ASAKO, price: 0, status: 'active', failureReason: null, at: NOW - 50 * DAY },
-  { id: mockUuid(902), source: 'purchase', cardId: mockUuid(801), buyer: LINXIA, price: 6, status: 'active', failureReason: null, at: NOW - 42 * DAY },
-  { id: mockUuid(903), source: 'creator', cardId: mockUuid(802), buyer: ASAKO, price: 0, status: 'active', failureReason: null, at: NOW - 40 * DAY },
-  { id: mockUuid(904), source: 'purchase', cardId: mockUuid(802), buyer: LINXIA, price: 0, status: 'active', failureReason: null, at: NOW - 40 * DAY },
-  { id: mockUuid(905), source: 'purchase', cardId: mockUuid(803), buyer: LINXIA, price: 3, status: 'failed', failureReason: '钱包余额不足，请先充值。', at: NOW - 8 * DAY },
-  { id: mockUuid(906), source: 'purchase', cardId: mockUuid(801), buyer: PLAYER_0123, price: 9.9, status: 'active', failureReason: null, at: NOW - 1 * DAY },
+  { id: mockUuid(901), source: 'creator', itemId: mockUuid(801), buyer: ASAKO, price: 0, status: 'active', failureReason: null, at: NOW - 50 * DAY },
+  { id: mockUuid(902), source: 'purchase', itemId: mockUuid(801), buyer: LINXIA, price: 6, status: 'active', failureReason: null, at: NOW - 42 * DAY },
+  { id: mockUuid(903), source: 'creator', itemId: mockUuid(802), buyer: ASAKO, price: 0, status: 'active', failureReason: null, at: NOW - 40 * DAY },
+  { id: mockUuid(904), source: 'purchase', itemId: mockUuid(802), buyer: LINXIA, price: 0, status: 'active', failureReason: null, at: NOW - 40 * DAY },
+  { id: mockUuid(905), source: 'purchase', itemId: mockUuid(803), buyer: LINXIA, price: 3, status: 'failed', failureReason: '钱包余额不足，请先充值。', at: NOW - 8 * DAY },
+  { id: mockUuid(906), source: 'purchase', itemId: mockUuid(801), buyer: PLAYER_0123, price: 9.9, status: 'active', failureReason: null, at: NOW - 1 * DAY },
+  { id: mockUuid(907), source: 'creator', itemId: mockUuid(811), buyer: ASAKO, price: 0, status: 'active', failureReason: null, at: NOW - 30 * DAY },
+  { id: mockUuid(908), source: 'purchase', itemId: mockUuid(811), buyer: LINXIA, price: 19.9, status: 'active', failureReason: null, at: NOW - 3 * DAY },
+  { id: mockUuid(909), source: 'creator', itemId: mockUuid(812), buyer: LINXIA, price: 0, status: 'active', failureReason: null, at: NOW - 12 * DAY },
+  { id: mockUuid(910), source: 'purchase', itemId: mockUuid(812), buyer: PLAYER_0123, price: 0, status: 'active', failureReason: null, at: NOW - 5 * HOUR },
 ];
 
 let settings: MarketSettingsView = { settings: { commissionRate: 0.3, creditsPerYuan: 100 }, updatedAt: null };
 
-function row(c: MockCard): MarketCardRow {
+/** 同服务端的 `ToListing()`：角色卡露头像开场白和能力，世界书露规模和时间。 */
+function listingOf(c: MarketItemContent): MarketListing {
+  if (c.kind === 'character_card') return { kind: c.kind, face: c.face, character: c.character, capabilities: c.capabilities };
   return {
-    cardId: c.id,
-    creator: c.creator,
-    face: c.onSale.face,
-    price: { amount: c.price, currency: 'CNY' },
-    stats: {
-      purchases: c.purchases,
-      rating: c.ratings.length ? Math.round((c.ratings.reduce((a, b) => a + b, 0) / c.ratings.length) * 10) / 10 : 0,
-      ratingCount: c.ratings.length,
+    kind: c.kind,
+    face: c.face,
+    summary: {
+      narratives: c.world.narratives.length,
+      settings: c.world.worldBook.nodes.filter((n) => n.type === 'lore').length,
+      rules: c.world.rulebook.rules.length,
+      time: c.world.time,
     },
-    state: c.state,
-    takedown: c.takedown,
-    publishedAt: c.publishedAt,
-    updatedAt: c.updatedAt,
+  };
+}
+
+function row(i: MockItem): MarketItemRow {
+  return {
+    itemId: i.id,
+    creator: i.creator,
+    listing: listingOf(i.onSale),
+    price: { amount: i.price, currency: 'CNY' },
+    stats: {
+      purchases: i.purchases,
+      rating: i.ratings.length ? Math.round((i.ratings.reduce((a, b) => a + b, 0) / i.ratings.length) * 10) / 10 : 0,
+      ratingCount: i.ratings.length,
+    },
+    state: i.state,
+    takedown: i.takedown,
+    publishedAt: i.publishedAt,
+    updatedAt: i.updatedAt,
   };
 }
 
 function orderRow(o: MockOrder): MarketOrderRow {
-  const card = cards.find((c) => c.id === o.cardId)!;
+  const item = items.find((i) => i.id === o.itemId)!;
   const sellerCredits = Math.round(o.price * (1 - settings.settings.commissionRate) * settings.settings.creditsPerYuan * 100) / 100;
   return {
     id: o.id,
     source: o.source,
-    card: { id: card.id, name: row(card).face.name },
+    item: { id: item.id, kind: item.onSale.kind, name: item.onSale.face.name },
     buyer: o.buyer,
-    seller: card.creator,
+    seller: item.creator,
     price: { amount: o.price, currency: 'CNY' },
     status: o.status,
     settlement: o.status === 'active' && o.source === 'purchase' ? { ...settings.settings, sellerCredits } : null,
@@ -154,71 +275,79 @@ function orderRow(o: MockOrder): MarketOrderRow {
   };
 }
 
-const notFound = () => fail({ code: 'not_found', message: '角色卡不存在。' });
+/** 同服务端的说法：角色卡论张，世界书论本。 */
+const thisOne = (i: MockItem) => (i.onSale.kind === 'world_book' ? '这本世界书' : '这张角色卡');
+
+const notFound = () => fail({ code: 'not_found', message: '商品不存在。' });
 
 export class TavernMarketMock implements TavernMarketPort {
-  async cards(query: MarketCardQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketCardRow>>> {
+  async items(query: MarketItemQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketItemRow>>> {
     await delay();
     const keyword = query.keyword?.trim().toLowerCase();
-    const rows = cards
+    const rows = items
       .map(row)
+      .filter((r) => query.kind == null || r.listing.kind === query.kind)
       .filter((r) => query.creatorUid == null || r.creator.uid === query.creatorUid)
       .filter((r) => query.state == null || r.state === query.state)
       .filter((r) => query.fromUtc == null || (r.publishedAt ?? 0) >= query.fromUtc)
       .filter((r) => query.toUtc == null || (r.publishedAt ?? 0) <= query.toUtc)
-      .filter((r) => !keyword || r.face.name.toLowerCase().includes(keyword) || r.face.tags.some((t) => t.includes(keyword)))
+      .filter(
+        (r) => !keyword || r.listing.face.name.toLowerCase().includes(keyword) || r.listing.face.tags.some((t) => t.includes(keyword)),
+      )
       .sort((a, b) => b.updatedAt - a.updatedAt);
     return ok(pageOf(rows, page.p, page.pageSize));
   }
 
-  async card(cardId: string): Promise<AppResult<MarketCardDetail>> {
+  async item(itemId: string): Promise<AppResult<MarketItemDetail>> {
     await delay();
-    const c = cards.find((x) => x.id === cardId);
-    if (!c) return notFound();
-    return ok({ card: row(c), onSale: c.onSale });
+    const i = items.find((x) => x.id === itemId);
+    if (!i) return notFound();
+    return ok({ item: row(i), onSale: i.onSale });
   }
 
-  async reviews(cardId: string, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketReview>>> {
+  async reviews(itemId: string, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketReview>>> {
     await delay();
-    const c = cards.find((x) => x.id === cardId);
-    if (!c) return notFound();
-    const rows: MarketReview[] = c.ratings.map((rating, i) => ({
-      id: i + 1,
-      account: i % 2 ? PLAYER_0123 : LINXIA,
+    const i = items.find((x) => x.id === itemId);
+    if (!i) return notFound();
+    const praise = i.onSale.kind === 'world_book' ? '设定扎实，开局就有戏。' : '人设很稳，推理戏好看。';
+    const rows: MarketReview[] = i.ratings.map((rating, n) => ({
+      id: n + 1,
+      account: n % 2 ? PLAYER_0123 : LINXIA,
       rating,
-      content: rating >= 4 ? '人设很稳，推理戏好看。' : null,
-      updatedAt: NOW - (i + 1) * DAY,
+      content: rating >= 4 ? praise : null,
+      updatedAt: NOW - (n + 1) * DAY,
     }));
     return ok(pageOf(rows, page.p, page.pageSize));
   }
 
-  async takeDown(cardId: string, reason: string): Promise<AppResult<MarketCardRow>> {
+  async takeDown(itemId: string, reason: string): Promise<AppResult<MarketItemRow>> {
     await delay();
-    const c = cards.find((x) => x.id === cardId);
-    if (!c) return notFound();
-    if (c.state !== 'listed') return fail({ code: 'conflict', message: '这张角色卡没有在售。' });
-    c.state = 'taken_down';
-    c.takedown = { reason, staffUid: STAFF_UID, atUtc: Date.now() };
-    c.updatedAt = Date.now();
-    return ok(row(c));
+    const i = items.find((x) => x.id === itemId);
+    if (!i) return notFound();
+    if (i.state !== 'listed') return fail({ code: 'conflict', message: `${thisOne(i)}没有在售。` });
+    i.state = 'taken_down';
+    i.takedown = { reason, staffUid: STAFF_UID, atUtc: Date.now() };
+    i.updatedAt = Date.now();
+    return ok(row(i));
   }
 
-  async restore(cardId: string): Promise<AppResult<MarketCardRow>> {
+  async restore(itemId: string): Promise<AppResult<MarketItemRow>> {
     await delay();
-    const c = cards.find((x) => x.id === cardId);
-    if (!c) return notFound();
-    if (c.state !== 'taken_down') return fail({ code: 'conflict', message: '这张角色卡没有被下架。' });
-    c.state = 'listed';
-    c.takedown = null;
-    c.updatedAt = Date.now();
-    return ok(row(c));
+    const i = items.find((x) => x.id === itemId);
+    if (!i) return notFound();
+    if (i.state !== 'taken_down') return fail({ code: 'conflict', message: `${thisOne(i)}没有被下架。` });
+    i.state = 'listed';
+    i.takedown = null;
+    i.updatedAt = Date.now();
+    return ok(row(i));
   }
 
   async orders(query: MarketOrderQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketOrderRow>>> {
     await delay();
     const rows = orders
       .map(orderRow)
-      .filter((o) => query.cardId == null || o.card.id === query.cardId)
+      .filter((o) => query.itemId == null || o.item.id === query.itemId)
+      .filter((o) => query.kind == null || o.item.kind === query.kind)
       .filter((o) => query.buyerUid == null || o.buyer.uid === query.buyerUid)
       .filter((o) => query.sellerUid == null || o.seller.uid === query.sellerUid)
       .filter((o) => query.source == null || o.source === query.source)

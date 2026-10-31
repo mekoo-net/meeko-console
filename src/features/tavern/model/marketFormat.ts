@@ -1,7 +1,7 @@
 /**
  * 市场页共用的展示辅助。
  */
-import type { MarketPrice } from './market.types';
+import { TemplateTimeModeLabel, type MarketItemKind, type MarketPrice, type WorldTimeTemplate } from './market.types';
 
 /** 0 元写「免费」，其余两位小数带币种符号。 */
 export function formatPrice(price: MarketPrice): string {
@@ -13,4 +13,22 @@ export function formatPrice(price: MarketPrice): string {
 /** 0.3 → 30%。 */
 export function formatPercent(rate: number): string {
   return `${Math.round(rate * 1000) / 10}%`;
+}
+
+/** 时间走多快：流逝是故事钟相对现实的倍数，推进是每回合几分钟；停滞没有快慢。 */
+export function timePace(time: WorldTimeTemplate): string {
+  if (time.mode === 'realtime') return `${time.ratio} 倍速`;
+  if (time.mode === 'turnbased') return `每回合 ${time.turnMinutes} 分钟`;
+  return '';
+}
+
+/** 列表里一格写完：「推进 · 每回合 30 分钟」。 */
+export function timeText(time: WorldTimeTemplate): string {
+  const pace = timePace(time);
+  return pace ? `${TemplateTimeModeLabel[time.mode]} · ${pace}` : TemplateTimeModeLabel[time.mode];
+}
+
+/** 一类商品在市场里的那一页（路由名）；带 `?itemId=` 进去直接打开那一件。 */
+export function itemPage(kind: MarketItemKind): string {
+  return kind === 'world_book' ? 'tavern-market-world-books' : 'tavern-market-cards';
 }

@@ -13,16 +13,26 @@ vi.mock('@/features/tavern/api/http', async (importOriginal) => ({
 
 const request = vi.mocked(http.requestTavern);
 
-/** 钉住市场管理接口「后端真发什么」：snake_case 枚举、epoch 毫秒、价格带币种、在卖的内容原样嵌着、不带版本。 */
-const CARD_ID = '0193f5a0-7c1e-7d2a-9b3c-4e5f60718293';
+/**
+ * 钉住市场管理接口「后端真发什么」：两类商品按 `kind` 分形状、snake_case 枚举、epoch 毫秒、价格带币种、
+ * 在卖的内容原样嵌着、不带版本。
+ */
+const ITEM_ID = '0193f5a0-7c1e-7d2a-9b3c-4e5f60718293';
 const ACCOUNT = { uid: 100004120, displayName: '麻子', email: 'asako@example.com', phone: null };
-const FACE = { name: '沈惟行', avatar: null, cover: null, tagline: '督察', description: null, tags: ['推理'], greetings: [] };
+const FACE = { name: '沈惟行', cover: null, tagline: '督察', description: null, tags: ['推理'] };
+const CARD_LISTING = {
+  kind: 'character_card',
+  face: FACE,
+  character: { avatar: null, greetings: [] },
+  capabilities: { moments: false, mcpMemory: false, imageGen: false },
+};
+const TIME = { mode: 'turnbased', ratio: 1, turnMinutes: 30, storyStart: '1931-11-02T21:00:00' };
 
-function wireCard(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function wireItem(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    cardId: CARD_ID,
+    itemId: ITEM_ID,
     creator: ACCOUNT,
-    face: FACE,
+    listing: CARD_LISTING,
     price: { amount: 9.9, currency: 'CNY' },
     stats: { purchases: 128, rating: 4.4, ratingCount: 5 },
     state: 'listed',
@@ -36,52 +46,83 @@ function wireCard(overrides: Record<string, unknown> = {}): Record<string, unkno
 describe('TavernMarketHttpAdapter', () => {
   beforeEach(() => request.mockReset());
 
-  it('lists cards with the filter the page gave', async () => {
-    request.mockResolvedValueOnce(ok({ items: [wireCard()], total: 1, page: 1, pageSize: 20 }));
-    const r = await new TavernMarketHttpAdapter().cards({ creatorUid: 100004120, state: 'listed' }, { p: 1, pageSize: 20 });
-    expect(request).toHaveBeenCalledWith('/tavern/api/admin/market/cards', {
-      query: { p: 1, pageSize: 20, creatorUid: 100004120, state: 'listed' },
+  it('lists one kind of item with the filter the page gave', async () => {
+    request.mockResolvedValueOnce(ok({ items: [wireItem()], total: 1, page: 1, pageSize: 20 }));
+    const r = await new TavernMarketHttpAdapter().items(
+      { kind: 'character_card', creatorUid: 100004120, state: 'taken_down' },
+      { p: 1, pageSize: 20 },
+    );
+    expect(request).toHaveBeenCalledWith('/tavern/api/admin/market/items', {
+      query: { p: 1, pageSize: 20, kind: 'character_card', creatorUid: 100004120, state: 'taken_down' },
     });
     expect(r.success && r.data.items[0]?.price).toEqual({ amount: 9.9, currency: 'CNY' });
   });
 
-  it('reads what is on sale with its preset and world book', async () => {
+  it('reads a character card on sale with its preset and description', async () => {
     request.mockResolvedValueOnce(
       ok({
-        card: wireCard({ state: 'taken_down', takedown: { reason: '侵权', staffUid: 1, atUtc: 1761877649000 } }),
+        item: wireItem({ state: 'taken_down', takedown: { reason: '侵权', staffUid: 1, atUtc: 1761877649000 } }),
         onSale: {
           face: FACE,
+          kind: 'character_card',
+          character: { avatar: null, greetings: ['又是你。'] },
           preset: { systemPrompt: '你是沈惟行。', personality: '克制' },
           worldBook: [{ keys: ['雾港'] }],
           capabilities: { moments: false, mcpMemory: false, imageGen: false },
         },
-        reviews: [],
       }),
     );
-    const r = await new TavernMarketHttpAdapter().card(CARD_ID);
-    expect(request).toHaveBeenCalledWith(`/tavern/api/admin/market/cards/${CARD_ID}`);
-    expect(r.success && r.data.card.takedown?.reason).toBe('侵权');
-    expect(r.success && r.data.onSale.preset.systemPrompt).toBe('你是沈惟行。');
+    const r = await new TavernMarketHttpAdapter().item(ITEM_ID);
+    expect(request).toHaveBeenCalledWith(`/tavern/api/admin/market/items/${ITEM_ID}`);
+    expect(r.success && r.data.item.takedown?.reason).toBe('侵权');
+    expect(r.success && r.data.onSale.kind === 'character_card' && r.data.onSale.preset.systemPrompt).toBe('你是沈惟行。');
   });
 
-  it('takes a card down with a reason and gets the changed row back', async () => {
-    request.mockResolvedValueOnce(ok(wireCard({ state: 'taken_down', takedown: { reason: '侵权', staffUid: 1, atUtc: 1 } })));
-    const r = await new TavernMarketHttpAdapter().takeDown(CARD_ID, '侵权');
-    expect(request).toHaveBeenCalledWith(`/tavern/api/admin/market/cards/${CARD_ID}/takedown`, {
+  it('reads a world book on sale as a whole world template', async () => {
+    const book = { kind: 'world_book', face: { ...FACE, name: '雾港 1931' }, summary: { narratives: 1, settings: 1, rules: 0, time: TIME } };
+    request.mockResolvedValueOnce(
+      ok({
+        item: wireItem({ listing: book }),
+        onSale: {
+          face: book.face,
+          world: {
+            time: TIME,
+            narratives: [{ name: '基调', content: '冷硬派。' }],
+            worldBook: { nodes: [{ id: 'rain', type: 'lore', title: '雨', content: '一直在下' }] },
+            // 创作者的世界没写过规则书：服务端原样给空对象。
+            rulebook: {},
+          },
+          kind: 'world_book',
+        },
+      }),
+    );
+    const r = await new TavernMarketHttpAdapter().item(ITEM_ID);
+    expect(r.success).toBe(true);
+    if (!r.success || r.data.onSale.kind !== 'world_book') return;
+    expect(r.data.item.listing.kind).toBe('world_book');
+    expect(r.data.onSale.world.time.mode).toBe('turnbased');
+    expect(r.data.onSale.world.rulebook.rules).toEqual([]);
+    expect(r.data.onSale.world.worldBook.nodes[0]).toMatchObject({ type: 'lore', enabled: true, audience: 'all' });
+  });
+
+  it('takes an item down with a reason and gets the changed row back', async () => {
+    request.mockResolvedValueOnce(ok(wireItem({ state: 'taken_down', takedown: { reason: '侵权', staffUid: 1, atUtc: 1 } })));
+    const r = await new TavernMarketHttpAdapter().takeDown(ITEM_ID, '侵权');
+    expect(request).toHaveBeenCalledWith(`/tavern/api/admin/market/items/${ITEM_ID}/takedown`, {
       method: 'POST',
       body: { reason: '侵权' },
     });
     expect(r.success && r.data.state).toBe('taken_down');
   });
 
-  it('reads an order with the seller share it settled at', async () => {
+  it('reads an order with the kind of item and the seller share it settled at', async () => {
     request.mockResolvedValueOnce(
       ok({
         items: [
           {
             id: '0193f5a0-0000-7000-8000-000000000001',
             source: 'purchase',
-            card: { id: CARD_ID, name: '沈惟行' },
+            item: { id: ITEM_ID, kind: 'world_book', name: '雾港 1931' },
             buyer: ACCOUNT,
             seller: ACCOUNT,
             price: { amount: 9.9, currency: 'CNY' },
@@ -97,7 +138,11 @@ describe('TavernMarketHttpAdapter', () => {
         pageSize: 20,
       }),
     );
-    const r = await new TavernMarketHttpAdapter().orders({ buyerUid: 100004120 }, { p: 1, pageSize: 20 });
+    const r = await new TavernMarketHttpAdapter().orders({ buyerUid: 100004120, kind: 'world_book' }, { p: 1, pageSize: 20 });
+    expect(request).toHaveBeenCalledWith('/tavern/api/admin/market/orders', {
+      query: { p: 1, pageSize: 20, buyerUid: 100004120, kind: 'world_book' },
+    });
+    expect(r.success && r.data.items[0]?.item.kind).toBe('world_book');
     expect(r.success && r.data.items[0]?.settlement?.sellerCredits).toBe(693);
   });
 });

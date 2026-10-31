@@ -4,14 +4,14 @@ import type { AppResult } from '@/shared/api/httpTypes';
 
 import type { PageQuery } from '../../model/content.types';
 import {
-  marketCardDetailSchema,
-  marketCardRowSchema,
+  marketItemDetailSchema,
+  marketItemRowSchema,
   marketOrderRowSchema,
   marketReviewSchema,
   marketSettingsViewSchema,
-  type MarketCardDetail,
-  type MarketCardQuery,
-  type MarketCardRow,
+  type MarketItemDetail,
+  type MarketItemQuery,
+  type MarketItemRow,
   type MarketOrderQuery,
   type MarketOrderRow,
   type MarketReview,
@@ -22,31 +22,31 @@ import { pageSchema } from '../../model/metering.types';
 
 const BASE = '/tavern/api/admin/market';
 
-const cardPageSchema = pageSchema(marketCardRowSchema);
+const itemPageSchema = pageSchema(marketItemRowSchema);
 const orderPageSchema = pageSchema(marketOrderRowSchema);
 const reviewPageSchema = pageSchema(marketReviewSchema);
 
 export class TavernMarketHttpAdapter implements TavernMarketPort {
-  async cards(query: MarketCardQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketCardRow>>> {
-    return parseTavern(cardPageSchema, await requestTavern<unknown>(`${BASE}/cards`, { query: { ...page, ...query } }), '市场角色卡列表');
+  async items(query: MarketItemQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketItemRow>>> {
+    return parseTavern(itemPageSchema, await requestTavern<unknown>(`${BASE}/items`, { query: { ...page, ...query } }), '市场商品列表');
   }
 
-  async card(cardId: string): Promise<AppResult<MarketCardDetail>> {
-    return parseTavern(marketCardDetailSchema, await requestTavern<unknown>(`${BASE}/cards/${cardId}`), '市场角色卡');
+  async item(itemId: string): Promise<AppResult<MarketItemDetail>> {
+    return parseTavern(marketItemDetailSchema, await requestTavern<unknown>(`${BASE}/items/${itemId}`), '市场商品');
   }
 
-  async reviews(cardId: string, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketReview>>> {
-    return parseTavern(reviewPageSchema, await requestTavern<unknown>(`${BASE}/cards/${cardId}/reviews`, { query: page }), '评价');
+  async reviews(itemId: string, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketReview>>> {
+    return parseTavern(reviewPageSchema, await requestTavern<unknown>(`${BASE}/items/${itemId}/reviews`, { query: page }), '评价');
   }
 
-  async takeDown(cardId: string, reason: string): Promise<AppResult<MarketCardRow>> {
-    const res = await requestTavern<unknown>(`${BASE}/cards/${cardId}/takedown`, { method: 'POST', body: { reason } });
-    return parseTavern(marketCardRowSchema, res, '下架');
+  async takeDown(itemId: string, reason: string): Promise<AppResult<MarketItemRow>> {
+    const res = await requestTavern<unknown>(`${BASE}/items/${itemId}/takedown`, { method: 'POST', body: { reason } });
+    return parseTavern(marketItemRowSchema, res, '下架');
   }
 
-  async restore(cardId: string): Promise<AppResult<MarketCardRow>> {
-    const res = await requestTavern<unknown>(`${BASE}/cards/${cardId}/restore`, { method: 'POST' });
-    return parseTavern(marketCardRowSchema, res, '恢复上架');
+  async restore(itemId: string): Promise<AppResult<MarketItemRow>> {
+    const res = await requestTavern<unknown>(`${BASE}/items/${itemId}/restore`, { method: 'POST' });
+    return parseTavern(marketItemRowSchema, res, '恢复上架');
   }
 
   async orders(query: MarketOrderQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketOrderRow>>> {

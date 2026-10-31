@@ -1,11 +1,11 @@
 <script setup lang="ts">
 /**
- * 市场 › 商品：玩家发布到市场的卡，版式同调用日志页，详情在抽屉里看（在卖的卡面、人设、世界书）。
- * 发布即上架，员工只能事后下架 / 恢复；下架只是停售，已买的照常用手里的版本。
- * `?cardId=` 进来直接打开那张卡（角色卡抽屉里的市场卡号点过来）。
- * 也是用户视角「发布的」：传了 `creatorUid` 就只看这个人发布的，创作者筛选和创作者列都不要。
+ * 市场 › 角色卡 / 世界书：玩家发布到市场的一类商品，版式同调用日志页，详情在抽屉里看在卖的那一版。
+ * 发布即上架，员工只能事后下架 / 恢复；下架只是停售，已买的照常用。
+ * `?itemId=` 进来直接打开那一件（角色卡抽屉里的市场卡号点过来）。
+ * 也是用户视角「发布的」：传了 `creatorUid` 就只看这个人发布的，不分页面、两类一起列，多一列类别。
  */
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { Search } from '@element-plus/icons-vue';
 
@@ -19,23 +19,27 @@ import { formatDateTime } from '@/shared/lib/date';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 
 import AccountCell from '../../components/content/AccountCell.vue';
-import MarketCardDrawer from '../../components/market/MarketCardDrawer.vue';
+import MarketItemDrawer from '../../components/market/MarketItemDrawer.vue';
 import MarketOrdersDialog from '../../components/market/MarketOrdersDialog.vue';
 import MarketReviewsDialog from '../../components/market/MarketReviewsDialog.vue';
 import { usePagedList } from '../../composables/usePagedList';
 import { initialOf } from '../../model/contentFormat';
 import {
-  MarketCardStateLabel,
-  MarketCardStateTone,
-  marketCardStateValues,
-  type MarketCardRow,
-  type MarketCardState,
+  MarketItemKindLabel,
+  MarketItemStateLabel,
+  MarketItemStateTone,
+  marketItemKindSchema,
+  marketItemStateValues,
+  type MarketItemKind,
+  type MarketItemRow,
+  type MarketItemState,
+  type MarketListing,
 } from '../../model/market.types';
-import { formatPrice } from '../../model/marketFormat';
+import { formatPrice, timeText } from '../../model/marketFormat';
 import { parseAccountUid, shortId } from '../../model/meteringFormat';
 import { getTavernMarketPort } from '../../services';
 
-const props = defineProps<{ creatorUid?: number }>();
+const props = defineProps<{ kind?: MarketItemKind; creatorUid?: number }>();
 
 const port = getTavernMarketPort();
 const route = useRoute();
@@ -43,21 +47,30 @@ const route = useRoute();
 /** 列表里标签只露几个，全部在详情里。 */
 const TAG_LIMIT = 3;
 
+const title = computed(() => (props.kind ? MarketItemKindLabel[props.kind] : '商品'));
+
 /** 同调用日志页：账户（这里是创作者）一行、业务条件一行、时间一行。上架时间默认不限。 */
 const blank = () => ({
   creatorUid: '',
   keyword: '',
-  state: undefined as MarketCardState | undefined,
+  kind: undefined as MarketItemKind | undefined,
+  state: undefined as MarketItemState | undefined,
   dateRange: null as [string, string] | null,
 });
 const filter = ref(blank());
 
-const { items, total, page, pageSize, loading, load, reload } = usePagedList<MarketCardRow>((p) => {
+const { items, total, page, pageSize, loading, load, reload } = usePagedList<MarketItemRow>((p) => {
   const f = filter.value;
   const creator = props.creatorUid == null ? parseAccountUid(f.creatorUid) : { ok: true as const, value: props.creatorUid };
   return creator.ok
-    ? port.cards(
-        { creatorUid: creator.value, keyword: f.keyword.trim() || undefined, state: f.state, ...dateRangeToEpochMillis(f.dateRange) },
+    ? port.items(
+        {
+          kind: props.kind ?? f.kind,
+          creatorUid: creator.value,
+          keyword: f.keyword.trim() || undefined,
+          state: f.state,
+          ...dateRangeToEpochMillis(f.dateRange),
+        },
         p,
       )
     : Promise.resolve(fail({ code: 'validation', message: '创作者 UID 只能是数字' }));
@@ -70,31 +83,45 @@ const creatorFilter = computed(() =>
     : {},
 );
 
+/** 角色卡露头像，世界书露封面。 */
+function imageOf(listing: MarketListing): string | undefined {
+  return (listing.kind === 'character_card' ? listing.character.avatar : listing.face.cover) ?? undefined;
+}
+
 const detailOpen = ref(false);
 const detailId = ref<string | null>(null);
 
-function openDetail(cardId: string): void {
-  detailId.value = cardId;
+function openDetail(itemId: string): void {
+  detailId.value = itemId;
   detailOpen.value = true;
 }
 
 const reviewsOpen = ref(false);
 const ordersOpen = ref(false);
-const recordsOf = ref<MarketCardRow | null>(null);
+const recordsOf = ref<MarketItemRow | null>(null);
 
-function openReviews(row: MarketCardRow): void {
+function openReviews(row: MarketItemRow): void {
   recordsOf.value = row;
   reviewsOpen.value = true;
 }
 
-function openOrders(row: MarketCardRow): void {
+function openOrders(row: MarketItemRow): void {
   recordsOf.value = row;
   ordersOpen.value = true;
 }
 
+/** 角色卡、世界书两页是同一个组件，路由切过来时实例复用：换类别就清掉筛选，从第 1 页重拉。 */
+watch(
+  () => props.kind,
+  () => {
+    detailOpen.value = false;
+    filter.value = blank();
+  },
+);
+
 onMounted(() => {
   void load();
-  if (typeof route.query.cardId === 'string') openDetail(route.query.cardId);
+  if (typeof route.query.itemId === 'string') openDetail(route.query.itemId);
 });
 </script>
 
@@ -104,7 +131,7 @@ onMounted(() => {
       v-if="creatorUid == null"
       #header
     >
-      <PageHeader title="商品" />
+      <PageHeader :title="title" />
     </template>
 
     <template #filters>
@@ -117,6 +144,24 @@ onMounted(() => {
         @refresh="reload"
         @reset="filter = blank()"
       >
+        <el-form-item
+          v-if="!kind"
+          label="类别"
+        >
+          <el-select
+            v-model="filter.kind"
+            placeholder="全部"
+            clearable
+            style="width: 120px"
+          >
+            <el-option
+              v-for="k in marketItemKindSchema.options"
+              :key="k"
+              :label="MarketItemKindLabel[k]"
+              :value="k"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="名字 / 标签">
           <el-input
             v-model="filter.keyword"
@@ -134,9 +179,9 @@ onMounted(() => {
             style="width: 140px"
           >
             <el-option
-              v-for="s in marketCardStateValues"
+              v-for="s in marketItemStateValues"
               :key="s"
-              :label="MarketCardStateLabel[s]"
+              :label="MarketItemStateLabel[s]"
               :value="s"
             />
           </el-select>
@@ -147,38 +192,54 @@ onMounted(() => {
     <el-table
       v-loading="loading"
       :data="items"
-      row-key="cardId"
+      row-key="itemId"
       size="small"
       class="compact-table"
       height="100%"
       :empty-text="' '"
     >
       <el-table-column
-        label="角色卡"
+        :label="title"
         min-width="200"
       >
-        <template #default="{ row }: { row: MarketCardRow }">
-          <div class="cell-card">
+        <template #default="{ row }: { row: MarketItemRow }">
+          <div class="cell-item">
             <el-avatar
               :size="32"
               shape="square"
-              :src="row.face.avatar ?? undefined"
-              class="cell-card__avatar"
+              :src="imageOf(row.listing)"
+              class="cell-item__avatar"
             >
-              {{ initialOf(row.face.name) }}
+              {{ initialOf(row.listing.face.name) }}
             </el-avatar>
             <div class="cell-stack">
               <el-button
                 link
                 type="primary"
                 class="cell-title"
-                @click="openDetail(row.cardId)"
+                @click="openDetail(row.itemId)"
               >
-                {{ row.face.name }}
+                {{ row.listing.face.name }}
               </el-button>
-              <span class="cell-uid">{{ shortId(row.cardId) }}</span>
+              <span class="cell-uid">{{ shortId(row.itemId) }}</span>
             </div>
           </div>
+        </template>
+      </el-table-column>
+
+      <el-table-column
+        v-if="!kind"
+        label="类别"
+        width="80"
+      >
+        <template #default="{ row }: { row: MarketItemRow }">
+          <el-tag
+            size="small"
+            effect="plain"
+            :type="row.listing.kind === 'world_book' ? 'success' : 'primary'"
+          >
+            {{ MarketItemKindLabel[row.listing.kind] }}
+          </el-tag>
         </template>
       </el-table-column>
 
@@ -187,7 +248,7 @@ onMounted(() => {
         label="创作者"
         min-width="170"
       >
-        <template #default="{ row }: { row: MarketCardRow }">
+        <template #default="{ row }: { row: MarketItemRow }">
           <AccountCell :account="row.creator" />
         </template>
       </el-table-column>
@@ -196,13 +257,13 @@ onMounted(() => {
         label="标签"
         min-width="150"
       >
-        <template #default="{ row }: { row: MarketCardRow }">
+        <template #default="{ row }: { row: MarketItemRow }">
           <div
-            v-if="row.face.tags.length"
+            v-if="row.listing.face.tags.length"
             class="cell-tags"
           >
             <el-tag
-              v-for="t in row.face.tags.slice(0, TAG_LIMIT)"
+              v-for="t in row.listing.face.tags.slice(0, TAG_LIMIT)"
               :key="t"
               size="small"
               type="info"
@@ -211,10 +272,10 @@ onMounted(() => {
               {{ t }}
             </el-tag>
             <span
-              v-if="row.face.tags.length > TAG_LIMIT"
+              v-if="row.listing.face.tags.length > TAG_LIMIT"
               class="cell-muted"
-              :title="row.face.tags.join('、')"
-            >+{{ row.face.tags.length - TAG_LIMIT }}</span>
+              :title="row.listing.face.tags.join('、')"
+            >+{{ row.listing.face.tags.length - TAG_LIMIT }}</span>
           </div>
           <span
             v-else
@@ -223,12 +284,34 @@ onMounted(() => {
         </template>
       </el-table-column>
 
+      <template v-if="kind === 'world_book'">
+        <el-table-column
+          label="规模"
+          min-width="170"
+        >
+          <template #default="{ row }: { row: MarketItemRow }">
+            <span
+              v-if="row.listing.kind === 'world_book'"
+              class="cell-muted-strong"
+            >叙事 {{ row.listing.summary.narratives }} · 设定 {{ row.listing.summary.settings }} · 规则 {{ row.listing.summary.rules }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="时间"
+          min-width="140"
+        >
+          <template #default="{ row }: { row: MarketItemRow }">
+            <span v-if="row.listing.kind === 'world_book'">{{ timeText(row.listing.summary.time) }}</span>
+          </template>
+        </el-table-column>
+      </template>
+
       <el-table-column
         label="价格"
         width="90"
         align="right"
       >
-        <template #default="{ row }: { row: MarketCardRow }">
+        <template #default="{ row }: { row: MarketItemRow }">
           <span class="num">{{ formatPrice(row.price) }}</span>
         </template>
       </el-table-column>
@@ -238,7 +321,7 @@ onMounted(() => {
         width="72"
         align="right"
       >
-        <template #default="{ row }: { row: MarketCardRow }">
+        <template #default="{ row }: { row: MarketItemRow }">
           <span class="num">{{ row.stats.purchases }}</span>
         </template>
       </el-table-column>
@@ -248,7 +331,7 @@ onMounted(() => {
         width="96"
         align="right"
       >
-        <template #default="{ row }: { row: MarketCardRow }">
+        <template #default="{ row }: { row: MarketItemRow }">
           <span
             v-if="row.stats.ratingCount > 0"
             class="num"
@@ -264,10 +347,10 @@ onMounted(() => {
         label="状态"
         width="90"
       >
-        <template #default="{ row }: { row: MarketCardRow }">
+        <template #default="{ row }: { row: MarketItemRow }">
           <StatusTag
-            :label="MarketCardStateLabel[row.state]"
-            :tone="MarketCardStateTone[row.state]"
+            :label="MarketItemStateLabel[row.state]"
+            :tone="MarketItemStateTone[row.state]"
             :title="row.takedown?.reason"
           />
         </template>
@@ -277,7 +360,7 @@ onMounted(() => {
         label="更新时间"
         width="140"
       >
-        <template #default="{ row }: { row: MarketCardRow }">
+        <template #default="{ row }: { row: MarketItemRow }">
           <span class="cell-date">{{ formatDateTime(row.updatedAt) }}</span>
         </template>
       </el-table-column>
@@ -288,12 +371,12 @@ onMounted(() => {
         fixed="right"
         align="right"
       >
-        <template #default="{ row }: { row: MarketCardRow }">
+        <template #default="{ row }: { row: MarketItemRow }">
           <el-button
             link
             type="primary"
             size="small"
-            @click="openDetail(row.cardId)"
+            @click="openDetail(row.itemId)"
           >
             详情
           </el-button>
@@ -318,7 +401,7 @@ onMounted(() => {
 
       <template #empty>
         <EmptyState
-          title="没有符合条件的角色卡"
+          :title="`没有符合条件的${title}`"
           description="调整筛选条件或重置后重试。"
         />
       </template>
@@ -336,20 +419,20 @@ onMounted(() => {
     </template>
   </FillListPageLayout>
 
-  <MarketCardDrawer
+  <MarketItemDrawer
     v-model:visible="detailOpen"
-    :card-id="detailId"
+    :item-id="detailId"
     @changed="load"
   />
 
   <MarketReviewsDialog
     v-model:visible="reviewsOpen"
-    :card="recordsOf"
+    :item="recordsOf"
   />
 
   <MarketOrdersDialog
     v-model:visible="ordersOpen"
-    :card="recordsOf"
+    :item="recordsOf"
   />
 </template>
 
@@ -358,14 +441,14 @@ onMounted(() => {
   font-variant-numeric: tabular-nums;
 }
 
-.cell-card {
+.cell-item {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
 }
 
-.cell-card__avatar {
+.cell-item__avatar {
   flex-shrink: 0;
   font-size: 14px;
   font-weight: 600;
@@ -395,5 +478,10 @@ onMounted(() => {
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
+}
+
+.cell-muted-strong {
+  color: var(--el-text-color-regular);
+  font-variant-numeric: tabular-nums;
 }
 </style>

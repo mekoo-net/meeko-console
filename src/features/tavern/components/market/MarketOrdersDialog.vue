@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 商品行「订单」：一张角色卡的订单，版式同平台「领取记录」弹窗——上面一行摘要，一行轻筛选，下面定高表格，分页贴右下。
+ * 商品行「订单」：一件商品（角色卡或世界书）的订单，版式同平台「领取记录」弹窗——上面一行摘要，一行轻筛选，下面定高表格，分页贴右下。
  */
 import { computed, ref, watch } from 'vue';
 import { Search } from '@element-plus/icons-vue';
@@ -16,7 +16,7 @@ import {
   MarketOrderStatusLabel,
   MarketOrderStatusTone,
   marketOrderSourceSchema,
-  type MarketCardRow,
+  type MarketItemRow,
   type MarketOrderRow,
   type MarketOrderSource,
 } from '../../model/market.types';
@@ -27,7 +27,7 @@ import AccountCell from '../content/AccountCell.vue';
 import CopyableId from '../metering/CopyableId.vue';
 
 const visible = defineModel<boolean>('visible', { required: true });
-const props = defineProps<{ card: MarketCardRow | null }>();
+const props = defineProps<{ item: MarketItemRow | null }>();
 
 const port = getTavernMarketPort();
 
@@ -38,7 +38,7 @@ const filter = ref({ buyer: '', source: undefined as MarketOrderSource | undefin
 const { items, total, page, pageSize, loading, load } = usePagedList<MarketOrderRow>((p) => {
   const buyer = parseAccountUid(filter.value.buyer);
   return buyer.ok
-    ? port.orders({ cardId: props.card?.cardId, buyerUid: buyer.value, source: filter.value.source }, p)
+    ? port.orders({ itemId: props.item?.itemId, buyerUid: buyer.value, source: filter.value.source }, p)
     : Promise.resolve(fail({ code: 'validation', message: '买家 UID 只能是数字' }));
 }, filter);
 
@@ -46,10 +46,10 @@ const applyBuyer = debounce((value: string) => {
   filter.value.buyer = value;
 }, 300);
 
-const title = computed(() => (props.card ? `订单 · ${props.card.face.name}` : '订单'));
+const title = computed(() => (props.item ? `订单 · ${props.item.listing.face.name}` : '订单'));
 
 watch(visible, (open) => {
-  if (!open || !props.card) return;
+  if (!open || !props.item) return;
   buyerInput.value = '';
   filter.value = { buyer: '', source: undefined };
   page.value = 1;
@@ -66,20 +66,20 @@ watch(visible, (open) => {
     destroy-on-close
   >
     <el-descriptions
-      v-if="card"
+      v-if="item"
       :column="3"
       border
       size="small"
       class="summary"
     >
       <el-descriptions-item label="售价">
-        {{ formatPrice(card.price) }}
+        {{ formatPrice(item.price) }}
       </el-descriptions-item>
       <el-descriptions-item label="销量">
-        <span class="summary__accent">{{ card.stats.purchases }}</span>
+        <span class="summary__accent">{{ item.stats.purchases }}</span>
       </el-descriptions-item>
       <el-descriptions-item label="创作者">
-        <AccountCell :account="card.creator" />
+        <AccountCell :account="item.creator" />
       </el-descriptions-item>
     </el-descriptions>
 

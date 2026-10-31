@@ -1,28 +1,28 @@
 <script setup lang="ts">
 /**
- * 商品行「评价」：一张角色卡的评价，版式同平台「领取记录」弹窗——上面一行摘要，下面定高表格，分页贴右下。
+ * 商品行「评价」：一件商品（角色卡或世界书）的评价，版式同平台「领取记录」弹窗——上面一行摘要，下面定高表格，分页贴右下。
  */
 import { computed, watch } from 'vue';
 
 import { formatDateTime } from '@/shared/lib/date';
 
 import { usePagedList } from '../../composables/usePagedList';
-import type { MarketCardRow, MarketReview } from '../../model/market.types';
+import type { MarketItemRow, MarketReview } from '../../model/market.types';
 import { getTavernMarketPort } from '../../services';
 import AccountCell from '../content/AccountCell.vue';
 
 const visible = defineModel<boolean>('visible', { required: true });
-const props = defineProps<{ card: MarketCardRow | null }>();
+const props = defineProps<{ item: MarketItemRow | null }>();
 
 const port = getTavernMarketPort();
 const { items, total, page, pageSize, loading, load } = usePagedList<MarketReview>((p) =>
-  port.reviews(props.card?.cardId ?? '', p),
+  port.reviews(props.item?.itemId ?? '', p),
 );
 
-const title = computed(() => (props.card ? `评价 · ${props.card.face.name}` : '评价'));
+const title = computed(() => (props.item ? `评价 · ${props.item.listing.face.name}` : '评价'));
 
 watch(visible, (open) => {
-  if (!open || !props.card) return;
+  if (!open || !props.item) return;
   page.value = 1;
   void load();
 });
@@ -37,7 +37,7 @@ watch(visible, (open) => {
     destroy-on-close
   >
     <el-descriptions
-      v-if="card"
+      v-if="item"
       :column="3"
       border
       size="small"
@@ -45,19 +45,19 @@ watch(visible, (open) => {
     >
       <el-descriptions-item label="平均评分">
         <span
-          v-if="card.stats.ratingCount"
+          v-if="item.stats.ratingCount"
           class="summary__accent"
-        >{{ card.stats.rating.toFixed(1) }}</span>
+        >{{ item.stats.rating.toFixed(1) }}</span>
         <span
           v-else
           class="muted"
         >—</span>
       </el-descriptions-item>
       <el-descriptions-item label="评价数">
-        {{ card.stats.ratingCount }}
+        {{ item.stats.ratingCount }}
       </el-descriptions-item>
       <el-descriptions-item label="销量">
-        {{ card.stats.purchases }}
+        {{ item.stats.purchases }}
       </el-descriptions-item>
     </el-descriptions>
 

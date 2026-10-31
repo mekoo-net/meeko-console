@@ -16,7 +16,7 @@ defineProps<{ content: MarketCardContent }>();
   >
     <el-descriptions-item label="市场角色卡">
       <router-link
-        :to="{ name: 'tavern-market-cards', query: { cardId: content.cardId } }"
+        :to="{ name: 'tavern-market-cards', query: { itemId: content.cardId } }"
         class="link mono"
         title="在市场里看这张角色卡"
       >

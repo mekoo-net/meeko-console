@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 市场 › 订单：一单就是一份权益。买家付人民币进平台钱包，卖家的分成按成交时的设置折成积分（行上有快照）。
+ * 市场 › 订单：一单就是一份权益，角色卡和世界书一样买。买家付人民币进平台钱包，卖家的分成按成交时的设置折成积分（行上有快照）。
  * 创作者第一次发布时自己得的那一单（0 元）也在这里。
  * 也是用户视角「购买的」：传了 `buyerUid` 就只看这个人买的，买家筛选和买家列都不要。
  */
@@ -20,14 +20,17 @@ import AccountCell from '../../components/content/AccountCell.vue';
 import CopyableId from '../../components/metering/CopyableId.vue';
 import { usePagedList } from '../../composables/usePagedList';
 import {
+  MarketItemKindLabel,
   MarketOrderSourceLabel,
   MarketOrderStatusLabel,
   MarketOrderStatusTone,
+  marketItemKindSchema,
   marketOrderSourceSchema,
+  type MarketItemKind,
   type MarketOrderRow,
   type MarketOrderSource,
 } from '../../model/market.types';
-import { formatPercent, formatPrice } from '../../model/marketFormat';
+import { formatPercent, formatPrice, itemPage } from '../../model/marketFormat';
 import { formatCredits, parseAccountUid, shortId } from '../../model/meteringFormat';
 import { getTavernMarketPort } from '../../services';
 
@@ -39,7 +42,8 @@ const port = getTavernMarketPort();
 const blank = () => ({
   buyerUid: '',
   sellerUid: '',
-  cardId: '',
+  itemId: '',
+  kind: undefined as MarketItemKind | undefined,
   source: undefined as MarketOrderSource | undefined,
   dateRange: null as [string, string] | null,
 });
@@ -54,7 +58,8 @@ const { items, total, page, pageSize, loading, load, reload } = usePagedList<Mar
         {
           buyerUid: buyer.value,
           sellerUid: seller.value,
-          cardId: f.cardId.trim() || undefined,
+          itemId: f.itemId.trim() || undefined,
+          kind: f.kind,
           source: f.source,
           ...dateRangeToEpochMillis(f.dateRange),
         },
@@ -100,9 +105,24 @@ onMounted(() => void load());
             clearable
           />
         </el-form-item>
-        <el-form-item label="角色卡 ID">
+        <el-form-item label="类别">
+          <el-select
+            v-model="filter.kind"
+            placeholder="全部"
+            clearable
+            style="width: 120px"
+          >
+            <el-option
+              v-for="k in marketItemKindSchema.options"
+              :key="k"
+              :label="MarketItemKindLabel[k]"
+              :value="k"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="商品 ID">
           <el-input
-            v-model="filter.cardId"
+            v-model="filter.itemId"
             :prefix-icon="Search"
             placeholder="精确匹配"
             clearable
@@ -159,16 +179,25 @@ onMounted(() => void load());
       </el-table-column>
 
       <el-table-column
-        label="角色卡"
-        min-width="150"
+        label="商品"
+        min-width="190"
       >
         <template #default="{ row }: { row: MarketOrderRow }">
-          <router-link
-            :to="{ name: 'tavern-market-cards', query: { cardId: row.card.id } }"
-            class="link"
-          >
-            {{ row.card.name }}
-          </router-link>
+          <span class="cell-item">
+            <el-tag
+              size="small"
+              effect="plain"
+              :type="row.item.kind === 'world_book' ? 'success' : 'primary'"
+            >
+              {{ MarketItemKindLabel[row.item.kind] }}
+            </el-tag>
+            <router-link
+              :to="{ name: itemPage(row.item.kind), query: { itemId: row.item.id } }"
+              class="link"
+            >
+              {{ row.item.name }}
+            </router-link>
+          </span>
         </template>
       </el-table-column>
 
@@ -263,6 +292,13 @@ onMounted(() => void load());
 </template>
 
 <style scoped>
+.cell-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .num {
   font-variant-numeric: tabular-nums;
 }

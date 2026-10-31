@@ -1,14 +1,19 @@
 /**
- * 角色卡的预设、描写、额外描述，在控制台里都按「条目」显示：标题一行，点开看正文，和客户端角色卡页一样分条。
- * 这里把几种来源收成同一种条目。
+ * 角色卡的预设、描写、额外描述，世界书商品的叙事和设定，在控制台里都按「条目」显示：
+ * 标题一行，点开看正文，和客户端里一样分条。这里把几种来源收成同一种条目。
  */
 import {
+  ActivationModeLabel,
+  WorldBookAudienceLabel,
   WorldBookScopeLabel,
   WorldBookTriggerLabel,
   type Preset,
   type PromptEntry,
   type WorldBookEntry,
+  type WorldBookLore,
+  type WorldBookNode,
 } from './content.types';
+import type { NarrativeEntry } from './market.types';
 
 export interface EntryTag {
   label: string;
@@ -19,8 +24,10 @@ export interface EntryItem {
   key: string;
   title: string;
   tags: EntryTag[];
-  /** 描写条目的触发词。 */
+  /** 描写条目、设定的触发词。 */
   keywords: string[];
+  /** 正文上面的一行说明，如设定的生效条件。 */
+  note?: string;
   content: string;
 }
 
@@ -61,4 +68,32 @@ export function presetItems(preset: Preset): EntryItem[] {
       ? [{ key: field, title: PRESET_FIELD_LABEL[field] ?? field, tags: [], keywords: [], content }]
       : [];
   });
+}
+
+/** 世界的叙事：名字和正文，顺序就是拼进系统提示的顺序。 */
+export function narrativeItems(entries: readonly NarrativeEntry[]): EntryItem[] {
+  return entries.map((e, i) => ({ key: String(i), title: e.name, tags: [], keywords: [], content: e.content }));
+}
+
+/** 世界书（节点树）里的设定：分组只当标签，标出所在分组、触发方式、谁看得见；有生效条件的写在正文上面。 */
+export function worldBookNodeItems(nodes: readonly WorldBookNode[]): EntryItem[] {
+  const groups = new Map(nodes.filter((n) => n.type === 'group').map((n) => [n.id, n.title || n.id]));
+  return nodes
+    .filter((n): n is WorldBookLore => n.type === 'lore')
+    .map((n) => {
+      const group = n.parent ? groups.get(n.parent) : undefined;
+      return {
+        key: n.id,
+        title: n.title || n.id,
+        tags: [
+          ...(group ? [{ label: group, type: 'info' as const }] : []),
+          { label: ActivationModeLabel[n.activation.mode], type: n.activation.mode === 'always' ? ('success' as const) : ('info' as const) },
+          ...(n.audience === 'all' ? [] : [{ label: WorldBookAudienceLabel[n.audience], type: 'warning' as const }]),
+          ...(n.enabled ? [] : [{ label: '已停用', type: 'warning' as const }]),
+        ],
+        keywords: n.activation.keywords,
+        note: n.when ? `生效条件：${n.when}` : undefined,
+        content: n.content ?? '',
+      };
+    });
 }
