@@ -7,12 +7,14 @@ import {
   marketCardDetailSchema,
   marketCardRowSchema,
   marketOrderRowSchema,
+  marketReviewSchema,
   marketSettingsViewSchema,
   type MarketCardDetail,
   type MarketCardQuery,
   type MarketCardRow,
   type MarketOrderQuery,
   type MarketOrderRow,
+  type MarketReview,
   type MarketSettings,
   type MarketSettingsView,
 } from '../../model/market.types';
@@ -22,6 +24,7 @@ const BASE = '/tavern/api/admin/market';
 
 const cardPageSchema = pageSchema(marketCardRowSchema);
 const orderPageSchema = pageSchema(marketOrderRowSchema);
+const reviewPageSchema = pageSchema(marketReviewSchema);
 
 export class TavernMarketHttpAdapter implements TavernMarketPort {
   async cards(query: MarketCardQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketCardRow>>> {
@@ -30,6 +33,10 @@ export class TavernMarketHttpAdapter implements TavernMarketPort {
 
   async card(cardId: string): Promise<AppResult<MarketCardDetail>> {
     return parseTavern(marketCardDetailSchema, await requestTavern<unknown>(`${BASE}/cards/${cardId}`), '市场卡');
+  }
+
+  async reviews(cardId: string, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketReview>>> {
+    return parseTavern(reviewPageSchema, await requestTavern<unknown>(`${BASE}/cards/${cardId}/reviews`, { query: page }), '评价');
   }
 
   async takeDown(cardId: string, reason: string): Promise<AppResult<MarketCardRow>> {

@@ -7,6 +7,7 @@ import type {
   MarketCardQuery,
   MarketCardRow,
   MarketOrderQuery,
+  MarketReview,
   MarketOrderRow,
   MarketSettings,
   MarketSettingsView,
@@ -16,6 +17,8 @@ import type {
 export interface TavernMarketPort {
   cards(query: MarketCardQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketCardRow>>>;
   card(cardId: string): Promise<AppResult<MarketCardDetail>>;
+  /** 新的在前。 */
+  reviews(cardId: string, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketReview>>>;
   takeDown(cardId: string, reason: string): Promise<AppResult<MarketCardRow>>;
   restore(cardId: string): Promise<AppResult<MarketCardRow>>;
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * 市场卡详情，版式同角色卡抽屉：摘要表在上，卡面、在卖的人设与世界书、最近评价分段往下，下架 / 恢复放底栏。
+ * 市场卡详情，版式同角色卡抽屉：摘要表在上，卡面、在卖的人设与世界书分段往下（都按条目，点开看正文），下架 / 恢复放底栏。
+ * 评价和订单在商品列表行上的「操作」里另开弹窗看。
  * 只给在卖的那一版——员工判断要不要下架看的就是它；版本是创作者和买家之间的事，这里不露。
  */
 import { computed, ref, watch } from 'vue';
@@ -14,7 +15,8 @@ import { accountName, initialOf } from '../../model/contentFormat';
 import { MarketCardStateLabel, MarketCardStateTone, type CardFace, type MarketCardDetail } from '../../model/market.types';
 import { formatPrice } from '../../model/marketFormat';
 import { getTavernMarketPort } from '../../services';
-import ImportedCardContent from '../content/ImportedCardContent.vue';
+import { presetItems, worldBookItems } from '../../model/promptEntries';
+import PromptEntryList from '../content/PromptEntryList.vue';
 import CopyableId from '../metering/CopyableId.vue';
 
 const visible = defineModel<boolean>('visible', { required: true });
@@ -28,6 +30,8 @@ const loading = ref(false);
 const acting = ref(false);
 
 const card = computed(() => detail.value?.card ?? null);
+const persona = computed(() => (detail.value ? presetItems(detail.value.onSale.preset) : []));
+const worldBook = computed(() => (detail.value ? worldBookItems(detail.value.onSale.worldBook) : []));
 
 async function load(id: string): Promise<void> {
   loading.value = true;
@@ -192,42 +196,21 @@ function faceLines(face: CardFace): { label: string; value: string }[] {
         </dl>
 
         <el-divider />
-        <ImportedCardContent :content="detail.onSale" />
-
-        <el-divider />
         <h4 class="section-title">
-          最近评价
+          人设
         </h4>
-        <div
-          v-for="r in detail.reviews"
-          :key="r.id"
-          class="review"
-        >
-          <div class="review__head">
-            <router-link
-              :to="{ name: 'tavern-user', params: { uid: String(r.account.uid) } }"
-              class="link"
-            >
-              {{ accountName(r.account) }}
-            </router-link>
-            <el-rate
-              :model-value="r.rating"
-              disabled
-              size="small"
-            />
-            <span class="sub">{{ formatDateTime(r.updatedAt) }}</span>
-          </div>
-          <p
-            v-if="r.content"
-            class="review__text"
-          >
-            {{ r.content }}
-          </p>
-        </div>
-        <span
-          v-if="!detail.reviews.length"
-          class="cell-muted"
-        >还没有评价</span>
+        <PromptEntryList
+          :entries="persona"
+          empty="没写人设"
+        />
+
+        <h4 class="section-title section-title--gap">
+          世界书
+        </h4>
+        <PromptEntryList
+          :entries="worldBook"
+          empty="这张卡不带世界书"
+        />
       </template>
     </div>
 
@@ -317,23 +300,6 @@ function faceLines(face: CardFace): { label: string; value: string }[] {
   color: var(--el-text-color-regular);
 }
 
-.review {
-  padding: 8px 0;
-  border-bottom: 1px solid var(--el-border-color-extra-light);
-}
-
-.review__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.review__text {
-  margin: 4px 0 0;
-  color: var(--el-text-color-regular);
-  white-space: pre-wrap;
-}
-
 .sub {
   margin-left: 6px;
   font-size: 12px;
@@ -344,6 +310,10 @@ function faceLines(face: CardFace): { label: string; value: string }[] {
 .link {
   color: var(--el-color-primary);
   text-decoration: none;
+}
+
+.section-title--gap {
+  margin-top: 16px;
 }
 
 .cell-muted {

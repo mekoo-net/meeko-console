@@ -19,6 +19,7 @@ import { formatDateTime } from '@/shared/lib/date';
 
 import AccountCell from '../../components/content/AccountCell.vue';
 import MarketCardDrawer from '../../components/market/MarketCardDrawer.vue';
+import MarketCardRecordsDialog, { type MarketCardRecords } from '../../components/market/MarketCardRecordsDialog.vue';
 import { usePagedList } from '../../composables/usePagedList';
 import { initialOf } from '../../model/contentFormat';
 import {
@@ -59,6 +60,16 @@ const detailId = ref<string | null>(null);
 function openDetail(cardId: string): void {
   detailId.value = cardId;
   detailOpen.value = true;
+}
+
+const recordsOpen = ref(false);
+const recordsOf = ref<{ cardId: string; name: string } | null>(null);
+const records = ref<MarketCardRecords>('reviews');
+
+function openRecords(row: MarketCardRow, kind: MarketCardRecords): void {
+  recordsOf.value = { cardId: row.cardId, name: row.face.name };
+  records.value = kind;
+  recordsOpen.value = true;
 }
 
 onMounted(() => {
@@ -261,7 +272,7 @@ onMounted(() => {
 
       <el-table-column
         label="操作"
-        width="64"
+        width="140"
         fixed="right"
         align="right"
       >
@@ -273,6 +284,22 @@ onMounted(() => {
             @click="openDetail(row.cardId)"
           >
             详情
+          </el-button>
+          <el-button
+            link
+            type="primary"
+            size="small"
+            @click="openRecords(row, 'reviews')"
+          >
+            评价
+          </el-button>
+          <el-button
+            link
+            type="primary"
+            size="small"
+            @click="openRecords(row, 'orders')"
+          >
+            订单
           </el-button>
         </template>
       </el-table-column>
@@ -301,6 +328,12 @@ onMounted(() => {
     v-model:visible="detailOpen"
     :card-id="detailId"
     @changed="load"
+  />
+
+  <MarketCardRecordsDialog
+    v-model:visible="recordsOpen"
+    :card="recordsOf"
+    :records="records"
   />
 </template>
 

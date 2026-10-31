@@ -647,11 +647,64 @@ export const marketCardContentSchema = z.object({
 });
 export type MarketCardContent = z.infer<typeof marketCardContentSchema>;
 
+/** 一条预设或额外描述：玩家在客户端里看到的那一条，名字和正文。 */
+export const promptEntrySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  content: z.string(),
+});
+export type PromptEntry = z.infer<typeof promptEntrySchema>;
+
+export const worldBookTriggerValues = ['constant', 'keyword', 'semantic'] as const;
+export type WorldBookTrigger = (typeof worldBookTriggerValues)[number];
+
+export const WorldBookTriggerLabel: Readonly<Record<WorldBookTrigger, string>> = {
+  constant: '常驻',
+  keyword: '关键词',
+  semantic: '语义',
+};
+
+/** 世界书条目的作用域，同客户端：全局的，或指定了这个角色的。 */
+export const WorldBookScopeLabel: Readonly<Record<'global' | 'persona', string>> = {
+  global: '全局',
+  persona: '指定角色',
+};
+
+/**
+ * 角色身上的世界书条目，读进来收成一个形状：客户端的条目（name / keywords / triggerMode / scope），
+ * 和酒馆卡导进来的条目（comment / keys / constant）都认。触发方式没写的，有关键词按关键词、没有算常驻，同客户端。
+ */
+export const worldBookEntrySchema = z
+  .looseObject({
+    name: z.string().default(''),
+    comment: z.string().default(''),
+    keywords: z.array(z.string()).default([]),
+    keys: z.array(z.string()).default([]),
+    content: z.string().default(''),
+    enabled: z.boolean().default(true),
+    constant: z.boolean().default(false),
+    triggerMode: z.enum(worldBookTriggerValues).optional(),
+    scope: z.enum(['global', 'persona']).optional(),
+  })
+  .transform((e) => {
+    const keywords = e.keywords.length ? e.keywords : e.keys;
+    return {
+      title: e.name || e.comment,
+      keywords,
+      content: e.content,
+      enabled: e.enabled,
+      trigger: e.triggerMode ?? (e.constant || keywords.length === 0 ? 'constant' : 'keyword'),
+      scope: e.scope ?? null,
+    };
+  });
+export type WorldBookEntry = z.infer<typeof worldBookEntrySchema>;
+
+/** 导入的卡，和客户端里一样分条：人设是按顺序绑的预设，另可挂额外描述；世界书是作用到这个角色的条目。 */
 export const importedCardContentSchema = z.object({
   kind: z.literal('imported'),
-  preset: presetSchema,
-  /** 角色自带的旧格式世界书条目。 */
-  worldBook: z.array(jsonValueSchema),
+  presets: z.array(promptEntrySchema),
+  extraDescriptions: z.array(promptEntrySchema),
+  worldBook: z.array(worldBookEntrySchema),
 });
 export type ImportedCardContent = z.infer<typeof importedCardContentSchema>;
 

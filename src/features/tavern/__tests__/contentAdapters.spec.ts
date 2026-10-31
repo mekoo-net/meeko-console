@@ -253,7 +253,15 @@ describe('tavern content adapters', () => {
       .mockResolvedValueOnce(
         ok({
           persona: { ...row, source: 'imported' },
-          content: { kind: 'imported', preset: { systemPrompt: '灯塔' }, worldBook: [] },
+          content: {
+            kind: 'imported',
+            presets: [{ id: 'p1', name: '灯塔守夜人', content: '你是陆川。' }],
+            extraDescriptions: [],
+            worldBook: [
+              { name: '海燕号', keywords: ['沉船'], content: '2006 年沉没。', triggerMode: 'keyword', scope: 'persona' },
+              { comment: '灯塔', keys: [], content: '东岬角。', constant: true },
+            ],
+          },
         }),
       );
 
@@ -267,7 +275,13 @@ describe('tavern content adapters', () => {
     });
     const imported = await adapter.persona(10000008);
     expect(imported.success && imported.data.persona.source).toBe('imported');
-    expect(imported.success && imported.data.content.kind === 'imported' && imported.data.content.preset.systemPrompt).toBe('灯塔');
+    const content = imported.success && imported.data.content.kind === 'imported' ? imported.data.content : null;
+    expect(content?.presets[0]?.name).toBe('灯塔守夜人');
+    // 客户端的条目和酒馆卡导进来的条目收成同一个形状。
+    expect(content?.worldBook).toEqual([
+      { title: '海燕号', keywords: ['沉船'], content: '2006 年沉没。', enabled: true, trigger: 'keyword', scope: 'persona' },
+      { title: '灯塔', keywords: [], content: '东岬角。', enabled: true, trigger: 'constant', scope: null },
+    ]);
   });
 
   it('turns a message with an unknown content kind into a validation failure', async () => {

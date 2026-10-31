@@ -12,6 +12,7 @@ import type {
   MarketCardState,
   MarketOrderQuery,
   MarketOrderRow,
+  MarketReview,
   MarketSettings,
   MarketSettingsView,
 } from '../../model/market.types';
@@ -172,17 +173,21 @@ export class TavernMarketMock implements TavernMarketPort {
     await delay();
     const c = cards.find((x) => x.id === cardId);
     if (!c) return notFound();
-    return ok({
-      card: row(c),
-      onSale: c.onSale,
-      reviews: c.ratings.map((rating, i) => ({
-        id: i + 1,
-        account: i % 2 ? PLAYER_0123 : LINXIA,
-        rating,
-        content: rating >= 4 ? '人设很稳，推理戏好看。' : null,
-        updatedAt: NOW - (i + 1) * DAY,
-      })),
-    });
+    return ok({ card: row(c), onSale: c.onSale });
+  }
+
+  async reviews(cardId: string, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketReview>>> {
+    await delay();
+    const c = cards.find((x) => x.id === cardId);
+    if (!c) return notFound();
+    const rows: MarketReview[] = c.ratings.map((rating, i) => ({
+      id: i + 1,
+      account: i % 2 ? PLAYER_0123 : LINXIA,
+      rating,
+      content: rating >= 4 ? '人设很稳，推理戏好看。' : null,
+      updatedAt: NOW - (i + 1) * DAY,
+    }));
+    return ok(pageOf(rows, page.p, page.pageSize));
   }
 
   async takeDown(cardId: string, reason: string): Promise<AppResult<MarketCardRow>> {

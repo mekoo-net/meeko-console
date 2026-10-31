@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { epochMillisNullableSchema, epochMillisSchema } from '@/shared/lib/epoch';
 
-import { accountRefSchema, jsonValueSchema, presetSchema } from './content.types';
+import { accountRefSchema, presetSchema, worldBookEntrySchema } from './content.types';
 import type { StatusTone } from './metering.types';
 
 /**
@@ -81,7 +81,7 @@ export type MarketCardRow = z.infer<typeof marketCardRowSchema>;
 export const cardVersionContentSchema = z.object({
   face: cardFaceSchema,
   preset: presetSchema,
-  worldBook: z.array(jsonValueSchema),
+  worldBook: z.array(worldBookEntrySchema),
   capabilities: cardCapabilitiesSchema,
 });
 export type CardVersionContent = z.infer<typeof cardVersionContentSchema>;
@@ -98,7 +98,6 @@ export type MarketReview = z.infer<typeof marketReviewSchema>;
 export const marketCardDetailSchema = z.object({
   card: marketCardRowSchema,
   onSale: cardVersionContentSchema,
-  reviews: z.array(marketReviewSchema),
 });
 export type MarketCardDetail = z.infer<typeof marketCardDetailSchema>;
 

@@ -2,7 +2,8 @@
 /**
  * 市场 › 订单：一单就是一份权益。买家付人民币进平台钱包，卖家的分成按成交时的设置折成积分（行上有快照）。
  * 创作者第一次发布时自己得的那一单（0 元）也在这里。
- * 也是用户视角「购买的」：传了 `buyerUid` 就只看这个人买的，买家筛选和买家列都不要。
+ * 也是用户视角「购买的」：传了 `buyerUid` 就只看这个人买的，买家筛选和买家列都不要；
+ * 也是商品行「订单」弹窗里的表：传了 `cardId` 就只看这张卡的，卡号筛选和卡列都不要。
  */
 import { onMounted, ref } from 'vue';
 
@@ -29,7 +30,10 @@ import { formatPercent, formatPrice } from '../../model/marketFormat';
 import { formatCredits, parseAccountUid, shortId } from '../../model/meteringFormat';
 import { getTavernMarketPort } from '../../services';
 
-const props = defineProps<{ buyerUid?: number }>();
+const props = defineProps<{ buyerUid?: number; cardId?: string }>();
+
+/** 嵌在用户视角或弹窗里：撑满父容器，不要页头。 */
+const embedded = props.buyerUid != null || props.cardId != null;
 
 const port = getTavernMarketPort();
 
@@ -44,7 +48,7 @@ const { items, total, page, pageSize, loading, load, reload } = usePagedList<Mar
         {
           buyerUid: buyer.value,
           sellerUid: seller.value,
-          cardId: filter.value.cardId.trim() || undefined,
+          cardId: props.cardId ?? (filter.value.cardId.trim() || undefined),
           source: filter.value.source || undefined,
         },
         p,
@@ -56,9 +60,9 @@ onMounted(() => void load());
 </script>
 
 <template>
-  <FillListPageLayout :embedded="buyerUid != null">
+  <FillListPageLayout :embedded="embedded">
     <template
-      v-if="buyerUid == null"
+      v-if="!embedded"
       #header
     >
       <PageHeader title="订单" />
@@ -89,7 +93,10 @@ onMounted(() => void load());
             style="width: 160px"
           />
         </el-form-item>
-        <el-form-item label="卡号">
+        <el-form-item
+          v-if="cardId == null"
+          label="卡号"
+        >
           <el-input
             v-model="filter.cardId"
             placeholder="精确匹配"
@@ -149,6 +156,7 @@ onMounted(() => void load());
       </el-table-column>
 
       <el-table-column
+        v-if="cardId == null"
         label="卡"
         min-width="150"
       >
