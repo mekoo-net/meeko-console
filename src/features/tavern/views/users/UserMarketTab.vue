@@ -1,21 +1,21 @@
 <script setup lang="ts">
 /**
- * 用户视角 › 市场：这个人买过的（订单）、发布过的（角色卡、世界书）、卖出赚的钱（收益）和提现，
- * 用的就是市场那几张表，按这个人筛好。
+ * 用户视角 › 市场，按这个人自己的说法分：仓库（手里有的商品，买来的和自己上架的）、上架（挂在市场上卖的）、
+ * 收益（卖出赚的钱）、提现。用的就是市场那几张表，按这个人筛好。
  */
 import { ref } from 'vue';
 
 import MarketItemsView from '../market/MarketItemsView.vue';
-import MarketOrdersView from '../market/MarketOrdersView.vue';
 import MarketWithdrawalsView from '../market/MarketWithdrawalsView.vue';
 import UserEarningsPanel from './UserEarningsPanel.vue';
+import UserInventoryPanel from './UserInventoryPanel.vue';
 
 defineProps<{ accountUid: number }>();
 
-const part = ref<'bought' | 'published' | 'earnings' | 'withdrawals'>('bought');
+const part = ref<'inventory' | 'listed' | 'earnings' | 'withdrawals'>('inventory');
 const parts = [
-  { label: '购买的', value: 'bought' },
-  { label: '发布的', value: 'published' },
+  { label: '仓库', value: 'inventory' },
+  { label: '上架', value: 'listed' },
   { label: '收益', value: 'earnings' },
   { label: '提现', value: 'withdrawals' },
 ];
@@ -28,12 +28,12 @@ const parts = [
       :options="parts"
       class="user-market__switch"
     />
-    <MarketOrdersView
-      v-if="part === 'bought'"
-      :buyer-uid="accountUid"
+    <UserInventoryPanel
+      v-if="part === 'inventory'"
+      :account-uid="accountUid"
     />
     <MarketItemsView
-      v-else-if="part === 'published'"
+      v-else-if="part === 'listed'"
       :creator-uid="accountUid"
     />
     <UserEarningsPanel

@@ -18,22 +18,22 @@ interface MockUser {
   market: UserMarketStats;
 }
 
-/** 与内容 mock 对得上：林夏两个世界、三张卡，0123 一张卡（另一张卡和一个世界删了），麻子刚进来什么都没有。 */
+/** 与内容 mock、市场 mock 对得上：林夏两个世界、三张卡，0123 一张卡（另一张卡和一个世界删了），麻子刚进来；仓库、上架数照市场订单数。 */
 const users: MockUser[] = [
   {
     user: { account: LINXIA, credits: { available: 1834.5, held: 12.4 }, joinedAt: NOW - 45 * DAY, lastSeenAt: NOW - 8 * MINUTE },
     content: { worlds: 2, cards: 3 },
-    market: { purchased: 2, published: 0 },
+    market: { owned: 4, listed: 1 },
   },
   {
     user: { account: PLAYER_0123, credits: { available: 96.2, held: 0 }, joinedAt: NOW - 31 * DAY, lastSeenAt: NOW - 2 * DAY },
     content: { worlds: 0, cards: 1 },
-    market: { purchased: 1, published: 1 },
+    market: { owned: 2, listed: 1 },
   },
   {
     user: { account: ASAKO, credits: { available: 0, held: 0 }, joinedAt: NOW - 3 * 60 * MINUTE, lastSeenAt: NOW - 3 * 60 * MINUTE },
     content: { worlds: 0, cards: 0 },
-    market: { purchased: 0, published: 2 },
+    market: { owned: 3, listed: 3 },
   },
 ];
 

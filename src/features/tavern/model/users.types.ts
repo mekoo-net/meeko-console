@@ -24,10 +24,10 @@ export const userContentStatsSchema = z.object({
 });
 export type UserContentStats = z.infer<typeof userContentStatsSchema>;
 
-/** 在市场里买过几张（不算创作者自己那一单）、发布过几张。 */
+/** 仓库里几件（买来的和自己上架的）、上架过几件（下架的也算）。 */
 export const userMarketStatsSchema = z.object({
-  purchased: z.number().int().nonnegative(),
-  published: z.number().int().nonnegative(),
+  owned: z.number().int().nonnegative(),
+  listed: z.number().int().nonnegative(),
 });
 export type UserMarketStats = z.infer<typeof userMarketStatsSchema>;
 

@@ -4,6 +4,7 @@ import type { AppResult } from '@/shared/api/httpTypes';
 
 import type { PageQuery } from '../../model/content.types';
 import {
+  inventoryRowSchema,
   marketItemDetailSchema,
   marketItemRowSchema,
   marketOrderDetailSchema,
@@ -14,6 +15,8 @@ import {
   sellerEarningsSchema,
   sellerTxnSchema,
   withdrawalRowSchema,
+  type InventoryQuery,
+  type InventoryRow,
   type MarketItemDetail,
   type MarketItemQuery,
   type MarketItemRow,
@@ -37,6 +40,7 @@ const BASE = '/tavern/api/admin/market';
 const itemPageSchema = pageSchema(marketItemRowSchema);
 const orderPageSchema = pageSchema(marketOrderRowSchema);
 const reviewPageSchema = pageSchema(marketReviewSchema);
+const inventoryPageSchema = pageSchema(inventoryRowSchema);
 const withdrawalPageSchema = pageSchema(withdrawalRowSchema);
 const sellerTxnPageSchema = pageSchema(sellerTxnSchema);
 
@@ -70,6 +74,11 @@ export class TavernMarketHttpAdapter implements TavernMarketPort {
 
   async orders(query: MarketOrderQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketOrderRow>>> {
     return parseTavern(orderPageSchema, await requestTavern<unknown>(`${BASE}/orders`, { query: { ...page, ...query } }), '市场订单');
+  }
+
+  async inventory(accountUid: number, query: InventoryQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<InventoryRow>>> {
+    const res = await requestTavern<unknown>(`${BASE}/users/${accountUid}/inventory`, { query: { ...page, ...query } });
+    return parseTavern(inventoryPageSchema, res, '仓库');
   }
 
   async order(orderId: string): Promise<AppResult<MarketOrderDetail>> {

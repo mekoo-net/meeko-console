@@ -297,6 +297,33 @@ export type MarketOrderQuery = {
   toUtc?: number;
 };
 
+// ---------- 仓库（用户视角） ----------
+
+/** 仓库里的一件：商品、现在在不在售、创作者、怎么得的（买的 / 自己上架的）、凭的哪一单、什么时候得的。 */
+export const inventoryRowSchema = z.object({
+  item: z.object({ id: z.string().min(1), kind: marketItemKindSchema, name: z.string() }),
+  /** 角色卡是头像，世界书是封面。 */
+  image: z.string().nullable(),
+  itemState: marketItemStateSchema,
+  creator: accountRefSchema,
+  source: marketOrderSourceSchema,
+  orderId: z.string().min(1),
+  serialNo: z.string().min(1),
+  acquiredAt: epochMillisSchema,
+});
+export type InventoryRow = z.infer<typeof inventoryRowSchema>;
+
+export type InventoryQuery = {
+  kind?: MarketItemKind;
+  source?: MarketOrderSource;
+};
+
+/** 仓库里说「怎么得的」：自己上架时得的那一份叫「自己的」。 */
+export const InventorySourceLabel: Readonly<Record<MarketOrderSource, string>> = {
+  purchase: '购买',
+  creator: '自己的',
+};
+
 // ---------- 分成设置 ----------
 
 export const marketSettingsSchema = z.object({

@@ -5,6 +5,8 @@ import { delay } from '@/shared/lib/delay';
 import type { AccountRef, PageQuery } from '../../model/content.types';
 import {
   marketItemContentSchema,
+  type InventoryQuery,
+  type InventoryRow,
   type ItemFace,
   type MarketItemContent,
   type MarketItemDetail,
@@ -539,6 +541,30 @@ export class TavernMarketMock implements TavernMarketPort {
       .filter((o) => query.stage == null || o.stage === query.stage)
       .filter((o) => query.fromUtc == null || o.createdAt >= query.fromUtc)
       .filter((o) => query.toUtc == null || o.createdAt <= query.toUtc)
+      .sort((a, b) => b.serialNo.localeCompare(a.serialNo));
+    return ok(pageOf(rows, page.p, page.pageSize));
+  }
+
+  async inventory(accountUid: number, query: InventoryQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<InventoryRow>>> {
+    await delay();
+    const rows: InventoryRow[] = orders
+      .filter((o) => o.buyer.uid === accountUid && o.status === 'active')
+      .map((o) => {
+        const item = items.find((i) => i.id === o.itemId)!;
+        const listing = listingOf(item.onSale);
+        return {
+          item: { id: item.id, kind: item.onSale.kind, name: item.onSale.face.name },
+          image: listing.kind === 'character_card' ? listing.character.avatar : listing.face.cover,
+          itemState: item.state,
+          creator: item.creator,
+          source: o.source,
+          orderId: o.id,
+          serialNo: serialNos.get(o.id)!,
+          acquiredAt: o.at,
+        };
+      })
+      .filter((r) => query.kind == null || r.item.kind === query.kind)
+      .filter((r) => query.source == null || r.source === query.source)
       .sort((a, b) => b.serialNo.localeCompare(a.serialNo));
     return ok(pageOf(rows, page.p, page.pageSize));
   }

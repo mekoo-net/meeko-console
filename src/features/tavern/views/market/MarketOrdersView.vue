@@ -4,9 +4,8 @@
  * 列表只给订单状态（待付款 / 已扣款 / 待结算 / 已完成 / 失败），钱怎么分、账单号、结算在行首「详情」的抽屉里，同平台账单流水。
  * 列序照平台「账单流水」：订单号 → 买家 → 商品 → 来源 → 状态 → 价格 → 卖家 → 时间。订单号按天按序发，新的在前。
  * 创作者第一次发布时自己得的那一单（0 元）也在这里。
- * 也是用户视角「购买的」：传了 `buyerUid` 就只看这个人买的，买家筛选和买家列都不要。
  */
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { Search, View } from '@element-plus/icons-vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
@@ -38,8 +37,6 @@ import { formatPrice, itemPage } from '../../model/marketFormat';
 import { parseAccountUid } from '../../model/meteringFormat';
 import { getTavernMarketPort } from '../../services';
 
-const props = defineProps<{ buyerUid?: number }>();
-
 const port = getTavernMarketPort();
 
 /** 同调用日志页：账户（这里是买家）一行、业务条件一行、时间一行。下单时间默认不限。 */
@@ -57,7 +54,7 @@ const filter = ref(blank());
 
 const { items, total, page, pageSize, loading, load, reload } = usePagedList<MarketOrderRow>((p) => {
   const f = filter.value;
-  const buyer = props.buyerUid == null ? parseAccountUid(f.buyerUid) : { ok: true as const, value: props.buyerUid };
+  const buyer = parseAccountUid(f.buyerUid);
   const seller = parseAccountUid(f.sellerUid);
   return buyer.ok && seller.ok
     ? port.orders(
@@ -76,13 +73,6 @@ const { items, total, page, pageSize, loading, load, reload } = usePagedList<Mar
     : Promise.resolve(fail({ code: 'validation', message: 'UID 只能是数字' }));
 }, filter);
 
-/** 用户视角里买家是定的，筛选栏不出账户那一行。 */
-const buyerFilter = computed(() =>
-  props.buyerUid == null
-    ? { accountUid: filter.value.buyerUid, 'onUpdate:accountUid': (v?: string) => (filter.value.buyerUid = v ?? '') }
-    : {},
-);
-
 const detailOpen = ref(false);
 const detailId = ref<string | null>(null);
 
@@ -95,17 +85,14 @@ onMounted(() => void load());
 </script>
 
 <template>
-  <FillListPageLayout :embedded="buyerUid != null">
-    <template
-      v-if="buyerUid == null"
-      #header
-    >
+  <FillListPageLayout>
+    <template #header>
       <PageHeader title="订单" />
     </template>
 
     <template #filters>
       <FilterBar
-        v-bind="buyerFilter"
+        v-model:account-uid="filter.buyerUid"
         v-model:date-range="filter.dateRange"
         account-uid-label="买家 UID"
         date-range-label="下单时间"
@@ -226,7 +213,6 @@ onMounted(() => void load());
       </el-table-column>
 
       <el-table-column
-        v-if="buyerUid == null"
         label="买家"
         min-width="150"
       >

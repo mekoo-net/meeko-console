@@ -76,8 +76,8 @@ const stats = computed(() => {
     { key: 'held', label: '预扣中', value: formatCredits(d.user.credits.held) },
     { key: 'worlds', label: '世界', value: count(d.content?.worlds) },
     { key: 'cards', label: '角色卡', value: count(d.content?.cards) },
-    { key: 'purchased', label: '已购', value: String(d.market.purchased) },
-    { key: 'published', label: '发布', value: String(d.market.published) },
+    { key: 'owned', label: '仓库', value: String(d.market.owned) },
+    { key: 'listed', label: '上架', value: String(d.market.listed) },
   ];
 });
 
