@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
-import { aiUsageStatusSchema, billReverseCodeSchema, perTokenUsageSchema, type BillReverseCode } from '@yomi/common';
+import {
+  aiUsageStatusSchema,
+  billReverseCodeSchema,
+  perTokenUsageSchema,
+  rateBodySchema,
+  type BillReverseCode,
+} from '@yomi/common';
 import { epochMillisSchema } from '@/shared/lib/epoch';
 
 /**
@@ -47,16 +53,18 @@ export const TurnStatusTone: Readonly<Record<TurnStatus, StatusTone>> = {
   reversed: 'danger',
 };
 
-// ---------- 报价 ----------
+// ---------- 积分报价 ----------
 
-/** 价目对一条用量的报价：金额 = 计价用量 × 倍率 × 基线，四个数都由服务端给。 */
-export const usageQuoteSchema = z.object({
-  multiplier: z.number(),
-  baseline: z.number(),
-  billableQuantity: z.number(),
-  amount: z.number(),
+/**
+ * 积分价目对一条用量的报价。`price` 与 Yomi 价目同形（`{ billingType, rate }`），单位是积分。
+ * `ratedBy` 是命中的价目行「渠道/模型」，通配写 `*`；渠道和模型都是 `*` 即默认价，`-` 是连默认价都报不了（记 0）。
+ */
+export const creditLineSchema = z.object({
+  ratedBy: z.string(),
+  price: rateBodySchema,
+  credits: z.number(),
 });
-export type UsageQuote = z.infer<typeof usageQuoteSchema>;
+export type CreditLine = z.infer<typeof creditLineSchema>;
 
 // ---------- 调用 ----------
 
@@ -103,9 +111,14 @@ export const turnReversalSchema = z.object({
 });
 export type TurnReversal = z.infer<typeof turnReversalSchema>;
 
+/** 扣的是积分，还是改积分之前从平台钱包扣的钱。 */
+export const turnCurrencySchema = z.enum(['credits', 'cny']);
+export type TurnCurrency = z.infer<typeof turnCurrencySchema>;
+
 const callBillBase = {
   usageLogId: z.number().int(),
-  /** 整回合的实扣金额；作废 / 失败为 0，驳回的是退回的数。 */
+  currency: turnCurrencySchema,
+  /** 整回合实扣（积分或元，看 `currency`）；作废 / 失败为 0，驳回的是退回的数。 */
   amount: z.number(),
   billSerialNo: z.string().nullable(),
   /** 服务端判定能不能驳回：给不给勾、给不给按钮都看它。 */
@@ -132,15 +145,15 @@ export const callLogSchema = z.object({
   status: callStatusSchema,
   content: callContentSchema,
   usage: callUsageSchema,
-  /** 按现行价目折算，不论是否收费。 */
-  cost: usageQuoteSchema,
+  /** 按现行积分价目值多少积分，不论是否收费；平台承担的看这里知道烧了多少。 */
+  cost: creditLineSchema,
   /** null = 不向用户收费，由平台承担。 */
   bill: callBillSchema.nullable(),
   createdAt: epochMillisSchema,
 });
 export type CallLog = z.infer<typeof callLogSchema>;
 
-// ---------- 计价用量（计费配置页的报价预览） ----------
+// ---------- 计价用量（没有调用明细的回合） ----------
 
 export const countedUnitSchema = z.enum(['image', 'audio_second', 'video_second']);
 export type CountedUnit = z.infer<typeof countedUnitSchema>;
@@ -152,19 +165,18 @@ export const CountedUnitLabel: Readonly<Record<CountedUnit, string>> = {
 };
 
 const meteredUsageBase = {
-  /** 裸模型名（不带渠道前缀），倍率表按它查。 */
+  /** 裸模型名（不带渠道前缀）。 */
   modelName: z.string(),
   vendorKey: z.string().nullable(),
   kind: z.string(),
 };
 
-/** 一条计价用量：按 token 计（输入 / 输出）或按件计（张 / 秒），`unit` 判别形状。 */
+/** 一条计价用量：按 token 计（各桶同调用日志的 `usage`）或按件计（张 / 秒），`unit` 判别形状。 */
 export const meteredUsageSchema = z.discriminatedUnion('unit', [
   z.object({
     ...meteredUsageBase,
     unit: z.literal('token'),
-    promptTokens: z.number().int().nonnegative(),
-    completionTokens: z.number().int().nonnegative(),
+    tokens: callUsageSchema,
   }),
   z.object({
     ...meteredUsageBase,

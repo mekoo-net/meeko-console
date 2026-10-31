@@ -4,7 +4,7 @@
 import { toLocalDateTimeValue } from '@/shared/lib/date';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 
-import { CountedUnitLabel, type MeteredUsage } from './metering.types';
+import { CountedUnitLabel, type MeteredUsage, type TurnCurrency } from './metering.types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -12,8 +12,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const MAX_RANGE_DAYS = 31;
 
 export function last24h(): [string, string] {
+  return lastDays(1);
+}
+
+export function lastDays(days: number): [string, string] {
   const now = new Date();
-  return [toLocalDateTimeValue(new Date(now.getTime() - DAY_MS)), toLocalDateTimeValue(now)];
+  return [toLocalDateTimeValue(new Date(now.getTime() - days * DAY_MS)), toLocalDateTimeValue(now)];
 }
 
 export type RangeCheck = { ok: true; fromUtc: number; toUtc: number } | { ok: false; message: string };
@@ -57,6 +61,23 @@ export function formatCny(value: number, maxDigits = 6): string {
   return fmt.format(value);
 }
 
+const creditFmt = new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
+/** 积分两位小数、去尾零：12.37 积分、1,000 积分。 */
+export function formatCredits(value: number): string {
+  return `${creditFmt.format(value)} 积分`;
+}
+
+/** 回合的扣费按币种读：积分回合写积分，改积分之前从钱包扣的写元。 */
+export function formatCharge(currency: TurnCurrency, amount: number): string {
+  return currency === 'credits' ? formatCredits(amount) : formatCny(amount);
+}
+
+export function roundTo(value: number, digits: number): number {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
 /** 紧凑 token 数：980 / 12.3K / 1.2M。 */
 export function formatTokens(n: number): string {
   if (n < 1000) return String(n);
@@ -84,7 +105,7 @@ export function shortId(id: string | null): string {
 export function formatUsage(usage: MeteredUsage): string {
   switch (usage.unit) {
     case 'token':
-      return `入 ${usage.promptTokens.toLocaleString()} · 出 ${usage.completionTokens.toLocaleString()}`;
+      return `入 ${usage.tokens.input.tokens.toLocaleString()} · 出 ${usage.tokens.output.tokens.toLocaleString()}`;
     default:
       return `${usage.quantity.toLocaleString()} ${CountedUnitLabel[usage.unit]}`;
   }

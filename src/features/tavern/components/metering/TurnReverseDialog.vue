@@ -15,9 +15,8 @@ import {
   type BillReverseCode,
 } from '@yomi/common';
 
-import type { LogRow, TurnReversalRejected, TurnReversed } from '../../model/metering.types';
-import { formatCny } from '../../model/meteringFormat';
-import { roundTo } from '../../model/pricingPreview';
+import type { LogRow, TurnCurrency, TurnReversalRejected, TurnReversed } from '../../model/metering.types';
+import { formatCharge, roundTo } from '../../model/meteringFormat';
 import { getTavernBillingPort } from '../../services';
 
 const visible = defineModel<boolean>('visible', { required: true });
@@ -32,6 +31,7 @@ interface FormState {
 interface Turn {
   id: number;
   accountUid: number;
+  currency: TurnCurrency;
   amount: number;
   billSerialNo: string | null;
 }
@@ -50,16 +50,25 @@ const turns = computed<Turn[]>(() => {
   const byId = new Map<number, Turn>();
   for (const { accountUid, bill } of props.rows) {
     if (!bill?.reversible) continue;
-    byId.set(bill.usageLogId, { id: bill.usageLogId, accountUid, amount: bill.amount, billSerialNo: bill.billSerialNo });
+    byId.set(bill.usageLogId, {
+      id: bill.usageLogId,
+      accountUid,
+      currency: bill.currency,
+      amount: bill.amount,
+      billSerialNo: bill.billSerialNo,
+    });
   }
   return [...byId.values()];
 });
 const single = computed(() => (turns.value.length === 1 ? turns.value[0]! : null));
 const accounts = computed(() => new Set(turns.value.map((t) => t.accountUid)).size);
-const totalAmount = computed(() => sumAmount(turns.value));
+const totalText = computed(() => refundText(turns.value));
 
-function sumAmount(list: readonly Turn[]): number {
-  return roundTo(list.reduce((s, t) => s + t.amount, 0), 6);
+/** 积分回合退积分、改积分之前的回合退钱，一批里可能两种都有，各合各的。 */
+function refundText(list: readonly Turn[]): string {
+  const sums = new Map<TurnCurrency, number>();
+  for (const t of list) sums.set(t.currency, roundTo((sums.get(t.currency) ?? 0) + t.amount, 6));
+  return [...sums].map(([currency, amount]) => formatCharge(currency, amount)).join(' + ');
 }
 
 watch(visible, (open) => {
@@ -91,7 +100,7 @@ async function submit(): Promise<void> {
     if (done.length > 0) {
       const ids = new Set(done.map((o) => o.id));
       ElMessage.success(
-        `已驳回 ${done.length} 个回合，退回 ${formatCny(sumAmount(turns.value.filter((t) => ids.has(t.id))))}`,
+        `已驳回 ${done.length} 个回合，退回 ${refundText(turns.value.filter((t) => ids.has(t.id)))}`,
       );
       emit('reversed', done);
     }
@@ -135,7 +144,7 @@ async function submit(): Promise<void> {
       </template>
       <dt>退回</dt>
       <dd class="reverse__amount num">
-        {{ formatCny(totalAmount) }}
+        {{ totalText }}
       </dd>
     </dl>
 

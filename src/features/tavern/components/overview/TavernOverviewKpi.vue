@@ -2,9 +2,10 @@
 /** Tavern 概览 KPI —— 仅 usage_logs 可统计项（无 TTFT）。 */
 import { computed } from 'vue';
 
-import { BILLING_FRACTION_DIGITS, formatMoney } from '@/shared/lib/money';
 import type { LogStats } from '@yomi/common';
 import { shortNumber } from '@/features/yomi/components/overview/chartUtils';
+
+import { formatCredits } from '../../model/meteringFormat';
 
 const props = defineProps<{ stats: LogStats | null }>();
 
@@ -45,11 +46,11 @@ const successRateClass = computed(() => {
       <div class="kpi-card__sub">SLA 阈值 95% / 90%</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-card__label">总扣费</div>
+      <div class="kpi-card__label">扣积分</div>
       <div class="kpi-card__value">
-        {{ formatMoney(stats?.totalCost ?? 0, { fractionDigits: BILLING_FRACTION_DIGITS }) }}
+        {{ formatCredits(stats?.totalCost ?? 0) }}
       </div>
-      <div class="kpi-card__sub">范围内累计</div>
+      <div class="kpi-card__sub">范围内累计，改积分之前的不算</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-card__label">Tokens</div>

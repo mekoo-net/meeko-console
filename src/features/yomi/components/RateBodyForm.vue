@@ -37,8 +37,10 @@ interface Props {
   catalogBillingType?: BillingType | null;
   /** 模型定价自定义：同类计量可切换。价格表不要开。 */
   allowBillingType?: boolean;
-  /** 价格表美元；自定义有效价人民币。 */
+  /** 价格表美元；自定义有效价人民币；Tavern 积分价目传 `CREDIT`。 */
   currency?: string;
+  /** 指定可选的计量方式，覆盖按模型种类推的那一套（Tavern 积分价目不收上游积分计价）。 */
+  billingTypes?: readonly BillingType[];
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -47,9 +49,11 @@ const props = withDefaults(defineProps<Props>(), {
   catalogBillingType: null,
   allowBillingType: false,
   currency: PRICE_CURRENCY,
+  billingTypes: undefined,
 });
 
-const moneySymbol = computed(() => (props.currency.toUpperCase() === 'USD' ? '$' : '¥'));
+const CURRENCY_SYMBOL: Readonly<Record<string, string>> = { USD: '$', CREDIT: '积分' };
+const moneySymbol = computed(() => CURRENCY_SYMBOL[props.currency.toUpperCase()] ?? '¥');
 
 type Money = number | null;
 
@@ -139,7 +143,7 @@ const modelKind = computed(() =>
   }),
 );
 
-const allowedTypes = computed(() => allowedManualBillingTypes(modelKind.value));
+const allowedTypes = computed(() => props.billingTypes ?? allowedManualBillingTypes(modelKind.value));
 
 const isEmbedding = computed(() => modelKind.value === 'embedding');
 
@@ -257,7 +261,7 @@ defineExpose({ buildRateBody });
 
 <template>
   <div class="rate-body">
-    <div v-if="allowBillingType && allowedTypes.length > 1" class="type-row">
+    <div v-if="(allowBillingType || billingTypes) && allowedTypes.length > 1" class="type-row">
       <span class="type-row__label">计费方式</span>
       <el-select v-model="form.billingType" style="width: 100%">
         <el-option

@@ -10,6 +10,7 @@
  *  - 驳回：行尾、详情抽屉驳回单个回合；「批量驳回」进勾选模式，勾这一页里能驳回的一次驳掉
  */
 import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { ElMessage, type TableInstance } from 'element-plus';
 import { RefreshLeft, Search, View } from '@element-plus/icons-vue';
 
@@ -26,24 +27,29 @@ import TurnReverseDialog from '../components/metering/TurnReverseDialog.vue';
 import {
   TurnStatusLabel,
   callStatusValues,
+  type CallBill,
   type CallLog,
   type CallStatus,
   type LogRow,
   type PipelineRef,
   type TurnLog,
+  type TurnCurrency,
   type TurnReversed,
 } from '../model/metering.types';
 import {
   checkRange,
-  formatCny,
+  formatCharge,
+  formatCredits,
   formatDuration,
   formatTokens,
   formatUsage,
   last24h,
+  lastDays,
   parseAccountUid,
+  roundTo,
   shortId,
 } from '../model/meteringFormat';
-import { roundTo } from '../model/pricingPreview';
+
 import { getTavernCallLogPort, getTavernLlmSettingsPort } from '../services';
 
 const port = getTavernCallLogPort();
@@ -61,6 +67,14 @@ interface PageFilter {
   billed: BilledFilter;
 }
 
+const route = useRoute();
+
+/** 从积分流水等处带 `?traceId=` 跳来看一个回合：时间放宽到 30 天，那一回合多半不在最近 24 小时里。 */
+function filterFromRoute(): PageFilter {
+  const traceId = typeof route.query.traceId === 'string' ? route.query.traceId : '';
+  return traceId ? { ...defaultFilter(), traceId, dateRange: lastDays(30) } : defaultFilter();
+}
+
 const defaultFilter = (): PageFilter => ({
   accountUid: '',
   dateRange: last24h(),
@@ -71,7 +85,7 @@ const defaultFilter = (): PageFilter => ({
   billed: '',
 });
 
-const filter = ref<PageFilter>(defaultFilter());
+const filter = ref<PageFilter>(filterFromRoute());
 const records = ref<LogRow[]>([]);
 const total = ref(0);
 const page = ref(1);
@@ -169,11 +183,16 @@ const reverseOpen = ref(false);
 /** 打开对话框那一刻要驳的行；提交途中列表变了也不影响。 */
 const reverseRows = ref<LogRow[]>([]);
 
-/** 勾的是行，驳的是回合：同一回合的几行只算一次。 */
+/** 勾的是行，驳的是回合：同一回合的几行只算一次；积分回合与改积分之前的钱包回合各合各的。 */
 const selectedTurns = computed(() => {
-  const byTurn = new Map<number, number>();
-  for (const { bill } of selected.value) if (bill) byTurn.set(bill.usageLogId, bill.amount);
-  return { count: byTurn.size, amount: roundTo([...byTurn.values()].reduce((s, a) => s + a, 0), 6) };
+  const byTurn = new Map<number, CallBill>();
+  for (const { bill } of selected.value) if (bill) byTurn.set(bill.usageLogId, bill);
+  const sums = new Map<TurnCurrency, number>();
+  for (const b of byTurn.values()) sums.set(b.currency, roundTo((sums.get(b.currency) ?? 0) + b.amount, 6));
+  return {
+    count: byTurn.size,
+    refund: [...sums].map(([currency, amount]) => formatCharge(currency, amount)).join(' + '),
+  };
 });
 
 function toggleSelecting(): void {
@@ -296,8 +315,8 @@ function turnUsage({ usages }: TurnLog): { tags: UsageTag[][]; counted: string[]
   const counted: string[] = [];
   for (const u of usages) {
     if (u.unit === 'token') {
-      input += u.promptTokens;
-      output += u.completionTokens;
+      input += u.tokens.input.tokens;
+      output += u.tokens.output.tokens;
     } else {
       counted.push(formatUsage(u));
     }
@@ -412,7 +431,7 @@ onMounted(() => {
       >
         <span>
           已选 <strong class="num">{{ selectedTurns.count }}</strong> 个回合<template v-if="selectedTurns.count">，退回
-            <strong class="num">{{ formatCny(selectedTurns.amount) }}</strong></template>
+            <strong class="num">{{ selectedTurns.refund }}</strong></template>
         </span>
         <el-button
           type="danger"
@@ -660,7 +679,7 @@ onMounted(() => {
             <span
               class="cell-cost__amount"
               :class="{ 'cell-cost__amount--void': row.bill.status !== 'charged' }"
-            >{{ formatCny(row.bill.amount) }}</span>
+            >{{ formatCharge(row.bill.currency, row.bill.amount) }}</span>
             <el-tag
               v-if="row.bill.status !== 'charged'"
               size="small"
@@ -682,8 +701,8 @@ onMounted(() => {
           >
             <span
               class="cell-cost__amount cell-cost__amount--platform"
-              title="按现行价目折算"
-            >{{ formatCny(row.cost.amount) }}</span>
+              title="按现行积分价目，平台承担"
+            >{{ formatCredits(row.cost.credits) }}</span>
             <el-tag
               size="small"
               type="info"

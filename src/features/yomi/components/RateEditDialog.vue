@@ -20,12 +20,18 @@ interface Props {
   titleNoun?: string;
   billingType?: BillingType;
   capabilities?: ModelCapabilities | null;
+  /** 默认价格表美元；Tavern 积分价目传 `CREDIT`。 */
+  currency?: string;
+  /** 给了就能在这几种计量里切换，不给则计量跟着模型走。 */
+  billingTypes?: readonly BillingType[];
 }
 
 const props = withDefaults(defineProps<Props>(), {
   titleNoun: '定价',
   billingType: 'per_token',
   capabilities: null,
+  currency: MODEL_PRICE_CURRENCY,
+  billingTypes: undefined,
 });
 
 const emit = defineEmits<{
@@ -69,7 +75,8 @@ function onSubmit(): void {
       :billing-type="billingType"
       :catalog-billing-type="billingType"
       :capabilities="capabilities"
-      :currency="MODEL_PRICE_CURRENCY"
+      :currency="currency"
+      :billing-types="billingTypes"
     />
 
     <template #footer>

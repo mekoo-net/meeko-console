@@ -391,10 +391,22 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '调用日志', requiresAuth: true, roles: ['Admin'] },
           },
           {
-            path: 'pricing',
-            name: 'tavern-pricing',
-            component: () => import('@/features/tavern/views/TavernPricingView.vue'),
-            meta: { title: '计费配置', requiresAuth: true, roles: ['Admin'] },
+            path: 'credit-rates',
+            name: 'tavern-credit-rates',
+            component: () => import('@/features/tavern/views/TavernCreditRatesView.vue'),
+            meta: { title: '积分价目', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'credit-packs',
+            name: 'tavern-credit-packs',
+            component: () => import('@/features/tavern/views/TavernCreditPacksView.vue'),
+            meta: { title: '积分包', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'credit-accounts',
+            name: 'tavern-credit-accounts',
+            component: () => import('@/features/tavern/views/TavernCreditAccountsView.vue'),
+            meta: { title: '积分账户', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'backends',

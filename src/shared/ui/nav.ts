@@ -27,6 +27,7 @@ import {
   Ticket,
   Tickets,
   User,
+  Wallet,
 } from '@element-plus/icons-vue';
 
 import type { AppRole } from '@/stores/auth';
@@ -137,7 +138,9 @@ export const navViews: readonly NavView[] = [
       { type: 'leaf', index: '/tavern/overview', title: '概览', icon: DataAnalysis },
       { type: 'leaf', index: '/tavern/pipeline', title: '管线设置', icon: MagicStick },
       { type: 'leaf', index: '/tavern/logs', title: '调用日志', icon: DataLine },
-      { type: 'leaf', index: '/tavern/pricing', title: '计费配置', icon: PriceTag },
+      { type: 'leaf', index: '/tavern/credit-rates', title: '积分价目', icon: PriceTag },
+      { type: 'leaf', index: '/tavern/credit-packs', title: '积分包', icon: Money },
+      { type: 'leaf', index: '/tavern/credit-accounts', title: '积分账户', icon: Wallet },
     ],
   },
   {

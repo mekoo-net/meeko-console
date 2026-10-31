@@ -5,7 +5,7 @@ import * as http from '@/features/tavern/api/http';
 
 import { TavernBillingHttpAdapter } from '../api/adapters/tavernBillingAdapter';
 import { TavernCallLogHttpAdapter } from '../api/adapters/tavernCallLogAdapter';
-import { TavernPricingHttpAdapter } from '../api/adapters/tavernPricingAdapter';
+import { TavernCreditsHttpAdapter } from '../api/adapters/tavernCreditsAdapter';
 
 // 只替换传输，parseTavern 用真的：解析正是要测的东西。
 vi.mock('@/features/tavern/api/http', async (importOriginal) => ({
@@ -46,9 +46,14 @@ function wireCall(overrides: Record<string, unknown> = {}): Record<string, unkno
       input: { tokens: 13_862, cachedReadTokens: 0, cachedWriteTokens: 0, audioTokens: 0 },
       output: { tokens: 735, reasoningTokens: 0, audioTokens: 0, imageTokens: 0 },
     },
-    cost: { multiplier: 1, baseline: 0.000002, billableQuantity: 16_067, amount: 0.032134 },
+    cost: {
+      ratedBy: 'kiro/claude-opus-5.5',
+      price: { billingType: 'per_token', rate: { input: { perMToken: 300, cachedRead: 30 }, output: { perMToken: 1500 } } },
+      credits: 5.26386,
+    },
     bill: {
       usageLogId: 52300626,
+      currency: 'credits',
       status: 'charged',
       amount: 0.06145,
       billSerialNo: 'TVB20261031300626',
@@ -141,10 +146,16 @@ describe('tavern metering adapters', () => {
       sessionId: null,
       proactive: false,
       usages: [
-        { unit: 'token', modelName: 'claude-opus-4.6', vendorKey: 'kiro', kind: 'chat', promptTokens: 13_862, completionTokens: 735 },
+        {
+          unit: 'token',
+          modelName: 'claude-opus-4.6',
+          vendorKey: 'kiro',
+          kind: 'chat',
+          tokens: (wireCall().usage as object),
+        },
         { unit: 'image', modelName: 'nai-diffusion-5-full', vendorKey: 'neko', kind: 'generation', quantity: 1 },
       ],
-      bill: { ...(wireCall().bill as object), usageLogId: 418, calls: 1 },
+      bill: { ...(wireCall().bill as object), usageLogId: 418, currency: 'cny', billSerialNo: 'TVB20261030000418', calls: 1 },
       createdAt: 1761872338000,
     };
     request.mockResolvedValueOnce(ok({ items: [wireCall(), turn], total: 2, page: 1, pageSize: 20 }));
@@ -153,6 +164,7 @@ describe('tavern metering adapters', () => {
     const [, row] = r.data.items;
     expect(row?.kind === 'turn' && row.usages.map((u) => u.unit)).toEqual(['token', 'image']);
     expect(row?.kind === 'turn' && row.bill.usageLogId).toBe(418);
+    expect(row?.kind === 'turn' && row.bill.currency).toBe('cny');
   });
 
   it('rejects a reversed bill that lacks its reversal record', async () => {
@@ -187,27 +199,62 @@ describe('tavern metering adapters', () => {
     expect(await new TavernCallLogHttpAdapter().list({ fromUtc: 1, toUtc: 2, page: 1, pageSize: 20 })).toBe(failure);
   });
 
-  it('round-trips pricing as { rules, version }', async () => {
-    const rules = {
-      baselines: [
-        { unit: 'token', price: 0.000002 },
-        { unit: 'image', price: 0.05 },
-        { unit: 'audio_second', price: 0.002 },
-        { unit: 'video_second', price: 0.08 },
-      ],
-      modelMultipliers: [{ modelName: 'claude-opus-5.5', multiplier: 2 }],
-      defaultModelMultiplier: 1,
-      completionWeight: 3,
-      proactiveRateMultiplier: 1,
-    } as const;
-    const models = [{ modelName: 'claude-opus-5.5', vendors: ['factory', 'kiro'], inCatalog: true, calls30d: 595 }];
-    request.mockResolvedValueOnce(ok({ rules, version: 8, updatedAt: 1761877649000, models }));
+  it('reads the credit price board and sends a rate as Yomi\'s { billingType, rate }', async () => {
+    const rate = {
+      id: 2,
+      vendorKey: 'kiro',
+      modelName: 'claude-opus-5.5',
+      price: { billingType: 'per_token', rate: { input: { perMToken: 300 }, output: { perMToken: 1500 } } },
+      updatedAt: 1761877649000,
+    };
+    request.mockResolvedValueOnce(
+      ok({
+        default: { ...rate, id: 1, vendorKey: '*', modelName: '*' },
+        models: [
+          { vendorKey: 'kiro', modelName: 'claude-opus-5.5', inCatalog: true, calls30d: 595, rate, modelRate: null },
+          { vendorKey: 'neko', modelName: 'nai-diffusion-5-full', inCatalog: true, calls30d: 12, rate: null, modelRate: null },
+        ],
+      }),
+    );
+    const board = await new TavernCreditsHttpAdapter().rates();
+    expect(request).toHaveBeenCalledWith('/tavern/api/admin/credits/rates');
+    if (!board.success) throw new Error(board.error.message);
+    expect(board.data.default?.modelName).toBe('*');
+    expect(board.data.models[1]?.rate).toBeNull();
 
-    const input = { rules: { ...rules, baselines: [...rules.baselines], modelMultipliers: [...rules.modelMultipliers] }, version: 7 };
-    const r = await new TavernPricingHttpAdapter().update(input);
-    expect(request).toHaveBeenCalledWith('/tavern/api/admin/settings/metering', { method: 'PUT', body: input });
+    request.mockResolvedValueOnce(ok(rate));
+    const input = { vendorKey: 'kiro', modelName: 'claude-opus-5.5', price: rate.price } as never;
+    await new TavernCreditsHttpAdapter().saveRate(input);
+    expect(request).toHaveBeenLastCalledWith('/tavern/api/admin/credits/rates', { method: 'PUT', body: input });
+  });
+
+  it('reads a credit account with its ledger in snake_case kinds', async () => {
+    request.mockResolvedValueOnce(
+      ok({
+        accountUid: 100000123,
+        balance: { available: 987.63, held: 3.77 },
+        txns: {
+          items: [
+            {
+              id: 9,
+              kind: 'charge',
+              amount: 12.37,
+              availableAfter: 987.63,
+              source: { kind: 'turn', ref: 'd270f7a19db0fc8aa173ad1896b150fb' },
+              note: null,
+              createdAt: 1761877649000,
+            },
+          ],
+          total: 1,
+          page: 1,
+          pageSize: 20,
+        },
+      }),
+    );
+    const r = await new TavernCreditsHttpAdapter().account(100000123, 1, 20);
+    expect(request).toHaveBeenCalledWith('/tavern/api/admin/credits/accounts/100000123', { query: { p: 1, pageSize: 20 } });
     if (!r.success) throw new Error(r.error.message);
-    expect(r.data.version).toBe(8);
-    expect(r.data.models[0]?.vendors).toEqual(['factory', 'kiro']);
+    expect(r.data.txns.items[0]?.kind).toBe('charge');
+    expect(r.data.balance.held).toBe(3.77);
   });
 });

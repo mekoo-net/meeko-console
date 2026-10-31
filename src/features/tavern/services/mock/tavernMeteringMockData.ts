@@ -1,23 +1,25 @@
 /**
- * 计量 Mock 的共享数据：调用与计费回合互相引用，三个 Mock 必须看同一份，
- * 否则从调用日志跳到计费明细会找不到回合。
+ * 计量 Mock 的共享数据：调用、扣费回合、积分账户互相引用，几个 Mock 必须看同一份。
  *
- * Mock 扮演服务端：折算、报价、汇总都按查询时的价目现算（同 `pricingPreview`），
- * 所以在计费配置页改了价，回到调用日志能看到折算跟着变。数据用固定种子生成，刷新页面不变。
+ * Mock 扮演服务端：调用按现行积分价目现算（同服务端 `CreditRates.Quote`），所以在积分价目页改了价，
+ * 回到调用日志能看到报价跟着变。三天前（同线上 2026-10-31）之前的回合是改积分之前从钱包扣的钱，
+ * 没有调用明细、金额是元；之后的回合扣积分。数据用固定种子生成，刷新页面不变。
  */
-import { billReverseCodeValues } from '@yomi/common';
+import { billReverseCodeValues, type RateBody } from '@yomi/common';
 import type { ItemsEnvelope } from '@/features/tavern/api/http';
 
+import type { CreditModelRate, CreditPack, CreditRate, CreditTxn, CreditTxnKind } from '../../model/credits.types';
+import { ANY } from '../../model/credits.types';
 import type {
   CallBill,
   CallLog,
   CallStatus,
+  CreditLine,
   MeteredUsage,
   TurnLog,
   TurnReversal,
 } from '../../model/metering.types';
-import type { PricingModel, PricingRules } from '../../model/meteringPricing.types';
-import { applyProactive, quoteUsage, roundTo } from '../../model/pricingPreview';
+import { roundTo } from '../../model/meteringFormat';
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
@@ -64,38 +66,126 @@ function uuid(): string {
   return `${hex(8)}-${hex(4)}-7${hex(3)}-${pick(['8', '9', 'a', 'b'])}${hex(3)}-${hex(12)}`;
 }
 
-// ─── 价目 ────────────────────────────────────────────────
+// ─── 积分价目 ────────────────────────────────────────────
 
-/** 与线上现行价目一致。 */
-const INITIAL_RULES: PricingRules = {
-  baselines: [
-    { unit: 'token', price: 0.000002 },
-    { unit: 'image', price: 0.05 },
-    { unit: 'audio_second', price: 0.002 },
-    { unit: 'video_second', price: 0.08 },
-  ],
-  modelMultipliers: [],
-  defaultModelMultiplier: 1,
-  completionWeight: 3,
-  proactiveRateMultiplier: 1,
-};
-
-/** 3 天前输出权重从 2 调到 3：更早的回合按旧价扣过费，详情里实扣与按现行价目重算的数对不上。 */
-const PRICING_CHANGED_AT = NOW - 3 * DAY;
-const LEGACY_RULES: PricingRules = { ...INITIAL_RULES, completionWeight: 2 };
-
-let rules: PricingRules = structuredClone(INITIAL_RULES);
-let version = 7;
-let updatedAt = PRICING_CHANGED_AT;
-
-export function currentPricing(): { rules: PricingRules; version: number; updatedAt: number } {
-  return { rules: structuredClone(rules), version, updatedAt };
+function perToken(input: number, output: number, cachedRead?: number): RateBody {
+  return {
+    billingType: 'per_token',
+    rate: { input: { perMToken: input, ...(cachedRead != null ? { cachedRead } : {}) }, output: { perMToken: output } },
+  };
 }
 
-export function replacePricing(next: PricingRules): void {
-  rules = structuredClone(next);
-  version += 1;
-  updatedAt = Date.now();
+let rateSeq = 0;
+function rateRow(vendorKey: string, modelName: string, price: RateBody): CreditRate {
+  rateSeq += 1;
+  return { id: rateSeq, vendorKey, modelName, price, updatedAt: NOW - 2 * DAY };
+}
+
+const rates: CreditRate[] = [
+  rateRow(ANY, ANY, perToken(200, 800)),
+  rateRow('kiro', 'claude-opus-5.5', perToken(300, 1500, 30)),
+  rateRow(ANY, 'gemini-4-argon', perToken(100, 400)),
+  rateRow('neko', 'nai-diffusion-5-full', {
+    billingType: 'per_image',
+    rate: { tiers: [{ size: '1024x1024', quality: 'default', pricePerImage: 5 }] },
+  }),
+];
+
+export function mockRates(): CreditRate[] {
+  return rates.map((r) => structuredClone(r));
+}
+
+export function upsertMockRate(vendorKey: string, modelName: string, price: RateBody): CreditRate {
+  const hit = rates.find((r) => same(r.vendorKey, vendorKey) && same(r.modelName, modelName));
+  if (hit) {
+    hit.price = structuredClone(price);
+    hit.updatedAt = Date.now();
+    return structuredClone(hit);
+  }
+  const row = rateRow(vendorKey, modelName, structuredClone(price));
+  row.updatedAt = Date.now();
+  rates.push(row);
+  return structuredClone(row);
+}
+
+export function deleteMockRate(id: number): string | null {
+  const i = rates.findIndex((r) => r.id === id);
+  if (i < 0) return `价目 ${id} 不存在。`;
+  if (rates[i]!.vendorKey === ANY && rates[i]!.modelName === ANY) return '默认价不能删，改成想要的价就行。';
+  rates.splice(i, 1);
+  return null;
+}
+
+function same(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+/** 同服务端：(渠道, 模型) → (*, 模型) → 默认价。 */
+function findRate(vendorKey: string | null, modelName: string): CreditRate | undefined {
+  return (
+    (vendorKey ? rates.find((r) => same(r.vendorKey, vendorKey) && same(r.modelName, modelName)) : undefined) ??
+    rates.find((r) => r.vendorKey === ANY && same(r.modelName, modelName)) ??
+    rates.find((r) => r.vendorKey === ANY && r.modelName === ANY)
+  );
+}
+
+/** 同服务端 `CreditPrice.Quote`：形状对不上返回 null。 */
+function quoteWith(price: RateBody, usage: MeteredUsage): number | null {
+  switch (price.billingType) {
+    case 'per_token': {
+      if (usage.unit !== 'token') return null;
+      const { input: i, output: o } = usage.tokens;
+      const { input: pi, output: po } = price.rate;
+      return (
+        (i.tokens * pi.perMToken +
+          i.cachedReadTokens * (pi.cachedRead ?? pi.perMToken) +
+          i.cachedWriteTokens * (pi.cachedWrite ?? pi.perMToken) +
+          i.audioTokens * (pi.audio ?? pi.perMToken) +
+          o.tokens * po.perMToken +
+          o.reasoningTokens * (po.reasoning ?? po.perMToken) +
+          o.audioTokens * (po.audio ?? po.perMToken) +
+          o.imageTokens * po.perMToken) /
+        1_000_000
+      );
+    }
+    case 'per_call':
+      return price.rate.pricePerCall;
+    case 'per_image':
+      return usage.unit === 'image' ? usage.quantity * (price.rate.tiers[0]?.pricePerImage ?? 0) : null;
+    case 'per_video':
+      return usage.unit === 'video_second' ? usage.quantity * (price.rate.tiers[0]?.pricePerSecond ?? 0) : null;
+    case 'per_audio_minute':
+      return usage.unit === 'audio_second' ? (usage.quantity / 60) * price.rate.pricePerMinute : null;
+    default:
+      return null;
+  }
+}
+
+export function quoteCredits(usage: MeteredUsage): CreditLine {
+  const line = (r: CreditRate, credits: number): CreditLine => ({
+    ratedBy: `${r.vendorKey}/${r.modelName}`,
+    price: structuredClone(r.price),
+    credits: roundTo(credits, 6),
+  });
+  const rate = findRate(usage.vendorKey, usage.modelName);
+  const direct = rate ? quoteWith(rate.price, usage) : null;
+  if (rate && direct != null) return line(rate, direct);
+  const fallback = findRate(null, ANY);
+  const byDefault = fallback ? quoteWith(fallback.price, usage) : null;
+  if (fallback && byDefault != null) return line(fallback, byDefault);
+  return { ratedBy: '-', price: { billingType: 'per_call', rate: { pricePerCall: 0 } }, credits: 0 };
+}
+
+/** 改积分之前的钱包扣费：旧价目（token 基线 × 输出权重），只用来造历史。 */
+function legacyCny(usages: readonly MeteredUsage[]): number {
+  return roundTo(
+    usages.reduce(
+      (s, u) =>
+        s + (u.unit === 'token' ? (u.tokens.input.tokens + 3 * u.tokens.output.tokens) * 0.000002 : u.quantity * 0.05),
+      0,
+    ),
+    6,
+  );
 }
 
 // ─── 模型与管线 ──────────────────────────────────────────
@@ -208,12 +298,15 @@ function pickAccount(): number {
 type MockCall = Omit<CallLog, 'kind' | 'cost' | 'bill'> & { usageLogId: number | null };
 export const MOCK_STAFF_UID = 900000001;
 
-/** 调用日志开始记的时刻（同线上 2026-10-31）：之前的回合只有扣费记录，没有调用明细。 */
-const CALL_LOG_SINCE = NOW - 3 * DAY;
+/** 调用日志和积分都从这一刻开始（同线上 2026-10-31）：之前的回合只有钱包扣费记录，没有调用明细。 */
+const CREDITS_SINCE = NOW - 3 * DAY;
 
 /** 服务端 `usage_logs` 一行。没有调用明细的回合另带列表行要的字段。 */
 interface MockTurn {
   bill: CallBill;
+  accountUid: number;
+  traceId: string;
+  createdAt: number;
   withoutCalls: Omit<TurnLog, 'kind' | 'bill'> | null;
 }
 
@@ -227,10 +320,6 @@ interface CallContext {
   sessionId: string | null;
   traceId: string;
   proactive: boolean;
-}
-
-function rulesAt(t: number): PricingRules {
-  return t < PRICING_CHANGED_AT ? LEGACY_RULES : INITIAL_RULES;
 }
 
 function serialNo(t: number, id: number): string {
@@ -282,16 +371,9 @@ function makeCall(pipeline: string, model: ModelRef, start: number, ctx: CallCon
   };
 }
 
-/** 一次调用按 token 计价（同服务端 `MeteredTokens.Of`：输出只取正文桶）。 */
+/** 一次调用的用量，同服务端 `MeteredTokens`。 */
 function meteredTokens(c: Pick<CallLog, 'modelName' | 'vendorKey' | 'usage'>, kind = 'chat'): MeteredUsage {
-  return {
-    unit: 'token',
-    modelName: c.modelName,
-    vendorKey: c.vendorKey,
-    kind,
-    promptTokens: c.usage.input.tokens,
-    completionTokens: c.usage.output.tokens,
-  };
+  return { unit: 'token', modelName: c.modelName, vendorKey: c.vendorKey, kind, tokens: c.usage };
 }
 
 function generateTurn(start: number): void {
@@ -329,22 +411,25 @@ function generateTurn(start: number): void {
     usages.push({ unit: 'image', ...NAI, kind: 'generation', quantity: 1 });
   }
 
-  const chargedRules = rulesAt(start);
-  const subtotal = roundTo(usages.reduce((s, u) => s + quoteUsage(chargedRules, u).amount, 0), 6);
-
-  const logged = start >= CALL_LOG_SINCE;
-  if (logged) calls.push(...own);
+  const credits = start >= CREDITS_SINCE;
+  const cost = credits ? roundTo(usages.reduce((s, u) => s + quoteCredits(u).credits, 0), 2) : legacyCny(usages);
+  const amount = status === 'charged' ? cost : 0;
+  if (credits) calls.push(...own);
   turns.push({
+    accountUid,
+    traceId: ctx.traceId,
+    createdAt: t,
     bill: {
       usageLogId: turnId,
+      currency: credits ? 'credits' : 'cny',
       status,
       // 作废 / 失败没收到钱，金额按设计为 0。
-      amount: status === 'charged' ? applyProactive(chargedRules, subtotal, ctx.proactive) : 0,
-      billSerialNo: status === 'charged' ? serialNo(t, turnId) : null,
-      reversible: status === 'charged',
-      calls: logged ? own.length : 1,
+      amount,
+      billSerialNo: !credits && status === 'charged' ? serialNo(t, turnId) : null,
+      reversible: status === 'charged' && amount > 0,
+      calls: credits ? own.length : 1,
     },
-    withoutCalls: logged
+    withoutCalls: credits
       ? null
       : {
           id: turnId,
@@ -356,15 +441,6 @@ function generateTurn(start: number): void {
           createdAt: t,
         },
   });
-
-  if (status === 'charged' && rand() < 0.02) {
-    markReversed(turns[turns.length - 1]!, {
-      atUtc: Math.min(NOW, t + between(10, 600) * MINUTE),
-      by: MOCK_STAFF_UID,
-      code: pick(billReverseCodeValues),
-      remark: rand() < 0.5 ? '工单 #' + between(1000, 9999) : null,
-    });
-  }
 }
 
 function generateBackground(start: number): void {
@@ -382,7 +458,7 @@ function generateBackground(start: number): void {
     traceId: hex(32),
     proactive,
   };
-  if (start >= CALL_LOG_SINCE) calls.push(makeCall(real, model, start, ctx, 0, true));
+  if (start >= CREDITS_SINCE) calls.push(makeCall(real, model, start, ctx, 0, true));
 }
 
 for (let t = NOW - SPAN_DAYS * DAY; t < NOW - 2 * MINUTE; t += between(4, 40) * MINUTE) {
@@ -393,21 +469,126 @@ for (let t = NOW - SPAN_DAYS * DAY; t < NOW - 2 * MINUTE; t += between(4, 40) * 
 calls.sort((a, b) => b.createdAt - a.createdAt);
 const turnById = new Map(turns.map((t) => [t.bill.usageLogId, t]));
 
+// ─── 积分账户 ────────────────────────────────────────────
+
+interface MockAccount {
+  available: number;
+  held: number;
+  txns: CreditTxn[];
+  adjustRequests: Set<string>;
+}
+
+const accounts = new Map<number, MockAccount>();
+let txnSeq = 0;
+
+function accountOf(uid: number): MockAccount {
+  let a = accounts.get(uid);
+  if (!a) accounts.set(uid, (a = { available: 0, held: 0, txns: [], adjustRequests: new Set() }));
+  return a;
+}
+
+function record(uid: number, kind: CreditTxnKind, amount: number, source: CreditTxn['source'], note: string | null, at: number): void {
+  if (amount <= 0) return;
+  const a = accountOf(uid);
+  txnSeq += 1;
+  a.txns.unshift({ id: txnSeq, kind, amount, availableAfter: a.available, source, note, createdAt: at });
+}
+
+/** 开账：每个账户在积分上线那天买过一包；之后按时间扣它的积分回合，不够扣到 0 为止（同服务端）。 */
+for (const uid of ACCOUNTS) {
+  const a = accountOf(uid);
+  const pack = uid % 2 === 0 ? 3300 : 1100;
+  a.available = pack;
+  record(uid, 'purchase', pack, { kind: 'order', ref: uuid() }, pack === 3300 ? '3000 积分（送 300）' : '1000 积分（送 100）', CREDITS_SINCE - MINUTE);
+}
+for (const turn of [...turns].sort((x, y) => x.createdAt - y.createdAt)) {
+  if (turn.bill.currency !== 'credits' || turn.bill.status !== 'charged') continue;
+  const a = accountOf(turn.accountUid);
+  const charged = roundTo(Math.min(turn.bill.amount, a.available), 2);
+  a.available = roundTo(a.available - charged, 2);
+  record(turn.accountUid, 'charge', charged, { kind: 'turn', ref: turn.traceId }, null, turn.createdAt);
+  turn.bill = { ...turn.bill, amount: charged, reversible: charged > 0 };
+}
+for (const turn of turns) {
+  if (turn.bill.status === 'charged' && turn.bill.reversible && rand() < 0.02) {
+    markReversed(turn, {
+      atUtc: Math.min(NOW, turn.createdAt + between(10, 600) * MINUTE),
+      by: MOCK_STAFF_UID,
+      code: pick(billReverseCodeValues),
+      remark: rand() < 0.5 ? '工单 #' + between(1000, 9999) : null,
+    });
+  }
+}
+
+export function mockCreditAccount(uid: number): { available: number; held: number; txns: readonly CreditTxn[] } {
+  const a = accountOf(uid);
+  return { available: a.available, held: a.held, txns: a.txns };
+}
+
+/** 同服务端 `AdjustAsync`：正数发、负数扣（最多扣到 0），同一个 requestId 只记一次。 */
+export function adjustMockCredits(uid: number, delta: number, note: string, requestId: string): void {
+  const a = accountOf(uid);
+  if (a.adjustRequests.has(requestId)) return;
+  a.adjustRequests.add(requestId);
+  const source = { kind: 'staff' as const, ref: String(MOCK_STAFF_UID) };
+  if (delta > 0) {
+    a.available = roundTo(a.available + delta, 2);
+    record(uid, 'grant', delta, source, note, Date.now());
+  } else {
+    const deducted = roundTo(Math.min(-delta, a.available), 2);
+    a.available = roundTo(a.available - deducted, 2);
+    record(uid, 'deduct', deducted, source, note, Date.now());
+  }
+}
+
+// ─── 积分包 ──────────────────────────────────────────────
+
+let packSeq = 0;
+function packRow(name: string, credits: number, bonusCredits: number, price: number, active = true): CreditPack {
+  packSeq += 1;
+  return { id: packSeq, name, credits, bonusCredits, price, active, sort: packSeq * 10, updatedAt: NOW - 5 * DAY };
+}
+
+const packs: CreditPack[] = [
+  packRow('入门', 500, 0, 5),
+  packRow('常用', 1000, 100, 10),
+  packRow('畅玩', 3000, 300, 30),
+  packRow('尝鲜（已下架）', 200, 0, 1, false),
+];
+
+export function mockPacks(): CreditPack[] {
+  return [...packs].sort((a, b) => a.sort - b.sort || a.price - b.price).map((p) => ({ ...p }));
+}
+
+export function saveMockPack(edit: Omit<CreditPack, 'id' | 'updatedAt'> & { id: number | null }): CreditPack {
+  const hit = edit.id != null ? packs.find((p) => p.id === edit.id) : undefined;
+  if (hit) {
+    Object.assign(hit, { ...edit, id: hit.id, updatedAt: Date.now() });
+    return { ...hit };
+  }
+  packSeq += 1;
+  const row: CreditPack = { ...edit, id: packSeq, updatedAt: Date.now() };
+  packs.push(row);
+  return { ...row };
+}
+
+export function deleteMockPack(id: number): boolean {
+  const i = packs.findIndex((p) => p.id === id);
+  if (i < 0) return false;
+  packs.splice(i, 1);
+  return true;
+}
+
 // ─── 服务端视图 ──────────────────────────────────────────
 
 export function isBilled(c: MockCall): boolean {
   return c.usageLogId != null;
 }
 
-/** 调用按现行价目折算，不论是否收费；自主倍率只作用在回合上，这里不乘。 */
-export function callCost(c: MockCall): CallLog['cost'] {
-  return quoteUsage(rules, meteredTokens(c));
-}
-
 export function toCallLog(c: MockCall): CallLog {
   const { usageLogId, ...call } = c;
   const turn = usageLogId != null ? turnById.get(usageLogId) : undefined;
-  return { kind: 'call', ...call, cost: callCost(c), bill: turn?.bill ?? null };
+  return { kind: 'call', ...call, cost: quoteCredits(meteredTokens(c)), bill: turn?.bill ?? null };
 }
 
 /** 没有调用明细的回合，按现在的账单状态（驳回过的带驳回记录）。 */
@@ -423,8 +604,13 @@ export function findTurn(id: number): MockTurn | undefined {
   return turnById.get(id);
 }
 
-/** 同服务端 `TavernUsageLog.Reverse`：状态改成已驳回，金额不动——退回的就是它。 */
+/** 同服务端驳回：状态改成已驳回，金额不动——退回的就是它；积分回合退回积分账户。 */
 export function markReversed(t: MockTurn, reversal: TurnReversal): void {
+  if (t.bill.currency === 'credits') {
+    const a = accountOf(t.accountUid);
+    a.available = roundTo(a.available + t.bill.amount, 2);
+    record(t.accountUid, 'refund', t.bill.amount, { kind: 'turn', ref: t.traceId }, reversal.remark ?? reversal.code, reversal.atUtc);
+  }
   t.bill = { ...t.bill, status: 'reversed', reversible: false, reversal };
 }
 
@@ -435,21 +621,33 @@ export function pageOf<T>(rows: readonly T[], page: number, pageSize: number): I
   return { items: rows.slice((p - 1) * size, p * size), total: rows.length, page: p, pageSize: size };
 }
 
-export function mockModels(): PricingModel[] {
+/** 积分价目表的行：目录里的、近 30 天调用过的、配过价的取并集（同服务端 `BoardAsync`）。 */
+export function mockRateBoard(): { default: CreditRate | null; models: CreditModelRate[] } {
   const since = NOW - 30 * DAY;
-  const byName = new Map<string, PricingModel>();
-  const touch = (modelName: string, vendor: string | null, calls30d: number): void => {
-    const hit = byName.get(modelName) ?? {
-      modelName,
-      vendors: [],
-      inCatalog: !RETIRED_MODELS.has(modelName),
-      calls30d: 0,
-    };
-    if (vendor && !hit.vendors.includes(vendor)) hit.vendors.push(vendor);
-    hit.calls30d += calls30d;
-    byName.set(modelName, hit);
+  const rows = new Map<string, CreditModelRate>();
+  const row = (vendorKey: string, modelName: string): CreditModelRate => {
+    const key = `${vendorKey}/${modelName}`.toLowerCase();
+    let r = rows.get(key);
+    if (!r) rows.set(key, (r = { vendorKey, modelName, inCatalog: false, calls30d: 0, rate: null, modelRate: null }));
+    return r;
   };
-  for (const c of calls) if (c.createdAt >= since) touch(c.modelName, c.vendorKey, 1);
-  for (const m of IDLE_CATALOG) for (const v of m.vendors) touch(m.modelName, v, 0);
-  return [...byName.values()].sort((a, b) => b.calls30d - a.calls30d || a.modelName.localeCompare(b.modelName));
+  for (const m of IDLE_CATALOG) for (const v of m.vendors) row(v, m.modelName).inCatalog = true;
+  for (const c of calls) {
+    const r = row(c.vendorKey, c.modelName);
+    if (c.createdAt >= since) r.calls30d += 1;
+    if (!RETIRED_MODELS.has(c.modelName)) r.inCatalog = true;
+  }
+  for (const r of rates) if (!(r.vendorKey === ANY && r.modelName === ANY)) row(r.vendorKey, r.modelName).rate = structuredClone(r);
+  for (const r of rows.values()) {
+    if (r.rate || r.vendorKey === ANY) continue;
+    const byModel = rates.find((x) => x.vendorKey === ANY && same(x.modelName, r.modelName));
+    r.modelRate = byModel ? structuredClone(byModel) : null;
+  }
+  const def = rates.find((r) => r.vendorKey === ANY && r.modelName === ANY);
+  return {
+    default: def ? structuredClone(def) : null,
+    models: [...rows.values()].sort(
+      (a, b) => b.calls30d - a.calls30d || a.vendorKey.localeCompare(b.vendorKey) || a.modelName.localeCompare(b.modelName),
+    ),
+  };
 }

@@ -18,8 +18,8 @@ import {
   UsageKindLabel,
   type LogRow,
 } from '../../model/metering.types';
-import { formatCny, formatDuration, formatUsage } from '../../model/meteringFormat';
-import { perMillionFromPerToken } from '../../model/pricingPreview';
+import { creditPriceSummary, ratedByText } from '../../model/creditRate';
+import { formatCharge, formatCredits, formatDuration, formatUsage } from '../../model/meteringFormat';
 import CopyableId from './CopyableId.vue';
 
 const visible = defineModel<boolean>('visible', { required: true });
@@ -177,7 +177,7 @@ function openTrace(traceId: string): void {
               <span
                 class="cost-total"
                 :class="{ 'cost-total--void': call.bill.status !== 'charged' }"
-              >{{ formatCny(call.bill.amount) }}</span>
+              >{{ formatCharge(call.bill.currency, call.bill.amount) }}</span>
               <el-tag
                 v-if="call.bill.status !== 'charged'"
                 size="small"
@@ -257,15 +257,16 @@ function openTrace(traceId: string): void {
         </div>
         <el-divider class="sub-divider" />
         <div class="dim-group-title">
-          <span class="dim-group-name">按现行价目折算</span>
+          <span class="dim-group-name">按现行积分价目</span>
+          <span class="dim-group-totals">{{ formatCredits(call.cost.credits) }}</span>
         </div>
-        <div class="dim-row">
-          <span class="dim-label">计价用量</span>
-          <span class="dim-tokens">{{ call.cost.billableQuantity.toLocaleString() }}</span>
-          <span class="dim-sep">×</span>
-          <span class="dim-price">×{{ call.cost.multiplier }} · {{ formatCny(perMillionFromPerToken(call.cost.baseline)) }}/1M</span>
-          <span class="dim-sep">=</span>
-          <span class="dim-amount">{{ formatCny(call.cost.amount) }}</span>
+        <div class="log-detail__row">
+          <span class="label">照的价目</span>
+          <span class="mono">{{ ratedByText(call.cost.ratedBy) }}</span>
+        </div>
+        <div class="log-detail__row">
+          <span class="label">价目</span>
+          <span>{{ creditPriceSummary(call.cost.price) }}</span>
         </div>
       </template>
 
@@ -319,7 +320,7 @@ function openTrace(traceId: string): void {
             <span
               class="cost-total"
               :class="{ 'cost-total--void': turn.bill.status !== 'charged' }"
-            >{{ formatCny(turn.bill.amount) }}</span>
+            >{{ formatCharge(turn.bill.currency, turn.bill.amount) }}</span>
             <el-tag
               v-if="turn.bill.status !== 'charged'"
               size="small"
