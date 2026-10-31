@@ -2,8 +2,7 @@
 /**
  * 市场 › 订单：一单就是一份权益。买家付人民币进平台钱包，卖家的分成按成交时的设置折成积分（行上有快照）。
  * 创作者第一次发布时自己得的那一单（0 元）也在这里。
- * 也是用户视角「购买的」：传了 `buyerUid` 就只看这个人买的，买家筛选和买家列都不要；
- * 也是商品行「订单」弹窗里的表：传了 `cardId` 就只看这张卡的，卡号筛选和卡列都不要。
+ * 也是用户视角「购买的」：传了 `buyerUid` 就只看这个人买的，买家筛选和买家列都不要。
  */
 import { computed, onMounted, ref } from 'vue';
 import { Search } from '@element-plus/icons-vue';
@@ -32,10 +31,7 @@ import { formatPercent, formatPrice } from '../../model/marketFormat';
 import { formatCredits, parseAccountUid, shortId } from '../../model/meteringFormat';
 import { getTavernMarketPort } from '../../services';
 
-const props = defineProps<{ buyerUid?: number; cardId?: string }>();
-
-/** 嵌在用户视角或弹窗里：撑满父容器，不要页头。 */
-const embedded = props.buyerUid != null || props.cardId != null;
+const props = defineProps<{ buyerUid?: number }>();
 
 const port = getTavernMarketPort();
 
@@ -58,7 +54,7 @@ const { items, total, page, pageSize, loading, load, reload } = usePagedList<Mar
         {
           buyerUid: buyer.value,
           sellerUid: seller.value,
-          cardId: props.cardId ?? (f.cardId.trim() || undefined),
+          cardId: f.cardId.trim() || undefined,
           source: f.source,
           ...dateRangeToEpochMillis(f.dateRange),
         },
@@ -78,9 +74,9 @@ onMounted(() => void load());
 </script>
 
 <template>
-  <FillListPageLayout :embedded="embedded">
+  <FillListPageLayout :embedded="buyerUid != null">
     <template
-      v-if="!embedded"
+      v-if="buyerUid == null"
       #header
     >
       <PageHeader title="订单" />
@@ -104,10 +100,7 @@ onMounted(() => void load());
             clearable
           />
         </el-form-item>
-        <el-form-item
-          v-if="cardId == null"
-          label="角色卡 ID"
-        >
+        <el-form-item label="角色卡 ID">
           <el-input
             v-model="filter.cardId"
             :prefix-icon="Search"
@@ -166,7 +159,6 @@ onMounted(() => void load());
       </el-table-column>
 
       <el-table-column
-        v-if="cardId == null"
         label="角色卡"
         min-width="150"
       >

@@ -20,7 +20,8 @@ import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 
 import AccountCell from '../../components/content/AccountCell.vue';
 import MarketCardDrawer from '../../components/market/MarketCardDrawer.vue';
-import MarketCardRecordsDialog, { type MarketCardRecords } from '../../components/market/MarketCardRecordsDialog.vue';
+import MarketOrdersDialog from '../../components/market/MarketOrdersDialog.vue';
+import MarketReviewsDialog from '../../components/market/MarketReviewsDialog.vue';
 import { usePagedList } from '../../composables/usePagedList';
 import { initialOf } from '../../model/contentFormat';
 import {
@@ -77,14 +78,18 @@ function openDetail(cardId: string): void {
   detailOpen.value = true;
 }
 
-const recordsOpen = ref(false);
-const recordsOf = ref<{ cardId: string; name: string } | null>(null);
-const records = ref<MarketCardRecords>('reviews');
+const reviewsOpen = ref(false);
+const ordersOpen = ref(false);
+const recordsOf = ref<MarketCardRow | null>(null);
 
-function openRecords(row: MarketCardRow, kind: MarketCardRecords): void {
-  recordsOf.value = { cardId: row.cardId, name: row.face.name };
-  records.value = kind;
-  recordsOpen.value = true;
+function openReviews(row: MarketCardRow): void {
+  recordsOf.value = row;
+  reviewsOpen.value = true;
+}
+
+function openOrders(row: MarketCardRow): void {
+  recordsOf.value = row;
+  ordersOpen.value = true;
 }
 
 onMounted(() => {
@@ -296,7 +301,7 @@ onMounted(() => {
             link
             type="primary"
             size="small"
-            @click="openRecords(row, 'reviews')"
+            @click="openReviews(row)"
           >
             评价
           </el-button>
@@ -304,7 +309,7 @@ onMounted(() => {
             link
             type="primary"
             size="small"
-            @click="openRecords(row, 'orders')"
+            @click="openOrders(row)"
           >
             订单
           </el-button>
@@ -337,10 +342,14 @@ onMounted(() => {
     @changed="load"
   />
 
-  <MarketCardRecordsDialog
-    v-model:visible="recordsOpen"
+  <MarketReviewsDialog
+    v-model:visible="reviewsOpen"
     :card="recordsOf"
-    :records="records"
+  />
+
+  <MarketOrdersDialog
+    v-model:visible="ordersOpen"
+    :card="recordsOf"
   />
 </template>
 
