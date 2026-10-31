@@ -1,26 +1,30 @@
 <script setup lang="ts">
 /**
- * 角色卡详情，版式同调用详情抽屉：上面一张摘要表，下面分段，删除放底栏。
- * 人设和角色世界书是玩家写的 JSON，原样给；`systemPrompt` 是一大段正文，单独按原文排一份方便读。
+ * 角色卡详情，版式同调用详情抽屉：上面一张摘要表，下面分段。
+ * 卡是玩家手里独立的一张，只看卡本身：卡面，再按来源看内容（市场卡看卡号版本，导入的看人设和世界书）。
+ * 只读：卡归玩家，员工不删不改；市场卡有问题在市场下架。
  */
-import { computed, ref, watch } from 'vue';
-import { Delete } from '@element-plus/icons-vue';
+import { computed, ref, watch, type Component } from 'vue';
 import { ElMessage } from 'element-plus';
 
 import { formatDateTime } from '@/shared/lib/date';
 
-import { deletePersona } from '../../composables/contentActions';
-import type { PersonaDetail, PersonaWorld } from '../../model/content.types';
+import { CardSourceLabel, type CardContent, type PersonaDetail } from '../../model/content.types';
 import { accountName, initialOf } from '../../model/contentFormat';
 import { getTavernContentPort } from '../../services';
 import CopyableId from '../metering/CopyableId.vue';
-import JsonBlock from './JsonBlock.vue';
+import ImportedCardContent from './ImportedCardContent.vue';
+import MarketCardContent from './MarketCardContent.vue';
 
 const visible = defineModel<boolean>('visible', { required: true });
 const props = defineProps<{ personaId: number | null }>();
-const emit = defineEmits<{ deleted: [personaId: number] }>();
 
 const port = getTavernContentPort();
+
+const ContentView: Readonly<Record<CardContent['kind'], Component>> = {
+  market: MarketCardContent,
+  imported: ImportedCardContent,
+};
 
 const detail = ref<PersonaDetail | null>(null);
 const loading = ref(false);
@@ -48,13 +52,6 @@ watch(
   },
   { immediate: true },
 );
-
-async function remove(): Promise<void> {
-  const p = persona.value;
-  if (!p || !(await deletePersona(p))) return;
-  emit('deleted', p.id);
-  await load(p.id);
-}
 </script>
 
 <template>
@@ -124,23 +121,10 @@ async function remove(): Promise<void> {
             {{ formatDateTime(persona.deletedAt, 'YYYY-MM-DD HH:mm:ss') }}
           </el-descriptions-item>
           <el-descriptions-item
-            label="市场卡"
+            label="来源"
             :span="2"
           >
-            <template v-if="persona.card">
-              <CopyableId
-                :value="persona.card.id"
-                label="市场卡 ID"
-              />
-              <span
-                v-if="persona.card.version != null"
-                class="sub num"
-              >v{{ persona.card.version }}</span>
-            </template>
-            <span
-              v-else
-              class="cell-muted"
-            >—</span>
+            {{ CardSourceLabel[persona.source] }}
           </el-descriptions-item>
         </el-descriptions>
 
@@ -201,114 +185,12 @@ async function remove(): Promise<void> {
 
         <el-divider />
 
-        <h4 class="section-title">
-          人设
-        </h4>
-        <div
-          v-if="detail.preset.systemPrompt?.trim()"
-          class="text-block text-block--stack"
-        >
-          {{ detail.preset.systemPrompt }}
-        </div>
-        <JsonBlock :value="detail.preset" />
-
-        <el-divider />
-
-        <h4 class="section-title">
-          角色世界书
-        </h4>
-        <JsonBlock
-          v-if="detail.worldBook.length"
-          :value="detail.worldBook"
+        <component
+          :is="ContentView[detail.content.kind]"
+          :content="detail.content"
         />
-        <span
-          v-else
-          class="cell-muted"
-        >无</span>
-
-        <el-divider />
-
-        <h4 class="section-title">
-          所在世界
-        </h4>
-        <el-table
-          :data="detail.worlds"
-          :row-key="(w: PersonaWorld) => w.world.id"
-          size="small"
-          class="compact-table"
-          empty-text="没有加入过世界"
-        >
-          <el-table-column
-            label="世界"
-            min-width="160"
-          >
-            <template #default="{ row }: { row: PersonaWorld }">
-              <router-link
-                :to="{ name: 'tavern-world-detail', params: { accountUid: row.world.accountUid, worldId: row.world.id } }"
-                class="link"
-              >
-                {{ row.world.title }}
-              </router-link>
-              <el-tag
-                v-if="row.world.deletedAt != null"
-                size="small"
-                type="info"
-                effect="plain"
-                class="tag-gap"
-              >
-                已删除
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column
-            label="加入时间"
-            width="140"
-          >
-            <template #default="{ row }: { row: PersonaWorld }">
-              <span class="cell-date">{{ formatDateTime(row.joinedAt) }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column
-            label="离开时间"
-            width="140"
-          >
-            <template #default="{ row }: { row: PersonaWorld }">
-              <span
-                v-if="row.leftAt != null"
-                class="cell-date"
-              >{{ formatDateTime(row.leftAt) }}</span>
-              <span
-                v-else
-                class="cell-muted"
-              >—</span>
-            </template>
-          </el-table-column>
-        </el-table>
       </template>
     </div>
-
-    <template #footer>
-      <div
-        v-if="persona"
-        class="drawer-footer"
-      >
-        <el-button
-          v-if="persona.deletedAt == null"
-          type="danger"
-          :icon="Delete"
-          @click="remove"
-        >
-          删除角色卡
-        </el-button>
-        <el-tag
-          v-else
-          type="info"
-          effect="plain"
-        >
-          该角色卡已删除
-        </el-tag>
-      </div>
-    </template>
   </el-drawer>
 </template>
 
@@ -351,24 +233,9 @@ async function remove(): Promise<void> {
   width: 88px;
 }
 
-.num {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  font-variant-numeric: tabular-nums;
-}
-
-.sub {
-  margin-left: 6px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
 .link {
   color: var(--el-color-primary);
   text-decoration: none;
-}
-
-.tag-gap {
-  margin-left: 6px;
 }
 
 .cell-muted {
@@ -404,12 +271,5 @@ async function remove(): Promise<void> {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-
-.drawer-footer {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 8px;
 }
 </style>

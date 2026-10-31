@@ -612,12 +612,19 @@ export const personaProfileSchema = z.object({
 });
 export type PersonaProfile = z.infer<typeof personaProfileSchema>;
 
-/** 从市场卡导入的才有。 */
-export const personaCardSchema = z.object({
-  id: z.string().min(1),
-  version: z.number().int().nullable(),
-});
-export type PersonaCard = z.infer<typeof personaCardSchema>;
+/** 卡从哪来：市场买的跟着市场更新，导入的玩家自己维护。 */
+export const cardSourceSchema = z.enum(['imported', 'market']);
+export type CardSource = z.infer<typeof cardSourceSchema>;
+
+export const CardSourceLabel: Readonly<Record<CardSource, string>> = {
+  imported: '导入',
+  market: '市场',
+};
+
+export const CardSourceTone: Readonly<Record<CardSource, StatusTone>> = {
+  imported: 'info',
+  market: 'success',
+};
 
 export const personaRowSchema = z.object({
   id: z.number().int(),
@@ -625,32 +632,34 @@ export const personaRowSchema = z.object({
   name: z.string(),
   avatar: z.string().nullable(),
   profile: personaProfileSchema,
-  /** 现在还在的世界数（离开的不算）。 */
-  worlds: z.number().int().nonnegative(),
-  card: personaCardSchema.nullable(),
+  source: cardSourceSchema,
   createdAt: epochMillisSchema,
   updatedAt: epochMillisSchema,
   deletedAt: epochMillisNullableSchema,
 });
 export type PersonaRow = z.infer<typeof personaRowSchema>;
 
-export const personaWorldSchema = z.object({
-  world: z.object({
-    id: z.string().min(1),
-    accountUid: z.number().int(),
-    title: z.string(),
-    deletedAt: epochMillisNullableSchema,
-  }),
-  joinedAt: epochMillisSchema,
-  leftAt: epochMillisNullableSchema,
+/** 市场卡的人设在市场那张卡上，这里只有卡号和玩家手里的版本。 */
+export const marketCardContentSchema = z.object({
+  kind: z.literal('market'),
+  cardId: z.string().min(1),
+  version: z.number().int().nullable(),
 });
-export type PersonaWorld = z.infer<typeof personaWorldSchema>;
+export type MarketCardContent = z.infer<typeof marketCardContentSchema>;
 
-export const personaDetailSchema = z.object({
-  persona: personaRowSchema,
+export const importedCardContentSchema = z.object({
+  kind: z.literal('imported'),
   preset: presetSchema,
   /** 角色自带的旧格式世界书条目。 */
   worldBook: z.array(jsonValueSchema),
-  worlds: z.array(personaWorldSchema),
+});
+export type ImportedCardContent = z.infer<typeof importedCardContentSchema>;
+
+export const cardContentSchema = z.discriminatedUnion('kind', [marketCardContentSchema, importedCardContentSchema]);
+export type CardContent = z.infer<typeof cardContentSchema>;
+
+export const personaDetailSchema = z.object({
+  persona: personaRowSchema,
+  content: cardContentSchema,
 });
 export type PersonaDetail = z.infer<typeof personaDetailSchema>;

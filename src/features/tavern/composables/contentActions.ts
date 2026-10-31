@@ -3,7 +3,7 @@ import { ElMessage } from 'element-plus';
 import { confirmDanger, type ConfirmOptions } from '@/shared/composables/useConfirm';
 import type { AppResult } from '@/shared/api/httpTypes';
 
-import type { ActionResult, PersonaRow, WorldRow } from '../model/content.types';
+import type { ActionResult, WorldRow } from '../model/content.types';
 import { getTavernContentPort } from '../services';
 
 const port = getTavernContentPort();
@@ -36,10 +36,4 @@ export const deleteWorld = (world: WorldRow) =>
       confirmText: '删除',
     },
     () => port.deleteWorld({ accountUid: world.account.uid, worldId: world.id }),
-  );
-
-export const deletePersona = (persona: PersonaRow) =>
-  act(
-    { title: '删除角色卡', message: `删除角色卡「${persona.name}」？玩家那边会看不到这张卡。`, confirmText: '删除' },
-    () => port.deletePersona(persona.id),
   );

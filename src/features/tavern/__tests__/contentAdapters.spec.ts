@@ -232,11 +232,42 @@ describe('tavern content adapters', () => {
     expect(r).toEqual(ok({ affected: 46 }));
   });
 
-  it('deletes a persona by its numeric id', async () => {
-    request.mockResolvedValueOnce(ok({ affected: 1 }));
-    const r = await new TavernContentHttpAdapter().deletePersona(10000008);
-    expect(request).toHaveBeenCalledWith('/tavern/api/admin/personas/10000008', { method: 'DELETE' });
-    expect(r.success && r.data.affected).toBe(1);
+  it('reads a card by its source: market cards carry only the card ref, imported cards their own preset', async () => {
+    const row = {
+      id: 10000008,
+      account: ACCOUNT,
+      name: '沈惟行',
+      avatar: null,
+      profile: { tagline: null, tags: [], greetings: [] },
+      createdAt: 1758600000000,
+      updatedAt: 1761877649000,
+      deletedAt: null,
+    };
+    request
+      .mockResolvedValueOnce(
+        ok({
+          persona: { ...row, source: 'market' },
+          content: { kind: 'market', cardId: '0193f5a0-7c1e-7d2a-9b3c-4e5f60718293', version: 3 },
+        }),
+      )
+      .mockResolvedValueOnce(
+        ok({
+          persona: { ...row, source: 'imported' },
+          content: { kind: 'imported', preset: { systemPrompt: '灯塔' }, worldBook: [] },
+        }),
+      );
+
+    const adapter = new TavernContentHttpAdapter();
+    const market = await adapter.persona(10000008);
+    expect(request).toHaveBeenCalledWith('/tavern/api/admin/personas/10000008');
+    expect(market.success && market.data.content).toEqual({
+      kind: 'market',
+      cardId: '0193f5a0-7c1e-7d2a-9b3c-4e5f60718293',
+      version: 3,
+    });
+    const imported = await adapter.persona(10000008);
+    expect(imported.success && imported.data.persona.source).toBe('imported');
+    expect(imported.success && imported.data.content.kind === 'imported' && imported.data.content.preset.systemPrompt).toBe('灯塔');
   });
 
   it('turns a message with an unknown content kind into a validation failure', async () => {

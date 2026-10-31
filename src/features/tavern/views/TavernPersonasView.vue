@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * Tavern 角色卡列表，版式同世界列表：筛选栏 + 满高表格 + 分页，详情在抽屉里看。
- * 账户可以带 `?uid=` 过来；账户格子点一下按这个账户筛。删除是软删，状态选「已删除」能看到。
+ * 账户可以带 `?uid=` 过来；账户格子点一下按这个账户筛。只读：卡归玩家，市场卡在市场下架；
+ * 玩家自己删掉的，状态选「已删除」能看到。
  */
 import { onMounted, ref } from 'vue';
 import { Search } from '@element-plus/icons-vue';
@@ -15,9 +16,15 @@ import { formatDateTime } from '@/shared/lib/date';
 
 import AccountCell from '../components/content/AccountCell.vue';
 import PersonaDrawer from '../components/content/PersonaDrawer.vue';
-import { deletePersona } from '../composables/contentActions';
 import { useContentList } from '../composables/useContentList';
-import { LifecycleStateLabel, LifecycleStateTone, lifecycleStateValues, type PersonaRow } from '../model/content.types';
+import {
+  CardSourceLabel,
+  CardSourceTone,
+  LifecycleStateLabel,
+  LifecycleStateTone,
+  lifecycleStateValues,
+  type PersonaRow,
+} from '../model/content.types';
 import { initialOf } from '../model/contentFormat';
 import { getTavernContentPort } from '../services';
 
@@ -34,10 +41,6 @@ const detailId = ref<number | null>(null);
 function openDetail(row: PersonaRow): void {
   detailId.value = row.id;
   detailOpen.value = true;
-}
-
-async function remove(row: PersonaRow): Promise<void> {
-  if (await deletePersona(row)) await load();
 }
 
 onMounted(() => void load());
@@ -176,34 +179,18 @@ onMounted(() => void load());
       </el-table-column>
 
       <el-table-column
-        label="所在世界"
-        width="88"
-        align="right"
-      >
-        <template #default="{ row }: { row: PersonaRow }">
-          <span class="num">{{ row.worlds }}</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column
-        label="市场卡"
+        label="来源"
         width="72"
         align="center"
       >
         <template #default="{ row }: { row: PersonaRow }">
           <el-tag
-            v-if="row.card"
             size="small"
-            type="success"
+            :type="CardSourceTone[row.source]"
             effect="plain"
-            :title="row.card.id"
           >
-            {{ row.card.version != null ? `v${row.card.version}` : '市场' }}
+            {{ CardSourceLabel[row.source] }}
           </el-tag>
-          <span
-            v-else
-            class="cell-muted"
-          >—</span>
         </template>
       </el-table-column>
 
@@ -231,7 +218,7 @@ onMounted(() => void load());
 
       <el-table-column
         label="操作"
-        width="100"
+        width="64"
         fixed="right"
         align="right"
       >
@@ -243,15 +230,6 @@ onMounted(() => void load());
             @click="openDetail(row)"
           >
             详情
-          </el-button>
-          <el-button
-            v-if="row.deletedAt == null"
-            link
-            type="danger"
-            size="small"
-            @click="remove(row)"
-          >
-            删除
           </el-button>
         </template>
       </el-table-column>
@@ -279,15 +257,10 @@ onMounted(() => void load());
   <PersonaDrawer
     v-model:visible="detailOpen"
     :persona-id="detailId"
-    @deleted="load"
   />
 </template>
 
 <style scoped>
-.num {
-  font-variant-numeric: tabular-nums;
-}
-
 .cell-persona {
   display: flex;
   align-items: center;

@@ -17,6 +17,7 @@ import {
   type ActionResult,
   type Beat,
   type BeatQuery,
+  type CardContent,
   type ChronicleEntry,
   type ContentQuery,
   type LifecycleState,
@@ -74,9 +75,7 @@ interface MockPersona {
   tagline: string | null;
   tags: string[];
   greetings: string[];
-  card: { id: string; version: number | null } | null;
-  preset: Record<string, unknown>;
-  worldBook: unknown[];
+  content: CardContent;
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
@@ -94,18 +93,7 @@ const personas: MockPersona[] = [
       '“又是你。”他把伞收起来，雨水顺着伞尖滴到地板上。“这次又看见什么了？”',
       '他靠在警署门口的柱子上抽烟，看见你过来，把烟掐了。“码头那边出事了，跟我走一趟。”',
     ],
-    card: { id: 'card_7f3a91c2', version: 3 },
-    preset: {
-      systemPrompt:
-        '你是沈惟行，雾港警署督察，二十九岁。\n- 说话简短，很少用形容词\n- 对细节过目不忘，会在不经意间点出别人忽略的东西\n- 父亲二十年前死于一场码头火灾，你从不主动提起',
-      personality: '冷静、克制、嘴硬心软',
-      scenario: '雾港常年起雾，三号码头最近接连有货船失踪。',
-      exampleDialogue: ['<START>', '{{user}}: 你怎么知道我来过？', '{{char}}: 你鞋底的煤灰，只有三号码头有。'],
-    },
-    worldBook: [
-      { keys: ['父亲', '火灾'], content: '沈惟行的父亲沈仲是当年三号码头的仓库管理员，死于 2006 年的大火。', constant: false },
-      { keys: ['警署'], content: '雾港警署在旧城区钟楼对面，三层灰楼。', constant: true },
-    ],
+    content: { kind: 'market', cardId: mockUuid(801), version: 3 },
     createdAt: NOW - 42 * DAY,
     updatedAt: NOW - 2 * DAY,
     deletedAt: null,
@@ -118,12 +106,7 @@ const personas: MockPersona[] = [
     tagline: '码头茶馆老板娘，消息比谁都灵通。',
     tags: ['茶馆', '八卦', '温柔'],
     greetings: ['“来啦？”她往你面前推了一杯热茶，“今天雾大，船都没出去，坐一会儿吧。”'],
-    card: { id: 'card_1b6d0e44', version: null },
-    preset: {
-      systemPrompt: '你是苏晚，苏记茶馆的老板娘。说话带点南方口音，爱笑，记得每个熟客的口味。',
-      personality: '圆滑、热心、藏着心事',
-    },
-    worldBook: [],
+    content: { kind: 'market', cardId: mockUuid(802), version: null },
     createdAt: NOW - 40 * DAY,
     updatedAt: NOW - 6 * DAY,
     deletedAt: null,
@@ -136,9 +119,19 @@ const personas: MockPersona[] = [
     tagline: '退休的灯塔守夜人，喝醉了会讲二十年前的沉船。',
     tags: ['老人', '灯塔', '酒鬼'],
     greetings: ['“年轻人，”他晃了晃酒瓶，“你听说过‘海燕号’吗？”'],
-    card: null,
-    preset: { systemPrompt: '你是陆川，六十七岁，在雾港灯塔守了三十年夜。' },
-    worldBook: [],
+    content: {
+      kind: 'imported',
+      preset: {
+        systemPrompt:
+          '你是陆川，六十七岁，在雾港灯塔守了三十年夜。\n- 说话慢，爱打比方\n- 喝醉了会讲二十年前「海燕号」沉船那晚',
+        personality: '固执、念旧、心软',
+        scenario: '雾港灯塔已经自动化，他还是每晚上去看一眼。',
+      },
+      worldBook: [
+        { keys: ['海燕号', '沉船'], content: '海燕号 2006 年在三号码头外沉没，官方说是触礁。', constant: false },
+        { keys: ['灯塔'], content: '雾港灯塔在东岬角，1931 年建。', constant: true },
+      ],
+    },
     createdAt: NOW - 39 * DAY,
     updatedAt: NOW - 20 * DAY,
     deletedAt: null,
@@ -151,9 +144,7 @@ const personas: MockPersona[] = [
     tagline: '会说话的橘猫，只在下雨天开口。',
     tags: ['猫', '治愈'],
     greetings: ['“喵——今天也下雨了呢。”'],
-    card: null,
-    preset: { persona: '一只胖橘猫，懒，嘴馋，偶尔说出很有哲理的话。' },
-    worldBook: [],
+    content: { kind: 'imported', preset: { persona: '一只胖橘猫，懒，嘴馋，偶尔说出很有哲理的话。' }, worldBook: [] },
     createdAt: NOW - 30 * DAY,
     updatedAt: NOW - 9 * DAY,
     deletedAt: null,
@@ -166,9 +157,7 @@ const personas: MockPersona[] = [
     tagline: null,
     tags: [],
     greetings: [],
-    card: null,
-    preset: {},
-    worldBook: [],
+    content: { kind: 'imported', preset: {}, worldBook: [] },
     createdAt: NOW - 28 * DAY,
     updatedAt: NOW - 27 * DAY,
     deletedAt: NOW - 27 * DAY,
@@ -751,15 +740,13 @@ function worldRow(w: MockWorld): WorldRow {
 }
 
 function personaRow(p: MockPersona): PersonaRow {
-  const joined = worlds.filter((w) => w.deletedAt == null && w.members.some((m) => m.personaId === p.id && m.leftAt == null));
   return {
     id: p.id,
     account: p.account,
     name: p.name,
     avatar: p.avatar,
     profile: { tagline: p.tagline, tags: p.tags, greetings: p.greetings },
-    worlds: joined.length,
-    card: p.card,
+    source: p.content.kind,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
     deletedAt: p.deletedAt,
@@ -944,24 +931,6 @@ export class TavernContentMock implements TavernContentPort {
     await delay();
     const p = personas.find((x) => x.id === personaId);
     if (!p) return notFound('角色卡');
-    const joined = worlds.flatMap((w) =>
-      w.members
-        .filter((m) => m.personaId === p.id)
-        .map((m) => ({
-          world: { id: w.id, accountUid: w.account.uid, title: w.title, deletedAt: w.deletedAt },
-          joinedAt: m.joinedAt,
-          leftAt: m.leftAt,
-        })),
-    );
-    return ok({ persona: personaRow(p), preset: p.preset, worldBook: p.worldBook, worlds: joined });
-  }
-
-  async deletePersona(personaId: number): Promise<AppResult<ActionResult>> {
-    await delay();
-    const p = personas.find((x) => x.id === personaId);
-    if (!p) return notFound('角色卡');
-    if (p.deletedAt != null) return fail({ code: 'conflict', message: '这张角色卡已经删除了。' });
-    p.deletedAt = Date.now();
-    return ok({ affected: 1 });
+    return ok({ persona: personaRow(p), content: p.content });
   }
 }

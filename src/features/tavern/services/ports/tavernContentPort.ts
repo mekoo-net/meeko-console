@@ -38,6 +38,6 @@ export interface TavernContentPort {
   forgetMemoryItem(session: SessionKey, messageId: string): Promise<AppResult<ActionResult>>;
 
   personas(query: ContentQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<PersonaRow>>>;
+  /** 角色卡只读：卡归玩家，市场卡在市场下架。 */
   persona(personaId: number): Promise<AppResult<PersonaDetail>>;
-  deletePersona(personaId: number): Promise<AppResult<ActionResult>>;
 }

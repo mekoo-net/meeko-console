@@ -108,9 +108,4 @@ export class TavernContentHttpAdapter implements TavernContentPort {
   async persona(personaId: number): Promise<AppResult<PersonaDetail>> {
     return parseTavern(personaDetailSchema, await requestTavern<unknown>(`${BASE}/personas/${personaId}`), '角色卡详情');
   }
-
-  async deletePersona(personaId: number): Promise<AppResult<ActionResult>> {
-    const res = await requestTavern<unknown>(`${BASE}/personas/${personaId}`, { method: 'DELETE' });
-    return parseTavern(actionResultSchema, res, '删除角色卡');
-  }
 }
