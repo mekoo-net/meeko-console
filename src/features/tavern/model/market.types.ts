@@ -246,7 +246,10 @@ export const marketSettlementSchema = z.object({
 });
 
 export const marketOrderRowSchema = z.object({
+  /** 客户端下单时给的幂等键，不给人看。 */
   id: z.string().min(1),
+  /** 订单号：MO + yyyyMMdd + 9 位当天序号（平台流水号规范），按时间排。 */
+  serialNo: z.string().min(1),
   source: marketOrderSourceSchema,
   item: z.object({ id: z.string().min(1), kind: marketItemKindSchema, name: z.string() }),
   buyer: accountRefSchema,
@@ -261,6 +264,8 @@ export const marketOrderRowSchema = z.object({
 export type MarketOrderRow = z.infer<typeof marketOrderRowSchema>;
 
 export type MarketOrderQuery = {
+  /** 订单号，精确匹配。 */
+  serialNo?: string;
   itemId?: string;
   kind?: MarketItemKind;
   buyerUid?: number;

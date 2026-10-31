@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 商品行「订单」：一件商品（角色卡或世界书）的订单，版式同平台「领取记录」弹窗——上面一行摘要，一行轻筛选，下面定高表格，分页贴右下。
+ * 商品行「订单」：一件商品（角色卡或世界书）的订单，列序同订单页（订单号在前、时间在后），版式同平台「领取记录」弹窗——上面一行摘要，一行轻筛选，下面定高表格，分页贴右下。
  */
 import { computed, ref, watch } from 'vue';
 import { Search } from '@element-plus/icons-vue';
@@ -21,10 +21,9 @@ import {
   type MarketOrderSource,
 } from '../../model/market.types';
 import { formatPercent, formatPrice } from '../../model/marketFormat';
-import { formatCredits, parseAccountUid, shortId } from '../../model/meteringFormat';
+import { formatCredits, parseAccountUid } from '../../model/meteringFormat';
 import { getTavernMarketPort } from '../../services';
 import AccountCell from '../content/AccountCell.vue';
-import CopyableId from '../metering/CopyableId.vue';
 
 const visible = defineModel<boolean>('visible', { required: true });
 const props = defineProps<{ item: MarketItemRow | null }>();
@@ -116,36 +115,44 @@ watch(visible, (open) => {
       empty-text="还没有订单"
     >
       <el-table-column
+        label="订单号"
+        min-width="180"
+      >
+        <template #default="{ row }: { row: MarketOrderRow }">
+          <span class="serial">{{ row.serialNo }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column
         label="买家"
-        min-width="200"
+        min-width="190"
       >
         <template #default="{ row }: { row: MarketOrderRow }">
           <AccountCell :account="row.buyer" />
         </template>
       </el-table-column>
       <el-table-column
-        label="订单号"
-        width="140"
-      >
-        <template #default="{ row }: { row: MarketOrderRow }">
-          <CopyableId
-            :value="row.id"
-            :display="shortId(row.id)"
-            label="订单号"
-          />
-        </template>
-      </el-table-column>
-      <el-table-column
         label="来源"
-        width="90"
+        width="80"
       >
         <template #default="{ row }: { row: MarketOrderRow }">
           {{ MarketOrderSourceLabel[row.source] }}
         </template>
       </el-table-column>
       <el-table-column
+        label="状态"
+        width="90"
+      >
+        <template #default="{ row }: { row: MarketOrderRow }">
+          <StatusTag
+            :label="MarketOrderStatusLabel[row.status]"
+            :tone="MarketOrderStatusTone[row.status]"
+            :title="row.failureReason ?? undefined"
+          />
+        </template>
+      </el-table-column>
+      <el-table-column
         label="价格"
-        width="100"
+        width="90"
         align="right"
       >
         <template #default="{ row }: { row: MarketOrderRow }">
@@ -154,7 +161,7 @@ watch(visible, (open) => {
       </el-table-column>
       <el-table-column
         label="卖家分成"
-        width="130"
+        width="120"
         align="right"
       >
         <template #default="{ row }: { row: MarketOrderRow }">
@@ -167,19 +174,6 @@ watch(visible, (open) => {
             v-else
             class="muted"
           >—</span>
-        </template>
-      </el-table-column>
-      <el-table-column
-        label="状态"
-        width="100"
-        align="center"
-      >
-        <template #default="{ row }: { row: MarketOrderRow }">
-          <StatusTag
-            :label="MarketOrderStatusLabel[row.status]"
-            :tone="MarketOrderStatusTone[row.status]"
-            :title="row.failureReason ?? undefined"
-          />
         </template>
       </el-table-column>
       <el-table-column
@@ -229,6 +223,14 @@ watch(visible, (open) => {
 }
 
 .num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 同列表页的 .cell-uid（那个只在 compact-table 里生效）：单号等宽、次要色。 */
+.serial {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  color: var(--el-text-color-secondary);
   font-variant-numeric: tabular-nums;
 }
 

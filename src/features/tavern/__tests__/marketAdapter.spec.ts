@@ -121,6 +121,7 @@ describe('TavernMarketHttpAdapter', () => {
         items: [
           {
             id: '0193f5a0-0000-7000-8000-000000000001',
+            serialNo: 'MO20261031000000002',
             source: 'purchase',
             item: { id: ITEM_ID, kind: 'world_book', name: '雾港 1931' },
             buyer: ACCOUNT,
@@ -142,6 +143,7 @@ describe('TavernMarketHttpAdapter', () => {
     expect(request).toHaveBeenCalledWith('/tavern/api/admin/market/orders', {
       query: { p: 1, pageSize: 20, buyerUid: 100004120, kind: 'world_book' },
     });
+    expect(r.success && r.data.items[0]?.serialNo).toBe('MO20261031000000002');
     expect(r.success && r.data.items[0]?.item.kind).toBe('world_book');
     expect(r.success && r.data.items[0]?.settlement?.sellerCredits).toBe(693);
   });

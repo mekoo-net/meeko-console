@@ -257,11 +257,24 @@ function row(i: MockItem): MarketItemRow {
   };
 }
 
+/** 同服务端的 SerialNumbers：MO + 下单那天（UTC）+ 当天第几单，9 位。 */
+const serialNos = new Map<string, string>();
+{
+  const perDay = new Map<string, number>();
+  for (const o of [...orders].sort((a, b) => a.at - b.at)) {
+    const day = new Date(o.at).toISOString().slice(0, 10).replaceAll('-', '');
+    const n = (perDay.get(day) ?? 0) + 1;
+    perDay.set(day, n);
+    serialNos.set(o.id, `MO${day}${String(n).padStart(9, '0')}`);
+  }
+}
+
 function orderRow(o: MockOrder): MarketOrderRow {
   const item = items.find((i) => i.id === o.itemId)!;
   const sellerCredits = Math.round(o.price * (1 - settings.settings.commissionRate) * settings.settings.creditsPerYuan * 100) / 100;
   return {
     id: o.id,
+    serialNo: serialNos.get(o.id)!,
     source: o.source,
     item: { id: item.id, kind: item.onSale.kind, name: item.onSale.face.name },
     buyer: o.buyer,
@@ -346,6 +359,7 @@ export class TavernMarketMock implements TavernMarketPort {
     await delay();
     const rows = orders
       .map(orderRow)
+      .filter((o) => query.serialNo == null || o.serialNo === query.serialNo)
       .filter((o) => query.itemId == null || o.item.id === query.itemId)
       .filter((o) => query.kind == null || o.item.kind === query.kind)
       .filter((o) => query.buyerUid == null || o.buyer.uid === query.buyerUid)
@@ -353,7 +367,7 @@ export class TavernMarketMock implements TavernMarketPort {
       .filter((o) => query.source == null || o.source === query.source)
       .filter((o) => query.fromUtc == null || o.createdAt >= query.fromUtc)
       .filter((o) => query.toUtc == null || o.createdAt <= query.toUtc)
-      .sort((a, b) => b.createdAt - a.createdAt);
+      .sort((a, b) => b.serialNo.localeCompare(a.serialNo));
     return ok(pageOf(rows, page.p, page.pageSize));
   }
 

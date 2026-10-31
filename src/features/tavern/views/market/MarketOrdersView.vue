@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
  * 市场 › 订单：一单就是一份权益，角色卡和世界书一样买。买家付人民币进平台钱包，卖家的分成按成交时的设置折成积分（行上有快照）。
+ * 列序照平台「账单流水」：订单号 → 买家 → 商品 → 来源 → 状态 → 价格 → 卖家与分成 → 时间。订单号按天按序发，新的在前。
  * 创作者第一次发布时自己得的那一单（0 元）也在这里。
  * 也是用户视角「购买的」：传了 `buyerUid` 就只看这个人买的，买家筛选和买家列都不要。
  */
@@ -17,7 +18,6 @@ import { formatDateTime } from '@/shared/lib/date';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 
 import AccountCell from '../../components/content/AccountCell.vue';
-import CopyableId from '../../components/metering/CopyableId.vue';
 import { usePagedList } from '../../composables/usePagedList';
 import {
   MarketItemKindLabel,
@@ -31,7 +31,7 @@ import {
   type MarketOrderSource,
 } from '../../model/market.types';
 import { formatPercent, formatPrice, itemPage } from '../../model/marketFormat';
-import { formatCredits, parseAccountUid, shortId } from '../../model/meteringFormat';
+import { formatCredits, parseAccountUid } from '../../model/meteringFormat';
 import { getTavernMarketPort } from '../../services';
 
 const props = defineProps<{ buyerUid?: number }>();
@@ -42,6 +42,7 @@ const port = getTavernMarketPort();
 const blank = () => ({
   buyerUid: '',
   sellerUid: '',
+  serialNo: '',
   itemId: '',
   kind: undefined as MarketItemKind | undefined,
   source: undefined as MarketOrderSource | undefined,
@@ -58,6 +59,7 @@ const { items, total, page, pageSize, loading, load, reload } = usePagedList<Mar
         {
           buyerUid: buyer.value,
           sellerUid: seller.value,
+          serialNo: f.serialNo.trim() || undefined,
           itemId: f.itemId.trim() || undefined,
           kind: f.kind,
           source: f.source,
@@ -97,12 +99,13 @@ onMounted(() => void load());
         @refresh="reload"
         @reset="filter = blank()"
       >
-        <el-form-item label="卖家 UID">
+        <el-form-item label="订单号">
           <el-input
-            v-model="filter.sellerUid"
+            v-model="filter.serialNo"
             :prefix-icon="Search"
             placeholder="精确匹配"
             clearable
+            style="width: 220px"
           />
         </el-form-item>
         <el-form-item label="类别">
@@ -120,15 +123,6 @@ onMounted(() => void load());
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="商品 ID">
-          <el-input
-            v-model="filter.itemId"
-            :prefix-icon="Search"
-            placeholder="精确匹配"
-            clearable
-            style="width: 300px"
-          />
-        </el-form-item>
         <el-form-item label="来源">
           <el-select
             v-model="filter.source"
@@ -144,6 +138,26 @@ onMounted(() => void load());
             />
           </el-select>
         </el-form-item>
+
+        <template #extra-row>
+          <el-form-item label="卖家 UID">
+            <el-input
+              v-model="filter.sellerUid"
+              :prefix-icon="Search"
+              placeholder="精确匹配"
+              clearable
+            />
+          </el-form-item>
+          <el-form-item label="商品 ID">
+            <el-input
+              v-model="filter.itemId"
+              :prefix-icon="Search"
+              placeholder="精确匹配"
+              clearable
+              style="width: 300px"
+            />
+          </el-form-item>
+        </template>
       </FilterBar>
     </template>
 
@@ -157,30 +171,27 @@ onMounted(() => void load());
       :empty-text="' '"
     >
       <el-table-column
-        label="时间"
-        width="140"
+        label="订单号"
+        min-width="170"
       >
         <template #default="{ row }: { row: MarketOrderRow }">
-          <span class="cell-date">{{ formatDateTime(row.createdAt) }}</span>
+          <span class="cell-uid">{{ row.serialNo }}</span>
         </template>
       </el-table-column>
 
       <el-table-column
-        label="订单号"
-        width="130"
+        v-if="buyerUid == null"
+        label="买家"
+        min-width="150"
       >
         <template #default="{ row }: { row: MarketOrderRow }">
-          <CopyableId
-            :value="row.id"
-            :display="shortId(row.id)"
-            label="订单号"
-          />
+          <AccountCell :account="row.buyer" />
         </template>
       </el-table-column>
 
       <el-table-column
         label="商品"
-        min-width="190"
+        min-width="170"
       >
         <template #default="{ row }: { row: MarketOrderRow }">
           <span class="cell-item">
@@ -203,7 +214,7 @@ onMounted(() => void load());
 
       <el-table-column
         label="来源"
-        width="80"
+        width="70"
       >
         <template #default="{ row }: { row: MarketOrderRow }">
           {{ MarketOrderSourceLabel[row.source] }}
@@ -211,27 +222,21 @@ onMounted(() => void load());
       </el-table-column>
 
       <el-table-column
-        v-if="buyerUid == null"
-        label="买家"
-        min-width="160"
+        label="状态"
+        width="84"
       >
         <template #default="{ row }: { row: MarketOrderRow }">
-          <AccountCell :account="row.buyer" />
-        </template>
-      </el-table-column>
-
-      <el-table-column
-        label="卖家"
-        min-width="160"
-      >
-        <template #default="{ row }: { row: MarketOrderRow }">
-          <AccountCell :account="row.seller" />
+          <StatusTag
+            :label="MarketOrderStatusLabel[row.status]"
+            :tone="MarketOrderStatusTone[row.status]"
+            :title="row.failureReason ?? undefined"
+          />
         </template>
       </el-table-column>
 
       <el-table-column
         label="价格"
-        width="90"
+        width="84"
         align="right"
       >
         <template #default="{ row }: { row: MarketOrderRow }">
@@ -240,8 +245,17 @@ onMounted(() => void load());
       </el-table-column>
 
       <el-table-column
+        label="卖家"
+        min-width="150"
+      >
+        <template #default="{ row }: { row: MarketOrderRow }">
+          <AccountCell :account="row.seller" />
+        </template>
+      </el-table-column>
+
+      <el-table-column
         label="卖家分成"
-        width="130"
+        width="104"
         align="right"
       >
         <template #default="{ row }: { row: MarketOrderRow }">
@@ -258,15 +272,11 @@ onMounted(() => void load());
       </el-table-column>
 
       <el-table-column
-        label="状态"
-        width="90"
+        label="下单时间"
+        width="150"
       >
         <template #default="{ row }: { row: MarketOrderRow }">
-          <StatusTag
-            :label="MarketOrderStatusLabel[row.status]"
-            :tone="MarketOrderStatusTone[row.status]"
-            :title="row.failureReason ?? undefined"
-          />
+          <span class="cell-date">{{ formatDateTime(row.createdAt) }}</span>
         </template>
       </el-table-column>
 
