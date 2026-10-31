@@ -99,7 +99,7 @@ const payee = (row: WithdrawalRow) => `${row.payout.accountName}（${WithdrawalM
 async function approve(row: WithdrawalRow): Promise<void> {
   const ok = await confirmDanger({
     title: '审核通过',
-    message: `通过提现单 ${row.serialNo} 后，需线下向 ${payee(row)} 打款 ${formatYuan(row.amount)}，完成后标记已打款。`,
+    message: `通过后需线下向 ${payee(row)} 打款 ${formatYuan(row.amount)}。`,
     confirmText: '通过',
     type: 'info',
   });
@@ -107,14 +107,14 @@ async function approve(row: WithdrawalRow): Promise<void> {
 }
 
 async function reject(row: WithdrawalRow): Promise<void> {
-  const reason = await askReason('驳回', `驳回提现单 ${row.serialNo}，${formatYuan(row.amount)} 将退回卖家可提现余额，卖家可重新申请。`);
-  if (reason != null) await act(row, () => port.rejectWithdrawal(row.id, reason), '已驳回，金额已退回可提现余额');
+  const reason = await askReason('驳回', `驳回提现单 ${row.serialNo}？金额将退回卖家。`);
+  if (reason != null) await act(row, () => port.rejectWithdrawal(row.id, reason), '已驳回');
 }
 
 async function markPaid(row: WithdrawalRow): Promise<void> {
   const ok = await confirmDanger({
     title: '确认已打款',
-    message: `确认已向 ${payee(row)} 打款 ${formatYuan(row.amount)}？标记后计入卖家已提现。`,
+    message: `确认已向 ${payee(row)} 打款 ${formatYuan(row.amount)}？`,
     confirmText: '标记已打款',
     type: 'info',
   });
@@ -122,8 +122,8 @@ async function markPaid(row: WithdrawalRow): Promise<void> {
 }
 
 async function markFailed(row: WithdrawalRow): Promise<void> {
-  const reason = await askReason('打款失败', `确认向 ${payee(row)} 打款失败？${formatYuan(row.amount)} 将退回卖家可提现余额，卖家可修改收款信息后重新申请。`);
-  if (reason != null) await act(row, () => port.markWithdrawalFailed(row.id, reason), '已标记打款失败，金额已退回可提现余额');
+  const reason = await askReason('打款失败', `确认向 ${payee(row)} 打款失败？金额将退回卖家。`);
+  if (reason != null) await act(row, () => port.markWithdrawalFailed(row.id, reason), '已标记打款失败');
 }
 
 onMounted(() => void load());
@@ -137,7 +137,7 @@ onMounted(() => void load());
     >
       <PageHeader
         title="提现"
-        description="审核卖家的收益提现申请：审核通过后线下打款，并标记已打款或打款失败；驳回或打款失败的金额退回卖家可提现余额。"
+        description="审核通过后线下打款，再标记已打款或打款失败；驳回和打款失败的金额退回卖家。"
       />
     </template>
 
