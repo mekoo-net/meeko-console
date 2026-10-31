@@ -80,7 +80,7 @@ export class TavernCreditsMock implements TavernCreditsPort {
   async adjust(accountUid: number, input: CreditAdjustInput): Promise<AppResult<CreditBalance>> {
     await delay();
     if (input.delta === 0) return fail({ code: 'validation', message: '调整数不能为 0。' });
-    if (!input.note.trim()) return fail({ code: 'validation', message: '写一下为什么调整。' });
+    if (!input.note.trim()) return fail({ code: 'validation', message: '请填写调整原因。' });
     adjustMockCredits(accountUid, input.delta, input.note.trim(), input.requestId);
     const a = mockCreditAccount(accountUid);
     return ok({ available: a.available, held: a.held });

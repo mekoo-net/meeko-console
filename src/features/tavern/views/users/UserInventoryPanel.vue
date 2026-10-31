@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * 用户视角 › 市场 › 仓库：这个人手里有的商品，一件一行，新得的在前——买来的，和自己上架时得的那一份。
- * 商品被下架了照样在仓库里（下架只是停售，已有的照常用），「市场」一列标出来。
- * 行首「详情」打开凭的那一单（订单抽屉）；商品名点过去是市场里那一件。
+ * 商品被下架了照样在仓库里（下架只是停售，已有的照常用），「在售状态」一列标出来。
+ * 行首「详情」打开对应的订单（订单抽屉）；商品名点过去是市场里那一件。
  */
 import { onMounted, ref } from 'vue';
 import { View } from '@element-plus/icons-vue';
@@ -77,7 +77,7 @@ onMounted(() => void load());
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="怎么得的">
+        <el-form-item label="获得方式">
           <el-select
             v-model="filter.source"
             placeholder="全部"
@@ -115,7 +115,7 @@ onMounted(() => void load());
             :icon="View"
             link
             type="primary"
-            title="查看凭的那一单"
+            title="查看订单"
             @click="openDetail(row.orderId)"
           />
         </template>
@@ -170,7 +170,7 @@ onMounted(() => void load());
       </el-table-column>
 
       <el-table-column
-        label="怎么得的"
+        label="获得方式"
         width="90"
       >
         <template #default="{ row }: { row: InventoryRow }">
@@ -179,7 +179,7 @@ onMounted(() => void load());
       </el-table-column>
 
       <el-table-column
-        label="市场"
+        label="在售状态"
         width="90"
       >
         <template #default="{ row }: { row: InventoryRow }">
@@ -201,8 +201,8 @@ onMounted(() => void load());
 
       <template #empty>
         <EmptyState
-          title="仓库是空的"
-          description="这个人还没有买过、也没有上架过商品。"
+          title="暂无商品"
+          description="该用户尚未购买或创作商品。"
         />
       </template>
     </el-table>

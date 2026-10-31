@@ -299,7 +299,7 @@ export type MarketOrderQuery = {
 
 // ---------- 仓库（用户视角） ----------
 
-/** 仓库里的一件：商品、现在在不在售、创作者、怎么得的（买的 / 自己上架的）、凭的哪一单、什么时候得的。 */
+/** 仓库里的一件：商品、在售状态、创作者、获得方式（购买 / 创作）、对应订单、获得时间。 */
 export const inventoryRowSchema = z.object({
   item: z.object({ id: z.string().min(1), kind: marketItemKindSchema, name: z.string() }),
   /** 角色卡是头像，世界书是封面。 */
@@ -318,10 +318,10 @@ export type InventoryQuery = {
   source?: MarketOrderSource;
 };
 
-/** 仓库里说「怎么得的」：自己上架时得的那一份叫「自己的」。 */
+/** 仓库里的「获得方式」：买来的是「购买」，自己上架时得的那一份是「创作」。 */
 export const InventorySourceLabel: Readonly<Record<MarketOrderSource, string>> = {
   purchase: '购买',
-  creator: '自己的',
+  creator: '创作',
 };
 
 // ---------- 分成设置 ----------

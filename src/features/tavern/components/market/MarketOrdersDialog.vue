@@ -193,7 +193,7 @@ watch(visible, (open) => {
 
       <template #empty>
         <EmptyState
-          title="还没有订单"
+          title="暂无订单"
           description="调整筛选条件或清空后重试。"
         />
       </template>

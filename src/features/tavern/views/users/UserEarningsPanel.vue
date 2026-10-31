@@ -132,8 +132,8 @@ onMounted(() => {
 
       <template #empty>
         <EmptyState
-          title="还没有收益"
-          description="这个人卖出商品以后，钱从这里一笔笔记起。"
+          title="暂无收益"
+          description="该用户卖出商品后，收益流水显示在这里。"
         />
       </template>
     </el-table>

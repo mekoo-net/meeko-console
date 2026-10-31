@@ -193,7 +193,7 @@ watch(
             row-key="id"
             size="small"
             class="compact-table txns"
-            empty-text="还没有流水"
+            empty-text="暂无流水"
           >
             <el-table-column
               label="收益流水"

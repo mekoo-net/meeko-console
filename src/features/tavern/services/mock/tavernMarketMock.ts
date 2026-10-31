@@ -430,7 +430,7 @@ async function actOnWithdrawal(
   await delay();
   const w = withdrawals.find((x) => x.id === id);
   if (!w) return withdrawalNotFound();
-  if (!allowed.includes(w.status)) return fail({ code: 'conflict', message: `这笔提现现在不能${what}，刷新看看是不是已经有人处理了。` });
+  if (!allowed.includes(w.status)) return fail({ code: 'conflict', message: `提现单状态已变更，无法${what}，请刷新后重试。` });
   w.status = next;
   w.reason = reason ?? null;
   w.updatedAt = Date.now();

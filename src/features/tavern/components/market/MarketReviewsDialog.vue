@@ -172,8 +172,8 @@ watch(visible, (open) => {
 
       <template #empty>
         <EmptyState
-          title="没有这样的评价"
-          description="换个分类，或清空买家 UID 再看。"
+          title="暂无评价"
+          description="调整筛选条件后重试。"
         />
       </template>
     </el-table>

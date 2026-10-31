@@ -70,7 +70,7 @@ const adjustForm = ref<AdjustForm>({ direction: 'grant', amount: 100, note: '' }
 let requestId = '';
 
 const adjustRules: FormRules<AdjustForm> = {
-  note: [{ required: true, message: '写一下为什么调整', trigger: 'blur' }],
+  note: [{ required: true, message: '请填写调整原因', trigger: 'blur' }],
 };
 
 function openAdjust(): void {

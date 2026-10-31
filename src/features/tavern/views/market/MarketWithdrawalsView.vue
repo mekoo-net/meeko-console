@@ -88,8 +88,8 @@ function askReason(title: string, message: string): Promise<string | null> {
     confirmButtonText: title,
     cancelButtonText: '取消',
     inputType: 'textarea',
-    inputPlaceholder: '原因（卖家看得到）',
-    inputValidator: (v) => (v?.trim() ? (v.trim().length <= 200 ? true : '最长 200 字') : '写一下原因'),
+    inputPlaceholder: '原因（卖家可见）',
+    inputValidator: (v) => (v?.trim() ? (v.trim().length <= 200 ? true : '不超过 200 字') : '请填写原因'),
     type: 'warning',
   }).then(({ value }) => value.trim(), () => null);
 }
@@ -99,22 +99,22 @@ const payee = (row: WithdrawalRow) => `${row.payout.accountName}（${WithdrawalM
 async function approve(row: WithdrawalRow): Promise<void> {
   const ok = await confirmDanger({
     title: '审核通过',
-    message: `通过 ${row.serialNo}：之后线下向 ${payee(row)} 打款 ${formatYuan(row.amount)}，打完回来标记已打款。`,
+    message: `通过提现单 ${row.serialNo} 后，需线下向 ${payee(row)} 打款 ${formatYuan(row.amount)}，完成后标记已打款。`,
     confirmText: '通过',
     type: 'info',
   });
-  if (ok) await act(row, () => port.approveWithdrawal(row.id), '已通过，等打款');
+  if (ok) await act(row, () => port.approveWithdrawal(row.id), '已通过，待打款');
 }
 
 async function reject(row: WithdrawalRow): Promise<void> {
-  const reason = await askReason('驳回', `驳回 ${row.serialNo}：${formatYuan(row.amount)} 退回卖家的可提现，卖家可以重新申请。`);
-  if (reason != null) await act(row, () => port.rejectWithdrawal(row.id, reason), '已驳回，钱已退回');
+  const reason = await askReason('驳回', `驳回提现单 ${row.serialNo}，${formatYuan(row.amount)} 将退回卖家可提现余额，卖家可重新申请。`);
+  if (reason != null) await act(row, () => port.rejectWithdrawal(row.id, reason), '已驳回，金额已退回可提现余额');
 }
 
 async function markPaid(row: WithdrawalRow): Promise<void> {
   const ok = await confirmDanger({
     title: '确认已打款',
-    message: `确认已向 ${payee(row)} 打款 ${formatYuan(row.amount)}？标记后记成卖家的已提现。`,
+    message: `确认已向 ${payee(row)} 打款 ${formatYuan(row.amount)}？标记后计入卖家已提现。`,
     confirmText: '标记已打款',
     type: 'info',
   });
@@ -122,8 +122,8 @@ async function markPaid(row: WithdrawalRow): Promise<void> {
 }
 
 async function markFailed(row: WithdrawalRow): Promise<void> {
-  const reason = await askReason('打款失败', `向 ${payee(row)} 打款失败？${formatYuan(row.amount)} 退回卖家的可提现，卖家可以改了收款信息重新申请。`);
-  if (reason != null) await act(row, () => port.markWithdrawalFailed(row.id, reason), '已标记打款失败，钱已退回');
+  const reason = await askReason('打款失败', `确认向 ${payee(row)} 打款失败？${formatYuan(row.amount)} 将退回卖家可提现余额，卖家可修改收款信息后重新申请。`);
+  if (reason != null) await act(row, () => port.markWithdrawalFailed(row.id, reason), '已标记打款失败，金额已退回可提现余额');
 }
 
 onMounted(() => void load());
@@ -137,7 +137,7 @@ onMounted(() => void load());
     >
       <PageHeader
         title="提现"
-        description="卖家申请把收益提出来：审核通过后线下打款，再回来标记已打款或打款失败；驳回和打款失败的钱退回卖家的可提现。"
+        description="审核卖家的收益提现申请：审核通过后线下打款，并标记已打款或打款失败；驳回或打款失败的金额退回卖家可提现余额。"
       />
     </template>
 

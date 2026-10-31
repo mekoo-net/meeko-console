@@ -74,13 +74,13 @@ async function takeDown(): Promise<void> {
   const i = item.value;
   if (!i) return;
   const reason = await ElMessageBox.prompt(
-    `下架「${i.listing.face.name}」：市场里看不到、不能再买，已买的照常用。`,
+    `下架「${i.listing.face.name}」后，市场中不再展示、不可购买；已购买的用户不受影响。`,
     `下架${kindLabel.value}`,
     {
       confirmButtonText: '下架',
       cancelButtonText: '取消',
-      inputPlaceholder: '下架原因（创作者看得到）',
-      inputValidator: (v) => (v?.trim() ? (v.trim().length <= 200 ? true : '最长 200 字') : '写一下为什么下架'),
+      inputPlaceholder: '下架原因（创作者可见）',
+      inputValidator: (v) => (v?.trim() ? (v.trim().length <= 200 ? true : '不超过 200 字') : '请填写下架原因'),
       type: 'warning',
     },
   ).then(({ value }) => value.trim(), () => null);
@@ -90,7 +90,7 @@ async function takeDown(): Promise<void> {
 
 async function restore(): Promise<void> {
   const i = item.value;
-  if (!i || !(await confirmDanger({ title: '恢复上架', message: `让「${i.listing.face.name}」重新在市场里出售？`, confirmText: '恢复', type: 'info' })))
+  if (!i || !(await confirmDanger({ title: '恢复上架', message: `恢复「${i.listing.face.name}」在市场中出售？`, confirmText: '恢复', type: 'info' })))
     return;
   await act(() => port.restore(i.itemId), '已恢复上架');
 }
