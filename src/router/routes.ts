@@ -379,6 +379,26 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '概览', requiresAuth: true, roles: ['Admin'] },
           },
           {
+            path: 'worlds',
+            name: 'tavern-worlds',
+            component: () => import('@/features/tavern/views/TavernWorldsView.vue'),
+            meta: { title: '世界', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            // 挂在 /tavern/worlds 下面，侧边菜单按前缀高亮「世界」。UID 只认数字，页面拿到的就是数。
+            path: 'worlds/:accountUid(\\d+)/:worldId',
+            name: 'tavern-world-detail',
+            component: () => import('@/features/tavern/views/TavernWorldDetailView.vue'),
+            props: (route) => ({ accountUid: Number(route.params.accountUid), worldId: route.params.worldId }),
+            meta: { title: '世界详情', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'personas',
+            name: 'tavern-personas',
+            component: () => import('@/features/tavern/views/TavernPersonasView.vue'),
+            meta: { title: '角色卡', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
             path: 'pipeline',
             name: 'tavern-pipeline',
             component: () => import('@/features/tavern/views/LlmSettingsView.vue'),

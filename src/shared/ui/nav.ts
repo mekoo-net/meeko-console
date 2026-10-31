@@ -1,4 +1,5 @@
 import {
+  Avatar,
   Bell,
   ChatLineRound,
   Connection,
@@ -19,6 +20,7 @@ import {
   Files,
   List,
   Picture,
+  Place,
   Present,
   PriceTag,
   Lock,
@@ -136,6 +138,8 @@ export const navViews: readonly NavView[] = [
     roles: ['Admin'],
     menu: [
       { type: 'leaf', index: '/tavern/overview', title: '概览', icon: DataAnalysis },
+      { type: 'leaf', index: '/tavern/worlds', title: '世界', icon: Place },
+      { type: 'leaf', index: '/tavern/personas', title: '角色卡', icon: Avatar },
       { type: 'leaf', index: '/tavern/pipeline', title: '管线设置', icon: MagicStick },
       { type: 'leaf', index: '/tavern/logs', title: '调用日志', icon: DataLine },
       { type: 'leaf', index: '/tavern/credit-rates', title: '积分价目', icon: PriceTag },
