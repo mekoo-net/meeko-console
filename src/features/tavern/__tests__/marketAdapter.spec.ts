@@ -115,6 +115,16 @@ describe('TavernMarketHttpAdapter', () => {
     expect(r.success && r.data.state).toBe('taken_down');
   });
 
+  it('deletes an item with a reason and gets the deleted row back', async () => {
+    request.mockResolvedValueOnce(ok(wireItem({ state: 'deleted', takedown: { reason: '冒充真人', staffUid: 1, atUtc: 1 } })));
+    const r = await new TavernMarketHttpAdapter().deleteItem(ITEM_ID, '冒充真人');
+    expect(request).toHaveBeenCalledWith(`/tavern/api/admin/market/items/${ITEM_ID}/delete`, {
+      method: 'POST',
+      body: { reason: '冒充真人' },
+    });
+    expect(r.success && r.data.state).toBe('deleted');
+  });
+
   it('reads an order with the kind of item and one status for it', async () => {
     request.mockResolvedValueOnce(
       ok({

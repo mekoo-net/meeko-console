@@ -2,14 +2,14 @@
 /**
  * 商品详情，版式同角色卡抽屉：摘要表在上，门面、在卖的内容分段往下（都按条目，点开看正文），下架 / 恢复放底栏。
  * 内容按类别分：角色卡是预设和描写；世界书是一整套世界模板（时间、叙事、世界书、规则书）。
+ * 底栏是处置：下架 / 恢复上架、删除（同列表行上的「⋯」，都走 useItemModeration）。
  * 评价和订单在列表行上的「操作」里另开弹窗看。
  * 只给在卖的那一版——员工判断要不要下架看的就是它；版本是创作者和买家之间的事，这里不露。
  */
 import { computed, ref, watch } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage } from 'element-plus';
 
 import StatusTag from '@/shared/ui/StatusTag.vue';
-import { confirmDanger } from '@/shared/composables/useConfirm';
 import { formatDateTime } from '@/shared/lib/date';
 
 import { accountName, initialOf } from '../../model/contentFormat';
@@ -23,6 +23,7 @@ import {
 import { formatPrice } from '../../model/marketFormat';
 import { presetItems, worldBookItems } from '../../model/promptEntries';
 import { getTavernMarketPort } from '../../services';
+import { useItemModeration } from '../../composables/useItemModeration';
 import PromptEntryList from '../content/PromptEntryList.vue';
 import CopyableId from '../metering/CopyableId.vue';
 import WorldTemplateContent from './WorldTemplateContent.vue';
@@ -35,7 +36,6 @@ const port = getTavernMarketPort();
 
 const detail = ref<MarketItemDetail | null>(null);
 const loading = ref(false);
-const acting = ref(false);
 
 const item = computed(() => detail.value?.item ?? null);
 const onSale = computed(() => detail.value?.onSale ?? null);
@@ -70,46 +70,10 @@ watch(
   { immediate: true },
 );
 
-async function takeDown(): Promise<void> {
-  const i = item.value;
-  if (!i) return;
-  const reason = await ElMessageBox.prompt(
-    `下架「${i.listing.face.name}」后，市场中不再展示、不可购买；已购买的用户不受影响。`,
-    `下架${kindLabel.value}`,
-    {
-      confirmButtonText: '下架',
-      cancelButtonText: '取消',
-      inputPlaceholder: '下架原因（创作者可见）',
-      inputValidator: (v) => (v?.trim() ? (v.trim().length <= 200 ? true : '不超过 200 字') : '请填写下架原因'),
-      type: 'warning',
-    },
-  ).then(({ value }) => value.trim(), () => null);
-  if (reason == null) return;
-  await act(() => port.takeDown(i.itemId, reason), '已下架');
-}
-
-async function restore(): Promise<void> {
-  const i = item.value;
-  if (!i || !(await confirmDanger({ title: '恢复上架', message: `恢复「${i.listing.face.name}」在市场中出售？`, confirmText: '恢复', type: 'info' })))
-    return;
-  await act(() => port.restore(i.itemId), '已恢复上架');
-}
-
-async function act(run: () => ReturnType<typeof port.restore>, done: string): Promise<void> {
-  acting.value = true;
-  try {
-    const r = await run();
-    if (!r.success) {
-      ElMessage.error(r.error.message);
-      return;
-    }
-    ElMessage.success(done);
-    emit('changed', r.data.itemId);
-    await load(r.data.itemId);
-  } finally {
-    acting.value = false;
-  }
-}
+const { acting, takeDown, restore, remove } = useItemModeration((row) => {
+  emit('changed', row.itemId);
+  void load(row.itemId);
+});
 
 /** 门面上的几行；角色卡多一行开场白。 */
 function faceLines(content: MarketItemContent): { label: string; value: string }[] {
@@ -251,18 +215,27 @@ function faceLines(content: MarketItemContent): { label: string; value: string }
         class="drawer-footer"
       >
         <el-button
+          v-if="item.state !== 'deleted'"
+          type="danger"
+          plain
+          :disabled="acting === item.itemId"
+          @click="remove(item)"
+        >
+          删除
+        </el-button>
+        <el-button
           v-if="item.state === 'listed'"
           type="danger"
-          :loading="acting"
-          @click="takeDown"
+          :loading="acting === item.itemId"
+          @click="takeDown(item)"
         >
           下架
         </el-button>
         <el-button
           v-else-if="item.state === 'taken_down'"
           type="primary"
-          :loading="acting"
-          @click="restore"
+          :loading="acting === item.itemId"
+          @click="restore(item)"
         >
           恢复上架
         </el-button>

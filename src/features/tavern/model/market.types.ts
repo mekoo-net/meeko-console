@@ -109,19 +109,21 @@ export const marketStatsSchema = z.object({
   ratingCount: z.number().int().nonnegative(),
 });
 
-/** 管理面只列发布过的，所以只有这两种。 */
-export const marketItemStateSchema = z.enum(['listed', 'taken_down']);
+/** 管理面只列发布过的：在售、已下架（能恢复）、已删除（永久退出市场，默认列表不显示）。 */
+export const marketItemStateSchema = z.enum(['listed', 'taken_down', 'deleted']);
 export type MarketItemState = z.infer<typeof marketItemStateSchema>;
 export const marketItemStateValues = marketItemStateSchema.options;
 
 export const MarketItemStateLabel: Readonly<Record<MarketItemState, string>> = {
   listed: '在售',
   taken_down: '已下架',
+  deleted: '已删除',
 };
 
 export const MarketItemStateTone: Readonly<Record<MarketItemState, StatusTone>> = {
   listed: 'success',
   taken_down: 'danger',
+  deleted: 'info',
 };
 
 export const itemTakedownSchema = z.object({

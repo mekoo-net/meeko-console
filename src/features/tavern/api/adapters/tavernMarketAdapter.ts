@@ -72,6 +72,11 @@ export class TavernMarketHttpAdapter implements TavernMarketPort {
     return parseTavern(marketItemRowSchema, res, '恢复上架');
   }
 
+  async deleteItem(itemId: string, reason: string): Promise<AppResult<MarketItemRow>> {
+    const res = await requestTavern<unknown>(`${BASE}/items/${itemId}/delete`, { method: 'POST', body: { reason } });
+    return parseTavern(marketItemRowSchema, res, '删除');
+  }
+
   async orders(query: MarketOrderQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketOrderRow>>> {
     return parseTavern(orderPageSchema, await requestTavern<unknown>(`${BASE}/orders`, { query: { ...page, ...query } }), '市场订单');
   }

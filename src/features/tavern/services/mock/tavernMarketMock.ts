@@ -470,7 +470,7 @@ export class TavernMarketMock implements TavernMarketPort {
       .map(row)
       .filter((r) => query.kind == null || r.listing.kind === query.kind)
       .filter((r) => query.creatorUid == null || r.creator.uid === query.creatorUid)
-      .filter((r) => query.state == null || r.state === query.state)
+      .filter((r) => (query.state == null ? r.state !== 'deleted' : r.state === query.state))
       .filter((r) => query.fromUtc == null || (r.publishedAt ?? 0) >= query.fromUtc)
       .filter((r) => query.toUtc == null || (r.publishedAt ?? 0) <= query.toUtc)
       .filter(
@@ -524,6 +524,17 @@ export class TavernMarketMock implements TavernMarketPort {
     if (i.state !== 'taken_down') return fail({ code: 'conflict', message: `${thisOne(i)}没有被下架。` });
     i.state = 'listed';
     i.takedown = null;
+    i.updatedAt = Date.now();
+    return ok(row(i));
+  }
+
+  async deleteItem(itemId: string, reason: string): Promise<AppResult<MarketItemRow>> {
+    await delay();
+    const i = items.find((x) => x.id === itemId);
+    if (!i) return notFound();
+    if (i.state === 'deleted') return fail({ code: 'conflict', message: `${thisOne(i)}已删除。` });
+    i.state = 'deleted';
+    i.takedown = { reason, staffUid: STAFF_UID, atUtc: Date.now() };
     i.updatedAt = Date.now();
     return ok(row(i));
   }
