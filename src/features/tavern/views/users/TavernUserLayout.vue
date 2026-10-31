@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * 用户视角：一个玩家的世界、角色卡、市场、调用日志、积分，版式同平台账户页（头部 + 路由驱动的标签页）。
- * 头部的名字、邮箱是平台账户的；世界和角色卡数来自 WorldLine，它不通时显示「—」，其余照常。
+ * 用户视角：一个玩家的世界线、角色、仓库、市场、调用日志、积分，版式同平台账户页（头部 + 路由驱动的标签页）。
+ * 头部的名字、邮箱是平台账户的；世界线和角色数来自 WorldLine，它不通时显示「—」，其余照常。
  */
 import { computed, onMounted, provide, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -46,9 +46,11 @@ async function load(): Promise<void> {
 
 provide(TavernUserKey, { detail, refresh: () => void load() });
 
+// 仓库里放的是卡（角色卡、世界卡）；世界线是用世界卡开的世界，角色是用角色卡建的、玩家起了名字的角色。
 const tabs = [
-  { key: 'worlds', label: '世界' },
-  { key: 'cards', label: '角色卡' },
+  { key: 'worlds', label: '世界线' },
+  { key: 'characters', label: '角色' },
+  { key: 'inventory', label: '仓库' },
   { key: 'market', label: '市场' },
   { key: 'logs', label: '调用日志' },
   { key: 'credits', label: '积分' },
@@ -74,8 +76,8 @@ const stats = computed(() => {
   return [
     { key: 'available', label: '可用积分', value: formatCredits(d.user.credits.available) },
     { key: 'held', label: '预扣中', value: formatCredits(d.user.credits.held) },
-    { key: 'worlds', label: '世界', value: count(d.content?.worlds) },
-    { key: 'cards', label: '角色卡', value: count(d.content?.cards) },
+    { key: 'worlds', label: '世界线', value: count(d.content?.worlds) },
+    { key: 'characters', label: '角色', value: count(d.content?.cards) },
     { key: 'owned', label: '仓库', value: String(d.market.owned) },
     { key: 'listed', label: '上架', value: String(d.market.listed) },
   ];

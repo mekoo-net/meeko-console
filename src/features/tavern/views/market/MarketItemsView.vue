@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 市场 › 角色卡 / 世界线：玩家发布到市场的一类商品，版式同调用日志页，详情在抽屉里看在卖的那一版。
+ * 市场 › 角色卡 / 世界卡：玩家发布到市场的一类商品，版式同调用日志页，详情在抽屉里看在卖的那一版。
  * 发布即上架，卖家自己也能上架、下架。员工在行尾「⋯」和详情抽屉底栏处置：在售可下架；已下架可上架、删除；
  * 已删除（默认列表不显示）可恢复。已买的照常用。
  * `?itemId=` 进来直接打开那一件（角色卡抽屉里的市场卡号点过来）。
@@ -85,7 +85,7 @@ const creatorFilter = computed(() =>
     : {},
 );
 
-/** 角色卡露头像，世界线露封面。 */
+/** 角色卡露头像，世界卡露封面。 */
 function imageOf(listing: MarketListing): string | undefined {
   return (listing.kind === 'character_card' ? listing.character.avatar : listing.face.cover) ?? undefined;
 }
@@ -122,7 +122,7 @@ function openOrders(row: MarketItemRow): void {
   ordersOpen.value = true;
 }
 
-/** 角色卡、世界线两页是同一个组件，路由切过来时实例复用：换类别就清掉筛选，从第 1 页重拉。 */
+/** 角色卡、世界卡两页是同一个组件，路由切过来时实例复用：换类别就清掉筛选，从第 1 页重拉。 */
 watch(
   () => props.kind,
   () => {
@@ -248,7 +248,7 @@ onMounted(() => {
           <el-tag
             size="small"
             effect="plain"
-            :type="row.listing.kind === 'world_line' ? 'success' : 'primary'"
+            :type="row.listing.kind === 'world_card' ? 'success' : 'primary'"
           >
             {{ MarketItemKindLabel[row.listing.kind] }}
           </el-tag>
@@ -296,14 +296,14 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <template v-if="kind === 'world_line'">
+      <template v-if="kind === 'world_card'">
         <el-table-column
           label="规模"
           min-width="170"
         >
           <template #default="{ row }: { row: MarketItemRow }">
             <span
-              v-if="row.listing.kind === 'world_line'"
+              v-if="row.listing.kind === 'world_card'"
               class="cell-muted-strong"
             >叙事 {{ row.listing.summary.narratives }} · 设定 {{ row.listing.summary.settings }} · 规则 {{ row.listing.summary.rules }}</span>
           </template>
@@ -313,7 +313,7 @@ onMounted(() => {
           min-width="140"
         >
           <template #default="{ row }: { row: MarketItemRow }">
-            <span v-if="row.listing.kind === 'world_line'">{{ timeText(row.listing.summary.time) }}</span>
+            <span v-if="row.listing.kind === 'world_card'">{{ timeText(row.listing.summary.time) }}</span>
           </template>
         </el-table-column>
       </template>

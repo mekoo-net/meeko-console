@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Tavern 用户：进过 Tavern 的玩家（客户端 onboarding 落的行），按最近活跃倒序，版式同调用日志页。
- * 点进去是这个人的用户视角：世界、角色卡、调用日志、积分。关键字搜平台账户的名字 / 邮箱 / 手机。
+ * 点进去是这个人的用户视角：世界线、角色、仓库、市场、调用日志、积分。关键字搜平台账户的名字 / 邮箱 / 手机。
  */
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';

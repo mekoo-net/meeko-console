@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 用户视角 › 角色卡：这个玩家的卡，版式同世界页：筛选栏 + 满高表格 + 分页，详情在抽屉里看。
+ * 用户视角 › 角色：这个玩家用角色卡（市场买的或导入的）建的角色，版式同世界线页：筛选栏 + 满高表格 + 分页，详情在抽屉里看。
  * 只读：卡归玩家，市场卡在市场下架；玩家自己删掉的，状态选「已删除」能看到。
  */
 import { onMounted, ref } from 'vue';
@@ -220,7 +220,7 @@ onMounted(() => void load());
 
       <template #empty>
         <EmptyState
-          title="没有符合条件的角色卡"
+          title="没有符合条件的角色"
           description="调整筛选条件或重置后重试。"
         />
       </template>

@@ -31,8 +31,8 @@ export async function act(
 export const deleteWorld = (world: WorldRow) =>
   act(
     {
-      title: '删除世界',
-      message: `删除世界「${world.title}」？玩家那边会看不到这个世界和里面的会话。`,
+      title: '删除世界线',
+      message: `删除世界线「${world.title}」？玩家那边会看不到这条世界线和里面的会话。`,
       confirmText: '删除',
     },
     () => port.deleteWorld({ accountUid: world.account.uid, worldId: world.id }),

@@ -398,14 +398,21 @@ export const routes: RouteRecordRaw[] = [
                 name: 'tavern-user-worlds',
                 component: () => import('@/features/tavern/views/users/UserWorldsTab.vue'),
                 props: (route) => ({ accountUid: Number(route.params.uid) }),
-                meta: { title: '世界', requiresAuth: true, roles: ['Admin'] },
+                meta: { title: '世界线', requiresAuth: true, roles: ['Admin'] },
               },
               {
-                path: 'cards',
-                name: 'tavern-user-cards',
-                component: () => import('@/features/tavern/views/users/UserCardsTab.vue'),
+                path: 'characters',
+                name: 'tavern-user-characters',
+                component: () => import('@/features/tavern/views/users/UserCharactersTab.vue'),
                 props: (route) => ({ accountUid: Number(route.params.uid) }),
-                meta: { title: '角色卡', requiresAuth: true, roles: ['Admin'] },
+                meta: { title: '角色', requiresAuth: true, roles: ['Admin'] },
+              },
+              {
+                path: 'inventory',
+                name: 'tavern-user-inventory',
+                component: () => import('@/features/tavern/views/users/UserInventoryPanel.vue'),
+                props: (route) => ({ accountUid: Number(route.params.uid) }),
+                meta: { title: '仓库', requiresAuth: true, roles: ['Admin'] },
               },
               {
                 path: 'market',
@@ -431,12 +438,12 @@ export const routes: RouteRecordRaw[] = [
             ],
           },
           {
-            // 世界详情是整页，不嵌在用户视角的标签页里；面包屑回这个用户。
+            // 世界线详情是整页，不嵌在用户视角的标签页里；面包屑回这个用户。
             path: 'users/:uid(\\d+)/worlds/:worldId',
             name: 'tavern-user-world',
             component: () => import('@/features/tavern/views/TavernWorldDetailView.vue'),
             props: (route) => ({ accountUid: Number(route.params.uid), worldId: route.params.worldId }),
-            meta: { title: '世界详情', requiresAuth: true, roles: ['Admin'] },
+            meta: { title: '世界线详情', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'logs',
@@ -451,7 +458,7 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '积分价目', requiresAuth: true, roles: ['Admin'] },
           },
           {
-            // 角色卡、世界线两类商品同一张列表，按类别分页面。
+            // 角色卡、世界卡两类商品同一张列表，按类别分页面。
             path: 'market/cards',
             name: 'tavern-market-cards',
             component: () => import('@/features/tavern/views/market/MarketItemsView.vue'),
@@ -459,11 +466,11 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '角色卡', requiresAuth: true, roles: ['Admin'] },
           },
           {
-            path: 'market/world-lines',
-            name: 'tavern-market-world-lines',
+            path: 'market/world-cards',
+            name: 'tavern-market-world-cards',
             component: () => import('@/features/tavern/views/market/MarketItemsView.vue'),
-            props: { kind: 'world_line' },
-            meta: { title: '世界线', requiresAuth: true, roles: ['Admin'] },
+            props: { kind: 'world_card' },
+            meta: { title: '世界卡', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'market/withdrawals',

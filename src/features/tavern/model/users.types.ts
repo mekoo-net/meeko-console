@@ -17,7 +17,7 @@ export const tavernUserSchema = z.object({
 });
 export type TavernUser = z.infer<typeof tavernUserSchema>;
 
-/** 玩家在 WorldLine 里现有的世界和角色卡数，玩家删掉的不算。 */
+/** 玩家在 WorldLine 里现有的世界线和角色数，玩家删掉的不算。 */
 export const userContentStatsSchema = z.object({
   worlds: z.number().int().nonnegative(),
   cards: z.number().int().nonnegative(),

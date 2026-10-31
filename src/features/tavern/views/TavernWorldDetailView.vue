@@ -156,7 +156,7 @@ onMounted(() => void load());
               ID
               <CopyableId
                 :value="worldId"
-                label="世界 ID"
+                label="世界线 ID"
               />
             </span>
             <template v-if="world">
@@ -196,7 +196,7 @@ onMounted(() => void load());
             plain
             @click="removeWorld"
           >
-            删除世界
+            删除世界线
           </el-button>
         </div>
       </div>

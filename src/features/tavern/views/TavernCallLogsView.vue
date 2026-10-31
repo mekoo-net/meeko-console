@@ -577,7 +577,7 @@ onMounted(() => {
             <span
               v-if="row.kind === 'call'"
               class="cell-conv mono"
-              :title="row.content.sessionId ?? '世界级调用，没有会话'"
+              :title="row.content.sessionId ?? '世界线级调用，没有会话'"
             >{{ shortId(row.content.sessionId) }}</span>
             <span
               v-else

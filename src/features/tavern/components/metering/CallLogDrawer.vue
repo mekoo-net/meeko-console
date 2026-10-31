@@ -212,10 +212,10 @@ function openTrace(traceId: string): void {
           调用
         </h4>
         <div class="log-detail__row">
-          <span class="label">世界</span>
+          <span class="label">世界线</span>
           <CopyableId
             :value="call.content.worldId"
-            label="世界 ID"
+            label="世界线 ID"
           />
         </div>
         <div class="log-detail__row">

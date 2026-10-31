@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 市场 › 订单：一单就是一份权益，角色卡和世界线一样买。买家付人民币进平台钱包；卖家所得也是钱（C2C），冻结期满转可提现。
+ * 市场 › 订单：一单就是一份权益，角色卡和世界卡一样买。买家付人民币进平台钱包；卖家所得也是钱（C2C），冻结期满转可提现。
  * 列表只给订单状态（待付款 / 已扣款 / 待结算 / 已完成 / 失败），钱怎么分、账单号、结算在行首「详情」的抽屉里，同平台账单流水。
  * 列序照平台「账单流水」：订单号 → 买家 → 商品 → 来源 → 状态 → 价格 → 卖家 → 时间。订单号按天按序发，新的在前。
  * 创作者第一次发布时自己得的那一单（0 元）也在这里。
@@ -230,7 +230,7 @@ onMounted(() => void load());
             <el-tag
               size="small"
               effect="plain"
-              :type="row.item.kind === 'world_line' ? 'success' : 'primary'"
+              :type="row.item.kind === 'world_card' ? 'success' : 'primary'"
             >
               {{ MarketItemKindLabel[row.item.kind] }}
             </el-tag>

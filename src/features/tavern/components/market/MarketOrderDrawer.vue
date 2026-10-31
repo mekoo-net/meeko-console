@@ -103,7 +103,7 @@ watch(
               <el-tag
                 size="small"
                 effect="plain"
-                :type="order.item.kind === 'world_line' ? 'success' : 'primary'"
+                :type="order.item.kind === 'world_card' ? 'success' : 'primary'"
               >
                 {{ MarketItemKindLabel[order.item.kind] }}
               </el-tag>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * 用户视角 › 世界：这个玩家的世界，版式同调用日志页：筛选栏 + 满高表格 + 分页。
- * 删除是软删：默认只列没删的，状态选「已删除」能看到删掉的世界和它的内容。
+ * 用户视角 › 世界线：这个玩家用世界卡开的世界线，版式同调用日志页：筛选栏 + 满高表格 + 分页。
+ * 删除是软删：默认只列没删的，状态选「已删除」能看到删掉的世界线和它的内容。
  */
 import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
@@ -82,7 +82,7 @@ onMounted(() => void load());
       :empty-text="' '"
     >
       <el-table-column
-        label="世界"
+        label="世界线"
         min-width="220"
       >
         <template #default="{ row }: { row: WorldRow }">
@@ -98,7 +98,7 @@ onMounted(() => void load());
             <CopyableId
               :value="row.id"
               :display="shortId(row.id)"
-              label="世界 ID"
+              label="世界线 ID"
               class="cell-sub"
             />
           </div>
@@ -202,7 +202,7 @@ onMounted(() => void load());
 
       <template #empty>
         <EmptyState
-          title="没有符合条件的世界"
+          title="没有符合条件的世界线"
           description="调整筛选条件或重置后重试。"
         />
       </template>

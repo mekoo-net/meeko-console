@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 角色卡详情，版式同调用详情抽屉：上面一张摘要表，下面分段。
+ * 角色详情，版式同调用详情抽屉：上面一张摘要表，下面分段。
  * 卡是玩家手里独立的一张，只看卡本身：卡面，再按来源看内容（市场卡看卡号版本，导入的看人设和世界书）。
  * 只读：卡归玩家，员工不删不改；市场卡有问题在市场下架。
  */
@@ -70,7 +70,7 @@ watch(
         >
           {{ initialOf(persona?.name ?? '') }}
         </el-avatar>
-        <span class="drawer-title__text">{{ persona?.name ?? '角色卡' }}</span>
+        <span class="drawer-title__text">{{ persona?.name ?? '角色' }}</span>
         <el-tag
           v-if="persona?.deletedAt != null"
           size="small"
@@ -94,12 +94,12 @@ watch(
           class="log-detail__summary"
         >
           <el-descriptions-item
-            label="角色卡 ID"
+            label="角色 ID"
             :span="2"
           >
             <CopyableId
               :value="persona.id"
-              label="角色卡 ID"
+              label="角色 ID"
             />
           </el-descriptions-item>
           <el-descriptions-item label="创建时间">

@@ -30,7 +30,7 @@ export function timeText(time: WorldTimeTemplate): string {
 
 /** 一类商品在市场里的那一页（路由名）；带 `?itemId=` 进去直接打开那一件。 */
 export function itemPage(kind: MarketItemKind): string {
-  return kind === 'world_line' ? 'tavern-market-world-lines' : 'tavern-market-cards';
+  return kind === 'world_card' ? 'tavern-market-world-cards' : 'tavern-market-cards';
 }
 
 /** 商品行上记录弹窗（评价、订单）头部的一格统计；`rating` 给了就在数字后面画星。 */

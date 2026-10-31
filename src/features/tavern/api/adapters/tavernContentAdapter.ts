@@ -49,11 +49,11 @@ const sessionPath = ({ accountUid, sessionId }: SessionKey) => `${BASE}/accounts
 export class TavernContentHttpAdapter implements TavernContentPort {
   async worlds(query: ContentQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<WorldRow>>> {
     const res = await requestTavern<unknown>(`${BASE}/worlds`, { query: { ...page, ...query } });
-    return parseTavern(worldPageSchema, res, '世界列表');
+    return parseTavern(worldPageSchema, res, '世界线列表');
   }
 
   async world(world: WorldKey): Promise<AppResult<WorldDetail>> {
-    return parseTavern(worldDetailSchema, await requestTavern<unknown>(worldPath(world)), '世界详情');
+    return parseTavern(worldDetailSchema, await requestTavern<unknown>(worldPath(world)), '世界线详情');
   }
 
   async chronicle(world: WorldKey, page: PageQuery): Promise<AppResult<ItemsEnvelope<ChronicleEntry>>> {
@@ -68,7 +68,7 @@ export class TavernContentHttpAdapter implements TavernContentPort {
 
   async deleteWorld(world: WorldKey): Promise<AppResult<ActionResult>> {
     const res = await requestTavern<unknown>(worldPath(world), { method: 'DELETE' });
-    return parseTavern(actionResultSchema, res, '删除世界');
+    return parseTavern(actionResultSchema, res, '删除世界线');
   }
 
   async messages(session: SessionKey, page: PageQuery): Promise<AppResult<ItemsEnvelope<MessageRow>>> {
@@ -102,10 +102,10 @@ export class TavernContentHttpAdapter implements TavernContentPort {
 
   async personas(query: ContentQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<PersonaRow>>> {
     const res = await requestTavern<unknown>(`${BASE}/personas`, { query: { ...page, ...query } });
-    return parseTavern(personaPageSchema, res, '角色卡列表');
+    return parseTavern(personaPageSchema, res, '角色列表');
   }
 
   async persona(personaId: number): Promise<AppResult<PersonaDetail>> {
-    return parseTavern(personaDetailSchema, await requestTavern<unknown>(`${BASE}/personas/${personaId}`), '角色卡详情');
+    return parseTavern(personaDetailSchema, await requestTavern<unknown>(`${BASE}/personas/${personaId}`), '角色详情');
   }
 }

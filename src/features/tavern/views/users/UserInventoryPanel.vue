@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
- * 用户视角 › 市场 › 仓库：这个人手里有的商品，一件一行，新得的在前——买来的，和自己上架时得的那一份。
- * 商品被下架了照样在仓库里（下架只是停售，已有的照常用），「在售状态」一列标出来。
- * 行首「详情」打开对应的订单（订单抽屉）；商品名点过去是市场里那一件。
+ * 用户视角 › 仓库：这个人手里的卡（角色卡、世界卡），一张一行，新得的在前——买来的，和自己上架时得的那一份。
+ * 角色、世界线是用这些卡建出来的，在各自的页签。
+ * 卡在市场被下架了照样在仓库里（下架只是停售，已有的照常用），「在售状态」一列标出来。
+ * 行首「详情」打开对应的订单（订单抽屉）；卡名点过去是市场里那一张。
  */
 import { onMounted, ref } from 'vue';
 import { View } from '@element-plus/icons-vue';
@@ -122,7 +123,7 @@ onMounted(() => void load());
       </el-table-column>
 
       <el-table-column
-        label="商品"
+        label="卡"
         min-width="200"
       >
         <template #default="{ row }: { row: InventoryRow }">
@@ -153,7 +154,7 @@ onMounted(() => void load());
           <el-tag
             size="small"
             effect="plain"
-            :type="row.item.kind === 'world_line' ? 'success' : 'primary'"
+            :type="row.item.kind === 'world_card' ? 'success' : 'primary'"
           >
             {{ MarketItemKindLabel[row.item.kind] }}
           </el-tag>
@@ -201,8 +202,8 @@ onMounted(() => void load());
 
       <template #empty>
         <EmptyState
-          title="暂无商品"
-          description="该用户尚未购买或创作商品。"
+          title="仓库里还没有卡"
+          description="该用户尚未购买或上架过卡。"
         />
       </template>
     </el-table>

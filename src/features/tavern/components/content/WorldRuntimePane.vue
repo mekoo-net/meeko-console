@@ -14,7 +14,7 @@ defineProps<{ runtime: WorldRuntime | null }>();
 <template>
   <EmptyState
     v-if="!runtime"
-    title="世界尚未运行过"
+    title="世界线尚未运行过"
   />
   <div
     v-else
