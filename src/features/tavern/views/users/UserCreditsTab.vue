@@ -12,7 +12,13 @@ import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
 import { formatDateTime } from '@/shared/lib/date';
 
 import { TavernUserKey } from '../../composables/tavernUserContext';
-import { CREDIT_TXN_IN, CreditTxnKindLabel, type CreditAccount, type CreditTxn } from '../../model/credits.types';
+import {
+  CREDIT_TXN_IN,
+  CreditTxnKindLabel,
+  CreditTxnSourceText,
+  type CreditAccount,
+  type CreditTxn,
+} from '../../model/credits.types';
 import { formatCredits } from '../../model/meteringFormat';
 import { getTavernCreditsPort } from '../../services';
 
@@ -42,17 +48,6 @@ watch([page, pageSize], () => void load());
 
 function signed(t: CreditTxn): string {
   return `${CREDIT_TXN_IN.has(t.kind) ? '+' : '−'}${formatCredits(t.amount)}`;
-}
-
-function sourceText(t: CreditTxn): string {
-  switch (t.source.kind) {
-    case 'turn':
-      return '回合';
-    case 'order':
-      return '订单';
-    case 'staff':
-      return `员工 ${t.source.ref}`;
-  }
 }
 
 function openTurn(t: CreditTxn): void {
@@ -176,7 +171,7 @@ onMounted(() => void load());
       >
         <template #default="{ row }: { row: CreditTxn }">
           <div class="cell-source">
-            <span>{{ sourceText(row) }}</span>
+            <span>{{ CreditTxnSourceText[row.source.kind](row.source.ref) }}</span>
             <el-button
               v-if="row.source.kind === 'turn'"
               link
@@ -188,7 +183,7 @@ onMounted(() => void load());
               {{ row.source.ref }}
             </el-button>
             <span
-              v-else-if="row.source.kind === 'order'"
+              v-else-if="row.source.kind === 'order' || row.source.kind === 'market_order'"
               class="mono cell-muted"
             >{{ row.source.ref }}</span>
           </div>

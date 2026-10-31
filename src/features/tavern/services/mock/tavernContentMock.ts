@@ -53,7 +53,7 @@ const DAY = 24 * HOUR;
 const NOW = Date.now();
 
 /** 固定种子出的 uuid 形状 id：刷新页面不变，和真 id 一样能复制、能搜。 */
-function mockUuid(seed: number): string {
+export function mockUuid(seed: number): string {
   let h = (seed * 2654435761) >>> 0;
   let s = '';
   for (let i = 0; i < 32; i += 1) {

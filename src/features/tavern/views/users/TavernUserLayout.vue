@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 用户视角：一个玩家的世界、角色卡、调用日志、积分，版式同平台账户页（头部 + 路由驱动的标签页）。
+ * 用户视角：一个玩家的世界、角色卡、市场、调用日志、积分，版式同平台账户页（头部 + 路由驱动的标签页）。
  * 头部的名字、邮箱是平台账户的；世界和角色卡数来自 WorldLine，它不通时显示「—」，其余照常。
  */
 import { computed, onMounted, provide, ref, watch } from 'vue';
@@ -49,6 +49,7 @@ provide(TavernUserKey, { detail, refresh: () => void load() });
 const tabs = [
   { key: 'worlds', label: '世界' },
   { key: 'cards', label: '角色卡' },
+  { key: 'market', label: '市场' },
   { key: 'logs', label: '调用日志' },
   { key: 'credits', label: '积分' },
 ] as const;
@@ -75,6 +76,8 @@ const stats = computed(() => {
     { key: 'held', label: '预扣中', value: formatCredits(d.user.credits.held) },
     { key: 'worlds', label: '世界', value: count(d.content?.worlds) },
     { key: 'cards', label: '角色卡', value: count(d.content?.cards) },
+    { key: 'purchased', label: '已购', value: String(d.market.purchased) },
+    { key: 'published', label: '发布', value: String(d.market.published) },
   ];
 });
 
@@ -274,7 +277,7 @@ onMounted(() => void load());
 
 .user-head__stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   margin: 20px 0 4px;
   padding: 14px 0;
   border-top: 1px solid var(--el-border-color-extra-light);

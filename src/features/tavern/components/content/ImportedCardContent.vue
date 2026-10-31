@@ -1,11 +1,12 @@
 <script setup lang="ts">
 /**
- * 导入的卡：人设和角色世界书是玩家自己写的 JSON，原样给；`systemPrompt` 是一大段正文，单独按原文排一份方便读。
+ * 人设和角色世界书：导入的卡是玩家自己写的，市场卡的某一版是创作者写的，两者同形，原样给；
+ * `systemPrompt` 是一大段正文，单独按原文排一份方便读。
  */
 import type { ImportedCardContent } from '../../model/content.types';
 import JsonBlock from './JsonBlock.vue';
 
-defineProps<{ content: ImportedCardContent }>();
+defineProps<{ content: Pick<ImportedCardContent, 'preset' | 'worldBook'> }>();
 </script>
 
 <template>

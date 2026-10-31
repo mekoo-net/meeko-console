@@ -27,9 +27,10 @@ describe('TavernUsersHttpAdapter', () => {
   });
 
   it('reads the header, and keeps going when WorldLine had no counts', async () => {
-    request.mockResolvedValueOnce(ok({ user: USER, content: null }));
+    request.mockResolvedValueOnce(ok({ user: USER, content: null, market: { purchased: 2, published: 0 } }));
     const r = await new TavernUsersHttpAdapter().get(100002333);
     expect(request).toHaveBeenCalledWith('/tavern/api/admin/users/100002333');
     expect(r.success && r.data.content).toBeNull();
+    expect(r.success && r.data.market.purchased).toBe(2);
   });
 });

@@ -24,10 +24,18 @@ export const userContentStatsSchema = z.object({
 });
 export type UserContentStats = z.infer<typeof userContentStatsSchema>;
 
+/** 在市场里买过几张（不算创作者自己那一单）、发布过几张。 */
+export const userMarketStatsSchema = z.object({
+  purchased: z.number().int().nonnegative(),
+  published: z.number().int().nonnegative(),
+});
+export type UserMarketStats = z.infer<typeof userMarketStatsSchema>;
+
 /** 用户视角的头部。`content` 在 WorldLine 不通时为 null，头部照常显示其余的。 */
 export const tavernUserDetailSchema = z.object({
   user: tavernUserSchema,
   content: userContentStatsSchema.nullable(),
+  market: userMarketStatsSchema,
 });
 export type TavernUserDetail = z.infer<typeof tavernUserDetailSchema>;
 

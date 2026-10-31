@@ -15,9 +15,17 @@ defineProps<{ content: MarketCardContent }>();
     size="small"
   >
     <el-descriptions-item label="市场卡">
+      <router-link
+        :to="{ name: 'tavern-market-cards', query: { cardId: content.cardId } }"
+        class="link mono"
+        title="在市场里看这张卡"
+      >
+        {{ content.cardId }}
+      </router-link>
       <CopyableId
         :value="content.cardId"
         label="市场卡 ID"
+        display=""
       />
     </el-descriptions-item>
     <el-descriptions-item label="持有版本">
@@ -37,6 +45,16 @@ defineProps<{ content: MarketCardContent }>();
 .num {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
+}
+
+.link {
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+
+.mono {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
 }
 
 .cell-muted {

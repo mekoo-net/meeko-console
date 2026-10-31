@@ -408,6 +408,13 @@ export const routes: RouteRecordRaw[] = [
                 meta: { title: '角色卡', requiresAuth: true, roles: ['Admin'] },
               },
               {
+                path: 'market',
+                name: 'tavern-user-market',
+                component: () => import('@/features/tavern/views/users/UserMarketTab.vue'),
+                props: (route) => ({ accountUid: Number(route.params.uid) }),
+                meta: { title: '市场', requiresAuth: true, roles: ['Admin'] },
+              },
+              {
                 path: 'logs',
                 name: 'tavern-user-logs',
                 component: () => import('@/features/tavern/views/TavernCallLogsView.vue'),
@@ -442,6 +449,24 @@ export const routes: RouteRecordRaw[] = [
             name: 'tavern-credit-rates',
             component: () => import('@/features/tavern/views/TavernCreditRatesView.vue'),
             meta: { title: '积分价目', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'market/cards',
+            name: 'tavern-market-cards',
+            component: () => import('@/features/tavern/views/market/MarketCardsView.vue'),
+            meta: { title: '商品', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'market/orders',
+            name: 'tavern-market-orders',
+            component: () => import('@/features/tavern/views/market/MarketOrdersView.vue'),
+            meta: { title: '订单', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'settings/market',
+            name: 'tavern-market-settings',
+            component: () => import('@/features/tavern/views/settings/MarketSettingsView.vue'),
+            meta: { title: '市场分成', requiresAuth: true, roles: ['Admin'] },
           },
           {
             // Tavern 自己的业务设置，不放进平台的系统设置。
