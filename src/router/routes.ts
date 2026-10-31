@@ -385,6 +385,24 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '管线设置', requiresAuth: true, roles: ['Admin'] },
           },
           {
+            path: 'logs',
+            name: 'tavern-logs',
+            component: () => import('@/features/tavern/views/TavernCallLogsView.vue'),
+            meta: { title: '调用日志', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'billing',
+            name: 'tavern-billing',
+            component: () => import('@/features/tavern/views/TavernBillingView.vue'),
+            meta: { title: '计费明细', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'pricing',
+            name: 'tavern-pricing',
+            component: () => import('@/features/tavern/views/TavernPricingView.vue'),
+            meta: { title: '计费配置', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
             path: 'backends',
             redirect: { name: 'settings-gateway-issue' },
           },

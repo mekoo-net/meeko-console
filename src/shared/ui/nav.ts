@@ -136,6 +136,9 @@ export const navViews: readonly NavView[] = [
     menu: [
       { type: 'leaf', index: '/tavern/overview', title: '概览', icon: DataAnalysis },
       { type: 'leaf', index: '/tavern/pipeline', title: '管线设置', icon: MagicStick },
+      { type: 'leaf', index: '/tavern/logs', title: '调用日志', icon: DataLine },
+      { type: 'leaf', index: '/tavern/billing', title: '计费明细', icon: Money },
+      { type: 'leaf', index: '/tavern/pricing', title: '计费配置', icon: PriceTag },
     ],
   },
   {

@@ -1,0 +1,217 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { fail, ok } from '@/shared/api/httpTypes';
+import * as http from '@/features/tavern/api/http';
+
+import { TavernBillingHttpAdapter } from '../api/adapters/tavernBillingAdapter';
+import { TavernCallLogHttpAdapter } from '../api/adapters/tavernCallLogAdapter';
+import { TavernPricingHttpAdapter } from '../api/adapters/tavernPricingAdapter';
+
+// 只替换传输，parseTavern 用真的：解析正是要测的东西。
+vi.mock('@/features/tavern/api/http', async (importOriginal) => ({
+  ...(await importOriginal<typeof http>()),
+  requestTavern: vi.fn(),
+}));
+
+const request = vi.mocked(http.requestTavern);
+
+/**
+ * 这些用例钉的是「后端真发什么」：PlatformJsonOptions 下的 camelCase、snake_case 枚举、epoch 毫秒。
+ * 契约漂移要在适配层变成一次明确的校验失败，而不是让页面读到 undefined。
+ */
+
+/** 取自 `CallLogDto` 的一行。 */
+function wireCall(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: '0199a3c4-5e6f-7a8b-9c0d-1e2f3a4b5c6d',
+    traceId: 'd270f7a19db0fc8aa173ad1896b150fb',
+    accountUid: 100002333,
+    pipeline: { id: 'dialogue', label: '角色对话' },
+    vendorKey: 'kiro',
+    modelName: 'claude-opus-5.5',
+    status: 'success',
+    content: {
+      worldId: '7c1e0d52-1a2b-4c3d-8e9f-0a1b2c3d4e5f',
+      sessionId: '23c97d30-c8a6-4920-bd78-4c244bac6328',
+      proactive: false,
+      latencyMs: 1200,
+      durationMs: 7200,
+      toolCalls: 1,
+      stopReason: 'tool_use',
+      error: null,
+    },
+    usage: {
+      totalTokens: 14_597,
+      input: { tokens: 13_862, cachedReadTokens: 0, cachedWriteTokens: 0, audioTokens: 0 },
+      output: { tokens: 735, reasoningTokens: 0, audioTokens: 0, imageTokens: 0 },
+    },
+    cost: { multiplier: 1, baseline: 0.000002, billableQuantity: 16_067, amount: 0.032134 },
+    bill: { usageLogId: 52300626, status: 'charged', amount: 0.06145 },
+    createdAt: 1761877649000,
+    ...overrides,
+  };
+}
+
+/** 取自 `UsageLogDto` 的一行：token 与按件两种用量形状并存。 */
+function wireTurn(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 52300626,
+    traceId: 'd270f7a19db0fc8aa173ad1896b150fb',
+    accountUid: 100002333,
+    sessionId: null,
+    proactive: false,
+    status: 'charged',
+    amount: 0.06145,
+    billSerialNo: 'TVB20261031300626',
+    usages: [
+      { unit: 'token', modelName: 'claude-opus-5.5', vendorKey: 'kiro', kind: 'chat', promptTokens: 13_862, completionTokens: 735 },
+      { unit: 'image', modelName: 'nai-diffusion-5-full', vendorKey: 'neko', kind: 'generation', quantity: 1 },
+    ],
+    createdAt: 1761877673000,
+    ...overrides,
+  };
+}
+
+describe('tavern metering adapters', () => {
+  beforeEach(() => {
+    request.mockReset();
+  });
+
+  it('pages call logs the Yomi way and sends billed=false instead of dropping it', async () => {
+    request.mockResolvedValueOnce(ok({ items: [wireCall()], total: 77, page: 2, pageSize: 20 }));
+    const r = await new TavernCallLogHttpAdapter().list({
+      fromUtc: 1,
+      toUtc: 2,
+      billed: false,
+      model: 'opus',
+      page: 2,
+      pageSize: 20,
+    });
+    expect(request).toHaveBeenCalledWith('/tavern/api/admin/calls', {
+      query: expect.objectContaining({ p: 2, pageSize: 20, fromUtc: 1, toUtc: 2, billed: false, model: 'opus' }),
+    });
+    if (!r.success) throw new Error(r.error.message);
+    expect(r.data.total).toBe(77);
+    expect(r.data.items[0]).toMatchObject({
+      pipeline: { id: 'dialogue', label: '角色对话' },
+      content: { latencyMs: 1200, error: null },
+      bill: { usageLogId: 52300626, status: 'charged' },
+    });
+  });
+
+  it('keeps a failed, unbilled call with an error that has no code', async () => {
+    request.mockResolvedValueOnce(
+      ok({
+        items: [
+          wireCall({
+            status: 'failure',
+            bill: null,
+            content: { ...(wireCall().content as object), latencyMs: null, error: { code: null, message: 'stream interrupted' } },
+          }),
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }),
+    );
+    const r = await new TavernCallLogHttpAdapter().list({ fromUtc: 1, toUtc: 2, page: 1, pageSize: 20 });
+    if (!r.success) throw new Error(r.error.message);
+    expect(r.data.items[0]?.bill).toBeNull();
+    expect(r.data.items[0]?.content.error).toEqual({ code: null, message: 'stream interrupted' });
+  });
+
+  it('turns contract drift into a validation failure instead of half-parsed rows', async () => {
+    // 改名前的形状：flat 字段、ok / error 状态。
+    request.mockResolvedValueOnce(ok({ items: [{ ...wireCall(), status: 'ok' }], total: 1, page: 1, pageSize: 20 }));
+    const r = await new TavernCallLogHttpAdapter().list({ fromUtc: 1, toUtc: 2, page: 1, pageSize: 20 });
+    expect(r.success).toBe(false);
+    expect(!r.success && r.error.code).toBe('validation');
+  });
+
+  it('parses the call summary as sent, without re-deriving platform-borne cost', async () => {
+    const tally = {
+      calls: 10,
+      failures: 0,
+      tokens: { input: 187_600, output: 6_500 },
+      cost: { billed: 0, platformBorne: 0.4143, total: 0.4143 },
+    };
+    request.mockResolvedValueOnce(ok({ pipelines: [{ pipeline: { id: 'summary', label: '滚动摘要' }, tally }], total: tally }));
+    const r = await new TavernCallLogHttpAdapter().summary({ fromUtc: 1, toUtc: 2, accountUid: 100000123 });
+    expect(request).toHaveBeenCalledWith('/tavern/api/admin/calls/summary', {
+      query: { fromUtc: 1, toUtc: 2, accountUid: 100000123 },
+    });
+    expect(r.success && r.data.pipelines[0]?.tally.cost.platformBorne).toBe(0.4143);
+  });
+
+  it('discriminates token and counted usages by unit', async () => {
+    request.mockResolvedValueOnce(ok({ items: [wireTurn()], total: 1, page: 1, pageSize: 20 }));
+    const r = await new TavernBillingHttpAdapter().list({ fromUtc: 1, toUtc: 2, status: 'charged', page: 1, pageSize: 20 });
+    expect(request).toHaveBeenCalledWith('/tavern/api/admin/billing/usage', {
+      query: expect.objectContaining({ p: 1, pageSize: 20, status: 'charged' }),
+    });
+    if (!r.success) throw new Error(r.error.message);
+    const [tokens, image] = r.data.items[0]!.usages;
+    expect(tokens?.unit === 'token' && tokens.completionTokens).toBe(735);
+    expect(image?.unit === 'image' && image.quantity).toBe(1);
+  });
+
+  it('rejects a usage whose fields do not match its unit', async () => {
+    const usages = [{ unit: 'token', modelName: 'x', vendorKey: null, kind: 'chat', quantity: 3 }];
+    request.mockResolvedValueOnce(ok({ items: [wireTurn({ usages })], total: 1, page: 1, pageSize: 20 }));
+    const r = await new TavernBillingHttpAdapter().list({ fromUtc: 1, toUtc: 2, page: 1, pageSize: 20 });
+    expect(!r.success && r.error.code).toBe('validation');
+  });
+
+  it('reads the turn detail with server quotes and the repriced flag', async () => {
+    request.mockResolvedValueOnce(
+      ok({
+        turn: wireTurn(),
+        lines: [
+          {
+            usage: (wireTurn().usages as unknown[])[0],
+            quote: { multiplier: 1, baseline: 0.000002, billableQuantity: 16_067, amount: 0.032134 },
+          },
+        ],
+        amountAtCurrentPricing: 0.082134,
+        repriced: true,
+        calls: [wireCall()],
+      }),
+    );
+    const r = await new TavernBillingHttpAdapter().get(52300626);
+    expect(request).toHaveBeenCalledWith('/tavern/api/admin/billing/usage/52300626');
+    if (!r.success) throw new Error(r.error.message);
+    expect(r.data.repriced).toBe(true);
+    expect(r.data.lines[0]?.quote.billableQuantity).toBe(16_067);
+    expect(r.data.calls).toHaveLength(1);
+  });
+
+  it('passes transport failures through untouched', async () => {
+    const failure = fail({ code: 'unknown', message: '时间范围最长 31 天。' });
+    request.mockResolvedValueOnce(failure);
+    expect(await new TavernBillingHttpAdapter().summary({ fromUtc: 1, toUtc: 2 })).toBe(failure);
+  });
+
+  it('round-trips pricing as { rules, version }', async () => {
+    const rules = {
+      baselines: [
+        { unit: 'token', price: 0.000002 },
+        { unit: 'image', price: 0.05 },
+        { unit: 'audio_second', price: 0.002 },
+        { unit: 'video_second', price: 0.08 },
+      ],
+      modelMultipliers: [{ modelName: 'claude-opus-5.5', multiplier: 2 }],
+      defaultModelMultiplier: 1,
+      completionWeight: 3,
+      proactiveRateMultiplier: 1,
+    } as const;
+    const models = [{ modelName: 'claude-opus-5.5', vendors: ['factory', 'kiro'], inCatalog: true, calls30d: 595 }];
+    request.mockResolvedValueOnce(ok({ rules, version: 8, updatedAt: 1761877649000, models }));
+
+    const input = { rules: { ...rules, baselines: [...rules.baselines], modelMultipliers: [...rules.modelMultipliers] }, version: 7 };
+    const r = await new TavernPricingHttpAdapter().update(input);
+    expect(request).toHaveBeenCalledWith('/tavern/api/admin/settings/metering', { method: 'PUT', body: input });
+    if (!r.success) throw new Error(r.error.message);
+    expect(r.data.version).toBe(8);
+    expect(r.data.models[0]?.vendors).toEqual(['factory', 'kiro']);
+  });
+});
