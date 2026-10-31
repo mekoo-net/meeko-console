@@ -15,7 +15,10 @@ import {
   type MarketOrderQuery,
   type MarketOrderRow,
   type MarketReview,
+  type MarketReviewQuery,
   type MarketSettings,
+  type ReviewSentiment,
+  type ReviewSummary,
   type MarketSettingsView,
   type SellerBalance,
   type SellerEarnings,
@@ -150,7 +153,7 @@ const items: MockItem[] = [
     onSale: card(SHEN, ['“又是你。”'], '你是沈惟行，雾港警署督察。说话简短，对细节过目不忘。'),
     publishedAt: NOW - 50 * DAY,
     purchases: 128,
-    ratings: [5, 5, 4, 5, 3],
+    ratings: [5, 5, 4, 5, 3, 2, 5, 1],
     takedown: null,
     updatedAt: NOW - 3 * HOUR,
   },
@@ -186,7 +189,7 @@ const items: MockItem[] = [
     onSale: FOG_HARBOR,
     publishedAt: NOW - 30 * DAY,
     purchases: 57,
-    ratings: [5, 4, 5],
+    ratings: [5, 4, 5, 3, 2],
     takedown: null,
     updatedAt: NOW - 2 * DAY,
   },
@@ -428,6 +431,25 @@ const thisOne = (i: MockItem) => (i.onSale.kind === 'world_book' ? '这本世界
 
 const notFound = () => fail({ code: 'not_found', message: '商品不存在。' });
 
+/** 同服务端：好评 4–5 星、中评 3 星、差评 1–2 星。 */
+const sentimentOf = (rating: number): ReviewSentiment => (rating >= 4 ? 'good' : rating === 3 ? 'neutral' : 'bad');
+
+const REVIEW_TEXT: Readonly<Record<'character_card' | 'world_book', Record<ReviewSentiment, string | null>>> = {
+  character_card: { good: '人设很稳，推理戏好看。', neutral: '还行，开场有点慢。', bad: '人设崩了，说话一点不像督察。' },
+  world_book: { good: '设定扎实，开局就有戏。', neutral: null, bad: '规则太多，开出来的世界跑不动。' },
+};
+
+/** 每条评价轮流算在林夏、0123 名下，新的在前。 */
+function reviewsOf(i: MockItem): MarketReview[] {
+  return i.ratings.map((rating, n) => ({
+    id: n + 1,
+    account: n % 2 ? PLAYER_0123 : LINXIA,
+    rating,
+    content: REVIEW_TEXT[i.onSale.kind][sentimentOf(rating)],
+    updatedAt: NOW - (n + 1) * DAY,
+  }));
+}
+
 export class TavernMarketMock implements TavernMarketPort {
   async items(query: MarketItemQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketItemRow>>> {
     await delay();
@@ -453,19 +475,23 @@ export class TavernMarketMock implements TavernMarketPort {
     return ok({ item: row(i), onSale: i.onSale });
   }
 
-  async reviews(itemId: string, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketReview>>> {
+  async reviews(itemId: string, query: MarketReviewQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketReview>>> {
     await delay();
     const i = items.find((x) => x.id === itemId);
     if (!i) return notFound();
-    const praise = i.onSale.kind === 'world_book' ? '设定扎实，开局就有戏。' : '人设很稳，推理戏好看。';
-    const rows: MarketReview[] = i.ratings.map((rating, n) => ({
-      id: n + 1,
-      account: n % 2 ? PLAYER_0123 : LINXIA,
-      rating,
-      content: rating >= 4 ? praise : null,
-      updatedAt: NOW - (n + 1) * DAY,
-    }));
+    const rows = reviewsOf(i)
+      .filter((r) => query.accountUid == null || r.account.uid === query.accountUid)
+      .filter((r) => query.sentiment == null || sentimentOf(r.rating) === query.sentiment);
     return ok(pageOf(rows, page.p, page.pageSize));
+  }
+
+  async reviewSummary(itemId: string): Promise<AppResult<ReviewSummary>> {
+    await delay();
+    const i = items.find((x) => x.id === itemId);
+    if (!i) return notFound();
+    const all = reviewsOf(i);
+    const count = (s: ReviewSentiment) => all.filter((r) => sentimentOf(r.rating) === s).length;
+    return ok({ good: count('good'), neutral: count('neutral'), bad: count('bad') });
   }
 
   async takeDown(itemId: string, reason: string): Promise<AppResult<MarketItemRow>> {

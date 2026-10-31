@@ -8,9 +8,11 @@ import type {
   MarketItemRow,
   MarketOrderQuery,
   MarketReview,
+  MarketReviewQuery,
   MarketOrderRow,
   MarketSettings,
   MarketSettingsView,
+  ReviewSummary,
   SellerEarnings,
   SellerTxn,
   WithdrawalQuery,
@@ -21,8 +23,10 @@ import type {
 export interface TavernMarketPort {
   items(query: MarketItemQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketItemRow>>>;
   item(itemId: string): Promise<AppResult<MarketItemDetail>>;
-  /** 新的在前。 */
-  reviews(itemId: string, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketReview>>>;
+  /** 新的在前；可以只看某个买家的、只看好评 / 中评 / 差评。 */
+  reviews(itemId: string, query: MarketReviewQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketReview>>>;
+  /** 好评、中评、差评各几条。 */
+  reviewSummary(itemId: string): Promise<AppResult<ReviewSummary>>;
   takeDown(itemId: string, reason: string): Promise<AppResult<MarketItemRow>>;
   restore(itemId: string): Promise<AppResult<MarketItemRow>>;
 

@@ -195,6 +195,28 @@ export const marketReviewSchema = z.object({
 });
 export type MarketReview = z.infer<typeof marketReviewSchema>;
 
+/** 好评 4–5 星、中评 3 星、差评 1–2 星（同常见电商的口径）。 */
+export const reviewSentimentSchema = z.enum(['good', 'neutral', 'bad']);
+export type ReviewSentiment = z.infer<typeof reviewSentimentSchema>;
+
+export const ReviewSentimentLabel: Readonly<Record<ReviewSentiment, string>> = {
+  good: '好评',
+  neutral: '中评',
+  bad: '差评',
+};
+
+export const reviewSummarySchema = z.object({
+  good: z.number().int(),
+  neutral: z.number().int(),
+  bad: z.number().int(),
+});
+export type ReviewSummary = z.infer<typeof reviewSummarySchema>;
+
+export type MarketReviewQuery = {
+  accountUid?: number;
+  sentiment?: ReviewSentiment;
+};
+
 export const marketItemDetailSchema = z.object({
   item: marketItemRowSchema,
   onSale: marketItemContentSchema,

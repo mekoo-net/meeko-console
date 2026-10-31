@@ -172,6 +172,14 @@ describe('TavernMarketHttpAdapter', () => {
     expect(r.success && r.data.payout.method).toBe('alipay');
   });
 
+  it('narrows reviews to one buyer and one sentiment', async () => {
+    request.mockResolvedValueOnce(ok({ items: [], total: 0, page: 1, pageSize: 20 }));
+    await new TavernMarketHttpAdapter().reviews(ITEM_ID, { accountUid: 100004120, sentiment: 'bad' }, { p: 1, pageSize: 20 });
+    expect(request).toHaveBeenCalledWith(`/tavern/api/admin/market/items/${ITEM_ID}/reviews`, {
+      query: { p: 1, pageSize: 20, accountUid: 100004120, sentiment: 'bad' },
+    });
+  });
+
   it('reads a seller ledger line with the balance after it', async () => {
     request.mockResolvedValueOnce(
       ok({

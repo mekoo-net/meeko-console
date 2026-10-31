@@ -9,6 +9,7 @@ import {
   marketOrderRowSchema,
   marketReviewSchema,
   marketSettingsViewSchema,
+  reviewSummarySchema,
   sellerEarningsSchema,
   sellerTxnSchema,
   withdrawalRowSchema,
@@ -20,6 +21,8 @@ import {
   type MarketReview,
   type MarketSettings,
   type MarketSettingsView,
+  type MarketReviewQuery,
+  type ReviewSummary,
   type SellerEarnings,
   type SellerTxn,
   type WithdrawalQuery,
@@ -44,8 +47,13 @@ export class TavernMarketHttpAdapter implements TavernMarketPort {
     return parseTavern(marketItemDetailSchema, await requestTavern<unknown>(`${BASE}/items/${itemId}`), '市场商品');
   }
 
-  async reviews(itemId: string, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketReview>>> {
-    return parseTavern(reviewPageSchema, await requestTavern<unknown>(`${BASE}/items/${itemId}/reviews`, { query: page }), '评价');
+  async reviews(itemId: string, query: MarketReviewQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketReview>>> {
+    const res = await requestTavern<unknown>(`${BASE}/items/${itemId}/reviews`, { query: { ...page, ...query } });
+    return parseTavern(reviewPageSchema, res, '评价');
+  }
+
+  async reviewSummary(itemId: string): Promise<AppResult<ReviewSummary>> {
+    return parseTavern(reviewSummarySchema, await requestTavern<unknown>(`${BASE}/items/${itemId}/reviews/summary`), '评价分类');
   }
 
   async takeDown(itemId: string, reason: string): Promise<AppResult<MarketItemRow>> {
