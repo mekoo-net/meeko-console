@@ -118,7 +118,7 @@ function faceLines(face: CardFace): { label: string; value: string }[] {
         >
           {{ initialOf(card?.face.name ?? '') }}
         </el-avatar>
-        <span class="drawer-title__text">{{ card?.face.name ?? '市场卡' }}</span>
+        <span class="drawer-title__text">{{ card?.face.name ?? '角色卡' }}</span>
         <StatusTag
           v-if="card"
           :label="MarketCardStateLabel[card.state]"
@@ -139,12 +139,12 @@ function faceLines(face: CardFace): { label: string; value: string }[] {
           class="card-detail__summary"
         >
           <el-descriptions-item
-            label="卡号"
+            label="角色卡 ID"
             :span="2"
           >
             <CopyableId
               :value="card.cardId"
-              label="卡号"
+              label="角色卡 ID"
             />
           </el-descriptions-item>
           <el-descriptions-item label="创作者">
@@ -182,9 +182,6 @@ function faceLines(face: CardFace): { label: string; value: string }[] {
 
         <el-divider />
 
-        <h4 class="section-title">
-          卡面
-        </h4>
         <dl class="face">
           <template
             v-for="line in faceLines(card.face)"

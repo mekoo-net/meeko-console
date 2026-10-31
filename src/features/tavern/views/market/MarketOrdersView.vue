@@ -106,7 +106,7 @@ onMounted(() => void load());
         </el-form-item>
         <el-form-item
           v-if="cardId == null"
-          label="卡号"
+          label="角色卡 ID"
         >
           <el-input
             v-model="filter.cardId"
@@ -167,7 +167,7 @@ onMounted(() => void load());
 
       <el-table-column
         v-if="cardId == null"
-        label="卡"
+        label="角色卡"
         min-width="150"
       >
         <template #default="{ row }: { row: MarketOrderRow }">

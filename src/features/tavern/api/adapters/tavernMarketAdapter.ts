@@ -28,11 +28,11 @@ const reviewPageSchema = pageSchema(marketReviewSchema);
 
 export class TavernMarketHttpAdapter implements TavernMarketPort {
   async cards(query: MarketCardQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketCardRow>>> {
-    return parseTavern(cardPageSchema, await requestTavern<unknown>(`${BASE}/cards`, { query: { ...page, ...query } }), '市场卡列表');
+    return parseTavern(cardPageSchema, await requestTavern<unknown>(`${BASE}/cards`, { query: { ...page, ...query } }), '市场角色卡列表');
   }
 
   async card(cardId: string): Promise<AppResult<MarketCardDetail>> {
-    return parseTavern(marketCardDetailSchema, await requestTavern<unknown>(`${BASE}/cards/${cardId}`), '市场卡');
+    return parseTavern(marketCardDetailSchema, await requestTavern<unknown>(`${BASE}/cards/${cardId}`), '市场角色卡');
   }
 
   async reviews(cardId: string, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketReview>>> {

@@ -154,7 +154,7 @@ function orderRow(o: MockOrder): MarketOrderRow {
   };
 }
 
-const notFound = () => fail({ code: 'not_found', message: '卡不存在。' });
+const notFound = () => fail({ code: 'not_found', message: '角色卡不存在。' });
 
 export class TavernMarketMock implements TavernMarketPort {
   async cards(query: MarketCardQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketCardRow>>> {
@@ -196,7 +196,7 @@ export class TavernMarketMock implements TavernMarketPort {
     await delay();
     const c = cards.find((x) => x.id === cardId);
     if (!c) return notFound();
-    if (c.state !== 'listed') return fail({ code: 'conflict', message: '这张卡没有在售。' });
+    if (c.state !== 'listed') return fail({ code: 'conflict', message: '这张角色卡没有在售。' });
     c.state = 'taken_down';
     c.takedown = { reason, staffUid: STAFF_UID, atUtc: Date.now() };
     c.updatedAt = Date.now();
@@ -207,7 +207,7 @@ export class TavernMarketMock implements TavernMarketPort {
     await delay();
     const c = cards.find((x) => x.id === cardId);
     if (!c) return notFound();
-    if (c.state !== 'taken_down') return fail({ code: 'conflict', message: '这张卡没有被下架。' });
+    if (c.state !== 'taken_down') return fail({ code: 'conflict', message: '这张角色卡没有被下架。' });
     c.state = 'listed';
     c.takedown = null;
     c.updatedAt = Date.now();

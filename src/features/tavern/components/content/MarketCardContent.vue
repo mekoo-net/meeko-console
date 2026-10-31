@@ -14,17 +14,17 @@ defineProps<{ content: MarketCardContent }>();
     border
     size="small"
   >
-    <el-descriptions-item label="市场卡">
+    <el-descriptions-item label="市场角色卡">
       <router-link
         :to="{ name: 'tavern-market-cards', query: { cardId: content.cardId } }"
         class="link mono"
-        title="在市场里看这张卡"
+        title="在市场里看这张角色卡"
       >
         {{ content.cardId }}
       </router-link>
       <CopyableId
         :value="content.cardId"
-        label="市场卡 ID"
+        label="市场角色卡 ID"
         display=""
       />
     </el-descriptions-item>

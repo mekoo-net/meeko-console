@@ -112,11 +112,11 @@ onMounted(() => {
         @refresh="reload"
         @reset="filter = blank()"
       >
-        <el-form-item label="卡名 / 标签">
+        <el-form-item label="名字 / 标签">
           <el-input
             v-model="filter.keyword"
             :prefix-icon="Search"
-            placeholder="模糊匹配卡名、简介、标签"
+            placeholder="模糊匹配名字、简介、标签"
             clearable
             style="width: 300px"
           />
@@ -149,7 +149,7 @@ onMounted(() => {
       :empty-text="' '"
     >
       <el-table-column
-        label="卡"
+        label="角色卡"
         min-width="200"
       >
         <template #default="{ row }: { row: MarketCardRow }">
@@ -313,7 +313,7 @@ onMounted(() => {
 
       <template #empty>
         <EmptyState
-          title="没有符合条件的卡"
+          title="没有符合条件的角色卡"
           description="调整筛选条件或重置后重试。"
         />
       </template>

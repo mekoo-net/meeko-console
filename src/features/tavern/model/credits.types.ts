@@ -99,7 +99,7 @@ export const CreditTxnKindLabel: Readonly<Record<CreditTxnKind, string>> = {
   charge: '回合扣费',
   release: '预扣退回',
   refund: '驳回退回',
-  sale: '卖卡分成',
+  sale: '卖角色卡分成',
 };
 
 /** 余额增加的几种；其余是减（预扣把可用挪到预扣中，也算减）。 */
