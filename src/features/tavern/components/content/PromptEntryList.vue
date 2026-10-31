@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 一组条目（预设、额外描述、世界书）：一条一行，点开看正文。默认全收起，条目再多也只占一行一条。
+ * 一组条目（预设、描写、额外描述）：一条一行，点开看正文。默认全收起，条目再多也只占一行一条。
  */
 import type { EntryItem } from '../../model/promptEntries';
 

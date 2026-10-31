@@ -1,5 +1,5 @@
 /**
- * 角色的人设和世界书，在控制台里都按「条目」显示：标题一行，点开看正文，和客户端里玩家看到的一样分条。
+ * 角色卡的预设、描写、额外描述，在控制台里都按「条目」显示：标题一行，点开看正文，和客户端角色卡页一样分条。
  * 这里把几种来源收成同一种条目。
  */
 import {
@@ -19,7 +19,7 @@ export interface EntryItem {
   key: string;
   title: string;
   tags: EntryTag[];
-  /** 世界书条目的触发词。 */
+  /** 描写条目的触发词。 */
   keywords: string[];
   content: string;
 }
@@ -29,7 +29,7 @@ export function promptItems(entries: readonly PromptEntry[]): EntryItem[] {
   return entries.map((e) => ({ key: e.id, title: e.name, tags: [], keywords: [], content: e.content }));
 }
 
-/** 世界书条目：标出作用域（全局 / 指定角色）、触发方式，停用的也标出来。 */
+/** 描写条目（worldBook）：标出作用域（全局 / 角色专属）、触发方式，停用的也标出来。 */
 export function worldBookItems(entries: readonly WorldBookEntry[]): EntryItem[] {
   return entries.map((e, i) => ({
     key: `${i}:${e.title}`,
@@ -44,7 +44,7 @@ export function worldBookItems(entries: readonly WorldBookEntry[]): EntryItem[] 
   }));
 }
 
-/** 市场卡的人设是一份酒馆式的 preset：认得的字段按字段分条，其余文本字段用原名。 */
+/** 市场卡的预设是一份酒馆式的 preset：认得的字段按字段分条，其余文本字段用原名。 */
 const PRESET_FIELD_LABEL: Readonly<Record<string, string>> = {
   systemPrompt: '系统提示词',
   description: '角色描述',

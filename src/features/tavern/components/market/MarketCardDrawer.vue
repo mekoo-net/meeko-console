@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 市场卡详情，版式同角色卡抽屉：摘要表在上，卡面、在卖的人设与世界书分段往下（都按条目，点开看正文），下架 / 恢复放底栏。
+ * 市场卡详情，版式同角色卡抽屉：摘要表在上，卡面、在卖的预设与描写分段往下（都按条目，点开看正文），下架 / 恢复放底栏。
  * 评价和订单在商品列表行上的「操作」里另开弹窗看。
  * 只给在卖的那一版——员工判断要不要下架看的就是它；版本是创作者和买家之间的事，这里不露。
  */
@@ -30,8 +30,8 @@ const loading = ref(false);
 const acting = ref(false);
 
 const card = computed(() => detail.value?.card ?? null);
-const persona = computed(() => (detail.value ? presetItems(detail.value.onSale.preset) : []));
-const worldBook = computed(() => (detail.value ? worldBookItems(detail.value.onSale.worldBook) : []));
+const presets = computed(() => (detail.value ? presetItems(detail.value.onSale.preset) : []));
+const descriptions = computed(() => (detail.value ? worldBookItems(detail.value.onSale.worldBook) : []));
 
 async function load(id: string): Promise<void> {
   loading.value = true;
@@ -197,19 +197,19 @@ function faceLines(face: CardFace): { label: string; value: string }[] {
 
         <el-divider />
         <h4 class="section-title">
-          人设
+          预设
         </h4>
         <PromptEntryList
-          :entries="persona"
-          empty="没写人设"
+          :entries="presets"
+          empty="没写预设"
         />
 
         <h4 class="section-title section-title--gap">
-          世界书
+          描写
         </h4>
         <PromptEntryList
-          :entries="worldBook"
-          empty="这张卡不带世界书"
+          :entries="descriptions"
+          empty="没有描写"
         />
       </template>
     </div>

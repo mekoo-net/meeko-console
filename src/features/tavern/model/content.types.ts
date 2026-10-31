@@ -664,14 +664,14 @@ export const WorldBookTriggerLabel: Readonly<Record<WorldBookTrigger, string>> =
   semantic: '语义',
 };
 
-/** 世界书条目的作用域，同客户端：全局的，或指定了这个角色的。 */
+/** 描写条目的作用域，同客户端角色卡页的两栏：全局的，或这个角色专属的。 */
 export const WorldBookScopeLabel: Readonly<Record<'global' | 'persona', string>> = {
   global: '全局',
-  persona: '指定角色',
+  persona: '角色专属',
 };
 
 /**
- * 角色身上的世界书条目，读进来收成一个形状：客户端的条目（name / keywords / triggerMode / scope），
+ * 角色身上的描写条目（客户端代码里叫 worldBook，界面上叫「描写」），读进来收成一个形状：客户端的条目（name / keywords / triggerMode / scope），
  * 和酒馆卡导进来的条目（comment / keys / constant）都认。触发方式没写的，有关键词按关键词、没有算常驻，同客户端。
  */
 export const worldBookEntrySchema = z
@@ -699,7 +699,7 @@ export const worldBookEntrySchema = z
   });
 export type WorldBookEntry = z.infer<typeof worldBookEntrySchema>;
 
-/** 导入的卡，和客户端里一样分条：人设是按顺序绑的预设，另可挂额外描述；世界书是作用到这个角色的条目。 */
+/** 导入的卡，和客户端角色卡页一样三块：预设（按绑定顺序）、描写（worldBook）、额外描述。 */
 export const importedCardContentSchema = z.object({
   kind: z.literal('imported'),
   presets: z.array(promptEntrySchema),

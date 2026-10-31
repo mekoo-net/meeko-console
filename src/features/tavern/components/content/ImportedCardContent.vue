@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * 导入的卡，和玩家在客户端里看到的一样分条：人设是按顺序绑的预设，另可挂额外描述；
- * 世界书是作用到这个角色的条目，每条标出是全局的还是指定这个角色的。都点开看正文。
+ * 导入的卡，和客户端角色卡页一样三块：预设（按绑定顺序拼）、描写（客户端代码里叫 worldBook，界面叫描写，
+ * 分全局的和角色专属的）、额外描述。每条一行，点开看正文。
  */
 import { computed } from 'vue';
 
@@ -12,8 +12,8 @@ import PromptEntryList from './PromptEntryList.vue';
 const props = defineProps<{ content: ImportedCardContent }>();
 
 const presets = computed(() => promptItems(props.content.presets));
+const descriptions = computed(() => worldBookItems(props.content.worldBook));
 const extras = computed(() => promptItems(props.content.extraDescriptions));
-const worldBook = computed(() => worldBookItems(props.content.worldBook));
 </script>
 
 <template>
@@ -22,25 +22,23 @@ const worldBook = computed(() => worldBookItems(props.content.worldBook));
   </h4>
   <PromptEntryList
     :entries="presets"
-    empty="没绑预设，按名字和简介扮演"
+    empty="没绑预设"
   />
 
-  <template v-if="extras.length">
-    <h4 class="section-title section-title--gap">
-      额外描述
-    </h4>
-    <PromptEntryList
-      :entries="extras"
-      empty=""
-    />
-  </template>
-
   <h4 class="section-title section-title--gap">
-    世界书
+    描写
   </h4>
   <PromptEntryList
-    :entries="worldBook"
-    empty="没有作用到这个角色的条目"
+    :entries="descriptions"
+    empty="没有描写"
+  />
+
+  <h4 class="section-title section-title--gap">
+    额外描述
+  </h4>
+  <PromptEntryList
+    :entries="extras"
+    empty="没有额外描述"
   />
 </template>
 
