@@ -17,7 +17,7 @@ import type { StatusTone } from './metering.types';
  * 卖两类商品：角色卡、世界书（一整套世界模板，买了用它开新世界）。
  * 玩家发布即上架；员工只能事后下架 / 恢复，下架只是停售，已买的照常用。
  * 员工看的是市场上在卖的东西：没发布过的不列，版本不露——只给在卖的那一版。
- * 买家付人民币进平台钱包，卖家按「市场分成」拿积分。
+ * C2C：买家付人民币进平台钱包，卖家拿钱（人民币，记在 Tavern 账上）：平台抽成后先冻结，期满转可提现，提现由员工审核打款。
  */
 
 // ---------- 类别 ----------
@@ -238,12 +238,17 @@ export const MarketOrderStatusTone: Readonly<Record<MarketOrderStatus, StatusTon
   failed: 'danger',
 };
 
-/** 成交时的分成快照。 */
+/**
+ * 卖家这一单所得（人民币）和成交时的抽成。`settlesAt` 是转可提现的时间，`settledAt` 为 null 表示还在冻结期；
+ * 免费的单两个时间都是 null。
+ */
 export const marketSettlementSchema = z.object({
   commissionRate: z.number(),
-  creditsPerYuan: z.number(),
-  sellerCredits: z.number(),
+  sellerAmount: z.number(),
+  settlesAt: epochMillisNullableSchema,
+  settledAt: epochMillisNullableSchema,
 });
+export type MarketSettlement = z.infer<typeof marketSettlementSchema>;
 
 export const marketOrderRowSchema = z.object({
   /** 客户端下单时给的幂等键，不给人看。 */
@@ -281,8 +286,8 @@ export type MarketOrderQuery = {
 export const marketSettingsSchema = z.object({
   /** 平台抽成，0–1。 */
   commissionRate: z.number(),
-  /** 卖家所得每 1 元换多少积分。 */
-  creditsPerYuan: z.number(),
+  /** 卖出的钱冻结几天（留给退款）再转可提现。 */
+  settlementDays: z.number().int(),
 });
 export type MarketSettings = z.infer<typeof marketSettingsSchema>;
 
@@ -292,3 +297,99 @@ export const marketSettingsViewSchema = z.object({
   updatedAt: epochMillisNullableSchema,
 });
 export type MarketSettingsView = z.infer<typeof marketSettingsViewSchema>;
+
+// ---------- 卖家收益与提现（人民币） ----------
+
+/** 卖家收益四格。 */
+export const sellerBalanceSchema = z.object({
+  pending: z.number(),
+  available: z.number(),
+  withdrawing: z.number(),
+  withdrawn: z.number(),
+});
+export type SellerBalance = z.infer<typeof sellerBalanceSchema>;
+
+export const SellerBalanceLabel: Readonly<Record<keyof SellerBalance, string>> = {
+  pending: '待结算',
+  available: '可提现',
+  withdrawing: '提现中',
+  withdrawn: '已提现',
+};
+
+export const sellerEarningsSchema = z.object({ balance: sellerBalanceSchema });
+export type SellerEarnings = z.infer<typeof sellerEarningsSchema>;
+
+export const sellerTxnKindSchema = z.enum(['sale', 'settle', 'withdraw', 'withdraw_returned', 'withdraw_paid']);
+export type SellerTxnKind = z.infer<typeof sellerTxnKindSchema>;
+
+export const SellerTxnKindLabel: Readonly<Record<SellerTxnKind, string>> = {
+  sale: '卖出',
+  settle: '结算',
+  withdraw: '申请提现',
+  withdraw_returned: '提现退回',
+  withdraw_paid: '已打款',
+};
+
+export const sellerTxnSchema = z.object({
+  id: z.number().int(),
+  kind: sellerTxnKindSchema,
+  amount: z.number(),
+  balanceAfter: sellerBalanceSchema,
+  /** `ref` 是订单号或提现单号。 */
+  source: z.object({ kind: z.enum(['order', 'withdrawal']), ref: z.string() }),
+  note: z.string().nullable(),
+  createdAt: epochMillisSchema,
+});
+export type SellerTxn = z.infer<typeof sellerTxnSchema>;
+
+export const withdrawalStatusSchema = z.enum(['pending', 'approved', 'rejected', 'paid', 'failed']);
+export type WithdrawalStatus = z.infer<typeof withdrawalStatusSchema>;
+
+export const WithdrawalStatusLabel: Readonly<Record<WithdrawalStatus, string>> = {
+  pending: '待审核',
+  approved: '已通过',
+  rejected: '已驳回',
+  paid: '已打款',
+  failed: '打款失败',
+};
+
+export const WithdrawalStatusTone: Readonly<Record<WithdrawalStatus, StatusTone>> = {
+  pending: 'warning',
+  approved: 'info',
+  rejected: 'danger',
+  paid: 'success',
+  failed: 'danger',
+};
+
+export const withdrawalMethodSchema = z.enum(['alipay', 'bank']);
+export type WithdrawalMethod = z.infer<typeof withdrawalMethodSchema>;
+
+export const WithdrawalMethodLabel: Readonly<Record<WithdrawalMethod, string>> = {
+  alipay: '支付宝',
+  bank: '银行卡',
+};
+
+export const withdrawalRowSchema = z.object({
+  id: z.string().min(1),
+  /** 提现单号：MW + yyyyMMdd + 9 位当天序号。 */
+  serialNo: z.string().min(1),
+  account: accountRefSchema,
+  amount: z.number(),
+  payout: z.object({ method: withdrawalMethodSchema, accountNo: z.string(), accountName: z.string() }),
+  status: withdrawalStatusSchema,
+  /** 驳回或打款失败的原因。 */
+  reason: z.string().nullable(),
+  appliedAt: epochMillisSchema,
+  updatedAt: epochMillisSchema,
+});
+export type WithdrawalRow = z.infer<typeof withdrawalRowSchema>;
+
+export type WithdrawalQuery = {
+  status?: WithdrawalStatus;
+  accountUid?: number;
+  /** 提现单号，精确匹配。 */
+  serialNo?: string;
+  /** 申请时间范围，epoch 毫秒，可只给一头。 */
+  fromUtc?: number;
+  toUtc?: number;
+};

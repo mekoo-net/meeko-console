@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * Tavern 系统设置 › 市场分成：平台抽成和卖家所得的积分换算。改了只影响之后成交的单，已成的单行上有当时的快照。
+ * Tavern 系统设置 › 市场分成：平台抽成，和卖家所得冻结几天再转可提现（留给退款）。
+ * 改了只影响之后成交的单，已成的单行上有当时的抽成和结算时间。
  */
 import { onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
@@ -16,7 +17,7 @@ const port = getTavernMarketPort();
 
 const view = ref<MarketSettingsView | null>(null);
 /** 表单里抽成按百分比填，存的是 0–1。 */
-const form = ref({ commissionPercent: 30, creditsPerYuan: 100 });
+const form = ref({ commissionPercent: 30, settlementDays: 7 });
 const loading = ref(false);
 const saving = ref(false);
 
@@ -24,7 +25,7 @@ function fill(v: MarketSettingsView): void {
   view.value = v;
   form.value = {
     commissionPercent: Math.round(v.settings.commissionRate * 1000) / 10,
-    creditsPerYuan: v.settings.creditsPerYuan,
+    settlementDays: v.settings.settlementDays,
   };
 }
 
@@ -44,7 +45,7 @@ async function save(): Promise<void> {
   try {
     const r = await port.saveSettings({
       commissionRate: form.value.commissionPercent / 100,
-      creditsPerYuan: form.value.creditsPerYuan,
+      settlementDays: form.value.settlementDays,
     });
     if (!r.success) {
       ElMessage.error(r.error.message);
@@ -67,7 +68,7 @@ onMounted(() => void load());
   >
     <PageHeader
       title="市场分成"
-      description="买家付人民币进平台钱包；平台抽成之后，剩下的按换算比例记成卖家的积分。"
+      description="C2C：买家付人民币进平台钱包，平台抽成后剩下的是卖家的钱，冻结期满转可提现，卖家申请提现后在「市场 › 提现」审核打款。"
     >
       <template #actions>
         <el-button
@@ -96,15 +97,16 @@ onMounted(() => void load());
           />
           <span class="unit">%</span>
         </el-form-item>
-        <el-form-item label="每 1 元换算">
+        <el-form-item label="冻结">
           <el-input-number
-            v-model="form.creditsPerYuan"
-            :min="0.01"
-            :precision="2"
-            :step="10"
+            v-model="form.settlementDays"
+            :min="0"
+            :max="90"
+            :precision="0"
+            :step="1"
             controls-position="right"
           />
-          <span class="unit">积分</span>
+          <span class="unit">天后转可提现</span>
         </el-form-item>
         <el-form-item>
           <el-button

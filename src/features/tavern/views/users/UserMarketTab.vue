@@ -1,18 +1,23 @@
 <script setup lang="ts">
 /**
- * 用户视角 › 市场：这个人买过的（订单）和发布过的（角色卡、世界书），用的就是市场的两张表，按这个人筛好。
+ * 用户视角 › 市场：这个人买过的（订单）、发布过的（角色卡、世界书）、卖出赚的钱（收益）和提现，
+ * 用的就是市场那几张表，按这个人筛好。
  */
 import { ref } from 'vue';
 
 import MarketItemsView from '../market/MarketItemsView.vue';
 import MarketOrdersView from '../market/MarketOrdersView.vue';
+import MarketWithdrawalsView from '../market/MarketWithdrawalsView.vue';
+import UserEarningsPanel from './UserEarningsPanel.vue';
 
 defineProps<{ accountUid: number }>();
 
-const part = ref<'bought' | 'published'>('bought');
+const part = ref<'bought' | 'published' | 'earnings' | 'withdrawals'>('bought');
 const parts = [
   { label: '购买的', value: 'bought' },
   { label: '发布的', value: 'published' },
+  { label: '收益', value: 'earnings' },
+  { label: '提现', value: 'withdrawals' },
 ];
 </script>
 
@@ -28,8 +33,16 @@ const parts = [
       :buyer-uid="accountUid"
     />
     <MarketItemsView
-      v-else
+      v-else-if="part === 'published'"
       :creator-uid="accountUid"
+    />
+    <UserEarningsPanel
+      v-else-if="part === 'earnings'"
+      :account-uid="accountUid"
+    />
+    <MarketWithdrawalsView
+      v-else
+      :account-uid="accountUid"
     />
   </div>
 </template>

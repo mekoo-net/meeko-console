@@ -88,7 +88,7 @@ export const creditBalanceSchema = z.object({
 });
 export type CreditBalance = z.infer<typeof creditBalanceSchema>;
 
-export const creditTxnKindSchema = z.enum(['purchase', 'grant', 'deduct', 'hold', 'charge', 'release', 'refund', 'sale']);
+export const creditTxnKindSchema = z.enum(['purchase', 'grant', 'deduct', 'hold', 'charge', 'release', 'refund']);
 export type CreditTxnKind = z.infer<typeof creditTxnKindSchema>;
 
 export const CreditTxnKindLabel: Readonly<Record<CreditTxnKind, string>> = {
@@ -99,13 +99,12 @@ export const CreditTxnKindLabel: Readonly<Record<CreditTxnKind, string>> = {
   charge: '回合扣费',
   release: '预扣退回',
   refund: '驳回退回',
-  sale: '卖角色卡分成',
 };
 
 /** 余额增加的几种；其余是减（预扣把可用挪到预扣中，也算减）。 */
-export const CREDIT_TXN_IN: ReadonlySet<CreditTxnKind> = new Set(['purchase', 'grant', 'release', 'refund', 'sale']);
+export const CREDIT_TXN_IN: ReadonlySet<CreditTxnKind> = new Set(['purchase', 'grant', 'release', 'refund']);
 
-export const creditTxnSourceKindSchema = z.enum(['turn', 'order', 'staff', 'market_order']);
+export const creditTxnSourceKindSchema = z.enum(['turn', 'order', 'staff']);
 export type CreditTxnSourceKind = z.infer<typeof creditTxnSourceKindSchema>;
 
 /** 流水「来由」一栏的说法；员工的直接带上 uid，订单号另起一格显示。 */
@@ -113,7 +112,6 @@ export const CreditTxnSourceText: Readonly<Record<CreditTxnSourceKind, (ref: str
   turn: () => '回合',
   order: () => '积分包订单',
   staff: (ref) => `员工 ${ref}`,
-  market_order: () => '市场订单',
 };
 
 export const creditTxnSchema = z.object({
@@ -122,7 +120,7 @@ export const creditTxnSchema = z.object({
   /** 恒为正，增减看 `kind`。 */
   amount: z.number(),
   availableAfter: z.number(),
-  /** 因什么动的：`ref` 是回合 trace id、积分包订单号、员工 uid 或市场订单号。 */
+  /** 因什么动的：`ref` 是回合 trace id、积分包订单号或员工 uid。 */
   source: z.object({ kind: creditTxnSourceKindSchema, ref: z.string() }),
   note: z.string().nullable(),
   createdAt: epochMillisSchema,

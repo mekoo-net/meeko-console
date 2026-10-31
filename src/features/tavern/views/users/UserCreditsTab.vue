@@ -183,7 +183,7 @@ onMounted(() => void load());
               {{ row.source.ref }}
             </el-button>
             <span
-              v-else-if="row.source.kind === 'order' || row.source.kind === 'market_order'"
+              v-else-if="row.source.kind === 'order'"
               class="mono cell-muted"
             >{{ row.source.ref }}</span>
           </div>

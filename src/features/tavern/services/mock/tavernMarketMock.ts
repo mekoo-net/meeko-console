@@ -17,6 +17,12 @@ import {
   type MarketReview,
   type MarketSettings,
   type MarketSettingsView,
+  type SellerBalance,
+  type SellerEarnings,
+  type SellerTxn,
+  type SellerTxnKind,
+  type WithdrawalQuery,
+  type WithdrawalRow,
 } from '../../model/market.types';
 import type { TavernMarketPort } from '../ports/tavernMarketPort';
 import { mockUuid } from './tavernContentMock';
@@ -222,7 +228,7 @@ const orders: MockOrder[] = [
   { id: mockUuid(910), source: 'purchase', itemId: mockUuid(812), buyer: PLAYER_0123, price: 0, status: 'active', failureReason: null, at: NOW - 5 * HOUR },
 ];
 
-let settings: MarketSettingsView = { settings: { commissionRate: 0.3, creditsPerYuan: 100 }, updatedAt: null };
+let settings: MarketSettingsView = { settings: { commissionRate: 0.3, settlementDays: 7 }, updatedAt: null };
 
 /** 同服务端的 `ToListing()`：角色卡露头像开场白和能力，世界书露规模和时间。 */
 function listingOf(c: MarketItemContent): MarketListing {
@@ -269,9 +275,24 @@ const serialNos = new Map<string, string>();
   }
 }
 
+/** 同服务端的 MarketSettings.Settle：卖家所得抹到分。 */
+const sellerAmountOf = (price: number) => Math.floor(price * (1 - settings.settings.commissionRate) * 100 + 1e-6) / 100;
+
+/** 同服务端：买来的单生效时记下卖家所得；有钱可分的冻结期满转可提现，免费的没有结算时间。 */
+function settlementOf(o: MockOrder): MarketOrderRow['settlement'] {
+  if (o.status !== 'active' || o.source !== 'purchase') return null;
+  const sellerAmount = sellerAmountOf(o.price);
+  const settlesAt = sellerAmount > 0 ? o.at + settings.settings.settlementDays * DAY : null;
+  return {
+    commissionRate: settings.settings.commissionRate,
+    sellerAmount,
+    settlesAt,
+    settledAt: settlesAt != null && settlesAt <= NOW ? settlesAt : null,
+  };
+}
+
 function orderRow(o: MockOrder): MarketOrderRow {
   const item = items.find((i) => i.id === o.itemId)!;
-  const sellerCredits = Math.round(o.price * (1 - settings.settings.commissionRate) * settings.settings.creditsPerYuan * 100) / 100;
   return {
     id: o.id,
     serialNo: serialNos.get(o.id)!,
@@ -281,11 +302,125 @@ function orderRow(o: MockOrder): MarketOrderRow {
     seller: item.creator,
     price: { amount: o.price, currency: 'CNY' },
     status: o.status,
-    settlement: o.status === 'active' && o.source === 'purchase' ? { ...settings.settings, sellerCredits } : null,
+    settlement: settlementOf(o),
     failureReason: o.failureReason,
     createdAt: o.at,
     updatedAt: o.at,
   };
+}
+
+// ---------- 卖家收益（人民币） ----------
+
+interface MockSeller {
+  balance: SellerBalance;
+  txns: SellerTxn[];
+}
+
+const sellers = new Map<number, MockSeller>();
+let txnSeq = 0;
+
+function sellerOf(uid: number): MockSeller {
+  let s = sellers.get(uid);
+  if (!s) {
+    s = { balance: { pending: 0, available: 0, withdrawing: 0, withdrawn: 0 }, txns: [] };
+    sellers.set(uid, s);
+  }
+  return s;
+}
+
+const cents = (n: number) => Math.round(n * 100) / 100;
+
+/** 同服务端 SellerPosting：每种动作从哪格挪到哪格。 */
+const MOVES: Readonly<Record<SellerTxnKind, [keyof SellerBalance | null, keyof SellerBalance]>> = {
+  sale: [null, 'pending'],
+  settle: ['pending', 'available'],
+  withdraw: ['available', 'withdrawing'],
+  withdraw_returned: ['withdrawing', 'available'],
+  withdraw_paid: ['withdrawing', 'withdrawn'],
+};
+
+function post(uid: number, kind: SellerTxnKind, amount: number, source: SellerTxn['source'], note: string | null, at: number): void {
+  const s = sellerOf(uid);
+  const [from, to] = MOVES[kind];
+  if (from) s.balance[from] = cents(s.balance[from] - amount);
+  s.balance[to] = cents(s.balance[to] + amount);
+  s.txns.push({ id: ++txnSeq, kind, amount, balanceAfter: { ...s.balance }, source, note, createdAt: at });
+}
+
+const withdrawals: WithdrawalRow[] = [];
+
+function withdrawalSerial(at: number, n: number): string {
+  return `MW${new Date(at).toISOString().slice(0, 10).replaceAll('-', '')}${String(n).padStart(9, '0')}`;
+}
+
+{
+  // 卖出与结算从订单来；提现照「一笔已打款、一笔被驳回、一笔待审核」排一段历史。
+  type Ev = { at: number; run: () => void };
+  const events: Ev[] = [];
+  for (const o of orders) {
+    const st = settlementOf(o);
+    if (!st || st.sellerAmount <= 0) continue;
+    const item = items.find((i) => i.id === o.itemId)!;
+    const serial = serialNos.get(o.id)!;
+    events.push({ at: o.at, run: () => post(item.creator.uid, 'sale', st.sellerAmount, { kind: 'order', ref: serial }, item.onSale.face.name, o.at) });
+    if (st.settledAt != null) {
+      const at = st.settledAt;
+      events.push({ at, run: () => post(item.creator.uid, 'settle', st.sellerAmount, { kind: 'order', ref: serial }, null, at) });
+    }
+  }
+  const asako = ASAKO.uid;
+  const apply = (at: number, n: number, amount: number, method: 'alipay' | 'bank', accountNo: string) => {
+    const w: WithdrawalRow = {
+      id: mockUuid(950 + n),
+      serialNo: withdrawalSerial(at, 1),
+      account: ASAKO,
+      amount,
+      payout: { method, accountNo, accountName: '麻子' },
+      status: 'pending',
+      reason: null,
+      appliedAt: at,
+      updatedAt: at,
+    };
+    events.push({ at, run: () => { withdrawals.push(w); post(asako, 'withdraw', amount, { kind: 'withdrawal', ref: w.serialNo }, null, at); } });
+    return w;
+  };
+  const paid = apply(NOW - 30 * DAY, 1, 3, 'alipay', 'asako@example.com');
+  events.push({ at: NOW - 29 * DAY, run: () => {
+    paid.status = 'paid';
+    paid.updatedAt = NOW - 29 * DAY;
+    post(asako, 'withdraw_paid', 3, { kind: 'withdrawal', ref: paid.serialNo }, null, NOW - 29 * DAY);
+  } });
+  const rejected = apply(NOW - 20 * DAY, 2, 1.2, 'bank', '6222 0000 1234 5678');
+  events.push({ at: NOW - 19 * DAY, run: () => {
+    rejected.status = 'rejected';
+    rejected.reason = '收款人和实名信息对不上，请核对后重新申请。';
+    rejected.updatedAt = NOW - 19 * DAY;
+    post(asako, 'withdraw_returned', 1.2, { kind: 'withdrawal', ref: rejected.serialNo }, rejected.reason, NOW - 19 * DAY);
+  } });
+  apply(NOW - 10 * HOUR, 3, 1, 'alipay', 'asako@example.com');
+  for (const e of events.sort((a, b) => a.at - b.at)) e.run();
+}
+
+const withdrawalNotFound = () => fail({ code: 'not_found', message: '提现单不存在。' });
+
+/** 同服务端 MarketPayoutAdminService：状态不对就拒，钱照四格挪。 */
+async function actOnWithdrawal(
+  id: string,
+  allowed: readonly WithdrawalRow['status'][],
+  what: string,
+  next: WithdrawalRow['status'],
+  money: SellerTxnKind | null,
+  reason?: string,
+): Promise<AppResult<WithdrawalRow>> {
+  await delay();
+  const w = withdrawals.find((x) => x.id === id);
+  if (!w) return withdrawalNotFound();
+  if (!allowed.includes(w.status)) return fail({ code: 'conflict', message: `这笔提现现在不能${what}，刷新看看是不是已经有人处理了。` });
+  w.status = next;
+  w.reason = reason ?? null;
+  w.updatedAt = Date.now();
+  if (money) post(w.account.uid, money, w.amount, { kind: 'withdrawal', ref: w.serialNo }, reason ?? null, w.updatedAt);
+  return ok({ ...w });
 }
 
 /** 同服务端的说法：角色卡论张，世界书论本。 */
@@ -379,8 +514,48 @@ export class TavernMarketMock implements TavernMarketPort {
   async saveSettings(next: MarketSettings): Promise<AppResult<MarketSettingsView>> {
     await delay();
     if (next.commissionRate < 0 || next.commissionRate > 1) return fail({ code: 'validation', message: '平台抽成在 0 到 100% 之间。' });
-    if (next.creditsPerYuan <= 0) return fail({ code: 'validation', message: '每元换算的积分要大于 0。' });
+    if (!Number.isInteger(next.settlementDays) || next.settlementDays < 0 || next.settlementDays > 90)
+      return fail({ code: 'validation', message: '冻结天数在 0 到 90 天之间。' });
     settings = { settings: next, updatedAt: Date.now() };
     return ok(settings);
+  }
+
+  async withdrawals(query: WithdrawalQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<WithdrawalRow>>> {
+    await delay();
+    const rows = withdrawals
+      .filter((w) => query.status == null || w.status === query.status)
+      .filter((w) => query.accountUid == null || w.account.uid === query.accountUid)
+      .filter((w) => query.serialNo == null || w.serialNo === query.serialNo)
+      .filter((w) => query.fromUtc == null || w.appliedAt >= query.fromUtc)
+      .filter((w) => query.toUtc == null || w.appliedAt <= query.toUtc)
+      .sort((a, b) => b.serialNo.localeCompare(a.serialNo))
+      .map((w) => ({ ...w }));
+    return ok(pageOf(rows, page.p, page.pageSize));
+  }
+
+  approveWithdrawal(id: string): Promise<AppResult<WithdrawalRow>> {
+    return actOnWithdrawal(id, ['pending'], '审核通过', 'approved', null);
+  }
+
+  rejectWithdrawal(id: string, reason: string): Promise<AppResult<WithdrawalRow>> {
+    return actOnWithdrawal(id, ['pending', 'approved'], '驳回', 'rejected', 'withdraw_returned', reason);
+  }
+
+  markWithdrawalPaid(id: string): Promise<AppResult<WithdrawalRow>> {
+    return actOnWithdrawal(id, ['approved'], '标记已打款', 'paid', 'withdraw_paid');
+  }
+
+  markWithdrawalFailed(id: string, reason: string): Promise<AppResult<WithdrawalRow>> {
+    return actOnWithdrawal(id, ['approved'], '标记打款失败', 'failed', 'withdraw_returned', reason);
+  }
+
+  async seller(accountUid: number): Promise<AppResult<SellerEarnings>> {
+    await delay();
+    return ok({ balance: { ...sellerOf(accountUid).balance } });
+  }
+
+  async sellerTxns(accountUid: number, page: PageQuery): Promise<AppResult<ItemsEnvelope<SellerTxn>>> {
+    await delay();
+    return ok(pageOf([...sellerOf(accountUid).txns].reverse(), page.p, page.pageSize));
   }
 }

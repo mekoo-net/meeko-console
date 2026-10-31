@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * 市场 › 订单：一单就是一份权益，角色卡和世界书一样买。买家付人民币进平台钱包，卖家的分成按成交时的设置折成积分（行上有快照）。
- * 列序照平台「账单流水」：订单号 → 买家 → 商品 → 来源 → 状态 → 价格 → 卖家与分成 → 时间。订单号按天按序发，新的在前。
+ * 市场 › 订单：一单就是一份权益，角色卡和世界书一样买。买家付人民币进平台钱包；卖家所得也是钱（C2C），
+ * 按成交时的抽成算好记在行上，冻结期满转可提现。
+ * 列序照平台「账单流水」：订单号 → 买家 → 商品 → 来源 → 状态 → 价格 → 卖家与所得 → 时间。订单号按天按序发，新的在前。
  * 创作者第一次发布时自己得的那一单（0 元）也在这里。
  * 也是用户视角「购买的」：传了 `buyerUid` 就只看这个人买的，买家筛选和买家列都不要。
  */
@@ -18,6 +19,7 @@ import { formatDateTime } from '@/shared/lib/date';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 
 import AccountCell from '../../components/content/AccountCell.vue';
+import SellerShareCell from '../../components/market/SellerShareCell.vue';
 import { usePagedList } from '../../composables/usePagedList';
 import {
   MarketItemKindLabel,
@@ -30,8 +32,8 @@ import {
   type MarketOrderRow,
   type MarketOrderSource,
 } from '../../model/market.types';
-import { formatPercent, formatPrice, itemPage } from '../../model/marketFormat';
-import { formatCredits, parseAccountUid } from '../../model/meteringFormat';
+import { formatPrice, itemPage } from '../../model/marketFormat';
+import { parseAccountUid } from '../../model/meteringFormat';
 import { getTavernMarketPort } from '../../services';
 
 const props = defineProps<{ buyerUid?: number }>();
@@ -254,20 +256,12 @@ onMounted(() => void load());
       </el-table-column>
 
       <el-table-column
-        label="卖家分成"
-        width="104"
+        label="卖家所得"
+        width="150"
         align="right"
       >
         <template #default="{ row }: { row: MarketOrderRow }">
-          <span
-            v-if="row.settlement"
-            class="num"
-            :title="`平台抽成 ${formatPercent(row.settlement.commissionRate)}，1 元 = ${row.settlement.creditsPerYuan} 积分`"
-          >{{ formatCredits(row.settlement.sellerCredits) }}</span>
-          <span
-            v-else
-            class="cell-muted"
-          >—</span>
+          <SellerShareCell :settlement="row.settlement" />
         </template>
       </el-table-column>
 

@@ -39,3 +39,8 @@ export interface RecordStat {
   value: string;
   rating?: number;
 }
+
+/** 人民币两位小数带 ¥；0 写 ¥0.00，不写「免费」——这是钱款不是售价。 */
+export function formatYuan(amount: number): string {
+  return `¥${amount.toFixed(2)}`;
+}

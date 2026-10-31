@@ -9,6 +9,9 @@ import {
   marketOrderRowSchema,
   marketReviewSchema,
   marketSettingsViewSchema,
+  sellerEarningsSchema,
+  sellerTxnSchema,
+  withdrawalRowSchema,
   type MarketItemDetail,
   type MarketItemQuery,
   type MarketItemRow,
@@ -17,6 +20,10 @@ import {
   type MarketReview,
   type MarketSettings,
   type MarketSettingsView,
+  type SellerEarnings,
+  type SellerTxn,
+  type WithdrawalQuery,
+  type WithdrawalRow,
 } from '../../model/market.types';
 import { pageSchema } from '../../model/metering.types';
 
@@ -25,6 +32,8 @@ const BASE = '/tavern/api/admin/market';
 const itemPageSchema = pageSchema(marketItemRowSchema);
 const orderPageSchema = pageSchema(marketOrderRowSchema);
 const reviewPageSchema = pageSchema(marketReviewSchema);
+const withdrawalPageSchema = pageSchema(withdrawalRowSchema);
+const sellerTxnPageSchema = pageSchema(sellerTxnSchema);
 
 export class TavernMarketHttpAdapter implements TavernMarketPort {
   async items(query: MarketItemQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketItemRow>>> {
@@ -60,5 +69,43 @@ export class TavernMarketHttpAdapter implements TavernMarketPort {
   async saveSettings(settings: MarketSettings): Promise<AppResult<MarketSettingsView>> {
     const res = await requestTavern<unknown>(`${BASE}/settings`, { method: 'PUT', body: settings });
     return parseTavern(marketSettingsViewSchema, res, '市场分成');
+  }
+
+  async withdrawals(query: WithdrawalQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<WithdrawalRow>>> {
+    return parseTavern(withdrawalPageSchema, await requestTavern<unknown>(`${BASE}/withdrawals`, { query: { ...page, ...query } }), '提现申请');
+  }
+
+  async approveWithdrawal(id: string): Promise<AppResult<WithdrawalRow>> {
+    return this.withdrawalAction(id, 'approve', undefined, '审核通过');
+  }
+
+  async rejectWithdrawal(id: string, reason: string): Promise<AppResult<WithdrawalRow>> {
+    return this.withdrawalAction(id, 'reject', { reason }, '驳回');
+  }
+
+  async markWithdrawalPaid(id: string): Promise<AppResult<WithdrawalRow>> {
+    return this.withdrawalAction(id, 'paid', undefined, '标记已打款');
+  }
+
+  async markWithdrawalFailed(id: string, reason: string): Promise<AppResult<WithdrawalRow>> {
+    return this.withdrawalAction(id, 'failed', { reason }, '标记打款失败');
+  }
+
+  async seller(accountUid: number): Promise<AppResult<SellerEarnings>> {
+    return parseTavern(sellerEarningsSchema, await requestTavern<unknown>(`${BASE}/sellers/${accountUid}`), '卖家收益');
+  }
+
+  async sellerTxns(accountUid: number, page: PageQuery): Promise<AppResult<ItemsEnvelope<SellerTxn>>> {
+    return parseTavern(sellerTxnPageSchema, await requestTavern<unknown>(`${BASE}/sellers/${accountUid}/txns`, { query: page }), '收益明细');
+  }
+
+  private async withdrawalAction(
+    id: string,
+    action: 'approve' | 'reject' | 'paid' | 'failed',
+    body: { reason: string } | undefined,
+    what: string,
+  ): Promise<AppResult<WithdrawalRow>> {
+    const res = await requestTavern<unknown>(`${BASE}/withdrawals/${id}/${action}`, { method: 'POST', body });
+    return parseTavern(withdrawalRowSchema, res, what);
   }
 }

@@ -466,6 +466,12 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '世界书', requiresAuth: true, roles: ['Admin'] },
           },
           {
+            path: 'market/withdrawals',
+            name: 'tavern-market-withdrawals',
+            component: () => import('@/features/tavern/views/market/MarketWithdrawalsView.vue'),
+            meta: { title: '提现', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
             path: 'market/orders',
             name: 'tavern-market-orders',
             component: () => import('@/features/tavern/views/market/MarketOrdersView.vue'),

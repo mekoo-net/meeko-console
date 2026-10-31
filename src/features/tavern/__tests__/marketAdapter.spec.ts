@@ -115,7 +115,7 @@ describe('TavernMarketHttpAdapter', () => {
     expect(r.success && r.data.state).toBe('taken_down');
   });
 
-  it('reads an order with the kind of item and the seller share it settled at', async () => {
+  it('reads an order with the kind of item and the seller money it settles', async () => {
     request.mockResolvedValueOnce(
       ok({
         items: [
@@ -128,7 +128,7 @@ describe('TavernMarketHttpAdapter', () => {
             seller: ACCOUNT,
             price: { amount: 9.9, currency: 'CNY' },
             status: 'active',
-            settlement: { commissionRate: 0.3, creditsPerYuan: 100, sellerCredits: 693 },
+            settlement: { commissionRate: 0.3, sellerAmount: 13.93, settlesAt: 1762482449000, settledAt: null },
             failureReason: null,
             createdAt: 1761877649000,
             updatedAt: 1761877649000,
@@ -145,6 +145,54 @@ describe('TavernMarketHttpAdapter', () => {
     });
     expect(r.success && r.data.items[0]?.serialNo).toBe('MO20261031000000002');
     expect(r.success && r.data.items[0]?.item.kind).toBe('world_book');
-    expect(r.success && r.data.items[0]?.settlement?.sellerCredits).toBe(693);
+    expect(r.success && r.data.items[0]?.settlement?.sellerAmount).toBe(13.93);
+  });
+
+  it('reviews a withdrawal and reads it back with its reason', async () => {
+    request.mockResolvedValueOnce(
+      ok({
+        id: '0193f5a0-0000-7000-8000-0000000000aa',
+        serialNo: 'MW20261031000000001',
+        account: ACCOUNT,
+        amount: 3,
+        payout: { method: 'alipay', accountNo: 'asako@example.com', accountName: '麻子' },
+        status: 'rejected',
+        reason: '收款人对不上',
+        steps: [{ action: 'reject', staffUid: 1, atUtc: 1761877649000, reason: '收款人对不上' }],
+        appliedAt: 1761877649000,
+        updatedAt: 1761877649000,
+      }),
+    );
+    const r = await new TavernMarketHttpAdapter().rejectWithdrawal('0193f5a0-0000-7000-8000-0000000000aa', '收款人对不上');
+    expect(request).toHaveBeenCalledWith('/tavern/api/admin/market/withdrawals/0193f5a0-0000-7000-8000-0000000000aa/reject', {
+      method: 'POST',
+      body: { reason: '收款人对不上' },
+    });
+    expect(r.success && r.data.status).toBe('rejected');
+    expect(r.success && r.data.payout.method).toBe('alipay');
+  });
+
+  it('reads a seller ledger line with the balance after it', async () => {
+    request.mockResolvedValueOnce(
+      ok({
+        items: [
+          {
+            id: 7,
+            kind: 'withdraw_returned',
+            amount: 1.2,
+            balanceAfter: { pending: 20.86, available: 1.4, withdrawing: 0, withdrawn: 3 },
+            source: { kind: 'withdrawal', ref: 'MW20261011000000001' },
+            note: '收款人对不上',
+            createdAt: 1761877649000,
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }),
+    );
+    const r = await new TavernMarketHttpAdapter().sellerTxns(100004120, { p: 1, pageSize: 20 });
+    expect(request).toHaveBeenCalledWith('/tavern/api/admin/market/sellers/100004120/txns', { query: { p: 1, pageSize: 20 } });
+    expect(r.success && r.data.items[0]?.balanceAfter.available).toBe(1.4);
   });
 });

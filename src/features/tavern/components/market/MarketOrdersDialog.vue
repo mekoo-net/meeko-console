@@ -22,11 +22,12 @@ import {
   type MarketOrderRow,
   type MarketOrderSource,
 } from '../../model/market.types';
-import { formatPercent, formatPrice, type RecordStat } from '../../model/marketFormat';
-import { formatCredits, parseAccountUid } from '../../model/meteringFormat';
+import { formatPrice, type RecordStat } from '../../model/marketFormat';
+import { parseAccountUid } from '../../model/meteringFormat';
 import { getTavernMarketPort } from '../../services';
 import AccountCell from '../content/AccountCell.vue';
 import MarketRecordsDialog from './MarketRecordsDialog.vue';
+import SellerShareCell from './SellerShareCell.vue';
 
 const visible = defineModel<boolean>('visible', { required: true });
 const props = defineProps<{ item: MarketItemRow | null }>();
@@ -158,20 +159,12 @@ watch(visible, (open) => {
         </template>
       </el-table-column>
       <el-table-column
-        label="卖家分成"
-        width="130"
+        label="卖家所得"
+        width="160"
         align="right"
       >
         <template #default="{ row }: { row: MarketOrderRow }">
-          <span
-            v-if="row.settlement"
-            class="num"
-            :title="`平台抽成 ${formatPercent(row.settlement.commissionRate)}，1 元 = ${row.settlement.creditsPerYuan} 积分`"
-          >{{ formatCredits(row.settlement.sellerCredits) }}</span>
-          <span
-            v-else
-            class="cell-muted"
-          >—</span>
+          <SellerShareCell :settlement="row.settlement" />
         </template>
       </el-table-column>
       <el-table-column
