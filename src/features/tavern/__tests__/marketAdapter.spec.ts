@@ -115,7 +115,7 @@ describe('TavernMarketHttpAdapter', () => {
     expect(r.success && r.data.state).toBe('taken_down');
   });
 
-  it('reads an order with the kind of item and the seller money it settles', async () => {
+  it('reads an order with the kind of item and one status for it', async () => {
     request.mockResolvedValueOnce(
       ok({
         items: [
@@ -127,9 +127,7 @@ describe('TavernMarketHttpAdapter', () => {
             buyer: ACCOUNT,
             seller: ACCOUNT,
             price: { amount: 9.9, currency: 'CNY' },
-            status: 'active',
-            settlement: { commissionRate: 0.3, sellerAmount: 13.93, settlesAt: 1762482449000, settledAt: null },
-            failureReason: null,
+            stage: 'settling',
             createdAt: 1761877649000,
             updatedAt: 1761877649000,
           },
@@ -145,7 +143,35 @@ describe('TavernMarketHttpAdapter', () => {
     });
     expect(r.success && r.data.items[0]?.serialNo).toBe('MO20261031000000002');
     expect(r.success && r.data.items[0]?.item.kind).toBe('world_book');
-    expect(r.success && r.data.items[0]?.settlement?.sellerAmount).toBe(13.93);
+    expect(r.success && r.data.items[0]?.stage).toBe('settling');
+  });
+
+  it('reads an order detail with how its money is split', async () => {
+    request.mockResolvedValueOnce(
+      ok({
+        order: {
+          id: '0193f5a0-0000-7000-8000-000000000001',
+          serialNo: 'MO20261031000000002',
+          source: 'purchase',
+          item: { id: ITEM_ID, kind: 'character_card', name: '沈惟行' },
+          buyer: ACCOUNT,
+          seller: ACCOUNT,
+          price: { amount: 9.9, currency: 'CNY' },
+          stage: 'completed',
+          createdAt: 1761877649000,
+          updatedAt: 1761877649000,
+        },
+        itemVersion: 2,
+        billSerialNo: 'BL20261031000000007',
+        failureReason: null,
+        settlement: { commissionRate: 0.3, platformAmount: 2.97, sellerAmount: 6.93, settlesAt: 1762482449000, settledAt: 1762482449000 },
+        sellerTxns: [],
+      }),
+    );
+    const r = await new TavernMarketHttpAdapter().order('0193f5a0-0000-7000-8000-000000000001');
+    expect(request).toHaveBeenCalledWith('/tavern/api/admin/market/orders/0193f5a0-0000-7000-8000-000000000001');
+    expect(r.success && r.data.settlement?.platformAmount).toBe(2.97);
+    expect(r.success && r.data.billSerialNo).toBe('BL20261031000000007');
   });
 
   it('reviews a withdrawal and reads it back with its reason', async () => {

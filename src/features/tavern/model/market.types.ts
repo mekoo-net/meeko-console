@@ -243,35 +243,30 @@ export const MarketOrderSourceLabel: Readonly<Record<MarketOrderSource, string>>
   creator: '创作者',
 };
 
-export const marketOrderStatusSchema = z.enum(['pending', 'charged', 'active', 'failed']);
-export type MarketOrderStatus = z.infer<typeof marketOrderStatusSchema>;
+/**
+ * 订单状态：买家的权益和卖家的结算合成一个（服务端算好）。
+ * 生效了、卖家的钱还在冻结期是「待结算」；冻结期满或本来没钱可分（免费、创作者那单）是「已完成」。
+ */
+export const marketOrderStageSchema = z.enum(['pending', 'charged', 'settling', 'completed', 'failed']);
+export type MarketOrderStage = z.infer<typeof marketOrderStageSchema>;
 
-export const MarketOrderStatusLabel: Readonly<Record<MarketOrderStatus, string>> = {
+export const MarketOrderStageLabel: Readonly<Record<MarketOrderStage, string>> = {
   pending: '待付款',
   charged: '已扣款',
-  active: '已生效',
+  settling: '待结算',
+  completed: '已完成',
   failed: '失败',
 };
 
-export const MarketOrderStatusTone: Readonly<Record<MarketOrderStatus, StatusTone>> = {
+export const MarketOrderStageTone: Readonly<Record<MarketOrderStage, StatusTone>> = {
   pending: 'warning',
   charged: 'warning',
-  active: 'success',
+  settling: 'info',
+  completed: 'success',
   failed: 'danger',
 };
 
-/**
- * 卖家这一单所得（人民币）和成交时的抽成。`settlesAt` 是转可提现的时间，`settledAt` 为 null 表示还在冻结期；
- * 免费的单两个时间都是 null。
- */
-export const marketSettlementSchema = z.object({
-  commissionRate: z.number(),
-  sellerAmount: z.number(),
-  settlesAt: epochMillisNullableSchema,
-  settledAt: epochMillisNullableSchema,
-});
-export type MarketSettlement = z.infer<typeof marketSettlementSchema>;
-
+/** 列表上的一单；钱怎么分、账单号、失败原因在详情里。 */
 export const marketOrderRowSchema = z.object({
   /** 客户端下单时给的幂等键，不给人看。 */
   id: z.string().min(1),
@@ -282,9 +277,7 @@ export const marketOrderRowSchema = z.object({
   buyer: accountRefSchema,
   seller: accountRefSchema,
   price: marketPriceSchema,
-  status: marketOrderStatusSchema,
-  settlement: marketSettlementSchema.nullable(),
-  failureReason: z.string().nullable(),
+  stage: marketOrderStageSchema,
   createdAt: epochMillisSchema,
   updatedAt: epochMillisSchema,
 });
@@ -298,6 +291,7 @@ export type MarketOrderQuery = {
   buyerUid?: number;
   sellerUid?: number;
   source?: MarketOrderSource;
+  stage?: MarketOrderStage;
   /** 下单时间范围，epoch 毫秒，可只给一头。 */
   fromUtc?: number;
   toUtc?: number;
@@ -415,3 +409,29 @@ export type WithdrawalQuery = {
   fromUtc?: number;
   toUtc?: number;
 };
+
+// ---------- 订单详情 ----------
+
+/**
+ * 一单的钱怎么分（人民币）：抽成比例和金额、卖家所得。`settlesAt` 是卖家的钱转可提现的时间，`settledAt` 为 null 表示还在冻结期；
+ * 免费的单两个时间都是 null。
+ */
+export const orderSettlementSchema = z.object({
+  commissionRate: z.number(),
+  platformAmount: z.number(),
+  sellerAmount: z.number(),
+  settlesAt: epochMillisNullableSchema,
+  settledAt: epochMillisNullableSchema,
+});
+export type OrderSettlement = z.infer<typeof orderSettlementSchema>;
+
+/** `billSerialNo` 是平台钱包扣款的账单号（免费的没有）；`sellerTxns` 是卖家收益里因这一单记的流水。 */
+export const marketOrderDetailSchema = z.object({
+  order: marketOrderRowSchema,
+  itemVersion: z.number().int(),
+  billSerialNo: z.string().nullable(),
+  failureReason: z.string().nullable(),
+  settlement: orderSettlementSchema.nullable(),
+  sellerTxns: z.array(sellerTxnSchema),
+});
+export type MarketOrderDetail = z.infer<typeof marketOrderDetailSchema>;

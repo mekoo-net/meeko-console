@@ -1,10 +1,11 @@
 <script setup lang="ts">
 /**
- * 商品行「订单」：一件商品（角色卡或世界书）的订单，列序同订单页（订单号在前、时间在后），订单号新的在前。
+ * 商品行「订单」：一件商品（角色卡或世界书）的订单，列序同订单页（详情在前、时间在后），订单号新的在前；
+ * 钱怎么分在行首「详情」的抽屉里。
  * 外壳见 MarketRecordsDialog；上面一行按买家、来源轻筛。
  */
 import { computed, ref, watch } from 'vue';
-import { Search } from '@element-plus/icons-vue';
+import { Search, View } from '@element-plus/icons-vue';
 
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import StatusTag from '@/shared/ui/StatusTag.vue';
@@ -15,8 +16,8 @@ import { formatDateTime } from '@/shared/lib/date';
 import { usePagedList } from '../../composables/usePagedList';
 import {
   MarketOrderSourceLabel,
-  MarketOrderStatusLabel,
-  MarketOrderStatusTone,
+  MarketOrderStageLabel,
+  MarketOrderStageTone,
   marketOrderSourceSchema,
   type MarketItemRow,
   type MarketOrderRow,
@@ -27,7 +28,7 @@ import { parseAccountUid } from '../../model/meteringFormat';
 import { getTavernMarketPort } from '../../services';
 import AccountCell from '../content/AccountCell.vue';
 import MarketRecordsDialog from './MarketRecordsDialog.vue';
-import SellerShareCell from './SellerShareCell.vue';
+import MarketOrderDrawer from './MarketOrderDrawer.vue';
 
 const visible = defineModel<boolean>('visible', { required: true });
 const props = defineProps<{ item: MarketItemRow | null }>();
@@ -60,6 +61,14 @@ const stats = computed<RecordStat[]>(() => {
       : { label: '评分', value: '—' },
   ];
 });
+
+const detailOpen = ref(false);
+const detailId = ref<string | null>(null);
+
+function openDetail(orderId: string): void {
+  detailId.value = orderId;
+  detailOpen.value = true;
+}
 
 watch(visible, (open) => {
   if (!open || !props.item) return;
@@ -114,6 +123,22 @@ watch(visible, (open) => {
       :empty-text="' '"
     >
       <el-table-column
+        label="详情"
+        width="56"
+        align="center"
+        fixed
+      >
+        <template #default="{ row }: { row: MarketOrderRow }">
+          <el-button
+            :icon="View"
+            link
+            type="primary"
+            title="查看详情"
+            @click="openDetail(row.id)"
+          />
+        </template>
+      </el-table-column>
+      <el-table-column
         label="订单号"
         min-width="180"
       >
@@ -143,9 +168,8 @@ watch(visible, (open) => {
       >
         <template #default="{ row }: { row: MarketOrderRow }">
           <StatusTag
-            :label="MarketOrderStatusLabel[row.status]"
-            :tone="MarketOrderStatusTone[row.status]"
-            :title="row.failureReason ?? undefined"
+            :label="MarketOrderStageLabel[row.stage]"
+            :tone="MarketOrderStageTone[row.stage]"
           />
         </template>
       </el-table-column>
@@ -156,15 +180,6 @@ watch(visible, (open) => {
       >
         <template #default="{ row }: { row: MarketOrderRow }">
           <span class="num">{{ formatPrice(row.price) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column
-        label="卖家所得"
-        width="160"
-        align="right"
-      >
-        <template #default="{ row }: { row: MarketOrderRow }">
-          <SellerShareCell :settlement="row.settlement" />
         </template>
       </el-table-column>
       <el-table-column
@@ -184,6 +199,11 @@ watch(visible, (open) => {
       </template>
     </el-table>
   </MarketRecordsDialog>
+
+  <MarketOrderDrawer
+    v-model:visible="detailOpen"
+    :order-id="detailId"
+  />
 </template>
 
 <style scoped>

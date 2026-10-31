@@ -12,8 +12,11 @@ import {
   type MarketItemRow,
   type MarketItemState,
   type MarketListing,
+  type MarketOrderDetail,
   type MarketOrderQuery,
   type MarketOrderRow,
+  type MarketOrderStage,
+  type OrderSettlement,
   type MarketReview,
   type MarketReviewQuery,
   type MarketSettings,
@@ -213,7 +216,8 @@ interface MockOrder {
   itemId: string;
   buyer: AccountRef;
   price: number;
-  status: MarketOrderRow['status'];
+  /** 买家权益那一层（服务端的 MarketOrderStatus）；列表上的状态由它和结算合出来。 */
+  status: 'pending' | 'charged' | 'active' | 'failed';
   failureReason: string | null;
   at: number;
 }
@@ -278,20 +282,30 @@ const serialNos = new Map<string, string>();
   }
 }
 
+const cents = (n: number) => Math.round(n * 100) / 100;
+
 /** 同服务端的 MarketSettings.Settle：卖家所得抹到分。 */
 const sellerAmountOf = (price: number) => Math.floor(price * (1 - settings.settings.commissionRate) * 100 + 1e-6) / 100;
 
 /** 同服务端：买来的单生效时记下卖家所得；有钱可分的冻结期满转可提现，免费的没有结算时间。 */
-function settlementOf(o: MockOrder): MarketOrderRow['settlement'] {
+function settlementOf(o: MockOrder): OrderSettlement | null {
   if (o.status !== 'active' || o.source !== 'purchase') return null;
   const sellerAmount = sellerAmountOf(o.price);
   const settlesAt = sellerAmount > 0 ? o.at + settings.settings.settlementDays * DAY : null;
   return {
     commissionRate: settings.settings.commissionRate,
+    platformAmount: cents(o.price - sellerAmount),
     sellerAmount,
     settlesAt,
     settledAt: settlesAt != null && settlesAt <= NOW ? settlesAt : null,
   };
+}
+
+/** 同服务端 MarketOrder.Stage。 */
+function stageOf(o: MockOrder): MarketOrderStage {
+  if (o.status !== 'active') return o.status;
+  const st = settlementOf(o);
+  return st?.settlesAt != null && st.settledAt == null ? 'settling' : 'completed';
 }
 
 function orderRow(o: MockOrder): MarketOrderRow {
@@ -304,9 +318,7 @@ function orderRow(o: MockOrder): MarketOrderRow {
     buyer: o.buyer,
     seller: item.creator,
     price: { amount: o.price, currency: 'CNY' },
-    status: o.status,
-    settlement: settlementOf(o),
-    failureReason: o.failureReason,
+    stage: stageOf(o),
     createdAt: o.at,
     updatedAt: o.at,
   };
@@ -330,8 +342,6 @@ function sellerOf(uid: number): MockSeller {
   }
   return s;
 }
-
-const cents = (n: number) => Math.round(n * 100) / 100;
 
 /** 同服务端 SellerPosting：每种动作从哪格挪到哪格。 */
 const MOVES: Readonly<Record<SellerTxnKind, [keyof SellerBalance | null, keyof SellerBalance]>> = {
@@ -526,10 +536,29 @@ export class TavernMarketMock implements TavernMarketPort {
       .filter((o) => query.buyerUid == null || o.buyer.uid === query.buyerUid)
       .filter((o) => query.sellerUid == null || o.seller.uid === query.sellerUid)
       .filter((o) => query.source == null || o.source === query.source)
+      .filter((o) => query.stage == null || o.stage === query.stage)
       .filter((o) => query.fromUtc == null || o.createdAt >= query.fromUtc)
       .filter((o) => query.toUtc == null || o.createdAt <= query.toUtc)
       .sort((a, b) => b.serialNo.localeCompare(a.serialNo));
     return ok(pageOf(rows, page.p, page.pageSize));
+  }
+
+  async order(orderId: string): Promise<AppResult<MarketOrderDetail>> {
+    await delay();
+    const o = orders.find((x) => x.id === orderId);
+    if (!o) return fail({ code: 'not_found', message: '订单不存在。' });
+    const row = orderRow(o);
+    const sellerTxns = (sellers.get(row.seller.uid)?.txns ?? []).filter(
+      (t) => t.source.kind === 'order' && t.source.ref === row.serialNo,
+    );
+    return ok({
+      order: row,
+      itemVersion: 1,
+      billSerialNo: o.status !== 'pending' && o.price > 0 ? `BL${row.serialNo.slice(2)}` : null,
+      failureReason: o.failureReason,
+      settlement: settlementOf(o),
+      sellerTxns,
+    });
   }
 
   async settings(): Promise<AppResult<MarketSettingsView>> {

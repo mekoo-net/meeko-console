@@ -6,6 +6,7 @@ import type {
   MarketItemDetail,
   MarketItemQuery,
   MarketItemRow,
+  MarketOrderDetail,
   MarketOrderQuery,
   MarketReview,
   MarketReviewQuery,
@@ -31,6 +32,8 @@ export interface TavernMarketPort {
   restore(itemId: string): Promise<AppResult<MarketItemRow>>;
 
   orders(query: MarketOrderQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketOrderRow>>>;
+  /** 一单的详情：钱怎么分、结算、账单号、失败原因、卖家收益流水。 */
+  order(orderId: string): Promise<AppResult<MarketOrderDetail>>;
 
   settings(): Promise<AppResult<MarketSettingsView>>;
   saveSettings(settings: MarketSettings): Promise<AppResult<MarketSettingsView>>;

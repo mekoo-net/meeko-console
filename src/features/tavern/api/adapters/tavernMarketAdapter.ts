@@ -6,6 +6,7 @@ import type { PageQuery } from '../../model/content.types';
 import {
   marketItemDetailSchema,
   marketItemRowSchema,
+  marketOrderDetailSchema,
   marketOrderRowSchema,
   marketReviewSchema,
   marketSettingsViewSchema,
@@ -16,6 +17,7 @@ import {
   type MarketItemDetail,
   type MarketItemQuery,
   type MarketItemRow,
+  type MarketOrderDetail,
   type MarketOrderQuery,
   type MarketOrderRow,
   type MarketReview,
@@ -68,6 +70,10 @@ export class TavernMarketHttpAdapter implements TavernMarketPort {
 
   async orders(query: MarketOrderQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketOrderRow>>> {
     return parseTavern(orderPageSchema, await requestTavern<unknown>(`${BASE}/orders`, { query: { ...page, ...query } }), '市场订单');
+  }
+
+  async order(orderId: string): Promise<AppResult<MarketOrderDetail>> {
+    return parseTavern(marketOrderDetailSchema, await requestTavern<unknown>(`${BASE}/orders/${orderId}`), '订单');
   }
 
   async settings(): Promise<AppResult<MarketSettingsView>> {

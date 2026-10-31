@@ -1,13 +1,13 @@
 <script setup lang="ts">
 /**
- * 市场 › 订单：一单就是一份权益，角色卡和世界书一样买。买家付人民币进平台钱包；卖家所得也是钱（C2C），
- * 按成交时的抽成算好记在行上，冻结期满转可提现。
- * 列序照平台「账单流水」：订单号 → 买家 → 商品 → 来源 → 状态 → 价格 → 卖家与所得 → 时间。订单号按天按序发，新的在前。
+ * 市场 › 订单：一单就是一份权益，角色卡和世界书一样买。买家付人民币进平台钱包；卖家所得也是钱（C2C），冻结期满转可提现。
+ * 列表只给订单状态（待付款 / 已扣款 / 待结算 / 已完成 / 失败），钱怎么分、账单号、结算在行首「详情」的抽屉里，同平台账单流水。
+ * 列序照平台「账单流水」：订单号 → 买家 → 商品 → 来源 → 状态 → 价格 → 卖家 → 时间。订单号按天按序发，新的在前。
  * 创作者第一次发布时自己得的那一单（0 元）也在这里。
  * 也是用户视角「购买的」：传了 `buyerUid` 就只看这个人买的，买家筛选和买家列都不要。
  */
 import { computed, onMounted, ref } from 'vue';
-import { Search } from '@element-plus/icons-vue';
+import { Search, View } from '@element-plus/icons-vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import StatusTag from '@/shared/ui/StatusTag.vue';
@@ -19,18 +19,20 @@ import { formatDateTime } from '@/shared/lib/date';
 import { dateRangeToEpochMillis } from '@/shared/lib/epoch';
 
 import AccountCell from '../../components/content/AccountCell.vue';
-import SellerShareCell from '../../components/market/SellerShareCell.vue';
+import MarketOrderDrawer from '../../components/market/MarketOrderDrawer.vue';
 import { usePagedList } from '../../composables/usePagedList';
 import {
   MarketItemKindLabel,
   MarketOrderSourceLabel,
-  MarketOrderStatusLabel,
-  MarketOrderStatusTone,
+  MarketOrderStageLabel,
+  MarketOrderStageTone,
   marketItemKindSchema,
   marketOrderSourceSchema,
+  marketOrderStageSchema,
   type MarketItemKind,
   type MarketOrderRow,
   type MarketOrderSource,
+  type MarketOrderStage,
 } from '../../model/market.types';
 import { formatPrice, itemPage } from '../../model/marketFormat';
 import { parseAccountUid } from '../../model/meteringFormat';
@@ -48,6 +50,7 @@ const blank = () => ({
   itemId: '',
   kind: undefined as MarketItemKind | undefined,
   source: undefined as MarketOrderSource | undefined,
+  stage: undefined as MarketOrderStage | undefined,
   dateRange: null as [string, string] | null,
 });
 const filter = ref(blank());
@@ -65,6 +68,7 @@ const { items, total, page, pageSize, loading, load, reload } = usePagedList<Mar
           itemId: f.itemId.trim() || undefined,
           kind: f.kind,
           source: f.source,
+          stage: f.stage,
           ...dateRangeToEpochMillis(f.dateRange),
         },
         p,
@@ -78,6 +82,14 @@ const buyerFilter = computed(() =>
     ? { accountUid: filter.value.buyerUid, 'onUpdate:accountUid': (v?: string) => (filter.value.buyerUid = v ?? '') }
     : {},
 );
+
+const detailOpen = ref(false);
+const detailId = ref<string | null>(null);
+
+function openDetail(orderId: string): void {
+  detailId.value = orderId;
+  detailOpen.value = true;
+}
 
 onMounted(() => void load());
 </script>
@@ -140,6 +152,21 @@ onMounted(() => void load());
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="状态">
+          <el-select
+            v-model="filter.stage"
+            placeholder="全部"
+            clearable
+            style="width: 140px"
+          >
+            <el-option
+              v-for="s in marketOrderStageSchema.options"
+              :key="s"
+              :label="MarketOrderStageLabel[s]"
+              :value="s"
+            />
+          </el-select>
+        </el-form-item>
 
         <template #extra-row>
           <el-form-item label="卖家 UID">
@@ -172,6 +199,23 @@ onMounted(() => void load());
       height="100%"
       :empty-text="' '"
     >
+      <el-table-column
+        label="详情"
+        width="56"
+        align="center"
+        fixed
+      >
+        <template #default="{ row }: { row: MarketOrderRow }">
+          <el-button
+            :icon="View"
+            link
+            type="primary"
+            title="查看详情"
+            @click="openDetail(row.id)"
+          />
+        </template>
+      </el-table-column>
+
       <el-table-column
         label="订单号"
         min-width="170"
@@ -229,9 +273,8 @@ onMounted(() => void load());
       >
         <template #default="{ row }: { row: MarketOrderRow }">
           <StatusTag
-            :label="MarketOrderStatusLabel[row.status]"
-            :tone="MarketOrderStatusTone[row.status]"
-            :title="row.failureReason ?? undefined"
+            :label="MarketOrderStageLabel[row.stage]"
+            :tone="MarketOrderStageTone[row.stage]"
           />
         </template>
       </el-table-column>
@@ -252,16 +295,6 @@ onMounted(() => void load());
       >
         <template #default="{ row }: { row: MarketOrderRow }">
           <AccountCell :account="row.seller" />
-        </template>
-      </el-table-column>
-
-      <el-table-column
-        label="卖家所得"
-        width="150"
-        align="right"
-      >
-        <template #default="{ row }: { row: MarketOrderRow }">
-          <SellerShareCell :settlement="row.settlement" />
         </template>
       </el-table-column>
 
@@ -293,6 +326,11 @@ onMounted(() => void load());
       />
     </template>
   </FillListPageLayout>
+
+  <MarketOrderDrawer
+    v-model:visible="detailOpen"
+    :order-id="detailId"
+  />
 </template>
 
 <style scoped>
