@@ -67,14 +67,21 @@ export class TavernMarketHttpAdapter implements TavernMarketPort {
     return parseTavern(marketItemRowSchema, res, '下架');
   }
 
-  async restore(itemId: string): Promise<AppResult<MarketItemRow>> {
-    const res = await requestTavern<unknown>(`${BASE}/items/${itemId}/restore`, { method: 'POST' });
-    return parseTavern(marketItemRowSchema, res, '恢复上架');
+  async relist(itemId: string): Promise<AppResult<MarketItemRow>> {
+    return this.itemAction(itemId, 'relist', '上架');
   }
 
-  async deleteItem(itemId: string, reason: string): Promise<AppResult<MarketItemRow>> {
-    const res = await requestTavern<unknown>(`${BASE}/items/${itemId}/delete`, { method: 'POST', body: { reason } });
-    return parseTavern(marketItemRowSchema, res, '删除');
+  async deleteItem(itemId: string): Promise<AppResult<MarketItemRow>> {
+    return this.itemAction(itemId, 'delete', '删除');
+  }
+
+  async undelete(itemId: string): Promise<AppResult<MarketItemRow>> {
+    return this.itemAction(itemId, 'undelete', '恢复');
+  }
+
+  private async itemAction(itemId: string, action: 'relist' | 'delete' | 'undelete', what: string): Promise<AppResult<MarketItemRow>> {
+    const res = await requestTavern<unknown>(`${BASE}/items/${itemId}/${action}`, { method: 'POST' });
+    return parseTavern(marketItemRowSchema, res, what);
   }
 
   async orders(query: MarketOrderQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketOrderRow>>> {

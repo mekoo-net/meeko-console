@@ -2,7 +2,7 @@
 /**
  * 商品详情，版式同角色卡抽屉：摘要表在上，门面、在卖的内容分段往下（都按条目，点开看正文），下架 / 恢复放底栏。
  * 内容按类别分：角色卡是预设和描写；世界书是一整套世界模板（时间、叙事、世界书、规则书）。
- * 底栏是处置：下架 / 恢复上架、删除（同列表行上的「⋯」，都走 useItemModeration）。
+ * 底栏是处置，按状态给：在售可下架；已下架可上架、删除；已删除可恢复（同列表行上的「⋯」，都走 useItemModeration）。
  * 评价和订单在列表行上的「操作」里另开弹窗看。
  * 只给在卖的那一版——员工判断要不要下架看的就是它；版本是创作者和买家之间的事，这里不露。
  */
@@ -70,7 +70,7 @@ watch(
   { immediate: true },
 );
 
-const { acting, takeDown, restore, remove } = useItemModeration((row) => {
+const { acting, takeDown, relist, remove, undelete } = useItemModeration((row) => {
   emit('changed', row.itemId);
   void load(row.itemId);
 });
@@ -214,30 +214,39 @@ function faceLines(content: MarketItemContent): { label: string; value: string }
         v-if="item"
         class="drawer-footer"
       >
+        <template v-if="item.state === 'listed'">
+          <el-button
+            type="danger"
+            :loading="acting === item.itemId"
+            @click="takeDown(item)"
+          >
+            下架
+          </el-button>
+        </template>
+        <template v-else-if="item.state === 'unlisted'">
+          <el-button
+            type="danger"
+            plain
+            :disabled="acting === item.itemId"
+            @click="remove(item)"
+          >
+            删除
+          </el-button>
+          <el-button
+            type="primary"
+            :loading="acting === item.itemId"
+            @click="relist(item)"
+          >
+            上架
+          </el-button>
+        </template>
         <el-button
-          v-if="item.state !== 'deleted'"
-          type="danger"
-          plain
-          :disabled="acting === item.itemId"
-          @click="remove(item)"
-        >
-          删除
-        </el-button>
-        <el-button
-          v-if="item.state === 'listed'"
-          type="danger"
-          :loading="acting === item.itemId"
-          @click="takeDown(item)"
-        >
-          下架
-        </el-button>
-        <el-button
-          v-else-if="item.state === 'taken_down'"
+          v-else
           type="primary"
           :loading="acting === item.itemId"
-          @click="restore(item)"
+          @click="undelete(item)"
         >
-          恢复上架
+          恢复
         </el-button>
       </div>
     </template>

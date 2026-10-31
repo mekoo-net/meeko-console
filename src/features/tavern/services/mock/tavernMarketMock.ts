@@ -177,7 +177,7 @@ const items: MockItem[] = [
   {
     id: mockUuid(803),
     creator: PLAYER_0123,
-    state: 'taken_down',
+    state: 'unlisted',
     price: 3,
     onSale: card(face('某明星', '……', ['真人']), [], '你是某明星本人。'),
     publishedAt: NOW - 9 * DAY,
@@ -443,6 +443,22 @@ const thisOne = (i: MockItem) => (i.onSale.kind === 'world_book' ? '这本世界
 
 const notFound = () => fail({ code: 'not_found', message: '商品不存在。' });
 
+/** 同服务端 MarketAdminService.MoveAsync：状态对得上才动。 */
+async function moveItem(
+  itemId: string,
+  from: MarketItemState,
+  wrongState: (i: MockItem) => string,
+  move: (i: MockItem) => void,
+): Promise<AppResult<MarketItemRow>> {
+  await delay();
+  const i = items.find((x) => x.id === itemId);
+  if (!i) return notFound();
+  if (i.state !== from) return fail({ code: 'conflict', message: wrongState(i) });
+  move(i);
+  i.updatedAt = Date.now();
+  return ok(row(i));
+}
+
 /** 同服务端：好评 4–5 星、中评 3 星、差评 1–2 星。 */
 const sentimentOf = (rating: number): ReviewSentiment => (rating >= 4 ? 'good' : rating === 3 ? 'neutral' : 'bad');
 
@@ -507,36 +523,29 @@ export class TavernMarketMock implements TavernMarketPort {
   }
 
   async takeDown(itemId: string, reason: string): Promise<AppResult<MarketItemRow>> {
-    await delay();
-    const i = items.find((x) => x.id === itemId);
-    if (!i) return notFound();
-    if (i.state !== 'listed') return fail({ code: 'conflict', message: `${thisOne(i)}没有在售。` });
-    i.state = 'taken_down';
-    i.takedown = { reason, staffUid: STAFF_UID, atUtc: Date.now() };
-    i.updatedAt = Date.now();
-    return ok(row(i));
+    return moveItem(itemId, 'listed', (i) => `${thisOne(i)}没有在售。`, (i) => {
+      i.state = 'unlisted';
+      i.takedown = { reason, staffUid: STAFF_UID, atUtc: Date.now() };
+    });
   }
 
-  async restore(itemId: string): Promise<AppResult<MarketItemRow>> {
-    await delay();
-    const i = items.find((x) => x.id === itemId);
-    if (!i) return notFound();
-    if (i.state !== 'taken_down') return fail({ code: 'conflict', message: `${thisOne(i)}没有被下架。` });
-    i.state = 'listed';
-    i.takedown = null;
-    i.updatedAt = Date.now();
-    return ok(row(i));
+  relist(itemId: string): Promise<AppResult<MarketItemRow>> {
+    return moveItem(itemId, 'unlisted', (i) => `${thisOne(i)}不是已下架状态。`, (i) => {
+      i.state = 'listed';
+      i.takedown = null;
+    });
   }
 
-  async deleteItem(itemId: string, reason: string): Promise<AppResult<MarketItemRow>> {
-    await delay();
-    const i = items.find((x) => x.id === itemId);
-    if (!i) return notFound();
-    if (i.state === 'deleted') return fail({ code: 'conflict', message: `${thisOne(i)}已删除。` });
-    i.state = 'deleted';
-    i.takedown = { reason, staffUid: STAFF_UID, atUtc: Date.now() };
-    i.updatedAt = Date.now();
-    return ok(row(i));
+  deleteItem(itemId: string): Promise<AppResult<MarketItemRow>> {
+    return moveItem(itemId, 'unlisted', (i) => `${thisOne(i)}不是已下架状态。`, (i) => {
+      i.state = 'deleted';
+    });
+  }
+
+  undelete(itemId: string): Promise<AppResult<MarketItemRow>> {
+    return moveItem(itemId, 'deleted', (i) => `${thisOne(i)}没有被删除。`, (i) => {
+      i.state = 'unlisted';
+    });
   }
 
   async orders(query: MarketOrderQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketOrderRow>>> {

@@ -10,23 +10,14 @@ import { getTavernMarketPort } from '../services';
 const REASON_MAX = 200;
 
 /**
- * 员工处置一件商品：下架、恢复上架、删除。商品列表行上的「⋯」和商品抽屉的底栏共用这一份，确认框和提示只写一处。
- * 下架、删除都要写原因（创作者可见）；删除不能恢复。做完回改好的那一行给 `changed`。
+ * 员工处置一件商品，按状态走：在售 → 下架（写原因，创作者可见）；已下架 → 上架，或删除（不用原因）；已删除 → 恢复（回到已下架）。
+ * 卖家自己也能上架、下架，删除只有管理员能做。商品列表行上的「⋯」和商品抽屉的底栏共用这一份，确认框和提示只写一处；
+ * 做完回改好的那一行给 `changed`。
  */
 export function useItemModeration(changed: (row: MarketItemRow) => void) {
   const port = getTavernMarketPort();
   /** 正在处置的那一件，按钮据此转圈。 */
   const acting = ref<string | null>(null);
-
-  function askReason(title: string, message: string, placeholder: string): Promise<string | null> {
-    return ElMessageBox.prompt(message, title, {
-      confirmButtonText: title,
-      cancelButtonText: '取消',
-      inputPlaceholder: placeholder,
-      inputValidator: (v) => (v?.trim() ? (v.trim().length <= REASON_MAX ? true : `不超过 ${REASON_MAX} 字`) : '请填写原因'),
-      type: 'warning',
-    }).then(({ value }) => value.trim(), () => null);
-  }
 
   async function act(item: MarketItemRow, run: () => Promise<AppResult<MarketItemRow>>, done: string): Promise<void> {
     acting.value = item.itemId;
@@ -44,34 +35,48 @@ export function useItemModeration(changed: (row: MarketItemRow) => void) {
   }
 
   async function takeDown(item: MarketItemRow): Promise<void> {
-    const name = item.listing.face.name;
-    const reason = await askReason(
+    const reason = await ElMessageBox.prompt(
+      `下架「${item.listing.face.name}」后不可购买，已购买的用户不受影响。`,
       `下架${MarketItemKindLabel[item.listing.kind]}`,
-      `下架「${name}」后不可购买，已购买的用户不受影响。`,
-      '下架原因（创作者可见）',
-    );
+      {
+        confirmButtonText: '下架',
+        cancelButtonText: '取消',
+        inputPlaceholder: '下架原因（创作者可见）',
+        inputValidator: (v) => (v?.trim() ? (v.trim().length <= REASON_MAX ? true : `不超过 ${REASON_MAX} 字`) : '请填写原因'),
+        type: 'warning',
+      },
+    ).then(({ value }) => value.trim(), () => null);
     if (reason != null) await act(item, () => port.takeDown(item.itemId, reason), '已下架');
   }
 
-  async function restore(item: MarketItemRow): Promise<void> {
+  async function relist(item: MarketItemRow): Promise<void> {
     const ok = await confirmDanger({
-      title: '恢复上架',
-      message: `恢复「${item.listing.face.name}」在市场中出售？`,
-      confirmText: '恢复',
+      title: '上架',
+      message: `将「${item.listing.face.name}」重新上架？`,
+      confirmText: '上架',
       type: 'info',
     });
-    if (ok) await act(item, () => port.restore(item.itemId), '已恢复上架');
+    if (ok) await act(item, () => port.relist(item.itemId), '已上架');
   }
 
   async function remove(item: MarketItemRow): Promise<void> {
-    const name = item.listing.face.name;
-    const reason = await askReason(
-      `删除${MarketItemKindLabel[item.listing.kind]}`,
-      `删除「${name}」后不可恢复，已购买的用户不受影响。`,
-      '删除原因（创作者可见）',
-    );
-    if (reason != null) await act(item, () => port.deleteItem(item.itemId, reason), '已删除');
+    const ok = await confirmDanger({
+      title: `删除${MarketItemKindLabel[item.listing.kind]}`,
+      message: `删除「${item.listing.face.name}」？已购买的用户不受影响，删除后可恢复。`,
+      confirmText: '删除',
+    });
+    if (ok) await act(item, () => port.deleteItem(item.itemId), '已删除');
   }
 
-  return { acting, takeDown, restore, remove };
+  async function undelete(item: MarketItemRow): Promise<void> {
+    const ok = await confirmDanger({
+      title: '恢复',
+      message: `恢复「${item.listing.face.name}」？恢复后为已下架。`,
+      confirmText: '恢复',
+      type: 'info',
+    });
+    if (ok) await act(item, () => port.undelete(item.itemId), '已恢复');
+  }
+
+  return { acting, takeDown, relist, remove, undelete };
 }

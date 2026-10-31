@@ -31,9 +31,12 @@ export interface TavernMarketPort {
   /** 好评、中评、差评各几条。 */
   reviewSummary(itemId: string): Promise<AppResult<ReviewSummary>>;
   takeDown(itemId: string, reason: string): Promise<AppResult<MarketItemRow>>;
-  restore(itemId: string): Promise<AppResult<MarketItemRow>>;
-  /** 永久删除，不能恢复；已买的照常用。 */
-  deleteItem(itemId: string, reason: string): Promise<AppResult<MarketItemRow>>;
+  /** 重新上架已下架的。 */
+  relist(itemId: string): Promise<AppResult<MarketItemRow>>;
+  /** 删除已下架的，不用原因，能恢复；已买的照常用。 */
+  deleteItem(itemId: string): Promise<AppResult<MarketItemRow>>;
+  /** 恢复删除的，回到已下架。 */
+  undelete(itemId: string): Promise<AppResult<MarketItemRow>>;
 
   orders(query: MarketOrderQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketOrderRow>>>;
   /** 用户视角「仓库」：这个人手里有的商品，新得的在前。 */

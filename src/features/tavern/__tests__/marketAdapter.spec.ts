@@ -49,11 +49,11 @@ describe('TavernMarketHttpAdapter', () => {
   it('lists one kind of item with the filter the page gave', async () => {
     request.mockResolvedValueOnce(ok({ items: [wireItem()], total: 1, page: 1, pageSize: 20 }));
     const r = await new TavernMarketHttpAdapter().items(
-      { kind: 'character_card', creatorUid: 100004120, state: 'taken_down' },
+      { kind: 'character_card', creatorUid: 100004120, state: 'unlisted' },
       { p: 1, pageSize: 20 },
     );
     expect(request).toHaveBeenCalledWith('/tavern/api/admin/market/items', {
-      query: { p: 1, pageSize: 20, kind: 'character_card', creatorUid: 100004120, state: 'taken_down' },
+      query: { p: 1, pageSize: 20, kind: 'character_card', creatorUid: 100004120, state: 'unlisted' },
     });
     expect(r.success && r.data.items[0]?.price).toEqual({ amount: 9.9, currency: 'CNY' });
   });
@@ -61,7 +61,7 @@ describe('TavernMarketHttpAdapter', () => {
   it('reads a character card on sale with its preset and description', async () => {
     request.mockResolvedValueOnce(
       ok({
-        item: wireItem({ state: 'taken_down', takedown: { reason: '侵权', staffUid: 1, atUtc: 1761877649000 } }),
+        item: wireItem({ state: 'unlisted', takedown: { reason: '侵权', staffUid: 1, atUtc: 1761877649000 } }),
         onSale: {
           face: FACE,
           kind: 'character_card',
@@ -106,23 +106,25 @@ describe('TavernMarketHttpAdapter', () => {
   });
 
   it('takes an item down with a reason and gets the changed row back', async () => {
-    request.mockResolvedValueOnce(ok(wireItem({ state: 'taken_down', takedown: { reason: '侵权', staffUid: 1, atUtc: 1 } })));
+    request.mockResolvedValueOnce(ok(wireItem({ state: 'unlisted', takedown: { reason: '侵权', staffUid: 1, atUtc: 1 } })));
     const r = await new TavernMarketHttpAdapter().takeDown(ITEM_ID, '侵权');
     expect(request).toHaveBeenCalledWith(`/tavern/api/admin/market/items/${ITEM_ID}/takedown`, {
       method: 'POST',
       body: { reason: '侵权' },
     });
-    expect(r.success && r.data.state).toBe('taken_down');
+    expect(r.success && r.data.state).toBe('unlisted');
   });
 
-  it('deletes an item with a reason and gets the deleted row back', async () => {
-    request.mockResolvedValueOnce(ok(wireItem({ state: 'deleted', takedown: { reason: '冒充真人', staffUid: 1, atUtc: 1 } })));
-    const r = await new TavernMarketHttpAdapter().deleteItem(ITEM_ID, '冒充真人');
-    expect(request).toHaveBeenCalledWith(`/tavern/api/admin/market/items/${ITEM_ID}/delete`, {
-      method: 'POST',
-      body: { reason: '冒充真人' },
-    });
-    expect(r.success && r.data.state).toBe('deleted');
+  it('deletes an unlisted item without a reason and undeletes it back to unlisted', async () => {
+    request.mockResolvedValueOnce(ok(wireItem({ state: 'deleted' })));
+    const deleted = await new TavernMarketHttpAdapter().deleteItem(ITEM_ID);
+    expect(request).toHaveBeenCalledWith(`/tavern/api/admin/market/items/${ITEM_ID}/delete`, { method: 'POST' });
+    expect(deleted.success && deleted.data.state).toBe('deleted');
+
+    request.mockResolvedValueOnce(ok(wireItem({ state: 'unlisted' })));
+    const back = await new TavernMarketHttpAdapter().undelete(ITEM_ID);
+    expect(request).toHaveBeenLastCalledWith(`/tavern/api/admin/market/items/${ITEM_ID}/undelete`, { method: 'POST' });
+    expect(back.success && back.data.state).toBe('unlisted');
   });
 
   it('reads an order with the kind of item and one status for it', async () => {

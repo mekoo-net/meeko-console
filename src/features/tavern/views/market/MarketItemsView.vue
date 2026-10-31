@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * 市场 › 角色卡 / 世界书：玩家发布到市场的一类商品，版式同调用日志页，详情在抽屉里看在卖的那一版。
- * 发布即上架，员工事后处置：下架 / 恢复上架、删除（永久退出市场，默认列表不显示），都在行尾「⋯」和详情抽屉底栏；
- * 已买的照常用。
+ * 发布即上架，卖家自己也能上架、下架。员工在行尾「⋯」和详情抽屉底栏处置：在售可下架；已下架可上架、删除；
+ * 已删除（默认列表不显示）可恢复。已买的照常用。
  * `?itemId=` 进来直接打开那一件（角色卡抽屉里的市场卡号点过来）。
  * 也是用户视角「上架」：传了 `creatorUid` 就只看这个人上架的，不分页面、两类一起列，多一列类别。
  */
@@ -93,12 +93,14 @@ function imageOf(listing: MarketListing): string | undefined {
 const detailOpen = ref(false);
 const detailId = ref<string | null>(null);
 
-const { acting, takeDown, restore, remove } = useItemModeration(() => void load());
+const moderation = useItemModeration(() => void load());
+const { acting } = moderation;
 
-function moderate(row: MarketItemRow, command: 'takedown' | 'restore' | 'delete'): void {
-  if (command === 'takedown') void takeDown(row);
-  else if (command === 'restore') void restore(row);
-  else void remove(row);
+/** 行尾「⋯」的命令就是 useItemModeration 的那几个动作。 */
+type ModerationCommand = 'takeDown' | 'relist' | 'remove' | 'undelete';
+
+function moderate(row: MarketItemRow, command: ModerationCommand): void {
+  void moderation[command](row);
 }
 
 function openDetail(itemId: string): void {
@@ -410,8 +412,8 @@ onMounted(() => {
             <el-dropdown
               trigger="click"
               placement="bottom-end"
-              :disabled="row.state === 'deleted' || acting === row.itemId"
-              @command="(cmd: 'takedown' | 'restore' | 'delete') => moderate(row, cmd)"
+              :disabled="acting === row.itemId"
+              @command="(cmd: ModerationCommand) => moderate(row, cmd)"
             >
               <el-button
                 link
@@ -425,22 +427,27 @@ onMounted(() => {
                 <el-dropdown-menu>
                   <el-dropdown-item
                     v-if="row.state === 'listed'"
-                    command="takedown"
+                    command="takeDown"
                   >
                     下架
                   </el-dropdown-item>
+                  <template v-else-if="row.state === 'unlisted'">
+                    <el-dropdown-item command="relist">
+                      上架
+                    </el-dropdown-item>
+                    <el-dropdown-item
+                      command="remove"
+                      divided
+                      class="market-danger-item"
+                    >
+                      删除
+                    </el-dropdown-item>
+                  </template>
                   <el-dropdown-item
                     v-else
-                    command="restore"
+                    command="undelete"
                   >
-                    恢复上架
-                  </el-dropdown-item>
-                  <el-dropdown-item
-                    command="delete"
-                    divided
-                    class="market-danger-item"
-                  >
-                    删除
+                    恢复
                   </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
