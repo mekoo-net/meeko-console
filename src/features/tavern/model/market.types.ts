@@ -240,17 +240,9 @@ export type MarketItemQuery = {
 
 // ---------- 订单 ----------
 
-export const marketOrderSourceSchema = z.enum(['purchase', 'creator']);
-export type MarketOrderSource = z.infer<typeof marketOrderSourceSchema>;
-
-export const MarketOrderSourceLabel: Readonly<Record<MarketOrderSource, string>> = {
-  purchase: '购买',
-  creator: '创作者',
-};
-
 /**
  * 订单状态：买家的权益和卖家的结算合成一个（服务端算好）。
- * 生效了、卖家的钱还在冻结期是「待结算」；冻结期满或本来没钱可分（免费、创作者那单）是「已完成」。
+ * 生效了、卖家的钱还在冻结期是「待结算」；冻结期满或本来没钱可分（免费）是「已完成」。
  */
 export const marketOrderStageSchema = z.enum(['pending', 'charged', 'settling', 'completed', 'failed']);
 export type MarketOrderStage = z.infer<typeof marketOrderStageSchema>;
@@ -277,7 +269,6 @@ export const marketOrderRowSchema = z.object({
   id: z.string().min(1),
   /** 订单号：MO + yyyyMMdd + 9 位当天序号（平台流水号规范），按时间排。 */
   serialNo: z.string().min(1),
-  source: marketOrderSourceSchema,
   item: z.object({ id: z.string().min(1), kind: marketItemKindSchema, name: z.string() }),
   buyer: accountRefSchema,
   seller: accountRefSchema,
@@ -295,38 +286,10 @@ export type MarketOrderQuery = {
   kind?: MarketItemKind;
   buyerUid?: number;
   sellerUid?: number;
-  source?: MarketOrderSource;
   stage?: MarketOrderStage;
   /** 下单时间范围，epoch 毫秒，可只给一头。 */
   fromUtc?: number;
   toUtc?: number;
-};
-
-// ---------- 用户手里的卡（用户视角 › 卡片） ----------
-
-/** 用户手里的一张卡：商品、在售状态、创作者、获得方式（购买 / 创作）、对应订单、获得时间。 */
-export const inventoryRowSchema = z.object({
-  item: z.object({ id: z.string().min(1), kind: marketItemKindSchema, name: z.string() }),
-  /** 角色卡是头像，世界卡是封面。 */
-  image: z.string().nullable(),
-  itemState: marketItemStateSchema,
-  creator: accountRefSchema,
-  source: marketOrderSourceSchema,
-  orderId: z.string().min(1),
-  serialNo: z.string().min(1),
-  acquiredAt: epochMillisSchema,
-});
-export type InventoryRow = z.infer<typeof inventoryRowSchema>;
-
-export type InventoryQuery = {
-  kind?: MarketItemKind;
-  source?: MarketOrderSource;
-};
-
-/** 用户手里的卡的「获得方式」：买来的是「购买」，自己上架时得的那一份是「创作」。 */
-export const InventorySourceLabel: Readonly<Record<MarketOrderSource, string>> = {
-  purchase: '购买',
-  creator: '创作',
 };
 
 // ---------- 分成设置 ----------

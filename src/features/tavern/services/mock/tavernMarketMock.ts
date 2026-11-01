@@ -5,8 +5,6 @@ import { delay } from '@/shared/lib/delay';
 import type { AccountRef, PageQuery } from '../../model/content.types';
 import {
   marketItemContentSchema,
-  type InventoryQuery,
-  type InventoryRow,
   type ItemFace,
   type MarketItemContent,
   type MarketItemDetail,
@@ -32,6 +30,7 @@ import {
   type WithdrawalQuery,
   type WithdrawalRow,
 } from '../../model/market.types';
+import type { UserCardRow } from '../../model/users.types';
 import type { TavernMarketPort } from '../ports/tavernMarketPort';
 import { mockUuid } from './tavernContentMock';
 import { ASAKO, LINXIA, PLAYER_0123 } from './tavernMockAccounts';
@@ -214,7 +213,6 @@ const items: MockItem[] = [
 
 interface MockOrder {
   id: string;
-  source: MarketOrderRow['source'];
   itemId: string;
   buyer: AccountRef;
   price: number;
@@ -225,16 +223,12 @@ interface MockOrder {
 }
 
 const orders: MockOrder[] = [
-  { id: mockUuid(901), source: 'creator', itemId: mockUuid(801), buyer: ASAKO, price: 0, status: 'active', failureReason: null, at: NOW - 50 * DAY },
-  { id: mockUuid(902), source: 'purchase', itemId: mockUuid(801), buyer: LINXIA, price: 6, status: 'active', failureReason: null, at: NOW - 42 * DAY },
-  { id: mockUuid(903), source: 'creator', itemId: mockUuid(802), buyer: ASAKO, price: 0, status: 'active', failureReason: null, at: NOW - 40 * DAY },
-  { id: mockUuid(904), source: 'purchase', itemId: mockUuid(802), buyer: LINXIA, price: 0, status: 'active', failureReason: null, at: NOW - 40 * DAY },
-  { id: mockUuid(905), source: 'purchase', itemId: mockUuid(803), buyer: LINXIA, price: 3, status: 'failed', failureReason: '钱包余额不足，请先充值。', at: NOW - 8 * DAY },
-  { id: mockUuid(906), source: 'purchase', itemId: mockUuid(801), buyer: PLAYER_0123, price: 9.9, status: 'active', failureReason: null, at: NOW - 1 * DAY },
-  { id: mockUuid(907), source: 'creator', itemId: mockUuid(811), buyer: ASAKO, price: 0, status: 'active', failureReason: null, at: NOW - 30 * DAY },
-  { id: mockUuid(908), source: 'purchase', itemId: mockUuid(811), buyer: LINXIA, price: 19.9, status: 'active', failureReason: null, at: NOW - 3 * DAY },
-  { id: mockUuid(909), source: 'creator', itemId: mockUuid(812), buyer: LINXIA, price: 0, status: 'active', failureReason: null, at: NOW - 12 * DAY },
-  { id: mockUuid(910), source: 'purchase', itemId: mockUuid(812), buyer: PLAYER_0123, price: 0, status: 'active', failureReason: null, at: NOW - 5 * HOUR },
+  { id: mockUuid(902), itemId: mockUuid(801), buyer: LINXIA, price: 6, status: 'active', failureReason: null, at: NOW - 42 * DAY },
+  { id: mockUuid(904), itemId: mockUuid(802), buyer: LINXIA, price: 0, status: 'active', failureReason: null, at: NOW - 40 * DAY },
+  { id: mockUuid(905), itemId: mockUuid(803), buyer: LINXIA, price: 3, status: 'failed', failureReason: '钱包余额不足，请先充值。', at: NOW - 8 * DAY },
+  { id: mockUuid(906), itemId: mockUuid(801), buyer: PLAYER_0123, price: 9.9, status: 'active', failureReason: null, at: NOW - 1 * DAY },
+  { id: mockUuid(908), itemId: mockUuid(811), buyer: LINXIA, price: 19.9, status: 'active', failureReason: null, at: NOW - 3 * DAY },
+  { id: mockUuid(910), itemId: mockUuid(812), buyer: PLAYER_0123, price: 0, status: 'active', failureReason: null, at: NOW - 5 * HOUR },
 ];
 
 let settings: MarketSettingsView = { settings: { commissionRate: 0.3, settlementDays: 7 }, updatedAt: null };
@@ -289,9 +283,9 @@ const cents = (n: number) => Math.round(n * 100) / 100;
 /** 同服务端的 MarketSettings.Settle：卖家所得抹到分。 */
 const sellerAmountOf = (price: number) => Math.floor(price * (1 - settings.settings.commissionRate) * 100 + 1e-6) / 100;
 
-/** 同服务端：买来的单生效时记下卖家所得；有钱可分的冻结期满转可提现，免费的没有结算时间。 */
+/** 同服务端：一单生效时记下卖家所得；有钱可分的冻结期满转可提现，免费的没有结算时间。 */
 function settlementOf(o: MockOrder): OrderSettlement | null {
-  if (o.status !== 'active' || o.source !== 'purchase') return null;
+  if (o.status !== 'active') return null;
   const sellerAmount = sellerAmountOf(o.price);
   const settlesAt = sellerAmount > 0 ? o.at + settings.settings.settlementDays * DAY : null;
   return {
@@ -315,7 +309,6 @@ function orderRow(o: MockOrder): MarketOrderRow {
   return {
     id: o.id,
     serialNo: serialNos.get(o.id)!,
-    source: o.source,
     item: { id: item.id, kind: item.onSale.kind, name: item.onSale.face.name },
     buyer: o.buyer,
     seller: item.creator,
@@ -478,6 +471,61 @@ function reviewsOf(i: MockItem): MarketReview[] {
   }));
 }
 
+// ---------- 玩家手里的卡（权益在工坊；用户 mock 拿去出「卡片」页和头部计数） ----------
+
+/** 只在工坊里、没上过架的卡：林夏做了陆川，还没上架。 */
+const unlistedCards: UserCardRow[] = [
+  {
+    card: { id: mockUuid(813), kind: 'character_card', name: '陆川' },
+    image: null,
+    author: LINXIA,
+    source: 'authored',
+    purchase: null,
+    acquiredVersion: 0,
+    market: null,
+    acquiredAt: NOW - 20 * DAY,
+  },
+];
+
+/** 同服务端：作者建卡时就有一条（自己做的），买成时市场登记一条（买来的）。 */
+export function mockUserCards(accountUid: number): UserCardRow[] {
+  const authored: UserCardRow[] = items
+    .filter((i) => i.creator.uid === accountUid)
+    .map((i) => ({
+      card: { id: i.id, kind: i.onSale.kind, name: i.onSale.face.name },
+      image: imageOf(i),
+      author: i.creator,
+      source: 'authored',
+      purchase: null,
+      acquiredVersion: 0,
+      market: i.state,
+      acquiredAt: i.publishedAt - DAY,
+    }));
+  const purchased: UserCardRow[] = orders
+    .filter((o) => o.buyer.uid === accountUid && o.status === 'active')
+    .map((o) => {
+      const item = items.find((i) => i.id === o.itemId)!;
+      return {
+        card: { id: item.id, kind: item.onSale.kind, name: item.onSale.face.name },
+        image: imageOf(item),
+        author: item.creator,
+        source: 'purchased',
+        purchase: { orderId: o.id, serialNo: serialNos.get(o.id)! },
+        acquiredVersion: 1,
+        market: item.state,
+        acquiredAt: o.at,
+      };
+    });
+  return [...authored, ...purchased, ...unlistedCards.filter((c) => c.author.uid === accountUid)].sort(
+    (a, b) => b.acquiredAt - a.acquiredAt,
+  );
+}
+
+function imageOf(item: MockItem): string | null {
+  const listing = listingOf(item.onSale);
+  return listing.kind === 'character_card' ? listing.character.avatar : listing.face.cover;
+}
+
 export class TavernMarketMock implements TavernMarketPort {
   async items(query: MarketItemQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketItemRow>>> {
     await delay();
@@ -557,34 +605,9 @@ export class TavernMarketMock implements TavernMarketPort {
       .filter((o) => query.kind == null || o.item.kind === query.kind)
       .filter((o) => query.buyerUid == null || o.buyer.uid === query.buyerUid)
       .filter((o) => query.sellerUid == null || o.seller.uid === query.sellerUid)
-      .filter((o) => query.source == null || o.source === query.source)
       .filter((o) => query.stage == null || o.stage === query.stage)
       .filter((o) => query.fromUtc == null || o.createdAt >= query.fromUtc)
       .filter((o) => query.toUtc == null || o.createdAt <= query.toUtc)
-      .sort((a, b) => b.serialNo.localeCompare(a.serialNo));
-    return ok(pageOf(rows, page.p, page.pageSize));
-  }
-
-  async inventory(accountUid: number, query: InventoryQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<InventoryRow>>> {
-    await delay();
-    const rows: InventoryRow[] = orders
-      .filter((o) => o.buyer.uid === accountUid && o.status === 'active')
-      .map((o) => {
-        const item = items.find((i) => i.id === o.itemId)!;
-        const listing = listingOf(item.onSale);
-        return {
-          item: { id: item.id, kind: item.onSale.kind, name: item.onSale.face.name },
-          image: listing.kind === 'character_card' ? listing.character.avatar : listing.face.cover,
-          itemState: item.state,
-          creator: item.creator,
-          source: o.source,
-          orderId: o.id,
-          serialNo: serialNos.get(o.id)!,
-          acquiredAt: o.at,
-        };
-      })
-      .filter((r) => query.kind == null || r.item.kind === query.kind)
-      .filter((r) => query.source == null || r.source === query.source)
       .sort((a, b) => b.serialNo.localeCompare(a.serialNo));
     return ok(pageOf(rows, page.p, page.pageSize));
   }

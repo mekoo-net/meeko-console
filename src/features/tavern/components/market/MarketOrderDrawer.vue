@@ -11,7 +11,6 @@ import { formatDateTime } from '@/shared/lib/date';
 
 import {
   MarketItemKindLabel,
-  MarketOrderSourceLabel,
   MarketOrderStageLabel,
   MarketOrderStageTone,
   SellerTxnKindLabel,
@@ -91,9 +90,6 @@ watch(
               :label="MarketOrderStageLabel[order.stage]"
               :tone="MarketOrderStageTone[order.stage]"
             />
-          </el-descriptions-item>
-          <el-descriptions-item label="来源">
-            {{ MarketOrderSourceLabel[order.source] }}
           </el-descriptions-item>
           <el-descriptions-item
             label="商品"

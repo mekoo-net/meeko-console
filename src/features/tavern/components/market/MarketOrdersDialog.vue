@@ -15,13 +15,10 @@ import { formatDateTime } from '@/shared/lib/date';
 
 import { usePagedList } from '../../composables/usePagedList';
 import {
-  MarketOrderSourceLabel,
   MarketOrderStageLabel,
   MarketOrderStageTone,
-  marketOrderSourceSchema,
   type MarketItemRow,
   type MarketOrderRow,
-  type MarketOrderSource,
 } from '../../model/market.types';
 import { formatPrice, type RecordStat } from '../../model/marketFormat';
 import { parseAccountUid } from '../../model/meteringFormat';
@@ -37,12 +34,12 @@ const port = getTavernMarketPort();
 
 // buyerInput：输入框即时值；filter.buyer：防抖后的查询值。
 const buyerInput = ref('');
-const filter = ref({ buyer: '', source: undefined as MarketOrderSource | undefined });
+const filter = ref({ buyer: '' });
 
 const { items, total, page, pageSize, loading, load } = usePagedList<MarketOrderRow>((p) => {
   const buyer = parseAccountUid(filter.value.buyer);
   return buyer.ok
-    ? port.orders({ itemId: props.item?.itemId, buyerUid: buyer.value, source: filter.value.source }, p)
+    ? port.orders({ itemId: props.item?.itemId, buyerUid: buyer.value }, p)
     : Promise.resolve(fail({ code: 'validation', message: '买家 UID 只能是数字' }));
 }, filter);
 
@@ -73,7 +70,7 @@ function openDetail(orderId: string): void {
 watch(visible, (open) => {
   if (!open || !props.item) return;
   buyerInput.value = '';
-  filter.value = { buyer: '', source: undefined };
+  filter.value = { buyer: '' };
   page.value = 1;
   void load();
 });
@@ -98,19 +95,6 @@ watch(visible, (open) => {
         style="width: 280px"
         @input="applyBuyer"
       />
-      <el-select
-        v-model="filter.source"
-        placeholder="全部来源"
-        clearable
-        style="width: 150px"
-      >
-        <el-option
-          v-for="s in marketOrderSourceSchema.options"
-          :key="s"
-          :label="MarketOrderSourceLabel[s]"
-          :value="s"
-        />
-      </el-select>
     </template>
 
     <el-table
@@ -152,14 +136,6 @@ watch(visible, (open) => {
       >
         <template #default="{ row }: { row: MarketOrderRow }">
           <AccountCell :account="row.buyer" />
-        </template>
-      </el-table-column>
-      <el-table-column
-        label="来源"
-        width="90"
-      >
-        <template #default="{ row }: { row: MarketOrderRow }">
-          {{ MarketOrderSourceLabel[row.source] }}
         </template>
       </el-table-column>
       <el-table-column

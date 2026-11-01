@@ -27,10 +27,51 @@ describe('TavernUsersHttpAdapter', () => {
   });
 
   it('reads the header, and keeps going when WorldLine had no counts', async () => {
-    request.mockResolvedValueOnce(ok({ user: USER, content: null, market: { owned: { worldCards: 1, characterCards: 1 }, listed: 0 } }));
+    request.mockResolvedValueOnce(
+      ok({ user: USER, content: null, cards: { worldCards: 1, characterCards: 1 }, market: { listed: 0 } }),
+    );
     const r = await new TavernUsersHttpAdapter().get(100002333);
     expect(request).toHaveBeenCalledWith('/tavern/api/admin/users/100002333');
     expect(r.success && r.data.content).toBeNull();
-    expect(r.success && r.data.market.owned).toEqual({ worldCards: 1, characterCards: 1 });
+    expect(r.success && r.data.cards).toEqual({ worldCards: 1, characterCards: 1 });
+  });
+
+  it('reads the cards a user holds: authored ones have no order, unlisted ones no market state', async () => {
+    const card = { id: '0199a1a0-0000-7000-8000-000000000813', kind: 'character_card', name: '陆川' };
+    request.mockResolvedValueOnce(
+      ok({
+        items: [
+          {
+            card,
+            image: null,
+            author: ACCOUNT,
+            source: 'authored',
+            purchase: null,
+            acquiredVersion: 0,
+            market: null,
+            acquiredAt: 1761868800000,
+          },
+          {
+            card: { ...card, kind: 'world_card', name: '雾港 1931' },
+            image: 'cover.png',
+            author: { uid: 100000123, displayName: '0123', email: null, phone: null },
+            source: 'purchased',
+            purchase: { orderId: '0199a1a0-0000-7000-8000-000000000908', serialNo: 'MO20261029000000001' },
+            acquiredVersion: 1,
+            market: 'listed',
+            acquiredAt: 1761868800000,
+          },
+        ],
+        total: 2,
+        page: 1,
+        pageSize: 20,
+      }),
+    );
+    const r = await new TavernUsersHttpAdapter().cards(100002333, { kind: 'world_card', source: 'purchased' }, { p: 1, pageSize: 20 });
+    expect(request).toHaveBeenCalledWith('/tavern/api/admin/users/100002333/cards', {
+      query: { p: 1, pageSize: 20, kind: 'world_card', source: 'purchased' },
+    });
+    expect(r.success && r.data.items[0]?.market).toBeNull();
+    expect(r.success && r.data.items[1]?.purchase?.serialNo).toBe('MO20261029000000001');
   });
 });

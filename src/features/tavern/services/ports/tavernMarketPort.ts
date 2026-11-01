@@ -3,8 +3,6 @@ import type { AppResult } from '@/shared/api/httpTypes';
 
 import type { PageQuery } from '../../model/content.types';
 import type {
-  InventoryQuery,
-  InventoryRow,
   MarketItemDetail,
   MarketItemQuery,
   MarketItemRow,
@@ -39,8 +37,6 @@ export interface TavernMarketPort {
   undelete(itemId: string): Promise<AppResult<MarketItemRow>>;
 
   orders(query: MarketOrderQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<MarketOrderRow>>>;
-  /** 用户视角「卡片」：这个人手里的一类卡，新得的在前。 */
-  inventory(accountUid: number, query: InventoryQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<InventoryRow>>>;
   /** 一单的详情：钱怎么分、结算、账单号、失败原因、卖家收益流水。 */
   order(orderId: string): Promise<AppResult<MarketOrderDetail>>;
 

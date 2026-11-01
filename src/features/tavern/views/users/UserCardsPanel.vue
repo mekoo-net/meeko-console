@@ -1,9 +1,9 @@
 <script setup lang="ts">
 /**
- * 用户视角 › 卡片 › 世界卡 / 角色卡：这个人手里的一类卡，一张一行，新得的在前——买来的，和自己上架时得的那一份。
- * 两页是同一个实例，换类别时筛选清掉、从第 1 页重拉。
- * 卡在市场被下架了照样在这里（下架只是停售，已有的照常用），「在售状态」一列标出来。
- * 行首「详情」打开对应的订单（订单抽屉）；卡名点过去是市场里那一张。
+ * 用户视角 › 卡片 › 世界卡 / 角色卡：这个人手里的一类卡，一张一行，新得的在前——自己做的，和在市场买的。
+ * 卡和谁手里有哪张归工坊，在售状态归市场，服务端拼好给一行。两页是同一个实例，换类别时筛选清掉、从第 1 页重拉。
+ * 卡在市场被下架了照样在这里（下架只是停售，已有的照常用）；没上过架的标「未上架」。
+ * 买来的，行首「详情」打开那一单（订单抽屉）；上过架的，卡名点过去是市场里那一张。
  */
 import { computed, onMounted, ref, watch } from 'vue';
 import { View } from '@element-plus/icons-vue';
@@ -18,29 +18,26 @@ import AccountCell from '../../components/content/AccountCell.vue';
 import MarketOrderDrawer from '../../components/market/MarketOrderDrawer.vue';
 import { usePagedList } from '../../composables/usePagedList';
 import { initialOf } from '../../model/contentFormat';
-import {
-  InventorySourceLabel,
-  MarketItemKindLabel,
-  MarketItemStateLabel,
-  MarketItemStateTone,
-  marketOrderSourceSchema,
-  type InventoryRow,
-  type MarketItemKind,
-  type MarketOrderSource,
-} from '../../model/market.types';
+import { MarketItemKindLabel, MarketItemStateLabel, MarketItemStateTone, type MarketItemKind } from '../../model/market.types';
 import { itemPage } from '../../model/marketFormat';
-import { getTavernMarketPort } from '../../services';
+import {
+  EntitlementSourceLabel,
+  entitlementSourceSchema,
+  type EntitlementSource,
+  type UserCardRow,
+} from '../../model/users.types';
+import { getTavernUsersPort } from '../../services';
 
 const props = defineProps<{ accountUid: number; kind: MarketItemKind }>();
 
-const port = getTavernMarketPort();
+const port = getTavernUsersPort();
 
-const blank = () => ({ source: undefined as MarketOrderSource | undefined });
+const blank = () => ({ source: undefined as EntitlementSource | undefined });
 const filter = ref(blank());
 const kindLabel = computed(() => MarketItemKindLabel[props.kind]);
 
-const { items, total, page, pageSize, loading, load, reload } = usePagedList<InventoryRow>(
-  (p) => port.inventory(props.accountUid, { kind: props.kind, source: filter.value.source }, p),
+const { items, total, page, pageSize, loading, load, reload } = usePagedList<UserCardRow>(
+  (p) => port.cards(props.accountUid, { kind: props.kind, source: filter.value.source }, p),
   () => ({ ...filter.value, kind: props.kind }),
 );
 
@@ -79,9 +76,9 @@ onMounted(() => void load());
             style="width: 120px"
           >
             <el-option
-              v-for="s in marketOrderSourceSchema.options"
+              v-for="s in entitlementSourceSchema.options"
               :key="s"
-              :label="InventorySourceLabel[s]"
+              :label="EntitlementSourceLabel[s]"
               :value="s"
             />
           </el-select>
@@ -92,7 +89,7 @@ onMounted(() => void load());
     <el-table
       v-loading="loading"
       :data="items"
-      row-key="orderId"
+      row-key="card.id"
       size="small"
       class="compact-table"
       height="100%"
@@ -104,14 +101,19 @@ onMounted(() => void load());
         align="center"
         fixed
       >
-        <template #default="{ row }: { row: InventoryRow }">
+        <template #default="{ row }: { row: UserCardRow }">
           <el-button
+            v-if="row.purchase"
             :icon="View"
             link
             type="primary"
             title="查看订单"
-            @click="openDetail(row.orderId)"
+            @click="openDetail(row.purchase.orderId)"
           />
+          <span
+            v-else
+            class="cell-muted"
+          >—</span>
         </template>
       </el-table-column>
 
@@ -119,7 +121,7 @@ onMounted(() => void load());
         :label="kindLabel"
         min-width="200"
       >
-        <template #default="{ row }: { row: InventoryRow }">
+        <template #default="{ row }: { row: UserCardRow }">
           <div class="cell-item">
             <el-avatar
               :size="32"
@@ -127,14 +129,16 @@ onMounted(() => void load());
               :src="row.image ?? undefined"
               class="cell-item__avatar"
             >
-              {{ initialOf(row.item.name) }}
+              {{ initialOf(row.card.name) }}
             </el-avatar>
             <router-link
-              :to="{ name: itemPage(row.item.kind), query: { itemId: row.item.id } }"
+              v-if="row.market"
+              :to="{ name: itemPage(row.card.kind), query: { itemId: row.card.id } }"
               class="link"
             >
-              {{ row.item.name }}
+              {{ row.card.name }}
             </router-link>
+            <span v-else>{{ row.card.name }}</span>
           </div>
         </template>
       </el-table-column>
@@ -143,8 +147,8 @@ onMounted(() => void load());
         label="创作者"
         min-width="170"
       >
-        <template #default="{ row }: { row: InventoryRow }">
-          <AccountCell :account="row.creator" />
+        <template #default="{ row }: { row: UserCardRow }">
+          <AccountCell :account="row.author" />
         </template>
       </el-table-column>
 
@@ -152,8 +156,8 @@ onMounted(() => void load());
         label="获得方式"
         width="90"
       >
-        <template #default="{ row }: { row: InventoryRow }">
-          {{ InventorySourceLabel[row.source] }}
+        <template #default="{ row }: { row: UserCardRow }">
+          {{ EntitlementSourceLabel[row.source] }}
         </template>
       </el-table-column>
 
@@ -161,10 +165,16 @@ onMounted(() => void load());
         label="在售状态"
         width="90"
       >
-        <template #default="{ row }: { row: InventoryRow }">
+        <template #default="{ row }: { row: UserCardRow }">
           <StatusTag
-            :label="MarketItemStateLabel[row.itemState]"
-            :tone="MarketItemStateTone[row.itemState]"
+            v-if="row.market"
+            :label="MarketItemStateLabel[row.market]"
+            :tone="MarketItemStateTone[row.market]"
+          />
+          <StatusTag
+            v-else
+            label="未上架"
+            tone="info"
           />
         </template>
       </el-table-column>
@@ -173,7 +183,7 @@ onMounted(() => void load());
         label="获得时间"
         width="150"
       >
-        <template #default="{ row }: { row: InventoryRow }">
+        <template #default="{ row }: { row: UserCardRow }">
           <span class="cell-date">{{ formatDateTime(row.acquiredAt) }}</span>
         </template>
       </el-table-column>
@@ -181,7 +191,7 @@ onMounted(() => void load());
       <template #empty>
         <EmptyState
           :title="`还没有${kindLabel}`"
-          :description="`该用户尚未购买或上架过${kindLabel}。`"
+          :description="`该用户还没有做过或买过${kindLabel}。`"
         />
       </template>
     </el-table>
@@ -226,5 +236,9 @@ onMounted(() => void load());
   text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.cell-muted {
+  color: var(--el-text-color-placeholder);
 }
 </style>

@@ -22,15 +22,12 @@ import MarketOrderDrawer from '../../components/market/MarketOrderDrawer.vue';
 import { usePagedList } from '../../composables/usePagedList';
 import {
   MarketItemKindLabel,
-  MarketOrderSourceLabel,
   MarketOrderStageLabel,
   MarketOrderStageTone,
   marketItemKindSchema,
-  marketOrderSourceSchema,
   marketOrderStageSchema,
   type MarketItemKind,
   type MarketOrderRow,
-  type MarketOrderSource,
   type MarketOrderStage,
 } from '../../model/market.types';
 import { formatPrice, itemPage } from '../../model/marketFormat';
@@ -46,7 +43,6 @@ const blank = () => ({
   serialNo: '',
   itemId: '',
   kind: undefined as MarketItemKind | undefined,
-  source: undefined as MarketOrderSource | undefined,
   stage: undefined as MarketOrderStage | undefined,
   dateRange: null as [string, string] | null,
 });
@@ -64,7 +60,6 @@ const { items, total, page, pageSize, loading, load, reload } = usePagedList<Mar
           serialNo: f.serialNo.trim() || undefined,
           itemId: f.itemId.trim() || undefined,
           kind: f.kind,
-          source: f.source,
           stage: f.stage,
           ...dateRangeToEpochMillis(f.dateRange),
         },
@@ -121,21 +116,6 @@ onMounted(() => void load());
               :key="k"
               :label="MarketItemKindLabel[k]"
               :value="k"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="来源">
-          <el-select
-            v-model="filter.source"
-            placeholder="全部"
-            clearable
-            style="width: 140px"
-          >
-            <el-option
-              v-for="s in marketOrderSourceSchema.options"
-              :key="s"
-              :label="MarketOrderSourceLabel[s]"
-              :value="s"
             />
           </el-select>
         </el-form-item>
@@ -241,15 +221,6 @@ onMounted(() => void load());
               {{ row.item.name }}
             </router-link>
           </span>
-        </template>
-      </el-table-column>
-
-      <el-table-column
-        label="来源"
-        width="70"
-      >
-        <template #default="{ row }: { row: MarketOrderRow }">
-          {{ MarketOrderSourceLabel[row.source] }}
         </template>
       </el-table-column>
 

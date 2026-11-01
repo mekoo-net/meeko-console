@@ -78,8 +78,8 @@ const stats = computed(() => {
     { key: 'held', label: '预扣中', value: formatCredits(d.user.credits.held) },
     { key: 'worlds', label: '世界线', value: count(d.content?.worlds) },
     { key: 'contacts', label: '联系人', value: count(d.content?.cards) },
-    { key: 'world-cards', label: '世界卡', value: String(d.market.owned.worldCards) },
-    { key: 'character-cards', label: '角色卡', value: String(d.market.owned.characterCards) },
+    { key: 'world-cards', label: '世界卡', value: String(d.cards.worldCards) },
+    { key: 'character-cards', label: '角色卡', value: String(d.cards.characterCards) },
     { key: 'listed', label: '上架', value: String(d.market.listed) },
   ];
 });
