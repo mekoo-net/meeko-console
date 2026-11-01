@@ -127,7 +127,7 @@
 
 ### upsert `PUT /demux/api/admin/pricing/{groupCode}/{modelId}`
 
-`groupCode` 与 Chat 请求体 `model=帕米/gemini-2.5-pro` 的前缀一致（如 `帕米`、`default`）。
+`groupCode` 与 Chat 请求体里的通道 slug 一致（如 `nai`、`default`）。
 
 Body 为 `UpsertPricingInput`（含 `modelId`、`billingType`、`pricing`、可选 `groupCode`）。
 **币种和生效时间不由控制台传**：币种恒为 CNY，生效时间取后端落库时刻——让人在表单里挑一个「未来生效」
