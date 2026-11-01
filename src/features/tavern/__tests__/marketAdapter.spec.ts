@@ -23,6 +23,7 @@ const FACE = { name: '沈惟行', cover: null, tagline: '督察', description: n
 const CARD_LISTING = {
   kind: 'character_card',
   face: FACE,
+  image: null,
   character: { avatar: null, greetings: [] },
   capabilities: { moments: false, mcpMemory: false, imageGen: false },
 };
@@ -79,7 +80,7 @@ describe('TavernMarketHttpAdapter', () => {
   });
 
   it('reads a world card on sale as a whole world template', async () => {
-    const book = { kind: 'world_card', face: { ...FACE, name: '雾港 1931' }, summary: { narratives: 1, settings: 1, rules: 0, time: TIME } };
+    const book = { kind: 'world_card', face: { ...FACE, name: '雾港 1931' }, image: null, summary: { narratives: 1, settings: 1, rules: 0, time: TIME } };
     request.mockResolvedValueOnce(
       ok({
         item: wireItem({ listing: book }),

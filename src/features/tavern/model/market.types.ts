@@ -30,6 +30,12 @@ export const MarketItemKindLabel: Readonly<Record<MarketItemKind, string>> = {
   world_card: '世界卡',
 };
 
+/** 类别标签的颜色（el-tag 的 type）。 */
+export const MarketItemKindTagType: Readonly<Record<MarketItemKind, 'primary' | 'success'>> = {
+  character_card: 'primary',
+  world_card: 'success',
+};
+
 // ---------- 门面与目录上露的样子 ----------
 
 /** 两类一样的门面。 */
@@ -82,17 +88,19 @@ export const worldTemplateSummarySchema = z.object({
   time: worldTimeTemplateSchema,
 });
 
-/** 在售那一版在目录上露的样子，按类别分。 */
+/** 在售那一版在目录上露的样子，按类别分；`image` 是服务端挑好的那张图（角色卡头像、世界卡封面）。 */
 export const marketListingSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('character_card'),
     face: itemFaceSchema,
+    image: z.string().nullable(),
     character: characterProfileSchema,
     capabilities: cardCapabilitiesSchema,
   }),
   z.object({
     kind: z.literal('world_card'),
     face: itemFaceSchema,
+    image: z.string().nullable(),
     summary: worldTemplateSummarySchema,
   }),
 ]);
@@ -144,10 +152,12 @@ export const marketItemRowSchema = z.object({
   stats: marketStatsSchema,
   state: marketItemStateSchema,
   takedown: itemTakedownSchema.nullable(),
-  publishedAt: epochMillisNullableSchema,
+  publishedAt: epochMillisSchema,
   updatedAt: epochMillisSchema,
 });
 export type MarketItemRow = z.infer<typeof marketItemRowSchema>;
+/** 某一类的商品行：只列这一类的页面（世界卡专属列）拿到的就是它。 */
+export type MarketItemRowOf<K extends MarketItemKind> = MarketItemRow & { listing: Extract<MarketListing, { kind: K }> };
 
 // ---------- 在卖的内容 ----------
 

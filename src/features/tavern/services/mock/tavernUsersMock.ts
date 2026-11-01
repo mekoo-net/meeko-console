@@ -66,8 +66,8 @@ export class TavernUsersMock implements TavernUsersPort {
   async cards(uid: number, query: UserCardQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<UserCardRow>>> {
     await delay();
     const rows = mockUserCards(uid)
-      .filter((r) => query.kind == null || r.card.kind === query.kind)
-      .filter((r) => query.source == null || r.source === query.source);
+      .filter((r) => query.kind == null || r.held.card.kind === query.kind)
+      .filter((r) => query.source == null || r.held.origin.kind === query.source);
     return ok(pageOf(rows, page.p, page.pageSize));
   }
 }
@@ -75,7 +75,7 @@ export class TavernUsersMock implements TavernUsersPort {
 function ownedOf(uid: number): OwnedCards {
   const cards = mockUserCards(uid);
   return {
-    worldCards: cards.filter((c) => c.card.kind === 'world_card').length,
-    characterCards: cards.filter((c) => c.card.kind === 'character_card').length,
+    worldCards: cards.filter((c) => c.held.card.kind === 'world_card').length,
+    characterCards: cards.filter((c) => c.held.card.kind === 'character_card').length,
   };
 }

@@ -22,6 +22,7 @@ import MarketOrderDrawer from '../../components/market/MarketOrderDrawer.vue';
 import { usePagedList } from '../../composables/usePagedList';
 import {
   MarketItemKindLabel,
+  MarketItemKindTagType,
   MarketOrderStageLabel,
   MarketOrderStageTone,
   marketItemKindSchema,
@@ -30,7 +31,7 @@ import {
   type MarketOrderRow,
   type MarketOrderStage,
 } from '../../model/market.types';
-import { formatPrice, itemPage } from '../../model/marketFormat';
+import { formatPrice, MarketItemPage } from '../../model/marketFormat';
 import { parseAccountUid } from '../../model/meteringFormat';
 import { getTavernMarketPort } from '../../services';
 
@@ -210,12 +211,12 @@ onMounted(() => void load());
             <el-tag
               size="small"
               effect="plain"
-              :type="row.item.kind === 'world_card' ? 'success' : 'primary'"
+              :type="MarketItemKindTagType[row.item.kind]"
             >
               {{ MarketItemKindLabel[row.item.kind] }}
             </el-tag>
             <router-link
-              :to="{ name: itemPage(row.item.kind), query: { itemId: row.item.id } }"
+              :to="{ name: MarketItemPage[row.item.kind], query: { itemId: row.item.id } }"
               class="link"
             >
               {{ row.item.name }}

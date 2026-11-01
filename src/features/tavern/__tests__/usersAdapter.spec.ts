@@ -36,30 +36,24 @@ describe('TavernUsersHttpAdapter', () => {
     expect(r.success && r.data.cards).toEqual({ worldCards: 1, characterCards: 1 });
   });
 
-  it('reads the cards a user holds: authored ones have no order, unlisted ones no market state', async () => {
-    const card = { id: '0199a1a0-0000-7000-8000-000000000813', kind: 'character_card', name: '陆川' };
+  it('reads the cards a user holds: the origin says how, a bought one carries its order, unlisted ones no market state', async () => {
+    const card = { id: '0199a1a0-0000-7000-8000-000000000813', kind: 'character_card', name: '陆川', image: null };
     request.mockResolvedValueOnce(
       ok({
         items: [
           {
-            card,
-            image: null,
-            author: ACCOUNT,
-            source: 'authored',
-            purchase: null,
-            acquiredVersion: 0,
+            held: { card, author: ACCOUNT, origin: { kind: 'authored' }, acquiredVersion: 0, acquiredAt: 1761868800000 },
             market: null,
-            acquiredAt: 1761868800000,
           },
           {
-            card: { ...card, kind: 'world_card', name: '雾港 1931' },
-            image: 'cover.png',
-            author: { uid: 100000123, displayName: '0123', email: null, phone: null },
-            source: 'purchased',
-            purchase: { orderId: '0199a1a0-0000-7000-8000-000000000908', serialNo: 'MO20261029000000001' },
-            acquiredVersion: 1,
+            held: {
+              card: { ...card, kind: 'world_card', name: '雾港 1931', image: 'cover.png' },
+              author: { uid: 100000123, displayName: '0123', email: null, phone: null },
+              origin: { kind: 'purchased', orderId: '0199a1a0-0000-7000-8000-000000000908', serialNo: 'MO20261029000000001' },
+              acquiredVersion: 1,
+              acquiredAt: 1761868800000,
+            },
             market: 'listed',
-            acquiredAt: 1761868800000,
           },
         ],
         total: 2,
@@ -72,6 +66,7 @@ describe('TavernUsersHttpAdapter', () => {
       query: { p: 1, pageSize: 20, kind: 'world_card', source: 'purchased' },
     });
     expect(r.success && r.data.items[0]?.market).toBeNull();
-    expect(r.success && r.data.items[1]?.purchase?.serialNo).toBe('MO20261029000000001');
+    expect(r.success && r.data.items[0]?.held.origin).toEqual({ kind: 'authored' });
+    expect(r.success && r.data.items[1]?.held.origin).toMatchObject({ kind: 'purchased', serialNo: 'MO20261029000000001' });
   });
 });

@@ -6,7 +6,7 @@
  * 评价和订单在列表行上的「操作」里另开弹窗看。
  * 只给在卖的那一版——员工判断要不要下架看的就是它；版本是创作者和买家之间的事，这里不露。
  */
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, type Component } from 'vue';
 import { ElMessage } from 'element-plus';
 
 import StatusTag from '@/shared/ui/StatusTag.vue';
@@ -15,17 +15,18 @@ import { formatDateTime } from '@/shared/lib/date';
 import { accountName, initialOf } from '../../model/contentFormat';
 import {
   MarketItemKindLabel,
+  MarketItemKindTagType,
   MarketItemStateLabel,
   MarketItemStateTone,
   type MarketItemContent,
   type MarketItemDetail,
+  type MarketItemKind,
 } from '../../model/market.types';
 import { formatPrice } from '../../model/marketFormat';
-import { presetItems, worldBookItems } from '../../model/promptEntries';
 import { getTavernMarketPort } from '../../services';
 import { useItemModeration } from '../../composables/useItemModeration';
-import PromptEntryList from '../content/PromptEntryList.vue';
 import CopyableId from '../metering/CopyableId.vue';
+import CharacterCardContent from './CharacterCardContent.vue';
 import WorldTemplateContent from './WorldTemplateContent.vue';
 
 const visible = defineModel<boolean>('visible', { required: true });
@@ -40,13 +41,13 @@ const loading = ref(false);
 const item = computed(() => detail.value?.item ?? null);
 const onSale = computed(() => detail.value?.onSale ?? null);
 const kindLabel = computed(() => (item.value ? MarketItemKindLabel[item.value.listing.kind] : '商品'));
-/** 角色卡露头像，世界卡露封面。 */
-const image = computed(() => {
-  const l = item.value?.listing;
-  return (l?.kind === 'character_card' ? l.character.avatar : l?.face.cover) ?? undefined;
-});
-const presets = computed(() => (onSale.value?.kind === 'character_card' ? presetItems(onSale.value.preset) : []));
-const descriptions = computed(() => (onSale.value?.kind === 'character_card' ? worldBookItems(onSale.value.worldBook) : []));
+
+/** 在卖的内容按类别换组件；世界卡内容多，抽屉宽一些。 */
+const ContentPane: Readonly<Record<MarketItemKind, Component>> = {
+  character_card: CharacterCardContent,
+  world_card: WorldTemplateContent,
+};
+const DrawerSize: Readonly<Record<MarketItemKind, string>> = { character_card: '600px', world_card: '720px' };
 
 async function load(id: string): Promise<void> {
   loading.value = true;
@@ -70,18 +71,17 @@ watch(
   { immediate: true },
 );
 
-const { acting, takeDown, relist, remove, undelete } = useItemModeration((row) => {
+const { acting, actions } = useItemModeration((row) => {
   emit('changed', row.itemId);
   void load(row.itemId);
 });
 
-/** 门面上的几行；角色卡多一行开场白。 */
+/** 门面上的几行，两类卡一样。 */
 function faceLines(content: MarketItemContent): { label: string; value: string }[] {
   return [
     { label: '简介', value: content.face.tagline ?? '' },
     { label: '介绍', value: content.face.description ?? '' },
     { label: '标签', value: content.face.tags.join('、') },
-    { label: '开场白', value: content.kind === 'character_card' ? content.character.greetings.join('\n\n') : '' },
   ].filter((l) => l.value);
 }
 </script>
@@ -90,14 +90,14 @@ function faceLines(content: MarketItemContent): { label: string; value: string }
   <el-drawer
     v-model="visible"
     direction="rtl"
-    :size="onSale?.kind === 'world_card' ? '720px' : '600px'"
+    :size="item ? DrawerSize[item.listing.kind] : DrawerSize.character_card"
   >
     <template #header>
       <div class="drawer-title">
         <el-avatar
           :size="28"
           shape="square"
-          :src="image"
+          :src="item?.listing.image ?? undefined"
           class="drawer-title__avatar"
         >
           {{ initialOf(item?.listing.face.name ?? '') }}
@@ -107,6 +107,7 @@ function faceLines(content: MarketItemContent): { label: string; value: string }
           v-if="item"
           size="small"
           effect="plain"
+          :type="MarketItemKindTagType[item.listing.kind]"
         >
           {{ kindLabel }}
         </el-tag>
@@ -156,7 +157,7 @@ function faceLines(content: MarketItemContent): { label: string; value: string }
             {{ item.stats.purchases }} / {{ item.stats.ratingCount ? `${item.stats.rating.toFixed(1)}（${item.stats.ratingCount}）` : '—' }}
           </el-descriptions-item>
           <el-descriptions-item label="首次发布">
-            {{ item.publishedAt != null ? formatDateTime(item.publishedAt, 'YYYY-MM-DD HH:mm') : '—' }}
+            {{ formatDateTime(item.publishedAt, 'YYYY-MM-DD HH:mm') }}
           </el-descriptions-item>
           <el-descriptions-item label="更新时间">
             {{ formatDateTime(item.updatedAt, 'YYYY-MM-DD HH:mm') }}
@@ -185,25 +186,8 @@ function faceLines(content: MarketItemContent): { label: string; value: string }
 
         <el-divider />
 
-        <template v-if="onSale.kind === 'character_card'">
-          <h4 class="section-title">
-            预设
-          </h4>
-          <PromptEntryList
-            :entries="presets"
-            empty="没写预设"
-          />
-
-          <h4 class="section-title section-title--gap">
-            描写
-          </h4>
-          <PromptEntryList
-            :entries="descriptions"
-            empty="没有描写"
-          />
-        </template>
-        <WorldTemplateContent
-          v-else
+        <component
+          :is="ContentPane[onSale.kind]"
           :content="onSale"
         />
       </template>
@@ -214,39 +198,15 @@ function faceLines(content: MarketItemContent): { label: string; value: string }
         v-if="item"
         class="drawer-footer"
       >
-        <template v-if="item.state === 'listed'">
-          <el-button
-            type="danger"
-            :loading="acting === item.itemId"
-            @click="takeDown(item)"
-          >
-            下架
-          </el-button>
-        </template>
-        <template v-else-if="item.state === 'unlisted'">
-          <el-button
-            type="danger"
-            plain
-            :disabled="acting === item.itemId"
-            @click="remove(item)"
-          >
-            删除
-          </el-button>
-          <el-button
-            type="primary"
-            :loading="acting === item.itemId"
-            @click="relist(item)"
-          >
-            上架
-          </el-button>
-        </template>
         <el-button
-          v-else
-          type="primary"
+          v-for="action in actions[item.state]"
+          :key="action.key"
+          :type="action.danger ? 'danger' : 'primary'"
+          :plain="action.danger"
           :loading="acting === item.itemId"
-          @click="undelete(item)"
+          @click="action.run(item)"
         >
-          恢复
+          {{ action.label }}
         </el-button>
       </div>
     </template>
@@ -288,17 +248,6 @@ function faceLines(content: MarketItemContent): { label: string; value: string }
   width: 88px;
 }
 
-.section-title {
-  margin: 6px 0 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--el-text-color-regular);
-}
-
-.section-title--gap {
-  margin-top: 16px;
-}
-
 .face {
   display: grid;
   grid-template-columns: 56px 1fr;
@@ -329,8 +278,10 @@ function faceLines(content: MarketItemContent): { label: string; value: string }
   text-decoration: none;
 }
 
+/* 按钮按列表「⋯」里的顺序给，主操作排最右。 */
 .drawer-footer {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: row-reverse;
+  justify-content: flex-start;
 }
 </style>

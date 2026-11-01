@@ -19,7 +19,7 @@ import MarketOrderDrawer from '../../components/market/MarketOrderDrawer.vue';
 import { usePagedList } from '../../composables/usePagedList';
 import { initialOf } from '../../model/contentFormat';
 import { MarketItemKindLabel, MarketItemStateLabel, MarketItemStateTone, type MarketItemKind } from '../../model/market.types';
-import { itemPage } from '../../model/marketFormat';
+import { MarketItemPage } from '../../model/marketFormat';
 import {
   EntitlementSourceLabel,
   entitlementSourceSchema,
@@ -89,7 +89,7 @@ onMounted(() => void load());
     <el-table
       v-loading="loading"
       :data="items"
-      row-key="card.id"
+      row-key="held.card.id"
       size="small"
       class="compact-table"
       height="100%"
@@ -103,12 +103,12 @@ onMounted(() => void load());
       >
         <template #default="{ row }: { row: UserCardRow }">
           <el-button
-            v-if="row.purchase"
+            v-if="row.held.origin.kind === 'purchased'"
             :icon="View"
             link
             type="primary"
-            title="查看订单"
-            @click="openDetail(row.purchase.orderId)"
+            :title="`查看订单 ${row.held.origin.serialNo}`"
+            @click="openDetail(row.held.origin.orderId)"
           />
           <span
             v-else
@@ -126,19 +126,19 @@ onMounted(() => void load());
             <el-avatar
               :size="32"
               shape="square"
-              :src="row.image ?? undefined"
+              :src="row.held.card.image ?? undefined"
               class="cell-item__avatar"
             >
-              {{ initialOf(row.card.name) }}
+              {{ initialOf(row.held.card.name) }}
             </el-avatar>
             <router-link
               v-if="row.market"
-              :to="{ name: itemPage(row.card.kind), query: { itemId: row.card.id } }"
+              :to="{ name: MarketItemPage[row.held.card.kind], query: { itemId: row.held.card.id } }"
               class="link"
             >
-              {{ row.card.name }}
+              {{ row.held.card.name }}
             </router-link>
-            <span v-else>{{ row.card.name }}</span>
+            <span v-else>{{ row.held.card.name }}</span>
           </div>
         </template>
       </el-table-column>
@@ -148,7 +148,7 @@ onMounted(() => void load());
         min-width="170"
       >
         <template #default="{ row }: { row: UserCardRow }">
-          <AccountCell :account="row.author" />
+          <AccountCell :account="row.held.author" />
         </template>
       </el-table-column>
 
@@ -157,7 +157,7 @@ onMounted(() => void load());
         width="90"
       >
         <template #default="{ row }: { row: UserCardRow }">
-          {{ EntitlementSourceLabel[row.source] }}
+          {{ EntitlementSourceLabel[row.held.origin.kind] }}
         </template>
       </el-table-column>
 
@@ -184,7 +184,7 @@ onMounted(() => void load());
         width="150"
       >
         <template #default="{ row }: { row: UserCardRow }">
-          <span class="cell-date">{{ formatDateTime(row.acquiredAt) }}</span>
+          <span class="cell-date">{{ formatDateTime(row.held.acquiredAt) }}</span>
         </template>
       </el-table-column>
 

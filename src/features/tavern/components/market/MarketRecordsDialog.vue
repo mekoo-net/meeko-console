@@ -4,25 +4,17 @@
  * 不随条数缩成一条：头部是这件商品（图、名字、类别、状态、创作者），下面一排统计，
  * 再下面一行可选的轻筛选，表格（compact-table，`height="100%"`）铺满剩下的高度，分页贴底。
  */
-import { computed } from 'vue';
-
 import StatusTag from '@/shared/ui/StatusTag.vue';
 import { formatDateTime } from '@/shared/lib/date';
 
 import { accountName, initialOf } from '../../model/contentFormat';
-import { MarketItemKindLabel, MarketItemStateLabel, MarketItemStateTone, type MarketItemRow } from '../../model/market.types';
+import { MarketItemKindLabel, MarketItemKindTagType, MarketItemStateLabel, MarketItemStateTone, type MarketItemRow } from '../../model/market.types';
 import type { RecordStat } from '../../model/marketFormat';
 
 const visible = defineModel<boolean>('visible', { required: true });
 const page = defineModel<number>('page', { required: true });
 const pageSize = defineModel<number>('pageSize', { required: true });
-const props = defineProps<{ title: string; item: MarketItemRow | null; stats: RecordStat[]; total: number }>();
-
-/** 角色卡露头像，世界卡露封面。 */
-const image = computed(() => {
-  const l = props.item?.listing;
-  return (l?.kind === 'character_card' ? l.character.avatar : l?.face.cover) ?? undefined;
-});
+defineProps<{ title: string; item: MarketItemRow | null; stats: RecordStat[]; total: number }>();
 </script>
 
 <template>
@@ -42,7 +34,7 @@ const image = computed(() => {
         <el-avatar
           :size="44"
           shape="square"
-          :src="image"
+          :src="item.listing.image ?? undefined"
           class="records-head__avatar"
         >
           {{ initialOf(item.listing.face.name) }}
@@ -55,7 +47,7 @@ const image = computed(() => {
             <el-tag
               size="small"
               effect="plain"
-              :type="item.listing.kind === 'world_card' ? 'success' : 'primary'"
+              :type="MarketItemKindTagType[item.listing.kind]"
             >
               {{ MarketItemKindLabel[item.listing.kind] }}
             </el-tag>
@@ -72,10 +64,7 @@ const image = computed(() => {
                 class="link"
               >{{ accountName(item.creator) }}</router-link>
             </span>
-            <span
-              v-if="item.publishedAt != null"
-              class="meta"
-            >首次发布 {{ formatDateTime(item.publishedAt, 'YYYY-MM-DD') }}</span>
+            <span class="meta">首次发布 {{ formatDateTime(item.publishedAt, 'YYYY-MM-DD') }}</span>
           </div>
         </div>
       </div>

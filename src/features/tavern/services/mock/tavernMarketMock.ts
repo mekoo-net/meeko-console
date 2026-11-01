@@ -4,10 +4,12 @@ import { delay } from '@/shared/lib/delay';
 
 import type { AccountRef, PageQuery } from '../../model/content.types';
 import {
+  MarketItemKindLabel,
   marketItemContentSchema,
   type ItemFace,
   type MarketItemContent,
   type MarketItemDetail,
+  type MarketItemKind,
   type MarketItemQuery,
   type MarketItemRow,
   type MarketItemState,
@@ -30,7 +32,7 @@ import {
   type WithdrawalQuery,
   type WithdrawalRow,
 } from '../../model/market.types';
-import type { UserCardRow } from '../../model/users.types';
+import type { CardRef, UserCardRow } from '../../model/users.types';
 import type { TavernMarketPort } from '../ports/tavernMarketPort';
 import { mockUuid } from './tavernContentMock';
 import { ASAKO, LINXIA, PLAYER_0123 } from './tavernMockAccounts';
@@ -233,20 +235,26 @@ const orders: MockOrder[] = [
 
 let settings: MarketSettingsView = { settings: { commissionRate: 0.3, settlementDays: 7 }, updatedAt: null };
 
-/** 同服务端的 `ToListing()`：角色卡露头像开场白和能力，世界卡露规模和时间。 */
-function listingOf(c: MarketItemContent): MarketListing {
-  if (c.kind === 'character_card') return { kind: c.kind, face: c.face, character: c.character, capabilities: c.capabilities };
-  return {
+type ContentOf<K extends MarketItemKind> = Extract<MarketItemContent, { kind: K }>;
+type ListingOf<K extends MarketItemKind> = Extract<MarketListing, { kind: K }>;
+
+/** 同服务端各类内容的 `ToListing()`：角色卡露头像开场白和能力，世界卡露规模和时间；图是角色卡头像、世界卡封面。 */
+const Listing: { [K in MarketItemKind]: (c: ContentOf<K>) => ListingOf<K> } = {
+  character_card: (c) => ({ kind: c.kind, face: c.face, image: c.character.avatar, character: c.character, capabilities: c.capabilities }),
+  world_card: (c) => ({
     kind: c.kind,
     face: c.face,
+    image: c.face.cover,
     summary: {
       narratives: c.world.narratives.length,
       settings: c.world.worldBook.nodes.filter((n) => n.type === 'lore').length,
       rules: c.world.rulebook.rules.length,
       time: c.world.time,
     },
-  };
-}
+  }),
+};
+
+const listingOf = <K extends MarketItemKind>(c: ContentOf<K>): ListingOf<K> => Listing[c.kind as K](c);
 
 function row(i: MockItem): MarketItemRow {
   return {
@@ -432,7 +440,7 @@ async function actOnWithdrawal(
 }
 
 /** 同服务端的说法：角色卡、世界卡都论张。 */
-const thisOne = (i: MockItem) => (i.onSale.kind === 'world_card' ? '这张世界卡' : '这张角色卡');
+const thisOne = (i: MockItem) => `这张${MarketItemKindLabel[i.onSale.kind]}`;
 
 const notFound = () => fail({ code: 'not_found', message: '商品不存在。' });
 
@@ -476,54 +484,45 @@ function reviewsOf(i: MockItem): MarketReview[] {
 /** 只在工坊里、没上过架的卡：林夏做了陆川，还没上架。 */
 const unlistedCards: UserCardRow[] = [
   {
-    card: { id: mockUuid(813), kind: 'character_card', name: '陆川' },
-    image: null,
-    author: LINXIA,
-    source: 'authored',
-    purchase: null,
-    acquiredVersion: 0,
+    held: {
+      card: { id: mockUuid(813), kind: 'character_card', name: '陆川', image: null },
+      author: LINXIA,
+      origin: { kind: 'authored' },
+      acquiredVersion: 0,
+      acquiredAt: NOW - 20 * DAY,
+    },
     market: null,
-    acquiredAt: NOW - 20 * DAY,
   },
 ];
+
+const cardOf = (i: MockItem): CardRef => ({ id: i.id, kind: i.onSale.kind, name: i.onSale.face.name, image: listingOf(i.onSale).image });
 
 /** 同服务端：作者建卡时就有一条（自己做的），买成时市场登记一条（买来的）。 */
 export function mockUserCards(accountUid: number): UserCardRow[] {
   const authored: UserCardRow[] = items
     .filter((i) => i.creator.uid === accountUid)
     .map((i) => ({
-      card: { id: i.id, kind: i.onSale.kind, name: i.onSale.face.name },
-      image: imageOf(i),
-      author: i.creator,
-      source: 'authored',
-      purchase: null,
-      acquiredVersion: 0,
+      held: { card: cardOf(i), author: i.creator, origin: { kind: 'authored' }, acquiredVersion: 0, acquiredAt: i.publishedAt - DAY },
       market: i.state,
-      acquiredAt: i.publishedAt - DAY,
     }));
   const purchased: UserCardRow[] = orders
     .filter((o) => o.buyer.uid === accountUid && o.status === 'active')
     .map((o) => {
       const item = items.find((i) => i.id === o.itemId)!;
       return {
-        card: { id: item.id, kind: item.onSale.kind, name: item.onSale.face.name },
-        image: imageOf(item),
-        author: item.creator,
-        source: 'purchased',
-        purchase: { orderId: o.id, serialNo: serialNos.get(o.id)! },
-        acquiredVersion: 1,
+        held: {
+          card: cardOf(item),
+          author: item.creator,
+          origin: { kind: 'purchased', orderId: o.id, serialNo: serialNos.get(o.id)! },
+          acquiredVersion: 1,
+          acquiredAt: o.at,
+        },
         market: item.state,
-        acquiredAt: o.at,
       };
     });
-  return [...authored, ...purchased, ...unlistedCards.filter((c) => c.author.uid === accountUid)].sort(
-    (a, b) => b.acquiredAt - a.acquiredAt,
+  return [...authored, ...purchased, ...unlistedCards.filter((c) => c.held.author.uid === accountUid)].sort(
+    (a, b) => b.held.acquiredAt - a.held.acquiredAt,
   );
-}
-
-function imageOf(item: MockItem): string | null {
-  const listing = listingOf(item.onSale);
-  return listing.kind === 'character_card' ? listing.character.avatar : listing.face.cover;
 }
 
 export class TavernMarketMock implements TavernMarketPort {

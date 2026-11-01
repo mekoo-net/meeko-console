@@ -55,7 +55,7 @@ export type UserQuery = {
 
 // ---------- 用户手里的卡（用户视角 › 卡片） ----------
 
-/** 卡是怎么来的：自己做的（作者）、在市场买的。权益在工坊。 */
+/** 卡是怎么来的：自己做的（作者）、在市场买的。权益在工坊；按来源筛时用它。 */
 export const entitlementSourceSchema = z.enum(['authored', 'purchased']);
 export type EntitlementSource = z.infer<typeof entitlementSourceSchema>;
 
@@ -64,20 +64,36 @@ export const EntitlementSourceLabel: Readonly<Record<EntitlementSource, string>>
   purchased: '购买',
 };
 
-/**
- * 用户手里的一张卡：卡（图、名字、类别）、作者、怎么得的、买来的凭哪一单、得到时第几版、
- * 在市场上的状态（没上过架为 null）、什么时候得的。
- */
-export const userCardRowSchema = z.object({
-  card: z.object({ id: z.string().min(1), kind: marketItemKindSchema, name: z.string() }),
-  /** 角色卡是头像，世界卡是封面。 */
+/** 同服务端 `EntitlementOrigin`，按 `kind` 判别：买来的带着那一单。 */
+export const entitlementOriginSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('authored') }),
+  z.object({ kind: z.literal('purchased'), orderId: z.string().min(1), serialNo: z.string().min(1) }),
+]);
+export type EntitlementOrigin = z.infer<typeof entitlementOriginSchema>;
+
+/** 一张卡：`image` 是角色卡头像、世界卡封面。 */
+export const cardRefSchema = z.object({
+  id: z.string().min(1),
+  kind: marketItemKindSchema,
+  name: z.string(),
   image: z.string().nullable(),
+});
+export type CardRef = z.infer<typeof cardRefSchema>;
+
+/** 手里的一张卡（工坊）：卡、作者、怎么来的、得到时第几版（自己做的为 0）、什么时候得的。 */
+export const heldCardSchema = z.object({
+  card: cardRefSchema,
   author: accountRefSchema,
-  source: entitlementSourceSchema,
-  purchase: z.object({ orderId: z.string().min(1), serialNo: z.string().min(1) }).nullable(),
+  origin: entitlementOriginSchema,
   acquiredVersion: z.number().int().nonnegative(),
-  market: marketItemStateSchema.nullable(),
   acquiredAt: epochMillisSchema,
+});
+export type HeldCard = z.infer<typeof heldCardSchema>;
+
+/** 用户视角「卡片」的一行：手里的卡（工坊）和它在市场上的状态（市场；没上过架为 null）。 */
+export const userCardRowSchema = z.object({
+  held: heldCardSchema,
+  market: marketItemStateSchema.nullable(),
 });
 export type UserCardRow = z.infer<typeof userCardRowSchema>;
 

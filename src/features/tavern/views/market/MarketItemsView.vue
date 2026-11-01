@@ -6,7 +6,7 @@
  * `?itemId=` 进来直接打开那一件（角色卡抽屉里的市场卡号点过来）。
  * 也是用户视角「上架」：传了 `creatorUid` 就只看这个人上架的，不分页面、两类一起列，多一列类别。
  */
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch, type Component } from 'vue';
 import { useRoute } from 'vue-router';
 import { MoreFilled, Search } from '@element-plus/icons-vue';
 
@@ -23,11 +23,13 @@ import AccountCell from '../../components/content/AccountCell.vue';
 import MarketItemDrawer from '../../components/market/MarketItemDrawer.vue';
 import MarketOrdersDialog from '../../components/market/MarketOrdersDialog.vue';
 import MarketReviewsDialog from '../../components/market/MarketReviewsDialog.vue';
-import { useItemModeration } from '../../composables/useItemModeration';
+import { useItemModeration, type ItemAction } from '../../composables/useItemModeration';
+import WorldCardColumns from '../../components/market/WorldCardColumns.vue';
 import { usePagedList } from '../../composables/usePagedList';
 import { initialOf } from '../../model/contentFormat';
 import {
   MarketItemKindLabel,
+  MarketItemKindTagType,
   MarketItemStateLabel,
   MarketItemStateTone,
   marketItemKindSchema,
@@ -35,9 +37,8 @@ import {
   type MarketItemKind,
   type MarketItemRow,
   type MarketItemState,
-  type MarketListing,
 } from '../../model/market.types';
-import { formatPrice, timeText } from '../../model/marketFormat';
+import { formatPrice } from '../../model/marketFormat';
 import { parseAccountUid, shortId } from '../../model/meteringFormat';
 import { getTavernMarketPort } from '../../services';
 
@@ -85,23 +86,13 @@ const creatorFilter = computed(() =>
     : {},
 );
 
-/** 角色卡露头像，世界卡露封面。 */
-function imageOf(listing: MarketListing): string | undefined {
-  return (listing.kind === 'character_card' ? listing.character.avatar : listing.face.cover) ?? undefined;
-}
-
 const detailOpen = ref(false);
 const detailId = ref<string | null>(null);
 
-const moderation = useItemModeration(() => void load());
-const { acting } = moderation;
+const { acting, actions } = useItemModeration(() => void load());
 
-/** 行尾「⋯」的命令就是 useItemModeration 的那几个动作。 */
-type ModerationCommand = 'takeDown' | 'relist' | 'remove' | 'undelete';
-
-function moderate(row: MarketItemRow, command: ModerationCommand): void {
-  void moderation[command](row);
-}
+/** 一类卡自己才有的列（世界卡：规模、时间）。 */
+const KindColumns: Partial<Record<MarketItemKind, Component>> = { world_card: WorldCardColumns };
 
 function openDetail(itemId: string): void {
   detailId.value = itemId;
@@ -219,7 +210,7 @@ onMounted(() => {
             <el-avatar
               :size="32"
               shape="square"
-              :src="imageOf(row.listing)"
+              :src="row.listing.image ?? undefined"
               class="cell-item__avatar"
             >
               {{ initialOf(row.listing.face.name) }}
@@ -248,7 +239,7 @@ onMounted(() => {
           <el-tag
             size="small"
             effect="plain"
-            :type="row.listing.kind === 'world_card' ? 'success' : 'primary'"
+            :type="MarketItemKindTagType[row.listing.kind]"
           >
             {{ MarketItemKindLabel[row.listing.kind] }}
           </el-tag>
@@ -296,27 +287,10 @@ onMounted(() => {
         </template>
       </el-table-column>
 
-      <template v-if="kind === 'world_card'">
-        <el-table-column
-          label="规模"
-          min-width="170"
-        >
-          <template #default="{ row }: { row: MarketItemRow }">
-            <span
-              v-if="row.listing.kind === 'world_card'"
-              class="cell-muted-strong"
-            >叙事 {{ row.listing.summary.narratives }} · 设定 {{ row.listing.summary.settings }} · 规则 {{ row.listing.summary.rules }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column
-          label="时间"
-          min-width="140"
-        >
-          <template #default="{ row }: { row: MarketItemRow }">
-            <span v-if="row.listing.kind === 'world_card'">{{ timeText(row.listing.summary.time) }}</span>
-          </template>
-        </el-table-column>
-      </template>
+      <component
+        :is="KindColumns[kind]"
+        v-if="kind && KindColumns[kind]"
+      />
 
       <el-table-column
         label="价格"
@@ -413,7 +387,7 @@ onMounted(() => {
               trigger="click"
               placement="bottom-end"
               :disabled="acting === row.itemId"
-              @command="(cmd: ModerationCommand) => moderate(row, cmd)"
+              @command="(action: ItemAction) => action.run(row)"
             >
               <el-button
                 link
@@ -426,28 +400,13 @@ onMounted(() => {
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item
-                    v-if="row.state === 'listed'"
-                    command="takeDown"
+                    v-for="action in actions[row.state]"
+                    :key="action.key"
+                    :command="action"
+                    :divided="action.danger && actions[row.state].length > 1"
+                    :class="{ 'market-danger-item': action.danger }"
                   >
-                    下架
-                  </el-dropdown-item>
-                  <template v-else-if="row.state === 'unlisted'">
-                    <el-dropdown-item command="relist">
-                      上架
-                    </el-dropdown-item>
-                    <el-dropdown-item
-                      command="remove"
-                      divided
-                      class="market-danger-item"
-                    >
-                      删除
-                    </el-dropdown-item>
-                  </template>
-                  <el-dropdown-item
-                    v-else
-                    command="undelete"
-                  >
-                    恢复
+                    {{ action.label }}
                   </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -550,10 +509,5 @@ onMounted(() => {
 /* 下拉菜单 Teleport 到 body，scoped 命不中。 */
 :global(.market-danger-item:not(.is-disabled)) {
   color: var(--el-color-danger);
-}
-
-.cell-muted-strong {
-  color: var(--el-text-color-regular);
-  font-variant-numeric: tabular-nums;
 }
 </style>

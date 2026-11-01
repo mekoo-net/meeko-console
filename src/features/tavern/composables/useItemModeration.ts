@@ -4,15 +4,15 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { confirmDanger } from '@/shared/composables/useConfirm';
 import type { AppResult } from '@/shared/api/httpTypes';
 
-import { MarketItemKindLabel, type MarketItemRow } from '../model/market.types';
+import { MarketItemKindLabel, type MarketItemRow, type MarketItemState } from '../model/market.types';
 import { getTavernMarketPort } from '../services';
 
 const REASON_MAX = 200;
 
 /**
  * 员工处置一件商品，按状态走：在售 → 下架（写原因，创作者可见）；已下架 → 上架，或删除（不用原因）；已删除 → 恢复（回到已下架）。
- * 卖家自己也能上架、下架，删除只有管理员能做。商品列表行上的「⋯」和商品抽屉的底栏共用这一份，确认框和提示只写一处；
- * 做完回改好的那一行给 `changed`。
+ * 卖家自己也能上架、下架，删除只有管理员能做。`actions` 就是这张「状态 → 动作」表，商品列表行上的「⋯」和商品抽屉的底栏
+ * 都照它渲染，确认框和提示只写一处；做完回改好的那一行给 `changed`。
  */
 export function useItemModeration(changed: (row: MarketItemRow) => void) {
   const port = getTavernMarketPort();
@@ -78,5 +78,22 @@ export function useItemModeration(changed: (row: MarketItemRow) => void) {
     if (ok) await act(item, () => port.undelete(item.itemId), '已恢复');
   }
 
-  return { acting, takeDown, relist, remove, undelete };
+  const actions: Readonly<Record<MarketItemState, readonly ItemAction[]>> = {
+    listed: [{ key: 'takeDown', label: '下架', danger: true, run: takeDown }],
+    unlisted: [
+      { key: 'relist', label: '上架', danger: false, run: relist },
+      { key: 'remove', label: '删除', danger: true, run: remove },
+    ],
+    deleted: [{ key: 'undelete', label: '恢复', danger: false, run: undelete }],
+  };
+
+  return { acting, actions };
+}
+
+/** 一个处置动作；`danger` 的在菜单里排在分隔线后、标红，在底栏是描边红按钮。 */
+export interface ItemAction {
+  key: string;
+  label: string;
+  danger: boolean;
+  run: (item: MarketItemRow) => Promise<void>;
 }

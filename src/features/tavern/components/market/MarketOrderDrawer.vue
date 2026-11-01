@@ -11,12 +11,13 @@ import { formatDateTime } from '@/shared/lib/date';
 
 import {
   MarketItemKindLabel,
+  MarketItemKindTagType,
   MarketOrderStageLabel,
   MarketOrderStageTone,
   SellerTxnKindLabel,
   type MarketOrderDetail,
 } from '../../model/market.types';
-import { formatPercent, formatPrice, formatYuan, itemPage } from '../../model/marketFormat';
+import { formatPercent, formatPrice, formatYuan, MarketItemPage } from '../../model/marketFormat';
 import { getTavernMarketPort } from '../../services';
 import AccountCell from '../content/AccountCell.vue';
 import CopyableId from '../metering/CopyableId.vue';
@@ -99,12 +100,12 @@ watch(
               <el-tag
                 size="small"
                 effect="plain"
-                :type="order.item.kind === 'world_card' ? 'success' : 'primary'"
+                :type="MarketItemKindTagType[order.item.kind]"
               >
                 {{ MarketItemKindLabel[order.item.kind] }}
               </el-tag>
               <router-link
-                :to="{ name: itemPage(order.item.kind), query: { itemId: order.item.id } }"
+                :to="{ name: MarketItemPage[order.item.kind], query: { itemId: order.item.id } }"
                 class="link"
               >{{ order.item.name }}</router-link>
             </span>
