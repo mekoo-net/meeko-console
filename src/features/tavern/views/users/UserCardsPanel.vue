@@ -1,11 +1,11 @@
 <script setup lang="ts">
 /**
- * 用户视角 › 仓库：这个人手里的卡（角色卡、世界卡），一张一行，新得的在前——买来的，和自己上架时得的那一份。
- * 角色、世界线是用这些卡建出来的，在各自的页签。
- * 卡在市场被下架了照样在仓库里（下架只是停售，已有的照常用），「在售状态」一列标出来。
+ * 用户视角 › 卡片 › 世界卡 / 角色卡：这个人手里的一类卡，一张一行，新得的在前——买来的，和自己上架时得的那一份。
+ * 两页是同一个实例，换类别时筛选清掉、从第 1 页重拉。
+ * 卡在市场被下架了照样在这里（下架只是停售，已有的照常用），「在售状态」一列标出来。
  * 行首「详情」打开对应的订单（订单抽屉）；卡名点过去是市场里那一张。
  */
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { View } from '@element-plus/icons-vue';
 
 import StatusTag from '@/shared/ui/StatusTag.vue';
@@ -23,7 +23,6 @@ import {
   MarketItemKindLabel,
   MarketItemStateLabel,
   MarketItemStateTone,
-  marketItemKindSchema,
   marketOrderSourceSchema,
   type InventoryRow,
   type MarketItemKind,
@@ -32,16 +31,25 @@ import {
 import { itemPage } from '../../model/marketFormat';
 import { getTavernMarketPort } from '../../services';
 
-const props = defineProps<{ accountUid: number }>();
+const props = defineProps<{ accountUid: number; kind: MarketItemKind }>();
 
 const port = getTavernMarketPort();
 
-const blank = () => ({ kind: undefined as MarketItemKind | undefined, source: undefined as MarketOrderSource | undefined });
+const blank = () => ({ source: undefined as MarketOrderSource | undefined });
 const filter = ref(blank());
+const kindLabel = computed(() => MarketItemKindLabel[props.kind]);
 
 const { items, total, page, pageSize, loading, load, reload } = usePagedList<InventoryRow>(
-  (p) => port.inventory(props.accountUid, { kind: filter.value.kind, source: filter.value.source }, p),
-  filter,
+  (p) => port.inventory(props.accountUid, { kind: props.kind, source: filter.value.source }, p),
+  () => ({ ...filter.value, kind: props.kind }),
+);
+
+watch(
+  () => props.kind,
+  () => {
+    detailOpen.value = false;
+    filter.value = blank();
+  },
 );
 
 const detailOpen = ref(false);
@@ -63,21 +71,6 @@ onMounted(() => void load());
         @refresh="reload"
         @reset="filter = blank()"
       >
-        <el-form-item label="类别">
-          <el-select
-            v-model="filter.kind"
-            placeholder="全部"
-            clearable
-            style="width: 120px"
-          >
-            <el-option
-              v-for="k in marketItemKindSchema.options"
-              :key="k"
-              :label="MarketItemKindLabel[k]"
-              :value="k"
-            />
-          </el-select>
-        </el-form-item>
         <el-form-item label="获得方式">
           <el-select
             v-model="filter.source"
@@ -123,7 +116,7 @@ onMounted(() => void load());
       </el-table-column>
 
       <el-table-column
-        label="卡"
+        :label="kindLabel"
         min-width="200"
       >
         <template #default="{ row }: { row: InventoryRow }">
@@ -143,21 +136,6 @@ onMounted(() => void load());
               {{ row.item.name }}
             </router-link>
           </div>
-        </template>
-      </el-table-column>
-
-      <el-table-column
-        label="类别"
-        width="90"
-      >
-        <template #default="{ row }: { row: InventoryRow }">
-          <el-tag
-            size="small"
-            effect="plain"
-            :type="row.item.kind === 'world_card' ? 'success' : 'primary'"
-          >
-            {{ MarketItemKindLabel[row.item.kind] }}
-          </el-tag>
         </template>
       </el-table-column>
 
@@ -202,8 +180,8 @@ onMounted(() => void load());
 
       <template #empty>
         <EmptyState
-          title="仓库里还没有卡"
-          description="该用户尚未购买或上架过卡。"
+          :title="`还没有${kindLabel}`"
+          :description="`该用户尚未购买或上架过${kindLabel}。`"
         />
       </template>
     </el-table>

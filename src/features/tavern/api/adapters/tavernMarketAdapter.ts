@@ -90,7 +90,7 @@ export class TavernMarketHttpAdapter implements TavernMarketPort {
 
   async inventory(accountUid: number, query: InventoryQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<InventoryRow>>> {
     const res = await requestTavern<unknown>(`${BASE}/users/${accountUid}/inventory`, { query: { ...page, ...query } });
-    return parseTavern(inventoryPageSchema, res, '仓库');
+    return parseTavern(inventoryPageSchema, res, '用户的卡');
   }
 
   async order(orderId: string): Promise<AppResult<MarketOrderDetail>> {

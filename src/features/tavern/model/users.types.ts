@@ -17,16 +17,19 @@ export const tavernUserSchema = z.object({
 });
 export type TavernUser = z.infer<typeof tavernUserSchema>;
 
-/** 玩家在 WorldLine 里现有的世界线和角色数，玩家删掉的不算。 */
+/** 玩家在 WorldLine 里现有的世界线和联系人数，玩家删掉的不算。 */
 export const userContentStatsSchema = z.object({
   worlds: z.number().int().nonnegative(),
   cards: z.number().int().nonnegative(),
 });
 export type UserContentStats = z.infer<typeof userContentStatsSchema>;
 
-/** 仓库里几件（买来的和自己上架的）、上架过几件（下架的也算）。 */
+/** 手里有几张卡，按类别分（买来的和自己上架时得的）；上架过几件（下架的也算）。 */
 export const userMarketStatsSchema = z.object({
-  owned: z.number().int().nonnegative(),
+  owned: z.object({
+    worldCards: z.number().int().nonnegative(),
+    characterCards: z.number().int().nonnegative(),
+  }),
   listed: z.number().int().nonnegative(),
 });
 export type UserMarketStats = z.infer<typeof userMarketStatsSchema>;

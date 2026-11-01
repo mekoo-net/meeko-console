@@ -14,7 +14,7 @@ interface ContentFilter {
 const blank = (): ContentFilter => ({ keyword: '', state: 'live' });
 
 /**
- * 用户视角里世界线、角色两张表同一套筛选：关键字、生命周期，默认只列没删的。
+ * 用户视角里世界线、联系人两张表同一套筛选：关键字、生命周期，默认只列没删的。
  * 账户是定的——就是正在看的这个用户。
  */
 export function useContentList<T>(

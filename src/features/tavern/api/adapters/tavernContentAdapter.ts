@@ -102,10 +102,10 @@ export class TavernContentHttpAdapter implements TavernContentPort {
 
   async personas(query: ContentQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<PersonaRow>>> {
     const res = await requestTavern<unknown>(`${BASE}/personas`, { query: { ...page, ...query } });
-    return parseTavern(personaPageSchema, res, '角色列表');
+    return parseTavern(personaPageSchema, res, '联系人列表');
   }
 
   async persona(personaId: number): Promise<AppResult<PersonaDetail>> {
-    return parseTavern(personaDetailSchema, await requestTavern<unknown>(`${BASE}/personas/${personaId}`), '角色详情');
+    return parseTavern(personaDetailSchema, await requestTavern<unknown>(`${BASE}/personas/${personaId}`), '联系人详情');
   }
 }

@@ -19,7 +19,7 @@ import type {
   WorldRow,
 } from '../../model/content.types';
 
-/** 员工看玩家内容：世界线、会话、角色。删除都是软删，回执给实际动了几行。 */
+/** 员工看玩家内容：世界线、会话、联系人。删除都是软删，回执给实际动了几行。 */
 export interface TavernContentPort {
   worlds(query: ContentQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<WorldRow>>>;
   world(world: WorldKey): Promise<AppResult<WorldDetail>>;
@@ -38,6 +38,6 @@ export interface TavernContentPort {
   forgetMemoryItem(session: SessionKey, messageId: string): Promise<AppResult<ActionResult>>;
 
   personas(query: ContentQuery, page: PageQuery): Promise<AppResult<ItemsEnvelope<PersonaRow>>>;
-  /** 角色只读：卡归玩家，市场卡在市场下架。 */
+  /** 联系人只读：卡归玩家，市场卡在市场下架。 */
   persona(personaId: number): Promise<AppResult<PersonaDetail>>;
 }
