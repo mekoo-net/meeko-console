@@ -288,8 +288,18 @@ defineExpose({ buildRateBody });
         <div class="io-col">
           <span class="io-col__h">入 / 写</span>
           <PriceField :currency-symbol="moneySymbol" v-model="form.inputPerM" label="入" unit="每 1M tokens" placeholder="0" size="lg" />
-          <PriceField :currency-symbol="moneySymbol" v-model="form.cachedWrite" label="写 5m" unit="每 1M tokens" placeholder="同入价" />
-          <PriceField :currency-symbol="moneySymbol" v-model="form.cachedWrite1h" label="写 1h" unit="每 1M tokens" placeholder="写 5m × 1.6" />
+          <!-- 两档都是缓存写，放在同一个框里：5 分钟档留空按入价，1 小时档留空按 5 分钟档 × 1.6。 -->
+          <div class="pf-pair">
+            <span class="pf-pair__label">
+              <span>写</span>
+              <span class="pf-pair__unit">每 1M tokens</span>
+            </span>
+            <div class="pf-pair__box">
+              <PriceField bare :currency-symbol="moneySymbol" v-model="form.cachedWrite" label="5m" unit="" placeholder="同入价" />
+              <span class="pf-pair__sep" aria-hidden="true" />
+              <PriceField bare :currency-symbol="moneySymbol" v-model="form.cachedWrite1h" label="1h" unit="" placeholder="5m × 1.6" />
+            </div>
+          </div>
         </div>
         <div class="io-col">
           <span class="io-col__h">出 / 读</span>
@@ -478,6 +488,51 @@ defineExpose({ buildRateBody });
   font-size: 12px;
   font-weight: 500;
   color: var(--el-text-color-secondary);
+}
+/* 一个价的两档：外面一个框，里面并排两个输入。尺寸与 PriceField 的 sm 档对齐，和旁边的「读」等高。 */
+.pf-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.pf-pair__label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--el-text-color-secondary);
+}
+.pf-pair__unit {
+  font-size: 11px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.pf-pair__box {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 10px;
+  background: var(--el-bg-color);
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.pf-pair__box:hover {
+  border-color: var(--el-border-color-darker);
+}
+.pf-pair__box:focus-within {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--el-color-primary) 14%, transparent);
+}
+.pf-pair__sep {
+  align-self: stretch;
+  width: 1px;
+  background: var(--el-border-color-lighter);
 }
 .extras {
   border: 1px solid var(--el-border-color-lighter);

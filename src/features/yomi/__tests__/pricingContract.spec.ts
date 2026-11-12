@@ -267,7 +267,7 @@ describe('pricing contract', () => {
       billingType: 'per_token' as const,
       rate: { input: { perMToken: 10, cachedWrite: 12.5 }, output: { perMToken: 40 } },
     };
-    expect(write1h(derived)).toMatchObject({ kind: 'cacheWrite1h', inherited: true, inheritedNote: '写 5m × 1.6' });
+    expect(write1h(derived)).toMatchObject({ kind: 'cacheWrite1h', inherited: true, inheritedNote: '5m × 1.6' });
     expect(write1h(derived)?.text).toBe(
       rateBodyDisplay({ ...derived, rate: { ...derived.rate, input: { perMToken: 20 } } }).columns[0]?.[0]?.text,
     );

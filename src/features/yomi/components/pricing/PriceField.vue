@@ -18,9 +18,19 @@ interface Props {
   size?: 'lg' | 'sm';
   /** 价格表美元 `$`，有效价人民币 `¥`。 */
   currencySymbol?: string;
+  /**
+   * 不画自己的边框，标签缩成输入前的一个小档位名。同一个价的几档（缓存写的 5m / 1h）并排放进
+   * 外层同一个框里时用：各画各的框，看起来就成了两个互不相干的价。
+   */
+  bare?: boolean;
 }
 
-const props = withDefaults(defineProps<Props>(), { placeholder: '', size: 'sm', currencySymbol: '¥' });
+const props = withDefaults(defineProps<Props>(), {
+  placeholder: '',
+  size: 'sm',
+  currencySymbol: '¥',
+  bare: false,
+});
 
 const emit = defineEmits<{ (e: 'update:modelValue', v: number | null): void }>();
 
@@ -56,7 +66,7 @@ function onBlur(): void {
 </script>
 
 <template>
-  <label class="pf" :class="`pf--${size}`">
+  <label class="pf" :class="[`pf--${size}`, { 'pf--bare': bare }]">
     <span class="pf__label">{{ label }}</span>
     <span class="pf__box">
       <span class="pf__cur">{{ currencySymbol }}</span>
@@ -70,7 +80,7 @@ function onBlur(): void {
         @input="onInput"
         @blur="onBlur"
       />
-      <span class="pf__unit">{{ unit }}</span>
+      <span v-if="unit" class="pf__unit">{{ unit }}</span>
     </span>
   </label>
 </template>
@@ -148,6 +158,33 @@ function onBlur(): void {
 .pf--lg .pf__unit {
   flex-basis: 100%;
   margin-top: 4px;
+}
+
+/*
+ * 外层已经有框：自己只剩「档位名 + 币种 + 数字」一行。
+ * 选择器多带一个 .pf：下面 sm / lg 档的同名规则写在后面，同权重会把这里的 padding 盖回去。
+ */
+.pf.pf--bare {
+  flex: 1;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+}
+.pf.pf--bare .pf__label {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--el-text-color-placeholder);
+}
+.pf.pf--bare .pf__box,
+.pf.pf--bare .pf__box:hover,
+.pf.pf--bare .pf__box:focus-within {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 /* 附属价：紧凑一行 */

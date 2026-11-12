@@ -183,7 +183,7 @@ function rateColumns(body: RateBody, embedding: boolean, currency: string): Pric
               label: '写 1h',
               text: m2(write5m * ONE_HOUR_WRITE_OVER_FIVE_MINUTE, currency),
               inherited: true,
-              inheritedNote: '写 5m × 1.6',
+              inheritedNote: '5m × 1.6',
             }
           : { kind: 'cacheWrite1h', label: '写 1h', text: m2(input.cachedWrite1h, currency) };
       const left: PricePart[] = [

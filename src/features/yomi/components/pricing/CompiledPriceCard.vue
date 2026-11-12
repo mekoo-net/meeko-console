@@ -14,9 +14,17 @@ const props = defineProps<{
   multiplier: number;
 }>();
 
-interface CmpRow {
+/** 一条「价格表 × 倍率 = 有效价」。`tier` 是同一行里的档位名（缓存写的 5m / 1h），单档的行没有。 */
+interface CmpLine {
+  tier: string | null;
   part: PricePart;
   catalogText: string;
+}
+
+/** 一行一个价；缓存写的两档是同一个价的两条算式，收在同一行里，不各占一行。 */
+interface CmpRow {
+  part: PricePart;
+  lines: CmpLine[];
 }
 
 interface Pane {
@@ -27,6 +35,7 @@ interface Pane {
 const PANE_TITLE = ['入 / 写', '出 / 读'] as const;
 
 const SHORT_LABEL: Partial<Record<PricePartKind, string>> = {
+  cacheWrite: '写',
   cacheRead: '读',
 };
 
@@ -36,11 +45,25 @@ const kindMeta = computed(() => MODEL_KIND[props.effective.kind]);
 
 const panes = computed<Pane[]>(() => {
   const cat = new Map(props.catalog.columns.flat().map((p) => [`${p.kind}:${p.label}`, p]));
-  const zip = (parts: PricePart[]): CmpRow[] =>
-    parts.map((part) => ({
-      part,
-      catalogText: cat.get(`${part.kind}:${part.label}`)?.text ?? part.text,
-    }));
+  const line = (part: PricePart, tier: string | null): CmpLine => ({
+    tier,
+    part,
+    catalogText: cat.get(`${part.kind}:${part.label}`)?.text ?? part.text,
+  });
+  const zip = (parts: PricePart[]): CmpRow[] => {
+    const rows: CmpRow[] = [];
+    for (const part of parts) {
+      const write = rows.at(-1);
+      // 1 小时档接在它前面那行缓存写下面：两档合成一行，前一条补上档位名。
+      if (part.kind === 'cacheWrite1h' && write?.part.kind === 'cacheWrite') {
+        write.lines[0]!.tier = '5m';
+        write.lines.push(line(part, '1h'));
+        continue;
+      }
+      rows.push({ part, lines: [line(part, null)] });
+    }
+    return rows;
+  };
 
   if (props.effective.kind === 'per_token') {
     return props.effective.columns.map((col, i) => ({
@@ -81,15 +104,23 @@ function rowLabel(part: PricePart): string {
         <header v-if="pane.title" class="cprice__pane-h">{{ pane.title }}</header>
         <div v-for="row in pane.rows" :key="row.part.label" class="cprice__row">
           <div class="cprice__name">
-            <PricePartMark :kind="row.part.kind" :label="row.part.label" />
+            <PricePartMark :kind="row.part.kind" :label="rowLabel(row.part)" />
             <span class="cprice__label">{{ rowLabel(row.part) }}</span>
-            <span v-if="row.part.inherited" class="cprice__inherit">{{ row.part.inheritedNote ?? '同入价' }}</span>
+            <span v-if="row.lines.length === 1 && row.part.inherited" class="cprice__inherit">
+              {{ row.part.inheritedNote ?? '同入价' }}
+            </span>
           </div>
-          <div class="cprice__eq" :class="{ 'cprice__eq--inherited': row.part.inherited }">
-            <span class="cprice__cat">{{ row.catalogText }}</span>
-            <span class="cprice__factor">{{ mulText }}</span>
-            <span class="cprice__eqs">=</span>
-            <span class="cprice__eff">{{ row.part.text }}</span>
+          <div v-for="ln in row.lines" :key="ln.part.label" class="cprice__line">
+            <span v-if="ln.tier" class="cprice__tier">
+              {{ ln.tier }}
+              <span v-if="ln.part.inherited" class="cprice__inherit">{{ ln.part.inheritedNote ?? '同入价' }}</span>
+            </span>
+            <div class="cprice__eq" :class="{ 'cprice__eq--inherited': ln.part.inherited }">
+              <span class="cprice__cat">{{ ln.catalogText }}</span>
+              <span class="cprice__factor">{{ mulText }}</span>
+              <span class="cprice__eqs">=</span>
+              <span class="cprice__eff">{{ ln.part.text }}</span>
+            </div>
           </div>
         </div>
       </section>
@@ -195,6 +226,22 @@ function rowLabel(part: PricePart): string {
 .cprice__inherit {
   font-size: 11px;
   color: var(--el-text-color-placeholder);
+}
+/* 一条算式一行；有档位名时名字靠左、算式靠右。 */
+.cprice__line {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.cprice__tier {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
 }
 .cprice__eq {
   display: flex;
