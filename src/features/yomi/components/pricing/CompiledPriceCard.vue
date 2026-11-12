@@ -21,7 +21,10 @@ interface CmpLine {
   catalogText: string;
 }
 
-/** 一行一个价；缓存写的两档是同一个价的两条算式，收在同一行里，不各占一行。 */
+/**
+ * 一行一个价。缓存写的两档是同一个价的两个时长，并排收在同一行里：各占一行的话，
+ * 「入 / 写」这一栏就比「出 / 读」高出一截。并排放不下整条算式，所以两档只写有效价，算式放在悬停提示里。
+ */
 interface CmpRow {
   part: PricePart;
   lines: CmpLine[];
@@ -84,6 +87,12 @@ const panes = computed<Pane[]>(() => {
 function rowLabel(part: PricePart): string {
   return SHORT_LABEL[part.kind] ?? part.caption ?? part.label;
 }
+
+/** 并排的档位不写算式，悬停时给全：价格表 × 倍率 = 有效价，以及这个数是不是照别的价推出来的。 */
+function lineTitle(ln: CmpLine): string {
+  const eq = `${ln.catalogText} ${mulText.value} = ${ln.part.text}`;
+  return ln.part.inherited ? `${eq}（${ln.part.inheritedNote ?? '同入价'}）` : eq;
+}
 </script>
 
 <template>
@@ -110,17 +119,27 @@ function rowLabel(part: PricePart): string {
               {{ row.part.inheritedNote ?? '同入价' }}
             </span>
           </div>
-          <div v-for="ln in row.lines" :key="ln.part.label" class="cprice__line">
-            <span v-if="ln.tier" class="cprice__tier">
-              {{ ln.tier }}
-              <span v-if="ln.part.inherited" class="cprice__inherit">{{ ln.part.inheritedNote ?? '同入价' }}</span>
-            </span>
-            <div class="cprice__eq" :class="{ 'cprice__eq--inherited': ln.part.inherited }">
-              <span class="cprice__cat">{{ ln.catalogText }}</span>
-              <span class="cprice__factor">{{ mulText }}</span>
-              <span class="cprice__eqs">=</span>
+          <div v-if="row.lines.length > 1" class="cprice__eq cprice__eq--tiers">
+            <span
+              v-for="ln in row.lines"
+              :key="ln.part.label"
+              class="cprice__tierv"
+              :class="{ 'cprice__eq--inherited': ln.part.inherited }"
+              :title="lineTitle(ln)"
+            >
+              <span class="cprice__tier">{{ ln.tier }}</span>
               <span class="cprice__eff">{{ ln.part.text }}</span>
-            </div>
+            </span>
+          </div>
+          <div
+            v-else
+            class="cprice__eq"
+            :class="{ 'cprice__eq--inherited': row.part.inherited }"
+          >
+            <span class="cprice__cat">{{ row.lines[0]!.catalogText }}</span>
+            <span class="cprice__factor">{{ mulText }}</span>
+            <span class="cprice__eqs">=</span>
+            <span class="cprice__eff">{{ row.part.text }}</span>
           </div>
         </div>
       </section>
@@ -227,21 +246,19 @@ function rowLabel(part: PricePart): string {
   font-size: 11px;
   color: var(--el-text-color-placeholder);
 }
-/* 一条算式一行；有档位名时名字靠左、算式靠右。 */
-.cprice__line {
-  display: flex;
-  align-items: baseline;
-  justify-content: flex-end;
-  gap: 8px;
+/* 同一个价的两档并排：档位名 + 有效价，一档一组。与单档那一行同一个容器、同一个字号，行高才一样。 */
+.cprice__eq--tiers {
+  gap: 4px 14px;
 }
-.cprice__tier {
+.cprice__tierv {
   display: inline-flex;
   align-items: baseline;
-  gap: 6px;
-  margin-right: auto;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
+  gap: 4px;
   white-space: nowrap;
+}
+.cprice__tier {
+  font-size: 11px;
+  color: var(--el-text-color-placeholder);
 }
 .cprice__eq {
   display: flex;

@@ -4,11 +4,27 @@
  */
 import PricePartMark from './PricePartMark.vue';
 import PriceTierFlyout from './PriceTierFlyout.vue';
-import type { PriceDisplay } from '../../model/priceTable';
+import { computed } from 'vue';
 
-defineProps<{
+import type { PriceDisplay, PricePart } from '../../model/priceTable';
+
+const props = defineProps<{
   model: Pick<PriceDisplay, 'kind' | 'columns' | 'compact'>;
 }>();
+
+/**
+ * 缓存写的两档是同一个价的两个时长：1 小时档不另起一行，放在 5 分钟档右边的同一行上。
+ * 另起一行的话，「入 / 写」比「出 / 读」多一行，整张表的行高都被它撑高。
+ * `sideRow` 是 5 分钟档所在的行（从 1 数），1 小时档就排在那一行。
+ */
+const llmColumns = computed(() =>
+  props.model.columns.map((col) => {
+    const side: PricePart | null = col.find((p) => p.kind === 'cacheWrite1h') ?? null;
+    const main = side ? col.filter((p) => p !== side) : col;
+    const at = main.findIndex((p) => p.kind === 'cacheWrite');
+    return { main, side, sideRow: at < 0 ? main.length + 1 : at + 1 };
+  }),
+);
 </script>
 
 <template>
@@ -33,16 +49,30 @@ defineProps<{
         <span class="pp__v">{{ part.text }}</span>
       </div>
     </template>
-    <div v-else v-for="(col, i) in model.columns" :key="i" class="pcol">
-      <template v-for="part in col" :key="part.label">
-        <span class="pp__icon">
-          <PricePartMark :kind="part.kind" :label="part.label" />
+    <template v-else v-for="(col, i) in llmColumns" :key="i">
+      <div class="pcol">
+        <template v-for="part in col.main" :key="part.label">
+          <span class="pp__icon">
+            <PricePartMark :kind="part.kind" :label="part.label" />
+          </span>
+          <span class="pp__v" :class="{ 'pp__v--inherited': part.inherited }">
+            {{ part.text }}
+          </span>
+        </template>
+      </div>
+      <div v-if="col.side" class="pcol">
+        <span class="pp__icon" :style="{ gridRow: col.sideRow }">
+          <PricePartMark :kind="col.side.kind" :label="col.side.label" />
         </span>
-        <span class="pp__v" :class="{ 'pp__v--inherited': part.inherited }">
-          {{ part.text }}
+        <span
+          class="pp__v"
+          :class="{ 'pp__v--inherited': col.side.inherited }"
+          :style="{ gridRow: col.sideRow }"
+        >
+          {{ col.side.text }}
         </span>
-      </template>
-    </div>
+      </div>
+    </template>
   </div>
 </template>
 

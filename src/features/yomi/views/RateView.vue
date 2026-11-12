@@ -461,7 +461,8 @@ onMounted(async () => {
   min-height: 0;
   overflow: auto;
   display: grid;
-  grid-template-columns: minmax(160px, 1.1fr) minmax(220px, 1.5fr) 148px 140px;
+  /* 价格列放得下三组「icon + 数字」：入 / 写 5m、写 1h、出 / 读。窄了第三组会压到日期上。 */
+  grid-template-columns: minmax(160px, 1.1fr) minmax(340px, 1.5fr) 148px 140px;
   column-gap: 16px;
   align-content: start;
   padding: 0 4px 8px;
