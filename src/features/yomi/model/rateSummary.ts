@@ -15,6 +15,7 @@ export function rateBodySummary(body: RateBody, currency: string = MODEL_PRICE_C
       const extras: string[] = [];
       if (p.input.cachedRead != null) extras.push(`cR ${m2(p.input.cachedRead)}`);
       if (p.input.cachedWrite != null) extras.push(`cW ${m2(p.input.cachedWrite)}`);
+      if (p.input.cachedWrite1h != null) extras.push(`cW1h ${m2(p.input.cachedWrite1h)}`);
       if (p.output.reasoning != null) extras.push(`reason ${m2(p.output.reasoning)}`);
       if (p.input.audio != null || p.output.audio != null) {
         extras.push(`audio ${m2(p.input.audio ?? 0)}/${m2(p.output.audio ?? 0)}`);

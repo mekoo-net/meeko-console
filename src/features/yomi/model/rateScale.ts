@@ -19,6 +19,7 @@ export function scaleRateBody(body: RateBody, factor: number): RateBody {
             perMToken: mul(body.rate.input.perMToken)!,
             cachedRead: mul(body.rate.input.cachedRead),
             cachedWrite: mul(body.rate.input.cachedWrite),
+            cachedWrite1h: mul(body.rate.input.cachedWrite1h),
             audio: mul(body.rate.input.audio),
           }),
           output: strip({

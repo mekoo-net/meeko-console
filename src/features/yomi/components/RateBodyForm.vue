@@ -5,6 +5,7 @@
  * 它是上游报的结算点数、不绑模态，各类模型都能改挂（见 allowedManualBillingTypes）。
  *
  * cachedRead / cachedWrite 留空 = 按 input 价计。
+ * cachedWrite1h（1 小时档缓存写）留空 = 按 5 分钟档写价 × 1.6 计（官方两档之比 2x / 1.25x，后端 RatioResolver 同语义）。
  */
 import { computed, ref, watch } from 'vue';
 import { ArrowRight, Delete, Plus } from '@element-plus/icons-vue';
@@ -63,6 +64,7 @@ interface FormState {
   outputPerM: Money;
   cachedRead: Money;
   cachedWrite: Money;
+  cachedWrite1h: Money;
   inputAudio: Money;
   outputAudio: Money;
   reasoning: Money;
@@ -82,6 +84,7 @@ const emptyForm = (billingType: BillingType): FormState => ({
   outputPerM: null,
   cachedRead: null,
   cachedWrite: null,
+  cachedWrite1h: null,
   inputAudio: null,
   outputAudio: null,
   reasoning: null,
@@ -107,6 +110,7 @@ function loadRateIntoForm(p: RateDraft): FormState {
       f.outputPerM = p.rate.output.perMToken;
       f.cachedRead = p.rate.input.cachedRead ?? null;
       f.cachedWrite = p.rate.input.cachedWrite ?? null;
+      f.cachedWrite1h = p.rate.input.cachedWrite1h ?? null;
       f.inputAudio = p.rate.input.audio ?? null;
       f.outputAudio = p.rate.output.audio ?? null;
       f.reasoning = p.rate.output.reasoning ?? null;
@@ -222,6 +226,7 @@ function buildRateBody(): RateBody {
             perMToken: num(f.inputPerM),
             ...opt('cachedRead', f.cachedRead),
             ...opt('cachedWrite', f.cachedWrite),
+            ...opt('cachedWrite1h', f.cachedWrite1h),
             ...opt('audio', f.inputAudio),
           },
           output: {
@@ -283,7 +288,8 @@ defineExpose({ buildRateBody });
         <div class="io-col">
           <span class="io-col__h">入 / 写</span>
           <PriceField :currency-symbol="moneySymbol" v-model="form.inputPerM" label="入" unit="每 1M tokens" placeholder="0" size="lg" />
-          <PriceField :currency-symbol="moneySymbol" v-model="form.cachedWrite" label="写" unit="每 1M tokens" placeholder="同入价" />
+          <PriceField :currency-symbol="moneySymbol" v-model="form.cachedWrite" label="写 5m" unit="每 1M tokens" placeholder="同入价" />
+          <PriceField :currency-symbol="moneySymbol" v-model="form.cachedWrite1h" label="写 1h" unit="每 1M tokens" placeholder="写 5m × 1.6" />
         </div>
         <div class="io-col">
           <span class="io-col__h">出 / 读</span>

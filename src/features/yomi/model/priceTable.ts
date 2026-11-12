@@ -81,6 +81,7 @@ export type PricePartKind =
   | 'input'
   | 'output'
   | 'cacheWrite'
+  | 'cacheWrite1h'
   | 'cacheRead'
   | 'audioIn'
   | 'audioOut'
@@ -99,7 +100,15 @@ export interface PricePart {
   caption?: string;
   /** 这个数不是自己填的，是按契约兜底算出来的（缓存价留空按主价计），用占位色标。 */
   inherited?: boolean;
+  /** 兜底是照什么算的；不写就是「同入价」。 */
+  inheritedNote?: string;
 }
+
+/**
+ * 1 小时档缓存写留空时，按 5 分钟档的价乘这个数（官方两档之比：输入价 × 2 与 × 1.25）。
+ * 与后端 `RatioResolver.OneHourWriteOverFiveMinute` 是同一个数，改一边要改另一边。
+ */
+export const ONE_HOUR_WRITE_OVER_FIVE_MINUTE = 2 / 1.25;
 
 export interface PriceDisplay {
   price: ModelPrice;
@@ -162,9 +171,25 @@ function rateColumns(body: RateBody, embedding: boolean, currency: string): Pric
         v == null
           ? { kind, label, text: m2(input.perMToken, currency), inherited: true }
           : { kind, label, text: m2(v, currency) };
+      /**
+       * 缓存写分两档，两档都列：5 分钟档留空按入价计；1 小时档留空按 5 分钟档 × 1.6 计（后端同语义）。
+       * 推出来的数照样显示并标继承——它就是实扣用的价，省掉这一档等于把一个会收钱的价藏起来。
+       */
+      const write5m = input.cachedWrite ?? input.perMToken;
+      const write1h: PricePart =
+        input.cachedWrite1h == null
+          ? {
+              kind: 'cacheWrite1h',
+              label: '写 1h',
+              text: m2(write5m * ONE_HOUR_WRITE_OVER_FIVE_MINUTE, currency),
+              inherited: true,
+              inheritedNote: '写 5m × 1.6',
+            }
+          : { kind: 'cacheWrite1h', label: '写 1h', text: m2(input.cachedWrite1h, currency) };
       const left: PricePart[] = [
         { kind: 'input', label: '入', text: m2(input.perMToken, currency) },
-        cached('cacheWrite', '写', input.cachedWrite),
+        cached('cacheWrite', '写 5m', input.cachedWrite),
+        write1h,
       ];
       const right: PricePart[] = [
         { kind: 'output', label: '出', text: m2(output.perMToken, currency) },

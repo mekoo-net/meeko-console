@@ -27,7 +27,6 @@ interface Pane {
 const PANE_TITLE = ['入 / 写', '出 / 读'] as const;
 
 const SHORT_LABEL: Partial<Record<PricePartKind, string>> = {
-  cacheWrite: '写',
   cacheRead: '读',
 };
 
@@ -84,7 +83,7 @@ function rowLabel(part: PricePart): string {
           <div class="cprice__name">
             <PricePartMark :kind="row.part.kind" :label="row.part.label" />
             <span class="cprice__label">{{ rowLabel(row.part) }}</span>
-            <span v-if="row.part.inherited" class="cprice__inherit">同入价</span>
+            <span v-if="row.part.inherited" class="cprice__inherit">{{ row.part.inheritedNote ?? '同入价' }}</span>
           </div>
           <div class="cprice__eq" :class="{ 'cprice__eq--inherited': row.part.inherited }">
             <span class="cprice__cat">{{ row.catalogText }}</span>

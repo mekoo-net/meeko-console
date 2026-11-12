@@ -360,7 +360,10 @@ function usageTagRows(row: LogEntry): UsageTag[][] {
       arrow: '✎',
       value: formatTokenShort(input.cachedWriteTokens),
       kind: 'cache',
-      title: `缓存写入（cache write）${input.cachedWriteTokens.toLocaleString()} tokens`,
+      // 标签上的数是总量；1 小时档单价不同，写了就在提示里说清楚占了多少。
+      title: input.cachedWrite1hTokens
+        ? `缓存写入（cache write）${input.cachedWriteTokens.toLocaleString()} tokens，其中 1 小时档 ${input.cachedWrite1hTokens.toLocaleString()}`
+        : `缓存写入（cache write）${input.cachedWriteTokens.toLocaleString()} tokens`,
     });
   }
   if (output.reasoningTokens > 0) {

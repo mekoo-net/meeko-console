@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * 价格格标签。入/出用 ↓↑；缓存跟入出不是同一件事——
- * 写是铅笔（写入缓存），读是打开阅读（从缓存取）。
+ * 写是铅笔（写入缓存），读是打开阅读（从缓存取）。写分两档：5 分钟档是铅笔，1 小时档是计时器，
+ * 价格表里只有 icon 没有字，两档得一眼分得开。
  * 图像 / 视频档位写在价格格的 caption 槽，这里只画固定尺寸的 icon。
  */
 import type { Component } from 'vue';
@@ -15,6 +16,7 @@ import {
   Picture,
   Reading,
   Ticket,
+  Timer,
   Upload,
   VideoCamera,
 } from '@element-plus/icons-vue';
@@ -32,6 +34,7 @@ const ICON: Readonly<Record<PricePartKind, Component>> = {
   input: Download,
   output: Upload,
   cacheWrite: EditPen,
+  cacheWrite1h: Timer,
   cacheRead: Reading,
   audioIn: Headset,
   audioOut: Microphone,
@@ -67,7 +70,8 @@ const ICON: Readonly<Record<PricePartKind, Component>> = {
 .picon[data-kind='output'] {
   color: #2563eb;
 }
-.picon[data-kind='cacheWrite'] {
+.picon[data-kind='cacheWrite'],
+.picon[data-kind='cacheWrite1h'] {
   color: #d97706;
 }
 .picon[data-kind='cacheRead'] {

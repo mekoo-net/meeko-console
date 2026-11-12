@@ -594,6 +594,7 @@ function seedRate(models: Model[]): Rate[] {
             perMToken: 22,
             cachedRead: 2.2,
             cachedWrite: 27.5,
+            cachedWrite1h: 44,
           },
           output: { perMToken: 110 },
         },

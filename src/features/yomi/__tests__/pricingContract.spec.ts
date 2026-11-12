@@ -177,11 +177,11 @@ describe('pricing contract', () => {
     expect(show('whisper-1').typeLabel).toBe('音频');
     expect(show('tts-1').typeLabel).toBe('语音');
     expect(gpt4.columns.map((c) => c.map((p) => p.label))).toEqual([
-      ['入', '写'],
+      ['入', '写 5m', '写 1h'],
       ['出', '读'],
     ]);
     expect(gpt4.columns.map((c) => c.map((p) => p.kind))).toEqual([
-      ['input', 'cacheWrite'],
+      ['input', 'cacheWrite', 'cacheWrite1h'],
       ['output', 'cacheRead'],
     ]);
     expect(gpt4.columns[1]![1]!.text).toBe(gpt4.columns[0]![0]!.text);
@@ -226,11 +226,11 @@ describe('pricing contract', () => {
     const catalog = rateBodyDisplay(body);
     const effective = rateBodyDisplay(scaleRateBody(body, 1.25));
     expect(catalog.columns.map((c) => c.map((p) => p.kind))).toEqual([
-      ['input', 'cacheWrite'],
+      ['input', 'cacheWrite', 'cacheWrite1h'],
       ['output', 'cacheRead'],
     ]);
     expect(effective.columns.map((c) => c.map((p) => p.kind))).toEqual([
-      ['input', 'cacheWrite'],
+      ['input', 'cacheWrite', 'cacheWrite1h'],
       ['output', 'cacheRead'],
     ]);
     const expected = rateBodyDisplay({
@@ -243,6 +243,50 @@ describe('pricing contract', () => {
     expect(effective.columns.flat().map((p) => p.text)).toEqual(
       expected.columns.flat().map((p) => p.text),
     );
+  });
+
+  it('cache writes show both tiers; a blank 1-hour price is the 5-minute price × 1.6', () => {
+    const write1h = (body: Parameters<typeof rateBodyDisplay>[0]) => rateBodyDisplay(body).columns[0]?.[2];
+
+    // 配了专价：照填的数显示，不标继承。
+    const priced = {
+      billingType: 'per_token' as const,
+      rate: {
+        input: { perMToken: 10, cachedWrite: 12.5, cachedWrite1h: 22, cachedRead: 1 },
+        output: { perMToken: 40 },
+      },
+    };
+    expect(write1h(priced)).toMatchObject({ kind: 'cacheWrite1h', label: '写 1h' });
+    expect(write1h(priced)?.inherited).toBeUndefined();
+    expect(write1h(priced)?.text).toBe(
+      rateBodyDisplay({ ...priced, rate: { ...priced.rate, input: { perMToken: 22 } } }).columns[0]?.[0]?.text,
+    );
+
+    // 留空：12.5 × 1.6 = 20，和后端实扣用的是同一个数，标继承并写明是照什么推的。
+    const derived = {
+      billingType: 'per_token' as const,
+      rate: { input: { perMToken: 10, cachedWrite: 12.5 }, output: { perMToken: 40 } },
+    };
+    expect(write1h(derived)).toMatchObject({ kind: 'cacheWrite1h', inherited: true, inheritedNote: '写 5m × 1.6' });
+    expect(write1h(derived)?.text).toBe(
+      rateBodyDisplay({ ...derived, rate: { ...derived.rate, input: { perMToken: 20 } } }).columns[0]?.[0]?.text,
+    );
+
+    // 两档都没配：5 分钟档按入价，1 小时档在它上面乘 1.6。
+    const bare = {
+      billingType: 'per_token' as const,
+      rate: { input: { perMToken: 10 }, output: { perMToken: 40 } },
+    };
+    expect(write1h(bare)?.text).toBe(
+      rateBodyDisplay({ ...bare, rate: { ...bare.rate, input: { perMToken: 16 } } }).columns[0]?.[0]?.text,
+    );
+
+    // 缩放要带上专价：漏了的话渠道倍率一乘，1 小时价就从价格表里掉了，后端退回按比例推。
+    const scaled = scaleRateBody(priced, 1.25);
+    expect(scaled.billingType === 'per_token' && scaled.rate.input.cachedWrite1h).toBe(27.5);
+    // 没配的不凭空长出来：留空是「按比例推」这个语义，缩放后仍然是留空。
+    const scaledBare = scaleRateBody(derived, 1.25);
+    expect(scaledBare.billingType === 'per_token' && 'cachedWrite1h' in scaledBare.rate.input).toBe(false);
   });
 
   it('a few seeded rows deviate from the official sheet so the sync diff has something to show', async () => {

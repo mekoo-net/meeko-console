@@ -133,14 +133,36 @@ const inputDims = computed<DimRow[]>(() => {
   if (!l || (l.billingType !== 'per_token' && l.billingType !== 'unknown')) return [];
   const u = l.usage.input;
   const c = l.cost.input;
+  // 缓存写两档单价不同，各占一行：每一行的 tokens × 单价要等于这一行的金额。
+  // 1 小时档是总量的子集，5 分钟那一行是减掉它之后剩下的；没写 1 小时档就还是原来那一行。
+  const written1h = Math.min(u.cachedWrite1hTokens ?? 0, u.cachedWriteTokens);
+  const writeRows: DimRow[] =
+    written1h > 0 && c.cachedWrite1h
+      ? [
+          {
+            label: '缓存写 5m',
+            tokens: u.cachedWriteTokens - written1h,
+            perMToken: c.cachedWrite.perMToken,
+            amount: c.cachedWrite.amount,
+          },
+          {
+            label: '缓存写 1h',
+            tokens: written1h,
+            perMToken: c.cachedWrite1h.perMToken,
+            amount: c.cachedWrite1h.amount,
+          },
+        ]
+      : [
+          {
+            label: '缓存写',
+            tokens: u.cachedWriteTokens,
+            perMToken: c.cachedWrite.perMToken,
+            amount: c.cachedWrite.amount,
+          },
+        ];
   return [
     { label: '输入', tokens: u.tokens, perMToken: c.perMToken, amount: c.amount },
-    {
-      label: '缓存写',
-      tokens: u.cachedWriteTokens,
-      perMToken: c.cachedWrite.perMToken,
-      amount: c.cachedWrite.amount,
-    },
+    ...writeRows,
     {
       label: '缓存读',
       tokens: u.cachedReadTokens,
