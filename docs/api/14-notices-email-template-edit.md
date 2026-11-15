@@ -14,23 +14,23 @@
 
 | 业务动作 | Port 方法 | HTTP | REST 端点 |
 | --- | --- | --- | --- |
-| 取单个模板（按 id） | `getEmailTemplate(id)` | GET | `/api/admin/notice/templates/email/{id}` |
-| 取单个模板（按 code + locale，列表端点过滤） | `findEmailTemplate(code, locale)` | GET | `/api/admin/notice/templates/email?code={code}&locale={locale}` |
-| 列出修订时间线 | `listEmailRevisions(id)` | GET | `/api/admin/notice/templates/email/{id}/revisions` |
-| 更新（自动写入新版本） | `updateEmailTemplate(id, payload)` | PUT | `/api/admin/notice/templates/email/{id}` |
-| SMTP 渠道字典 | `listSmtpProviders` | GET | `/api/admin/notice/channels/smtp` |
+| 取单个模板（按 id） | `getEmailTemplate(id)` | GET | `/admin/notice/templates/email/{id}` |
+| 取单个模板（按 code + locale，列表端点过滤） | `findEmailTemplate(code, locale)` | GET | `/admin/notice/templates/email?code={code}&locale={locale}` |
+| 列出修订时间线 | `listEmailRevisions(id)` | GET | `/admin/notice/templates/email/{id}/revisions` |
+| 更新（自动写入新版本） | `updateEmailTemplate(id, payload)` | PUT | `/admin/notice/templates/email/{id}` |
+| SMTP 渠道字典 | `listSmtpProviders` | GET | `/admin/notice/channels/smtp` |
 
 ## 请求 / 响应
 
-### 取模板（按 id） `GET /api/admin/notice/templates/email/{id}`
+### 取模板（按 id） `GET /admin/notice/templates/email/{id}`
 成功响应：单条 `EmailTemplate`（与 13 列表元素结构一致，含 `content` 子对象）。
 
-### 取模板（按 code + locale） `GET /api/admin/notice/templates/email?code=&locale=`
+### 取模板（按 code + locale） `GET /admin/notice/templates/email?code=&locale=`
 复用列表端点：`code` + `locale` 同时存在 → 单条查询。响应：`EmailTemplate | null`（不存在时 HTTP 200 + body `null`）。
 
 > 两个端点并存的理由：路由能拿到 `:code/:locale` 但拿不到 `id` 时直查 query 端点最方便；其它场景（侧栏跳详情）则按 `id` 直查更稳定。
 
-### 修订时间线 `GET /api/admin/notice/templates/email/{id}/revisions`
+### 修订时间线 `GET /admin/notice/templates/email/{id}/revisions`
 成功响应（`EmailTemplateRevision[]`，按版本号倒序）：
 
 ```json
@@ -71,7 +71,7 @@
 | `content` | object | 该版本的完整内容快照 `{ subject, body, isHtml }`。**与 `EmailTemplate.content` 形状完全一致**，前端做"回填旧版本"时直接 `form.content = revision.content` 整段赋值即可。 |
 | `change` | object | 变更元数据 `{ byIamUserUid, atUtc, note }`。`byIamUserUid` 在系统迁移 / 初始数据时可为 `null`；`note` 同理。 |
 
-### 更新 `PUT /api/admin/notice/templates/email/{id}` （`UpdateEmailTemplatePayload`）
+### 更新 `PUT /admin/notice/templates/email/{id}` （`UpdateEmailTemplatePayload`）
 
 ```json
 {

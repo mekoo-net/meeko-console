@@ -25,12 +25,12 @@
 
 | 业务动作 | Port 方法 | HTTP | REST 端点 |
 | --- | --- | --- | --- |
-| 列表（含 code/locale/version/绑定渠道） | `listEmailTemplates` | GET | `/api/admin/notice/templates/email` |
-| 单条查询（按 id） | `getEmailTemplate(id)` | GET | `/api/admin/notice/templates/email/{id}` |
-| 新建（含初始版本） | `createEmailTemplate` | POST | `/api/admin/notice/templates/email` |
-| 切换启停 | `setEmailTemplateActive(id, active)` | PATCH | `/api/admin/notice/templates/email/{id}/active` |
-| 删除（软删） | `deleteEmailTemplate(id)` | DELETE | `/api/admin/notice/templates/email/{id}` |
-| SMTP 渠道字典（用于显示绑定名） | `listSmtpProviders` | GET | `/api/admin/notice/channels/smtp` |
+| 列表（含 code/locale/version/绑定渠道） | `listEmailTemplates` | GET | `/admin/notice/templates/email` |
+| 单条查询（按 id） | `getEmailTemplate(id)` | GET | `/admin/notice/templates/email/{id}` |
+| 新建（含初始版本） | `createEmailTemplate` | POST | `/admin/notice/templates/email` |
+| 切换启停 | `setEmailTemplateActive(id, active)` | PATCH | `/admin/notice/templates/email/{id}/active` |
+| 删除（软删） | `deleteEmailTemplate(id)` | DELETE | `/admin/notice/templates/email/{id}` |
+| SMTP 渠道字典（用于显示绑定名） | `listSmtpProviders` | GET | `/admin/notice/channels/smtp` |
 
 > 注：编辑 / 修订时间线在「编辑模板」页（详见 [`14-notices-email-template-edit.md`](./14-notices-email-template-edit.md)）。
 >
@@ -38,7 +38,7 @@
 
 ## 请求 / 响应
 
-### 列表 `GET /api/admin/notice/templates/email`
+### 列表 `GET /admin/notice/templates/email`
 成功响应（`EmailTemplate[]`，**无分页**）：
 
 ```json
@@ -73,7 +73,7 @@
 | `isActive` | boolean | 启用与否（false 时业务侧引用会被拒绝）。 |
 | `smtpProviderId` | string \| null | 绑定的 SMTP 渠道 `id`；`null` 表示使用默认渠道。 |
 
-### 新建 `POST /api/admin/notice/templates/email` （`CreateEmailTemplatePayload`）
+### 新建 `POST /admin/notice/templates/email` （`CreateEmailTemplatePayload`）
 
 ```json
 {
@@ -133,7 +133,7 @@ onMounted → useEmailTemplateList.run() + useSmtpList.run()
 
 ```
 
-### 启停 `PATCH /api/admin/notice/templates/email/{id}/active`
+### 启停 `PATCH /admin/notice/templates/email/{id}/active`
 
 ```json
 { "active": false }
@@ -144,7 +144,7 @@ onMounted → useEmailTemplateList.run() + useSmtpList.run()
 
 > 启停不会写入新版本（不算"内容变更"），但 `updatedAtUtc` 会刷新。
 
-### 删除 `DELETE /api/admin/notice/templates/email/{id}`
+### 删除 `DELETE /admin/notice/templates/email/{id}`
 
 软删（00-conventions 第 9 节）。成功响应：`204 No Content`。
 
@@ -161,6 +161,6 @@ onMounted → useEmailTemplateList.run() + useSmtpList.run()
 
 ## 备注
 
-- 占位符语法约定 Mustache：`{{variable}}`；业务侧调用 `/api/notifications` 发送时通过 `templateData` 传值。
+- 占位符语法约定 Mustache：`{{variable}}`；业务侧调用 `/notifications` 发送时通过 `templateData` 传值。
 - 列表不分页是因为模板数量量级低（通常 < 100 条）；若未来超出再补 `?page=&pageSize=`。
 - `content` 子对象设计与 14-edit 的 revisions 项形状保持一致 —— 每条 revision 也是 `{ content: { subject, body, isHtml }, change: {...} }`，便于前端"回填旧版本到当前表单"时直接 `form.content = revision.content` 整段赋值。

@@ -6,7 +6,7 @@ import {
 } from '@/shared/lib/epoch';
 
 // 注意：本模块不维护权限码全集。权限目录的唯一来源是
-// GET /api/admin/staff/permissions（Keystone staff_permissions 表）；
+// GET /admin/staff/permissions（Keystone staff_permissions 表）；
 // 各产品（Yomi 等）启动时经 RegisterPermissionCatalogAsync 自注册自己的码与描述。
 // mock 模式的样例全集在 services/mock/mockPermissions.ts。
 
@@ -73,7 +73,7 @@ export const defaultStaffListFilter = (): StaffListFilter => ({
 });
 
 // ---------------------------------------------------------------------------
-// 权限树模型（角色编辑页）：目录来自 GET /api/admin/staff/permissions，
+// 权限树模型（角色编辑页）：目录来自 GET /admin/staff/permissions，
 // 前端按码结构解析成 域 → 资源 → 操作 三级树；下面的 label 映射只负责翻译，
 // 出现未知码时自动降级为按码渲染，不会丢权限。
 // ---------------------------------------------------------------------------

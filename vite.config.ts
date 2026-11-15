@@ -17,17 +17,25 @@ export default defineConfig(({ mode }) => {
     return undefined;
   }
 
-  // 与 Gateway 路由前缀（Discovery:Gateway:Routes）对齐：
-  //   /api/**     → BFF + Keystone /api/user
+  // 与平台网关的路由前缀对齐（各服务在代码里声明，见 Meeko.Platform 的 XxxGatewayRoutes）。
+  // 平台的地址不带 /api：域名已经是 api.meeko.top。接口的第一段和页面路由可能同名（/billing、/admin），
+  // 所以整页刷新（Accept: text/html）不代理，交给前端路由。
+  //   /admin/**、/views/**         → 后台接口和 Bff 的只读视图
+  //   /billing/**、/storage/**、/notifications/**、/user/**、/status → 各领域服务
   //   /auth/**    → Keystone（匿名登录/注册/刷新）
   //   /staff/**   → Keystone（staff 登录）
   //   /me/**      → Keystone（当前用户自助）
   //   /yomi/**  → Yomi 产品门面（前端页面路由仍是 /yomi/*，不经代理）
   //   /tavern/**  → Tavern 产品门面
   //   /toapi/**   → ToApi 产品门面（Meeko.ToApi 控制面）
-  // 旧的 /accounts、/iam 已并入 /api/admin/**，不再需要独立 proxy 条目。
   const proxyRules = {
-    '/api':     { target: gatewayTarget, changeOrigin: true },
+    '/admin':         { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
+    '/views':         { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
+    '/billing':       { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
+    '/storage':       { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
+    '/notifications': { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
+    '/user':          { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
+    '/status':        { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
     '/auth':    { target: gatewayTarget, changeOrigin: true },
     '/staff':   { target: gatewayTarget, changeOrigin: true },
     '/me':      { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },

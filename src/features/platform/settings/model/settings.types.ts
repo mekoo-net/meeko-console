@@ -14,7 +14,7 @@ export const captchaProviderSchema = z.enum([
 ]);
 export type CaptchaProvider = z.infer<typeof captchaProviderSchema>;
 
-/** Staff 后台：注册/登录策略（GET/PUT /api/admin/platform/auth/setting）。 */
+/** Staff 后台：注册/登录策略（GET/PUT /admin/platform/auth/setting）。 */
 export const authSettingsAdminSchema = z.object({
   registrationEnabled: z.boolean(),
   passwordLogin: z.boolean(),
@@ -41,7 +41,7 @@ export const updateAuthSettingsSchema = z.object({
 
 export type UpdateAuthSettingsInput = z.infer<typeof updateAuthSettingsSchema>;
 
-/** Staff 后台：邮箱策略（GET/PUT /api/admin/platform/email/setting）。 */
+/** Staff 后台：邮箱策略（GET/PUT /admin/platform/email/setting）。 */
 export const emailSettingsAdminSchema = z.object({
   emailSuffixRestrictionEnabled: z.boolean(),
   allowedEmailSuffixes: z.array(z.string()),

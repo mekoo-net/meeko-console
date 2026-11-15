@@ -183,12 +183,14 @@ function buildListQuery(input: ListAccountsInput): string {
   return params.toString();
 }
 
-// 路径分两类：
-//   /accounts/current         —— Keystone 用户自助（当前登录账户），由 Keystone 直接处理
-//   /api/admin/accounts/**    —— BFF 后台聚合（StaffOnly），由 BFF 调下游 Keystone
-//   /api/admin/iam/users/**   —— 同上
-const ADMIN_ACCOUNTS = '/api/admin/accounts';
-const ADMIN_IAM_USERS = '/api/admin/iam/users';
+// 路径分四类：
+//   /accounts/current              —— Keystone 用户自助（当前登录账户）
+//   /views/admin/accounts/**   —— Bff 的只读视图：账户列表和详情，由 Keystone 和 Billing 的数据拼出来
+//   /admin/accounts/**         —— 对账户的写操作（状态、成就、邀请人、返佣比例）
+//   /admin/iam/users/**        —— Keystone 自己的后台接口
+const ADMIN_ACCOUNT_VIEWS = '/views/admin/accounts';
+const ADMIN_ACCOUNTS = '/admin/accounts';
+const ADMIN_IAM_USERS = '/admin/iam/users';
 
 export class AccountAdminHttpAdapter implements AccountAdminPort {
   async getCurrentAccount(): Promise<AppResult<Account>> {
@@ -198,7 +200,7 @@ export class AccountAdminHttpAdapter implements AccountAdminPort {
   }
 
   async listAccounts(input: ListAccountsInput): Promise<AppResult<ListAccountsOutput>> {
-    const res = await apiFetch<AccountAdminListWire>(`${ADMIN_ACCOUNTS}?${buildListQuery(input)}`);
+    const res = await apiFetch<AccountAdminListWire>(`${ADMIN_ACCOUNT_VIEWS}?${buildListQuery(input)}`);
     if (!res.success) return res;
 
     const items: Account[] = [];
@@ -211,7 +213,7 @@ export class AccountAdminHttpAdapter implements AccountAdminPort {
   }
 
   async getAccount(uid: string): Promise<AppResult<Account>> {
-    const res = await apiFetch<unknown>(`${ADMIN_ACCOUNTS}/${encodeURIComponent(uid)}`);
+    const res = await apiFetch<unknown>(`${ADMIN_ACCOUNT_VIEWS}/${encodeURIComponent(uid)}`);
     if (!res.success) return res;
     return parseAccount(res.data);
   }

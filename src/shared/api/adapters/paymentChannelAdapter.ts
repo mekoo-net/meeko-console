@@ -9,7 +9,7 @@ import type {
 } from '@/features/platform/billing/model/paymentChannel.types';
 import type { PaymentChannelPort } from '@/features/platform/billing/services/ports/paymentChannelPort';
 
-const BASE = '/api/admin/billing/channels';
+const BASE = '/admin/billing/channels';
 
 type ApiChannelDto = {
   id: number;

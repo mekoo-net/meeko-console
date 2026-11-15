@@ -31,13 +31,13 @@
 
 | 业务动作 | Port 方法 | HTTP | REST 端点 |
 | --- | --- | --- | --- |
-| 平台级全量账单 | `listBills` | GET | `/api/billing/bills` |
-| 取单条账单详情 | `getBill(id)` | GET | `/api/billing/bills/{id}` |
-| 账户辅助查询（前端按 UID/邮箱/手机过滤显示） | `accountAdminPort.listAccounts` | GET | `/api/admin/accounts` |
+| 平台级全量账单 | `listBills` | GET | `/views/admin/billing/bills` |
+| 取单条账单详情 | `getBill(id)` | GET | `/views/admin/billing/bills/{id}` |
+| 账户辅助查询（前端按 UID/邮箱/手机过滤显示） | `accountAdminPort.listAccounts` | GET | `/views/admin/accounts` |
 
 ## 请求 / 响应
 
-### `GET /api/billing/bills`
+### `GET /views/admin/billing/bills`
 查询参数：
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -108,7 +108,7 @@
 | `owner.accountUid` | string | 主账户 userId（**钱归它扣**，计费主体）。 |
 | `operator.accountUid` | string | 实操账户 userId（主账户 / IAM 子账户）。**与 owner 拆成两个对象**：一是双账户语义独立，二是未来要扩 `operator.iamUserUid` 区分席位级时无侵入。 |
 | `owner.contact` / `operator.contact` | object \| null | 账户身份与联系信息，由 BFF 按 uid 批量 enrich，统一嵌套 **`AccountContactDto`**：`{ uid, displayName, email, phone, accountType }`。**硬规范**：账户身份一律走此嵌套对象，不再展平成 `owner.displayName` / `owner.email` / `owner.phone`。 |
-| `business` | object | `{ productCode }`；`productCode` 为扣费时快照（关联 `/api/admin/billing/products` 的 `code`）；无产品归属时为 `null`。 |
+| `business` | object | `{ productCode }`；`productCode` 为扣费时快照（关联 `/admin/billing/products` 的 `code`）；无产品归属时为 `null`。 |
 | `subType` | enum | `prepaid`（订阅 / 一次性订单）/ `usage`（按量）。 |
 | `status` | enum | 见下表。 |
 | `amount` | object | 金额族：`{ original, actual, currency, balanceAfter }`。`balanceAfter` 只在 `status ∈ {completed, partial_refunded}` 时非 null。 |
@@ -133,7 +133,7 @@
 ### 驳回原因码（`reversal.code`）
 `duplicate_charge` / `metering_error` / `service_unavailable` / `customer_compensation` / `manual_correction`。
 
-### 单条详情 `GET /api/billing/bills/{id}`
+### 单条详情 `GET /views/admin/billing/bills/{id}`
 返回单个 Bill，结构与列表元素一致。用于深链 `?focus=BL20260531000001234`、客服侧排障。
 
 ## 交互流程

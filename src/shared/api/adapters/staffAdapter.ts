@@ -96,7 +96,7 @@ export class StaffHttpAdapter implements StaffPort {
     pageSize: number;
     filter: StaffListFilter;
   }): Promise<AppResult<ListStaffPage>> {
-    const res = await request<StaffListWire>('/api/admin/staff', {
+    const res = await request<StaffListWire>('/admin/staff', {
       query: buildStaffQuery(input.filter, input.page, input.pageSize),
     });
     if (!res.success) return res;
@@ -105,7 +105,7 @@ export class StaffHttpAdapter implements StaffPort {
   }
 
   async createStaff(input: CreateStaffInput): Promise<AppResult<StaffUser>> {
-    const res = await request<Record<string, unknown>>('/api/admin/staff', {
+    const res = await request<Record<string, unknown>>('/admin/staff', {
       method: 'POST',
       body: {
         username: input.username,
@@ -120,7 +120,7 @@ export class StaffHttpAdapter implements StaffPort {
   }
 
   async updateStaff(uid: string, input: UpdateStaffInput): Promise<AppResult<StaffUser>> {
-    const res = await request<Record<string, unknown>>(`/api/admin/staff/${uid}`, {
+    const res = await request<Record<string, unknown>>(`/admin/staff/${uid}`, {
       method: 'PATCH',
       body: input,
     });
@@ -129,7 +129,7 @@ export class StaffHttpAdapter implements StaffPort {
   }
 
   async setStaffStatus(uid: string, active: boolean): Promise<AppResult<StaffUser>> {
-    const res = await request<Record<string, unknown>>(`/api/admin/staff/${uid}/status`, {
+    const res = await request<Record<string, unknown>>(`/admin/staff/${uid}/status`, {
       method: 'PATCH',
       body: { active },
     });
@@ -138,7 +138,7 @@ export class StaffHttpAdapter implements StaffPort {
   }
 
   async resetStaffPassword(uid: string, newPassword: string): Promise<AppResult<StaffUser>> {
-    const res = await request<Record<string, unknown>>(`/api/admin/staff/${uid}/reset/password`, {
+    const res = await request<Record<string, unknown>>(`/admin/staff/${uid}/reset/password`, {
       method: 'POST',
       body: { newPassword },
     });
@@ -147,7 +147,7 @@ export class StaffHttpAdapter implements StaffPort {
   }
 
   async changeStaffRole(uid: string, roleId: string): Promise<AppResult<StaffUser>> {
-    const res = await request<Record<string, unknown>>(`/api/admin/staff/${uid}/role`, {
+    const res = await request<Record<string, unknown>>(`/admin/staff/${uid}/role`, {
       method: 'PATCH',
       body: { roleId },
     });
@@ -161,20 +161,20 @@ export class StaffHttpAdapter implements StaffPort {
       pageSize: input?.pageSize ?? 20,
     };
     if (input?.keyword?.trim()) query.keyword = input.keyword.trim();
-    const res = await request<{ items: unknown[]; total: number }>('/api/admin/staff/roles', { query });
+    const res = await request<{ items: unknown[]; total: number }>('/admin/staff/roles', { query });
     if (!res.success) return res;
     const items = res.data.items.map((row) => mapStaffRoleListItem(row as Record<string, unknown>));
     return ok({ items, total: res.data.total });
   }
 
   async getRole(id: string): Promise<AppResult<StaffRole>> {
-    const res = await request<Record<string, unknown>>(`/api/admin/staff/roles/${id}`);
+    const res = await request<Record<string, unknown>>(`/admin/staff/roles/${id}`);
     if (!res.success) return res;
     return ok(mapStaffRole(res.data));
   }
 
   async createRole(input: CreateRoleInput): Promise<AppResult<StaffRole>> {
-    const res = await request<Record<string, unknown>>('/api/admin/staff/roles', {
+    const res = await request<Record<string, unknown>>('/admin/staff/roles', {
       method: 'POST',
       body: input,
     });
@@ -183,7 +183,7 @@ export class StaffHttpAdapter implements StaffPort {
   }
 
   async updateRole(id: string, input: UpdateRoleInput): Promise<AppResult<StaffRole>> {
-    const res = await request<Record<string, unknown>>(`/api/admin/staff/roles/${id}`, {
+    const res = await request<Record<string, unknown>>(`/admin/staff/roles/${id}`, {
       method: 'PUT',
       body: input,
     });
@@ -192,13 +192,13 @@ export class StaffHttpAdapter implements StaffPort {
   }
 
   async deleteRole(id: string): Promise<AppResult<void>> {
-    const res = await request<void>(`/api/admin/staff/roles/${id}`, { method: 'DELETE' });
+    const res = await request<void>(`/admin/staff/roles/${id}`, { method: 'DELETE' });
     if (!res.success) return fail(res.error);
     return ok(undefined);
   }
 
   async listPermissionCatalog(): Promise<AppResult<PermissionCatalogItem[]>> {
-    const res = await request<unknown[]>('/api/admin/staff/permissions');
+    const res = await request<unknown[]>('/admin/staff/permissions');
     if (!res.success) return res;
     return ok(res.data.map((row) => mapPermission(row as Record<string, unknown>)));
   }

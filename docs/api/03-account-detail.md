@@ -14,15 +14,15 @@
 
 | 业务动作 | Port 方法 | HTTP | REST 端点 |
 | --- | --- | --- | --- |
-| 取单个账户（**详情，含 achievements / oauthBindings / wallet**） | `accountAdminPort.getAccount(uid)` | GET | `/api/admin/accounts/{uid}` |
-| 修改账户元数据（name / slug / description） | `accountAdminPort.updateAccount(uid, payload)` | PATCH | `/api/admin/accounts/{uid}` |
-| 切换启停 | `accountAdminPort.setAccountStatus(uid, status)` | PATCH | `/api/admin/accounts/{uid}/status` |
-| 授予勋章（成功响应即最新 `Account`） | `accountAdminPort.grantAchievement(uid, code)` | POST | `/api/admin/accounts/{uid}/achievements` |
-| 撤销勋章（成功响应即最新 `Account`） | `accountAdminPort.revokeAchievement(uid, code)` | DELETE | `/api/admin/accounts/{uid}/achievements/{code}` |
-| IAM 子账户列表 | `accountAdminPort.listIamUsers(uid)` | GET | `/api/admin/iam/users?accountUid={uid}` |
-| 新增 IAM 子账户 | `accountAdminPort.createIamUser(uid, payload)` | POST | `/api/admin/iam/users` |
-| 账单 Tab：充值记录 | `billingPort.listRecharges` | GET | `/api/billing/recharges` |
-| 账单 Tab：扣款流水 | `billingPort.listBills` | GET | `/api/billing/bills` |
+| 取单个账户（**详情，含 achievements / oauthBindings / wallet**） | `accountAdminPort.getAccount(uid)` | GET | `/views/admin/accounts/{uid}` |
+| 修改账户元数据（name / slug / description） | `accountAdminPort.updateAccount(uid, payload)` | PATCH | `/admin/accounts/{uid}` |
+| 切换启停 | `accountAdminPort.setAccountStatus(uid, status)` | PATCH | `/admin/accounts/{uid}/status` |
+| 授予勋章（成功响应即最新 `Account`） | `accountAdminPort.grantAchievement(uid, code)` | POST | `/admin/accounts/{uid}/achievements` |
+| 撤销勋章（成功响应即最新 `Account`） | `accountAdminPort.revokeAchievement(uid, code)` | DELETE | `/admin/accounts/{uid}/achievements/{code}` |
+| IAM 子账户列表 | `accountAdminPort.listIamUsers(uid)` | GET | `/admin/iam/users?accountUid={uid}` |
+| 新增 IAM 子账户 | `accountAdminPort.createIamUser(uid, payload)` | POST | `/admin/iam/users` |
+| 账单 Tab：充值记录 | `billingPort.listRecharges` | GET | `/billing/recharges` |
+| 账单 Tab：扣款流水 | `billingPort.listBills` | GET | `/views/admin/billing/bills` |
 
 ## 个人账户简化策略
 
@@ -33,14 +33,14 @@
 | `iamUserCount` | **恒为 `1`**（隐式 IAM 用户） | 真实子用户数 |
 | `owner.iamUserUid` | 隐式 IAM 用户 UID = `account.iamUserUid` | 当前 owner 子用户 UID |
 | 详情页 `IamUsersTab` | **不渲染** | 正常渲染 |
-| `GET /api/admin/iam/users?accountUid={uid}` | 返回 **`[]`** 空数组（隐式用户不暴露） | 正常列表 |
-| `POST /api/admin/iam/users` | **403** `feature_not_available_for_personal` | 正常 |
+| `GET /admin/iam/users?accountUid={uid}` | 返回 **`[]`** 空数组（隐式用户不暴露） | 正常列表 |
+| `POST /admin/iam/users` | **403** `feature_not_available_for_personal` | 正常 |
 
 > 前端在 `AccountDetailView.vue` 用 `account.type === 'organization'` 作为 IAM Tab / 新建按钮的渲染开关；BFF 在 personal 账户的写接口上做硬拒绝（不要静默吞掉）。
 
 ## 请求 / 响应（核心）
 
-### `GET /api/admin/accounts/{uid}`
+### `GET /views/admin/accounts/{uid}`
 **详情 = 重投影**：在 [`02-account-list.md`](./02-account-list.md) 的轻投影字段基础上，**一次性**附带详情专属字段（`achievements`、`oauthBindings`、`updatedAtUtc`、`owner.iamUserUid`、`owner.phone`、完整 `wallet` 快照等）。进入详情页**只发一次 `getAccount`**，徽章 / OAuth 等无需再走子接口。
 成功响应：
 
@@ -94,7 +94,7 @@
 | `achievements[]` | Achievement[] | 已授予勋章；空数组 = 无。**与 `AccountAchievementsCard` 直绑**，进页面即渲染，无需再走授勋专用读接口。 |
 | `oauthBindings[]` | OAuthBinding[] | OAuth 绑定关系；空数组 = 未绑定。 |
 
-### `PATCH /api/admin/accounts/{uid}` （`UpdateAccountPayload`）
+### `PATCH /admin/accounts/{uid}` （`UpdateAccountPayload`）
 修改账户元数据（**不含**状态切换 / 勋章 / IAM —— 这些是独立动作，走专用端点）。
 
 ```json
@@ -112,10 +112,10 @@
 | `slug` | string | 否 | URL 友好，组织域唯一 |
 | `description` | string \| null | 否 | 内部备注，可清空 |
 
-> 后续如需扩"修改 owner 邮箱 / 电话"等敏感字段，建议**走独立端点**（如 `POST /api/admin/accounts/{uid}/transfer-owner`）—— 涉及多方协议与二次校验，不应混在通用 PATCH 里。
+> 后续如需扩"修改 owner 邮箱 / 电话"等敏感字段，建议**走独立端点**（如 `POST /admin/accounts/{uid}/transfer-owner`）—— 涉及多方协议与二次校验，不应混在通用 PATCH 里。
 成功响应：`200 OK` + 更新后的 `Account` 完整体。
 
-### `PATCH /api/admin/accounts/{uid}/status`
+### `PATCH /admin/accounts/{uid}/status`
 请求体：
 
 ```json
@@ -126,7 +126,7 @@
 `status` 仅允许 `active` / `suspended`（不允许通过 API 改为 `deleted`，删除走专用流程）。
 成功返回更新后的 `Account` 完整体（用于前端就地刷新）。
 
-### `POST /api/admin/accounts/{uid}/achievements`
+### `POST /admin/accounts/{uid}/achievements`
 请求体：
 
 ```json
@@ -138,10 +138,10 @@
 - 已存在视为**幂等**成功。
 成功返回更新后的 `Account`。
 
-### `DELETE /api/admin/accounts/{uid}/achievements/{code}`
+### `DELETE /admin/accounts/{uid}/achievements/{code}`
 无请求体。`code` 不存在视为幂等成功，仍返回 `Account`。
 
-### `GET /api/admin/iam/users?accountUid={uid}` （listIamUsers）
+### `GET /admin/iam/users?accountUid={uid}` （listIamUsers）
 > 仅 organization 账户调用；personal 账户走该端点时 BFF 直接返回 `[]`（隐式 IAM 用户不暴露，详见上文「个人账户简化策略」）。前端在 personal 账户上不渲染 `IamUsersTab`，因此通常也不会发出此请求。
 响应 `IamUser[]`：
 
@@ -161,7 +161,7 @@
 
 ```
 
-### `POST /api/admin/iam/users` （createIamUser）
+### `POST /admin/iam/users` （createIamUser）
 请求体（`CreateIamUserPayload`）：
 
 ```json
@@ -183,9 +183,9 @@
 成功返回创建后的 `IamUser`。
 
 ### Billing 域接口（详见 [`04-billing-recharges.md`](./04-billing-recharges.md) 与 [`05-billing-bills.md`](./05-billing-bills.md)）
-- `GET /api/billing/businesses?accountUid={uid}&status=opened|paused|stopped|all`
-- `GET /api/billing/recharges?accountUid={uid}&provider=&status=&fromUtc=&toUtc=&page=&pageSize=`
-- `GET /api/billing/bills?accountUid={uid}&business=&subType=&status=&fromUtc=&toUtc=&page=&pageSize=`
+- `GET /billing/businesses?accountUid={uid}&status=opened|paused|stopped|all`
+- `GET /billing/recharges?accountUid={uid}&provider=&status=&fromUtc=&toUtc=&page=&pageSize=`
+- `GET /views/admin/billing/bills?accountUid={uid}&business=&subType=&status=&fromUtc=&toUtc=&page=&pageSize=`
 业务实例响应（`BusinessInstance[]`，**不分页**，单账户通常 <50 条）：
 
 ```json

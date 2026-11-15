@@ -18,7 +18,7 @@ import type {
 } from '@/features/platform/storage/model/storageObject.types';
 import type { StorageAdminPort } from '@/features/platform/storage/services/ports/storageAdminPort';
 
-const BASE = '/api/admin/storage/backends';
+const BASE = '/admin/storage/backends';
 
 export class StorageAdminHttpAdapter implements StorageAdminPort {
   async listBackends(): Promise<AppResult<StorageBackendDto[]>> {
@@ -26,11 +26,11 @@ export class StorageAdminHttpAdapter implements StorageAdminPort {
   }
 
   async getOverview(): Promise<AppResult<StorageOverview>> {
-    return request<StorageOverview>('/api/admin/storage/overview');
+    return request<StorageOverview>('/admin/storage/overview');
   }
 
   async listObjects(params: ListStorageObjectsParams): Promise<AppResult<StorageObjectList>> {
-    return request<StorageObjectList>('/api/admin/storage/objects', {
+    return request<StorageObjectList>('/admin/storage/objects', {
       query: {
         page: params.page,
         pageSize: params.pageSize,
@@ -46,7 +46,7 @@ export class StorageAdminHttpAdapter implements StorageAdminPort {
   }
 
   async browseObjects(params: BrowseStorageObjectsParams): Promise<AppResult<StorageBrowseResult>> {
-    return request<StorageBrowseResult>('/api/admin/storage/browse', {
+    return request<StorageBrowseResult>('/admin/storage/browse', {
       query: {
         prefix: params.prefix,
         page: params.page,
@@ -57,7 +57,7 @@ export class StorageAdminHttpAdapter implements StorageAdminPort {
   }
 
   async getObjectRefs(storageKey: string): Promise<AppResult<StorageObjectRefsResult>> {
-    return request<StorageObjectRefsResult>('/api/admin/storage/objects/refs', {
+    return request<StorageObjectRefsResult>('/admin/storage/objects/refs', {
       query: { storageKey },
     });
   }

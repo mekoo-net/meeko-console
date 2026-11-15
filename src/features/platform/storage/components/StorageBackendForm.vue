@@ -174,7 +174,7 @@ defineExpose({
       <el-form-item label="Static 基址" required>
         <el-input
           v-model="form.cdnStaticBaseUrl"
-          placeholder="localhost:7000/api/storage/files"
+          placeholder="localhost:7000/storage/files"
         />
       </el-form-item>
       <el-form-item label="Store 基址">

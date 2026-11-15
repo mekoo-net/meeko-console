@@ -42,10 +42,10 @@ import { request } from '@/shared/api/httpClient';
 import { asEpochMillis, asEpochMillisNullable } from '@/shared/lib/epoch';
 import { mapAccountContact } from '@/features/platform/accounts/model/account.types';
 
-const TEMPLATES = '/api/admin/billing/voucher/templates';
-const ACTIVITIES = '/api/admin/billing/voucher/activities';
-const GRANT_RULES = '/api/admin/billing/voucher/grant';
-const VOUCHERS = '/api/admin/billing/vouchers';
+const TEMPLATES = '/admin/billing/voucher/templates';
+const ACTIVITIES = '/admin/billing/voucher/activities';
+const GRANT_RULES = '/admin/billing/voucher/grant';
+const VOUCHERS = '/admin/billing/vouchers';
 
 type Raw = Record<string, unknown>;
 

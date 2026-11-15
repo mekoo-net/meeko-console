@@ -16,7 +16,7 @@ import { request } from '@/shared/api/httpClient';
 
 export class ApiKeyHttpAdapter implements ApiKeyPort {
   async list(input: { page: number; pageSize: number }): Promise<AppResult<ListApiKeyPage>> {
-    const res = await request<{ items: unknown[]; total: number }>('/api/admin/platform/apikeys', {
+    const res = await request<{ items: unknown[]; total: number }>('/admin/platform/apikeys', {
       query: { page: input.page, pageSize: input.pageSize },
     });
     if (!res.success) return res;
@@ -25,14 +25,14 @@ export class ApiKeyHttpAdapter implements ApiKeyPort {
   }
 
   async listScopes(): Promise<AppResult<PermissionCatalogItem[]>> {
-    const res = await request<unknown>('/api/admin/platform/apikeys/scopes');
+    const res = await request<unknown>('/admin/platform/apikeys/scopes');
     if (!res.success) return res;
     return ok(mapPermissionCatalog(res.data));
   }
 
   async issue(input: IssueApiKeyInput): Promise<AppResult<IssuedApiKey>> {
     const res = await request<{ key: Record<string, unknown>; plaintext: string }>(
-      '/api/admin/platform/apikeys',
+      '/admin/platform/apikeys',
       {
         method: 'POST',
         body: {
@@ -50,7 +50,7 @@ export class ApiKeyHttpAdapter implements ApiKeyPort {
   }
 
   async update(id: string, input: UpdateApiKeyInput): Promise<AppResult<PlatformApiKey>> {
-    const res = await request<Record<string, unknown>>(`/api/admin/platform/apikeys/${id}`, {
+    const res = await request<Record<string, unknown>>(`/admin/platform/apikeys/${id}`, {
       method: 'PUT',
       body: { scopes: input.scopes },
     });
@@ -59,7 +59,7 @@ export class ApiKeyHttpAdapter implements ApiKeyPort {
   }
 
   async revoke(id: string): Promise<AppResult<void>> {
-    const res = await request<void>(`/api/admin/platform/apikeys/${id}`, { method: 'DELETE' });
+    const res = await request<void>(`/admin/platform/apikeys/${id}`, { method: 'DELETE' });
     if (!res.success) return fail(res.error);
     return ok(undefined);
   }

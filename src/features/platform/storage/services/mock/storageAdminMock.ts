@@ -227,7 +227,7 @@ export class StorageAdminMock implements StorageAdminPort {
       region: 'local',
       bucket: 'dev',
       publicEndpoint: null,
-      cdnStaticBaseUrl: 'http://localhost:7000/api/storage/files',
+      cdnStaticBaseUrl: 'http://localhost:7000/storage/files',
       cdnStoreBaseUrl: null,
       accessKeyId: 'local',
       accessKeySecretConfigured: false,

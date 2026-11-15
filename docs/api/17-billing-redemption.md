@@ -55,7 +55,7 @@
 
 ## 充值渠道驱动 `redeem_code`
 
-在 `GET /api/admin/billing/channels/types` 中注册（`allowMultiple = false`，`supportedScenes = ["redeem"]`），配置字段：
+在 `GET /admin/billing/channels/types` 中注册（`allowMultiple = false`，`supportedScenes = ["redeem"]`），配置字段：
 
 | key | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -67,7 +67,7 @@
 
 ## 用户端接口
 
-前缀 `/api/billing/redemption`，需登录（账户用户）。
+前缀 `/billing/redemption`，需登录（账户用户）。
 
 | 业务动作 | HTTP | 端点 | 说明 |
 | --- | --- | --- | --- |
@@ -83,7 +83,7 @@
 
 ## 接口清单
 
-前缀 `/api/admin/billing/redemption`。
+前缀 `/admin/billing/redemption`。
 
 | 业务动作 | Port 方法 | HTTP | 端点 |
 | --- | --- | --- | --- |

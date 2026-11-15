@@ -32,17 +32,17 @@
 ## 接口清单
 | 业务动作 | Port 方法 | HTTP | REST 端点 |
 | --- | --- | --- | --- |
-| 列表已创建实例 | `listChannels` | GET | `/api/admin/billing/channels` |
-| 列表可创建类型 | `listChannelTypes` | GET | `/api/admin/billing/channels/types` |
-| 新建实例 | `createChannel(driverCode, name)` | POST | `/api/admin/billing/channels` |
-| 删除实例 | `deleteChannel(id)` | DELETE | `/api/admin/billing/channels/{id}` |
-| 启停实例 | `setActive(id, active)` | PATCH | `/api/admin/billing/channels/{id}/active` |
-| 取实例配置 schema | `getChannelSchema(id)` | GET | `/api/admin/billing/channels/{id}/schema` |
-| 取实例配置（脱敏） | `getChannelConfig(id)` | GET | `/api/admin/billing/channels/{id}/config` |
-| 保存实例配置 | `saveChannelConfig(id, values)` | PUT | `/api/admin/billing/channels/{id}/config` |
+| 列表已创建实例 | `listChannels` | GET | `/admin/billing/channels` |
+| 列表可创建类型 | `listChannelTypes` | GET | `/admin/billing/channels/types` |
+| 新建实例 | `createChannel(driverCode, name)` | POST | `/admin/billing/channels` |
+| 删除实例 | `deleteChannel(id)` | DELETE | `/admin/billing/channels/{id}` |
+| 启停实例 | `setActive(id, active)` | PATCH | `/admin/billing/channels/{id}/active` |
+| 取实例配置 schema | `getChannelSchema(id)` | GET | `/admin/billing/channels/{id}/schema` |
+| 取实例配置（脱敏） | `getChannelConfig(id)` | GET | `/admin/billing/channels/{id}/config` |
+| 保存实例配置 | `saveChannelConfig(id, values)` | PUT | `/admin/billing/channels/{id}/config` |
 
 ## 请求 / 响应
-### `GET /api/admin/billing/channels`
+### `GET /admin/billing/channels`
 成功响应（`PaymentChannelDto[]`，**仅已创建实例**）：
 
 ```json
@@ -78,7 +78,7 @@
 | `isConfigured` | boolean | 是否已保存过配置；无配置字段的类型（手工）天然为 true。 |
 | `supportedScenes` | string[] | 支持的场景标识。 |
 
-### `GET /api/admin/billing/channels/types`
+### `GET /admin/billing/channels/types`
 返回可创建的类型（`ChannelTypeDto[]`），供「新建实例」选择：
 
 ```json
@@ -104,7 +104,7 @@
 
 > `allowMultiple=false` 且 `instanceCount>0` 的类型（手工入账）在「新建」下拉中禁用。
 
-### `POST /api/admin/billing/channels`
+### `POST /admin/billing/channels`
 请求体：
 
 ```json
@@ -115,11 +115,11 @@
 - 未知 `driverCode` 返回 404 `not_found`。
 - 成功返回新建的 `PaymentChannelDto`。
 
-### `DELETE /api/admin/billing/channels/{id}`
+### `DELETE /admin/billing/channels/{id}`
 - 单例渠道（手工入账）不可删除，返回 400 `validation`。
 - 成功响应：`204 No Content`。
 
-### `PATCH /api/admin/billing/channels/{id}/active`
+### `PATCH /admin/billing/channels/{id}/active`
 请求体：
 
 ```json
@@ -130,7 +130,7 @@
 - 未知 `id` 返回 404 `not_found`。
 - 成功返回更新后的 `PaymentChannelDto`。
 
-### `GET /api/admin/billing/channels/{id}/schema`
+### `GET /admin/billing/channels/{id}/schema`
 返回该实例**所属类型**的配置字段定义（`ChannelConfigSchemaDto`），前端据此渲染表单：
 
 ```json
@@ -154,7 +154,7 @@
 | `required` | boolean | 是否必填。 |
 | `placeholder` / `help` | string? | 占位符 / 帮助文案（可选）。 |
 
-### `GET /api/admin/billing/channels/{id}/config`
+### `GET /admin/billing/channels/{id}/config`
 返回脱敏后的当前配置值（`ChannelConfigValuesDto`），未配置时 `values` 为空对象：
 
 ```json
@@ -170,7 +170,7 @@
 
 > ⚠️ 标记 `isSecret=true` 的字段返回时脱敏（`***` + 末 4 位）。前端回填后若用户未修改，PUT 时把脱敏占位符原样写回即可——服务端会识别占位符并保留原密文。
 
-### `PUT /api/admin/billing/channels/{id}/config`
+### `PUT /admin/billing/channels/{id}/config`
 请求体为扁平 key-value（`Record<string, string>`，键对应 schema 的 `field.key`）：
 
 ```json

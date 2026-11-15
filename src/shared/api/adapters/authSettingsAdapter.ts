@@ -8,7 +8,7 @@ import { request } from '@/shared/api/httpClient';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { asEpochMillis } from '@/shared/lib/epoch';
 
-const BASE = '/api/admin/platform/auth/setting';
+const BASE = '/admin/platform/auth/setting';
 
 function mapAuthSettingsWire(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object') return raw;

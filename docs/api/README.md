@@ -39,22 +39,22 @@
 
 | 业务域 | 前缀 | 说明 |
 | --- | --- | --- |
-| 账户 / IAM 后台 | `/api/admin/accounts`、`/api/admin/iam/users` | BFF 聚合，底层调 Keystone |
-| 计费 | `/api/billing` | 钱包 / 充值；账单流水见 `/api/admin/billing/bills` |
-| 充值渠道（平台配置） | `/api/admin/billing/channels` | 仅 Admin |
-| 兑换码（卡密批次 / 核销追踪） | `/api/admin/billing/redemption` | 仅 Admin |
+| 账户 / IAM 后台 | `/admin/accounts`、`/admin/iam/users` | BFF 聚合，底层调 Keystone |
+| 计费 | `/billing` | 钱包 / 充值；账单流水见 `/views/admin/billing/bills` |
+| 充值渠道（平台配置） | `/admin/billing/channels` | 仅 Admin |
+| 兑换码（卡密批次 / 核销追踪） | `/admin/billing/redemption` | 仅 Admin |
 | DemuxAI 控制面 | `/demux/api/admin/*` | 供应商组目录、模型路由、Vendor、ModelMeta、Pricing |
 | DemuxAI 激活码 | `/demux/api/redemption` | CDK 批量生成 / 列表 / 删除 |
 | DemuxAI 数据面（日志） | `/demux/api/admin/logs` | 用量查询 + 日聚合 stats（KPI 扩展中） |
-| 通知后台 | `/api/admin/notice/templates/email`、`/api/admin/notice/channels/smtp` | 仅 Admin |
-| 通知端点（含 OTP） | `/api/notifications`、`/api/notifications/otp` | 业务端通用 |
+| 通知后台 | `/admin/notice/templates/email`、`/admin/notice/channels/smtp` | 仅 Admin |
+| 通知端点（含 OTP） | `/notifications`、`/notifications/otp` | 业务端通用 |
 
 > 真实路径以 BFF 实际暴露为准；前端通过 `VITE_API_BASE` 拼接绝对地址。
 
 ## 一份请求示例
 
 ```http
-GET /api/admin/accounts?page=1&pageSize=20&type=organization HTTP/1.1
+GET /views/admin/accounts?page=1&pageSize=20&type=organization HTTP/1.1
 Host: api.meeko.example
 Authorization: Bearer <accessToken>
 Accept: application/json

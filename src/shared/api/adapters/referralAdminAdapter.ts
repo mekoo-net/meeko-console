@@ -19,7 +19,7 @@ import { request } from '@/shared/api/httpClient';
 import { asEpochMillis, asEpochMillisNullable } from '@/shared/lib/epoch';
 
 function base(uid: string): string {
-  return `/api/admin/accounts/${encodeURIComponent(uid)}/referral`;
+  return `/admin/accounts/${encodeURIComponent(uid)}/referral`;
 }
 
 function buildPageQuery(input: { page: number; pageSize: number }): string {
@@ -179,8 +179,10 @@ export class ReferralAdminHttpAdapter implements ReferralAdminPort {
     accountUid: string,
     input: { page: number; pageSize: number },
   ): Promise<AppResult<ListReferralInviteesPage>> {
+    // 受邀人列表是 Bff 的跨服务视图（Billing 的返佣加上 Keystone 的账户信息），地址在 /views 下；
+    // 汇总、返佣明细、提现还在 base() 那个地址。
     const res = await request<unknown>(
-      `${base(accountUid)}/invitees?${buildPageQuery(input)}`,
+      `/views/admin/accounts/${encodeURIComponent(accountUid)}/referral/invitees?${buildPageQuery(input)}`,
     );
     if (!res.success) return res;
     return parseInviteesPage(res.data);

@@ -6,7 +6,7 @@ import { useAsyncState } from '@/shared/composables/useAsyncState';
 import type { WalletSnapshot } from '../model/billing.types';
 import { getAccountAdminPort } from '@/features/platform/accounts/services';
 
-/** 管理台钱包数据来自 `GET /api/admin/accounts/{uid}` 的 `wallet` 字段，不走 `/api/billing/wallet`。 */
+/** 管理台钱包数据来自 `GET /views/admin/accounts/{uid}` 的 `wallet` 字段，不走 `/billing/wallet`。 */
 export function useWallet(accountUid: Ref<string | null>) {
   const state = useAsyncState<WalletSnapshot | null, []>(async () => {
     const uid = accountUid.value;

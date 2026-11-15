@@ -24,16 +24,16 @@
 
 | 业务动作 | Port 方法 | HTTP | REST 端点 |
 | --- | --- | --- | --- |
-| 列表 | `listSmtpProviders` | GET | `/api/admin/notice/channels/smtp` |
-| 详情 | `getSmtpProvider(id)` | GET | `/api/admin/notice/channels/smtp/{id}` |
-| 新增 | `createSmtpProvider(payload)` | POST | `/api/admin/notice/channels/smtp` |
-| 更新 | `updateSmtpProvider(id, payload)` | PUT | `/api/admin/notice/channels/smtp/{id}` |
-| 删除 | `deleteSmtpProvider(id)` | DELETE | `/api/admin/notice/channels/smtp/{id}` |
-| 连通测试 | `testSmtpProvider(id, payload)` | POST | `/api/admin/notice/channels/smtp/{id}/test` |
+| 列表 | `listSmtpProviders` | GET | `/admin/notice/channels/smtp` |
+| 详情 | `getSmtpProvider(id)` | GET | `/admin/notice/channels/smtp/{id}` |
+| 新增 | `createSmtpProvider(payload)` | POST | `/admin/notice/channels/smtp` |
+| 更新 | `updateSmtpProvider(id, payload)` | PUT | `/admin/notice/channels/smtp/{id}` |
+| 删除 | `deleteSmtpProvider(id)` | DELETE | `/admin/notice/channels/smtp/{id}` |
+| 连通测试 | `testSmtpProvider(id, payload)` | POST | `/admin/notice/channels/smtp/{id}/test` |
 
 ## 请求 / 响应
 
-### 列表 `GET /api/admin/notice/channels/smtp`
+### 列表 `GET /admin/notice/channels/smtp`
 成功响应（`SmtpProvider[]`，**无分页**）：
 
 ```json
@@ -73,7 +73,7 @@
 
 > ⚠️ `server.password` 不在响应字段中（敏感数据），前端表单使用"留空 = 不变更"语义。
 
-### 新增 `POST /api/admin/notice/channels/smtp` （`CreateSmtpPayload`）
+### 新增 `POST /admin/notice/channels/smtp` （`CreateSmtpPayload`）
 
 ```json
 {
@@ -98,7 +98,7 @@
 
 成功响应：`201 Created` + 完整的 `SmtpProvider`（结构与列表元素一致）。
 
-### 更新 `PUT /api/admin/notice/channels/smtp/{id}` （`UpdateSmtpPayload`）
+### 更新 `PUT /admin/notice/channels/smtp/{id}` （`UpdateSmtpPayload`）
 
 ```json
 {
@@ -129,7 +129,7 @@
 
 > 设置某条 `isDefault=true` 应由 BFF 在事务内将其它行置为 `false`，确保唯一性。
 
-### 删除 `DELETE /api/admin/notice/channels/smtp/{id}`
+### 删除 `DELETE /admin/notice/channels/smtp/{id}`
 成功响应：`204 No Content`。
 
 > 删除后，绑定该渠道的邮件模板会回退到 `isDefault=true` 的默认渠道。
@@ -137,7 +137,7 @@
 > 1. 选择另一个 `isActive=true` 渠道升级为默认；
 > 2. 或返回 `409 conflict` 拒绝删除（推荐，要求用户先指定新默认）。
 
-### 测试 `POST /api/admin/notice/channels/smtp/{id}/test` （`TestSmtpPayload`）
+### 测试 `POST /admin/notice/channels/smtp/{id}/test` （`TestSmtpPayload`）
 
 ```json
 {

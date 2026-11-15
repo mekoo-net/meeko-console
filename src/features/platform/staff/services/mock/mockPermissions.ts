@@ -1,6 +1,6 @@
 /**
  * mock 模式专用的权限码样例（模拟 Keystone staff_permissions 表内容）。
- * 真实环境权限目录来自 GET /api/admin/staff/permissions，由平台 seeder 与
+ * 真实环境权限目录来自 GET /admin/staff/permissions，由平台 seeder 与
  * 各产品（Yomi 等）启动时自注册产生；本文件仅供 StaffMock / mock 登录使用,
  * 业务代码禁止引用。
  */

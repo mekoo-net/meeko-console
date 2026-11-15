@@ -28,7 +28,7 @@ import {
 import type { RedemptionPort } from '@/features/platform/redemption/services/ports/redemptionPort';
 
 /** 平台 BFF：兑换码是 Billing 下「兑换码」充值渠道的卡密管理，不挂产品前缀。契约见 docs/api/17-billing-redemption.md。 */
-const BASE = '/api/admin/billing/redemption';
+const BASE = '/admin/billing/redemption';
 
 interface PageDto {
   items?: unknown[];

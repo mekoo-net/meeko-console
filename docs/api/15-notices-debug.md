@@ -11,7 +11,7 @@
 
 ## 业务定义
 
-> 一站式调试 `/api/notifications` 与 OTP 端点的页面，**直接对接 BFF 业务端通用通知接口**（不仅限 Admin 后台）。
+> 一站式调试 `/notifications` 与 OTP 端点的页面，**直接对接 BFF 业务端通用通知接口**（不仅限 Admin 后台）。
 >
 > 三张卡片对应三类操作：
 >
@@ -23,13 +23,13 @@
 
 | 业务动作 | Port 方法 | HTTP | REST 端点 |
 | --- | --- | --- | --- |
-| 发送通知 | `sendNotification(payload)` | POST | `/api/notifications` |
-| 发送 OTP | `sendOtp(payload)` | POST | `/api/notifications/otp/send` |
-| 校验 OTP | `verifyOtp(payload)` | POST | `/api/notifications/otp/verify` |
+| 发送通知 | `sendNotification(payload)` | POST | `/notifications` |
+| 发送 OTP | `sendOtp(payload)` | POST | `/notifications/otp/send` |
+| 校验 OTP | `verifyOtp(payload)` | POST | `/notifications/otp/verify` |
 
 ## 请求 / 响应
 
-### `POST /api/notifications` （`SendNotificationPayload`）
+### `POST /notifications` （`SendNotificationPayload`）
 
 ```json
 {
@@ -78,7 +78,7 @@
 
 > 封装 `message` 子对象后，未来扩 `message.providerMessageId` / `message.deliveredAtUtc` 时不会改顶层结构。
 
-### `POST /api/notifications/otp/send` （`SendOtpPayload`）
+### `POST /notifications/otp/send` （`SendOtpPayload`）
 
 ```json
 {
@@ -116,7 +116,7 @@
 | `audit.id` | 审计记录主键，**verify 时回传**以便关联同一 send 事件。 |
 | `audit.expiresAtUtc` | OTP 失效时间。 |
 
-### `POST /api/notifications/otp/verify` （`VerifyOtpPayload`）
+### `POST /notifications/otp/verify` （`VerifyOtpPayload`）
 
 ```json
 {

@@ -94,7 +94,7 @@ async function verifyOtp(): Promise<void> {
 
 <template>
   <div class="debug">
-    <PageHeader title="通知调试" description="调用 /api/notifications 与 OTP 端点进行联调。" />
+    <PageHeader title="通知调试" description="调用 /notifications 与 OTP 端点进行联调。" />
 
     <div class="debug__grid">
       <el-card shadow="never">

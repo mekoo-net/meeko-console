@@ -9,7 +9,7 @@ import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { request } from '@/shared/api/httpClient';
 import { asEpochMillis } from '@/shared/lib/epoch';
 
-const BASE = '/api/admin/billing/products';
+const BASE = '/admin/billing/products';
 
 function mapProduct(raw: Record<string, unknown>): BillingProduct {
   return {

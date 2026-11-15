@@ -24,16 +24,16 @@
 ## 接口清单
 | 业务动作 | Port 方法 | HTTP | REST 端点 |
 | --- | --- | --- | --- |
-| 平台级全量充值记录 | `listRecharges` | GET | `/api/billing/recharges` |
-| 单条详情 | `getRecharge(id)` | GET | `/api/billing/recharges/{id}` |
-| **内部入账写入**（Admin / 客服 / 营销系统专用） | `createInternalRecharge(payload)` | POST | `/api/billing/recharges/internal` |
-| 账户辅助查询（按 UID/邮箱/手机过滤显示） | `accountAdminPort.listAccounts` | GET | `/api/admin/accounts` |
+| 平台级全量充值记录 | `listRecharges` | GET | `/billing/recharges` |
+| 单条详情 | `getRecharge(id)` | GET | `/billing/recharges/{id}` |
+| **内部入账写入**（Admin / 客服 / 营销系统专用） | `createInternalRecharge(payload)` | POST | `/billing/recharges/internal` |
+| 账户辅助查询（按 UID/邮箱/手机过滤显示） | `accountAdminPort.listAccounts` | GET | `/views/admin/accounts` |
 
 > **`POST /recharges/internal` 端点的存在理由**：业务定义里明确"`manual` / `cs_compensation` / `marketing_reward` 三类内部入账由客服 / 财务 / 运营触发"，但原 API 只暴露读端点，写链路缺失。封装到独立 `/internal` 路径而非通用 `POST /recharges` 是有意区隔——外部支付（`alipay` / `wechat_pay`）入账是回调驱动、不经此端点。
 
 ## 请求 / 响应
 
-### `GET /api/billing/recharges`
+### `GET /billing/recharges`
 查询参数：
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -97,10 +97,10 @@
 | `createdAtUtc` | ISO8601 | 发起时间。 |
 | `paidAtUtc` | ISO8601 \| null | 入账时间；仅 `paid` 状态必有。 |
 
-### 单条详情 `GET /api/billing/recharges/{id}`
+### 单条详情 `GET /billing/recharges/{id}`
 返回单个 Recharge，结构与列表元素一致。用于深链 `?focus=RC20260531000001234` 与客服排障。
 
-### 内部入账写入 `POST /api/billing/recharges/internal` （`CreateInternalRechargePayload`）
+### 内部入账写入 `POST /billing/recharges/internal` （`CreateInternalRechargePayload`）
 > 仅对 `cs_compensation` / `marketing_reward` / `manual` 三类内部 provider 开放；外部支付（alipay / wechat_pay）入账必须走支付回调，**不能**走此端点（避免绕开三方账实校验）。
 
 ```json

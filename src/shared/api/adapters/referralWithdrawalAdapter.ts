@@ -11,7 +11,7 @@ import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { apiFetch } from '@/shared/api/httpClient';
 import { asEpochMillis, asEpochMillisNullable } from '@/shared/lib/epoch';
 
-const BASE = '/api/admin/referral/withdrawals';
+const BASE = '/admin/referral/withdrawals';
 
 function str(...vals: unknown[]): string | undefined {
   for (const v of vals) {

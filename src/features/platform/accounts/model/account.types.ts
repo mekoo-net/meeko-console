@@ -119,9 +119,9 @@ export const accountSchema = z.object({
   achievements: z.array(achievementSchema).nullish(),
   /** 列表投影：已持有勋章 code（列表 API 仅返回 code，用于筛选/徽章展示）。 */
   achievementCodes: z.array(z.string()).nullish(),
-  /** 列表投影：钱包概要（`GET /api/admin/accounts`）。 */
+  /** 列表投影：钱包概要（`GET /views/admin/accounts`）。 */
   walletSummary: walletSummarySchema.nullable().optional(),
-  /** 详情投影：完整钱包（`GET /api/admin/accounts/{uid}`）。 */
+  /** 详情投影：完整钱包（`GET /views/admin/accounts/{uid}`）。 */
   wallet: accountWalletSchema.nullable().optional(),
   /** 邀请人（返利关系）。 */
   inviter: referralInviterSchema.nullable().optional(),

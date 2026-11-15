@@ -18,10 +18,10 @@ export interface ListAccountsOutput {
 /**
  * 账户域服务端口。View → Composable → Port → MockAdapter | HttpAdapter（日后）。
  *
- * 对应 BFF 后台聚合层（`/api/admin/**`，StaffOnly）：
- * - `GET /api/admin/accounts`        → listAccounts
- * - `GET /api/admin/accounts/{uid}`  → getAccount
- * - `GET /api/admin/iam/users`、`POST /api/admin/iam/users` → listIamUsers / createIamUser
+ * 对应的后台接口（都是 StaffOnly）：
+ * - `GET /views/admin/accounts`        → listAccounts（Bff 的只读视图）
+ * - `GET /views/admin/accounts/{uid}`  → getAccount（同上）
+ * - `GET /admin/iam/users`、`POST /admin/iam/users` → listIamUsers / createIamUser（Keystone）
  *
  * 真接 BFF 时只需实现同名方法的 HttpAdapter，并对结果 zod 校验后返回 ok/fail。
  */

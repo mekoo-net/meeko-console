@@ -13,21 +13,21 @@ import type { NotificationsPort } from '@/features/platform/notices/services/por
 
 export class NotificationsHttpAdapter implements NotificationsPort {
   async sendNotification(payload: SendNotificationPayload): Promise<AppResult<SendNotificationResponse>> {
-    return request<SendNotificationResponse>('/api/notifications', {
+    return request<SendNotificationResponse>('/notifications', {
       method: 'POST',
       body: payload,
     });
   }
 
   async sendOtp(payload: SendOtpPayload): Promise<AppResult<SendOtpResponse>> {
-    return request<SendOtpResponse>('/api/notifications/otp/send', {
+    return request<SendOtpResponse>('/notifications/otp/send', {
       method: 'POST',
       body: payload,
     });
   }
 
   async verifyOtp(payload: VerifyOtpPayload): Promise<AppResult<VerifyOtpResponse>> {
-    return request<VerifyOtpResponse>('/api/notifications/otp/verify', {
+    return request<VerifyOtpResponse>('/notifications/otp/verify', {
       method: 'POST',
       body: payload,
     });

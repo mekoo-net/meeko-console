@@ -7,7 +7,7 @@ import type { EmailSettingsPort } from '@/features/platform/settings/services/po
 import { request } from '@/shared/api/httpClient';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 
-const BASE = '/api/admin/platform/email/setting';
+const BASE = '/admin/platform/email/setting';
 
 function parseSettings(value: unknown): AppResult<EmailSettingsAdmin> {
   const r = emailSettingsAdminSchema.safeParse(value);

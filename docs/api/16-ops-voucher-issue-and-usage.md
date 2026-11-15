@@ -15,7 +15,7 @@
 
 | 前缀 | 成功体 | 失败 |
 |---|---|---|
-| `/api/admin/*`（BFF） | HTTP 200，**直接是资源 JSON** | RFC 7807 ProblemDetails |
+| `/admin/*`（BFF） | HTTP 200，**直接是资源 JSON** | RFC 7807 ProblemDetails |
 | `/demux/api/*`（Demux） | `{ "success": true, "data": … }` | HTTP 仍 200，`success: false` + `message` |
 
 账户 / 模板 / 日志的 long 主键在 JSON 里是 **字符串**。日志时间参数是 **Unix 毫秒**。
@@ -33,21 +33,21 @@
 **按 UID（精确）**
 
 ```http
-GET /api/admin/accounts?accountUid=100000001&page=1&pageSize=20
+GET /views/admin/accounts?accountUid=100000001&page=1&pageSize=20
 Authorization: Bearer <token>
 ```
 
 或详情：
 
 ```http
-GET /api/admin/accounts/100000001
+GET /views/admin/accounts/100000001
 Authorization: Bearer <token>
 ```
 
 **按邮箱 / 手机 / 昵称（模糊，contains，大小写不敏感）**
 
 ```http
-GET /api/admin/accounts?contactKeyword=user@example.com&page=1&pageSize=20
+GET /views/admin/accounts?contactKeyword=user@example.com&page=1&pageSize=20
 Authorization: Bearer <token>
 ```
 
@@ -90,7 +90,7 @@ Authorization: Bearer <token>
 ### 2.1 列出券模板
 
 ```http
-GET /api/admin/billing/voucher/templates?includeArchived=false&page=1&pageSize=50
+GET /admin/billing/voucher/templates?includeArchived=false&page=1&pageSize=50
 Authorization: Bearer <token>
 ```
 
@@ -108,7 +108,7 @@ Authorization: Bearer <token>
 ### 2.2 发券
 
 ```http
-POST /api/admin/billing/voucher/templates/{templateId}/issue
+POST /admin/billing/voucher/templates/{templateId}/issue
 Authorization: Bearer <token>
 Content-Type: application/json
 
@@ -139,7 +139,7 @@ Content-Type: application/json
 ### 2.3 核对该账户已有券
 
 ```http
-GET /api/admin/billing/vouchers?accountUid=100000001&page=1&pageSize=20
+GET /admin/billing/vouchers?accountUid=100000001&page=1&pageSize=20
 Authorization: Bearer <token>
 ```
 
@@ -243,18 +243,18 @@ TO=$(($(date -u +%s) * 1000))
 
 # 1) 邮箱 → UID
 UID=$(curl -sS -H "Authorization: Bearer $TOKEN" \
-  "$BASE/api/admin/accounts?contactKeyword=$EMAIL&page=1&pageSize=20" \
+  "$BASE/admin/accounts?contactKeyword=$EMAIL&page=1&pageSize=20" \
   | jq -r '.items[0].uid')
 
 # 2) 选一张 Active 模板
 TID=$(curl -sS -H "Authorization: Bearer $TOKEN" \
-  "$BASE/api/admin/billing/voucher/templates?page=1&pageSize=50" \
+  "$BASE/admin/billing/voucher/templates?page=1&pageSize=50" \
   | jq -r '.items[] | select(.status==1) | .id' | head -n1)
 
 # 3) 下发（换 batchToken 才会再发一张）
 curl -sS -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d "{\"accountUids\":[\"$UID\"],\"batchToken\":\"ops-$(date +%Y%m%d)\"}" \
-  "$BASE/api/admin/billing/voucher/templates/$TID/issue"
+  "$BASE/admin/billing/voucher/templates/$TID/issue"
 
 # 4) 用量明细
 curl -sS -H "Authorization: Bearer $TOKEN" \

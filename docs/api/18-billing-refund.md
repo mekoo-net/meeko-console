@@ -17,7 +17,7 @@
 4. 每笔退款在钱包流水里记一笔扣款，挂在退款单下（`reference_kind = BalanceRefund`），流水备注写明实退金额与折损比例。
    退款不进账单列表：账单只收扣费与冲正扣费的退款。
 
-## `POST /api/admin/billing/refunds`
+## `POST /admin/billing/refunds`
 
 权限 `billing.recharge.write`。
 

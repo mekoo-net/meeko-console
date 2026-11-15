@@ -17,8 +17,8 @@ import type {
 } from '@/features/platform/notices/model/smtpProvider.types';
 import type { NoticeAdminPort } from '@/features/platform/notices/services/ports/noticeAdminPort';
 
-const SMTP = '/api/admin/notice/channels/smtp';
-const TPL = '/api/admin/notice/templates/email';
+const SMTP = '/admin/notice/channels/smtp';
+const TPL = '/admin/notice/templates/email';
 
 export class NoticeAdminHttpAdapter implements NoticeAdminPort {
   async listEmailTemplates(): Promise<AppResult<EmailTemplateDto[]>> {

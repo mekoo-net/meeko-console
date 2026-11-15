@@ -250,7 +250,7 @@ export class BillingHttpAdapter implements BillingPort {
     _accountUid: Uid,
     input: CreateRechargeInput,
   ): Promise<AppResult<RechargeIntent>> {
-    return request<RechargeIntent>('/api/billing/wallet/recharge', {
+    return request<RechargeIntent>('/billing/wallet/recharge', {
       method: 'POST',
       body: input,
     });
@@ -262,7 +262,7 @@ export class BillingHttpAdapter implements BillingPort {
     filter: ListRechargesFilter;
   }): Promise<AppResult<ListRechargesPage>> {
     const { page, pageSize, filter } = input;
-    const res = await request<RechargeListWire>('/api/billing/recharges', {
+    const res = await request<RechargeListWire>('/billing/recharges', {
       query: {
         page,
         pageSize,
@@ -284,7 +284,7 @@ export class BillingHttpAdapter implements BillingPort {
   }
 
   async createBalanceRefund(input: CreateBalanceRefundInput): Promise<AppResult<BalanceRefund>> {
-    const res = await request<unknown>('/api/admin/billing/refunds', {
+    const res = await request<unknown>('/admin/billing/refunds', {
       method: 'POST',
       body: {
         accountUid: Number(input.accountUid),
@@ -302,7 +302,7 @@ export class BillingHttpAdapter implements BillingPort {
   async createInternalRecharge(
     input: CreateInternalRechargeInput,
   ): Promise<AppResult<RechargeRecord>> {
-    const res = await request<RechargeDtoWire>('/api/billing/recharges/internal', {
+    const res = await request<RechargeDtoWire>('/billing/recharges/internal', {
       method: 'POST',
       body: {
         ownerAccountUid: Number(input.ownerAccountUid),
@@ -319,7 +319,7 @@ export class BillingHttpAdapter implements BillingPort {
 
   async getRecharge(serial: string): Promise<AppResult<RechargeRecord>> {
     const res = await request<RechargeDtoWire>(
-      `/api/billing/recharges/${encodeURIComponent(serial)}`,
+      `/billing/recharges/${encodeURIComponent(serial)}`,
     );
     if (!res.success) return res;
     return { success: true, data: mapRechargeDto(res.data as unknown as Record<string, unknown>) };
@@ -330,7 +330,7 @@ export class BillingHttpAdapter implements BillingPort {
     input: ConfirmManualRechargeInput,
   ): Promise<AppResult<RechargeRecord>> {
     const res = await request<RechargeDtoWire>(
-      `/api/billing/recharges/${encodeURIComponent(serial)}/confirm`,
+      `/billing/recharges/${encodeURIComponent(serial)}/confirm`,
       {
         method: 'POST',
         body: {
@@ -352,7 +352,7 @@ export class BillingHttpAdapter implements BillingPort {
   }): Promise<AppResult<ListBillsPage>> {
     const { page, pageSize, filter } = input;
     const res = await request<{ items: Record<string, unknown>[]; total: number }>(
-      '/api/admin/billing/bills',
+      '/views/admin/billing/bills',
       {
         query: {
           page,
@@ -378,7 +378,7 @@ export class BillingHttpAdapter implements BillingPort {
 
   async getBill(serial: string): Promise<AppResult<BillingEntry>> {
     const res = await request<Record<string, unknown>>(
-      `/api/admin/billing/bills/${encodeURIComponent(serial)}`,
+      `/views/admin/billing/bills/${encodeURIComponent(serial)}`,
     );
     if (!res.success) return res;
     return { success: true, data: mapBillDto(res.data) };

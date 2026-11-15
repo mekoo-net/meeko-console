@@ -9,7 +9,7 @@ import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { request } from '@/shared/api/httpClient';
 import { asEpochMillis } from '@/shared/lib/epoch';
 
-const BASE = '/api/admin/platform/referral/setting';
+const BASE = '/admin/platform/referral/setting';
 
 function numberOr(a: unknown, b: unknown, fallback: number): number {
   if (typeof a === 'number') return a;
