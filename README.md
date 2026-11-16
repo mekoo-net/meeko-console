@@ -77,3 +77,15 @@ pnpm type-check
 2. 账户：列表筛选、详情、子账号创建（Mock 延迟可感受 loading）。
 3. 账单：充值记录与账单流水筛选；充值大额触发二次确认。
 4. 通知：模板列表/编辑/修订时间线；SMTP 列表/抽屉表单/测试/删除；调试页发送通知与 OTP（无真实网络）。
+
+## 失败和报错的文案
+
+平台回的失败里没有给人看的那句话，只有种类（`code`）、原因码（`reason`）和逐字段的错。界面上说什么，按原因码从
+`@platform/contracts` 的 i18n 里取（和各产品前端是同一套文案）——入口是 `src/shared/api/problemDetails.ts` 的 `failureToAppError`，
+请求封装（`httpClient.ts`）和登录（`stores/auth.ts`）都走它。页面里拿到的 `AppError.message` 就是那句话，`AppError.reason` 是原因码。
+
+- 后端加了一种失败：原因码和中英文文案加在 `@platform/contracts`（`src/reasons.ts`、`src/i18n/`），这里不用改。
+- 要对某一种失败做不一样的事：认 `error.reason`，不要比对 `error.message`。
+- Yomi / Tavern / ToApi 的后端还没换到这个形状，它们的失败只有一句 `message`，`requestApiEnvelope` 里原样用；等它们换过来再删那一支。
+
+`@platform/contracts` 是子模块，放在 `src/platform/contracts`（别名在 `vite.config.ts`、`tsconfig.app.json`），源码就地用。

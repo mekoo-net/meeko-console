@@ -7,6 +7,7 @@ import {
 } from '@/features/platform/staff/services/mock/mockPermissions';
 import { apiUrl } from '@/shared/api/apiBase';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
+import { failureToAppError } from '@/shared/api/problemDetails';
 import { isMockMode } from '@/shared/runtime';
 
 import type { Uid } from '@/shared/lib/id';
@@ -203,13 +204,9 @@ export const useAuthStore = defineStore('auth', () => {
     return ok(undefined);
   }
 
+  /** 登录这几步失败时说什么：按平台给的原因码（用户名或密码错误、动态码不对、来源 IP 不在白名单……），和别处同一套文案。 */
   async function readErrorMessage(res: Response): Promise<string> {
-    let msg = `HTTP ${res.status}`;
-    try {
-      const body = await res.json() as { detail?: string; title?: string };
-      msg = body.detail ?? body.title ?? msg;
-    } catch { /* ignore */ }
-    return msg;
+    return failureToAppError(await res.json().catch(() => null), res.status).message;
   }
 
   /**

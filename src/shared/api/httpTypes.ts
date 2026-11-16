@@ -22,7 +22,10 @@ export type ErrorCode =
 
 export interface AppError {
   code: ErrorCode;
+  /** 界面上显示的那句话：按原因码（没有就按种类）出的，不是后端写的。 */
   message: string;
+  /** 平台给的原因码（`role_in_use`……）。要分情况处理时认它，不要去比对 message。 */
+  reason?: string;
   /** RFC 7807 ProblemDetails 的 errors 字段：字段级校验错误。 */
   details?: Record<string, string[]>;
   /** 用于 OTP / Recharge 等 4xx Retry-After 场景。 */

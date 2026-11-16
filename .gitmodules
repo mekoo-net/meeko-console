@@ -1,3 +1,6 @@
 [submodule "src/common"]
 	path = src/common
 	url = https://github.com/DemuxAi/demux-common.git
+[submodule "src/platform/contracts"]
+	path = src/platform/contracts
+	url = https://github.com/mekoo-net/Platform.Contracts.git

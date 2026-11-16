@@ -1,8 +1,8 @@
 import { useAuthStore } from '@/stores/auth';
 
 import { apiUrl } from './apiBase';
-import { fail, ok, type AppError, type AppResult, type ErrorCode } from './httpTypes';
-import { problemDetailsSchema, problemToAppError } from './problemDetails';
+import { fail, ok, type AppError, type AppResult } from './httpTypes';
+import { failureToAppError } from './problemDetails';
 
 const SESSION_KEY = 'meeko.admin.session.v1';
 
@@ -19,34 +19,10 @@ function readAccessToken(): string | null {
   }
 }
 
-function statusToErrorCode(status: number): ErrorCode {
-  if (status === 401) return 'unauthorized';
-  if (status === 403) return 'forbidden';
-  if (status === 404) return 'not_found';
-  if (status === 409) return 'conflict';
-  if (status === 422 || status === 400) return 'validation';
-  if (status === 429) return 'too_many_requests';
-  if (status === 504) return 'timeout';
-  if (status >= 500) return 'upstream';
-  return 'unknown';
-}
-
+/** 失败的回复 → AppError。说什么按平台给的原因码、种类出（见 problemDetails.ts）；回复是空的就只按状态码。 */
 async function parseFailure(res: Response): Promise<AppError> {
-  const fallback = statusToErrorCode(res.status);
-  try {
-    const body: unknown = await res.json();
-    const parsed = problemDetailsSchema.safeParse(body);
-    if (parsed.success) {
-      return problemToAppError(parsed.data, fallback);
-    }
-    if (body && typeof body === 'object' && 'detail' in body) {
-      const detail = (body as { detail?: string }).detail;
-      return { code: fallback, message: detail ?? `HTTP ${res.status}` };
-    }
-  } catch {
-    /* empty body */
-  }
-  return { code: fallback, message: `HTTP ${res.status}` };
+  const body: unknown = await res.json().catch(() => null);
+  return failureToAppError(body, res.status);
 }
 
 function handleUnauthorized(): void {
@@ -132,6 +108,9 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
 interface ApiEnvelope<T> {
   success: boolean;
+  /** 平台的信封：失败是怎么回事在这里（种类 + 原因码）。 */
+  error?: { code?: string; reason?: string };
+  /** Yomi / Tavern / ToApi 的后端还没换到 error 对象，失败时只有这一句。它们换过来以后删。 */
   message?: string;
   data?: T | null;
 }
@@ -167,7 +146,12 @@ export async function requestApiEnvelope<T>(
     }
     const envelope = (await res.json()) as ApiEnvelope<T>;
     if (!envelope.success) {
-      return fail({ code: 'unknown', message: envelope.message || '请求失败' });
+      // 信封的失败 HTTP 是 200，种类在 error.code 里。没有 error 的是还没换过来的产品后端，只有一句 message。
+      return fail(
+        envelope.error
+          ? failureToAppError(envelope, res.status)
+          : { code: 'unknown', message: envelope.message || '请求失败' },
+      );
     }
     if (envelope.data === undefined || envelope.data === null) {
       return ok(undefined as T);

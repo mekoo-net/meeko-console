@@ -51,6 +51,9 @@ export default defineConfig(({ mode }) => {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
         // 平台公共契约（@yomi/common）以嵌套子模块源码（src/common）就地消费。
         '@yomi/common': fileURLToPath(new URL('./src/common/src/index.ts', import.meta.url)),
+        // 平台对前端的契约（@platform/contracts）：失败的种类、原因码和报错文案都在里面，各前端共用一套。
+        // 子模块 src/platform/contracts，源码就地用。
+        '@platform/contracts': fileURLToPath(new URL('./src/platform/contracts/src/index.ts', import.meta.url)),
       },
     },
     server: {

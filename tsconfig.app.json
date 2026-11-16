@@ -28,7 +28,8 @@
 
     "paths": {
       "@/*": ["./src/*"],
-      "@yomi/common": ["./src/common/src/index.ts"]
+      "@yomi/common": ["./src/common/src/index.ts"],
+      "@platform/contracts": ["./src/platform/contracts/src/index.ts"]
     },
 
     "types": ["element-plus/global", "vitest/globals", "node"]
