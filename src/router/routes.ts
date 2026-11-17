@@ -555,6 +555,38 @@ export const routes: RouteRecordRaw[] = [
         ],
       },
       {
+        path: 'jastalk',
+        component: () => import('@/features/jastalk/views/JastalkLayout.vue'),
+        redirect: { name: 'jastalk-users' },
+        meta: { title: 'Jastalk 管理', requiresAuth: true, roles: ['Admin'] },
+        children: [
+          {
+            path: 'users',
+            name: 'jastalk-users',
+            component: () => import('@/features/jastalk/views/JastalkUsersView.vue'),
+            meta: { title: '用户', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'catalog',
+            name: 'jastalk-catalog',
+            component: () => import('@/features/jastalk/views/JastalkCatalogView.vue'),
+            meta: { title: '模型目录', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'rates',
+            name: 'jastalk-rates',
+            component: () => import('@/features/jastalk/views/JastalkRatesView.vue'),
+            meta: { title: '定价', requiresAuth: true, roles: ['Admin'] },
+          },
+          {
+            path: 'usage',
+            name: 'jastalk-usage',
+            component: () => import('@/features/jastalk/views/JastalkUsageLogsView.vue'),
+            meta: { title: '用量明细', requiresAuth: true, roles: ['Admin'] },
+          },
+        ],
+      },
+      {
         path: 'storage',
         component: () => import('@/features/platform/storage/views/StorageLayout.vue'),
         redirect: { name: 'storage-overview' },

@@ -2,7 +2,7 @@
  * 外部业务网关接入产品。签发入口在平台设置，各产品共用同一套 UI，
  * 真正的 POST 仍打到各自控制面。
  */
-export type GatewayProductId = 'yomi' | 'tavern';
+export type GatewayProductId = 'yomi' | 'tavern' | 'jastalk';
 
 export interface GatewayProduct {
   id: GatewayProductId;
@@ -27,6 +27,14 @@ export const GATEWAY_PRODUCTS: readonly GatewayProduct[] = [
     hint: 'Tavern.Gateway → Meeko.Tavern 7082 BackendRpc',
     configHint:
       '写入 Tavern.Gateway 配置 Meeko:Tavern:Platform:ClientId / ClientSecret；主密钥 Meeko:Tavern:LlmBackend:HmacKeyBase64 需在平台侧单独配置。',
+    requireName: true,
+  },
+  {
+    id: 'jastalk',
+    label: 'Jastalk',
+    hint: 'Jastalk.Gateway → Meeko.Jastalk 7102 BackendRpc',
+    configHint:
+      '写入 Jastalk.Gateway 配置 Jastalk:Platform:ClientId / ClientSecret（也可以用环境变量 Jastalk__Platform__ClientSecret）；主密钥 Meeko:Jastalk:BackendRpc:HmacKeyBase64 需在平台侧单独配置。',
     requireName: true,
   },
 ];

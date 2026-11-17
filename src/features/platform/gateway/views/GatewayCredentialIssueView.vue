@@ -1,9 +1,10 @@
 <script setup lang="ts">
 /**
- * 平台设置：给外部业务网关签发 RPC 凭据。Yomi / Tavern 共用这一页。
+ * 平台设置：给外部业务网关签发 RPC 凭据。Yomi / Tavern / Jastalk 共用这一页。
  */
 import { computed, ref } from 'vue';
 
+import { getJastalkBackendPort } from '@/features/jastalk/services';
 import { getYomiBackendPort } from '@/features/yomi/services';
 import GatewayCredentialIssuePanel from '@/features/platform/gateway/components/GatewayCredentialIssuePanel.vue';
 import type { IssueBackendInput } from '@/features/platform/gateway/model/backend.types';
@@ -16,10 +17,13 @@ const product = computed(() => gatewayProductById(productId.value));
 
 async function issue(input: IssueBackendInput) {
   const p = product.value;
+  // Tavern、Jastalk 的凭据是自带签名的，后端不存、也不收名字；名字只留在本控制台这次会话的清单里
   const r =
     p.id === 'yomi'
       ? await getYomiBackendPort().issue(input)
-      : await getTavernBackendPort().issue({ name: input.name });
+      : p.id === 'tavern'
+        ? await getTavernBackendPort().issue({ name: input.name })
+        : await getJastalkBackendPort().issue();
   if (r.success) {
     rememberIssuedGateway({
       productId: p.id,

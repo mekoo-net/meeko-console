@@ -1,5 +1,6 @@
 import {
   Bell,
+  ChatDotRound,
   ChatLineRound,
   Connection,
   CreditCard,
@@ -185,6 +186,19 @@ export const navViews: readonly NavView[] = [
       { type: 'leaf', index: '/toapi/groups', title: '渠道分组', icon: Link },
       { type: 'leaf', index: '/toapi/rates', title: '模型定价', icon: PriceTag },
       { type: 'leaf', index: '/toapi/logs', title: '调用日志', icon: DataLine },
+    ],
+  },
+  {
+    id: 'jastalk',
+    title: 'Jastalk',
+    icon: ChatDotRound,
+    roles: ['Admin'],
+    // 用户进去看他的积分；目录和定价是一对（目录里有、定价里没有的模型用户选不了）；用量明细是查账用的。
+    menu: [
+      { type: 'leaf', index: '/jastalk/users', title: '用户', icon: User },
+      { type: 'leaf', index: '/jastalk/catalog', title: '模型目录', icon: List },
+      { type: 'leaf', index: '/jastalk/rates', title: '定价', icon: PriceTag },
+      { type: 'leaf', index: '/jastalk/usage', title: '用量明细', icon: DataLine },
     ],
   },
   {
