@@ -223,7 +223,7 @@ describe('展示层兜底', () => {
     expect(logErrorCodeText('upstream_timeout')).toBe('上游超时');
     expect(logErrorCodeText('vendor_error')).toBe(logErrorCodeText('upstream_error'));
     expect(logErrorCodeText('vendor_timeout')).toBe(logErrorCodeText('upstream_timeout'));
-    for (const code of ['vendor_bad_request', 'vendor_refused']) {
+    for (const code of ['vendor_bad_request', 'vendor_refused', 'vendor_policy_rejected']) {
       expect(logErrorCodeText(code)).not.toBe(code);
     }
   });
