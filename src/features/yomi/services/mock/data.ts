@@ -698,7 +698,17 @@ const SEED_IAM_USERS = ['200000001', '700000001', '700000002'] as const;
  */
 function seedLogs(providers: Provider[]): LogEntry[] {
   const out: LogEntry[] = [];
-  const errorCodes = ['upstream_5xx', 'upstream_timeout', 'rate_limited', 'context_too_long'];
+  // 新旧两套码都造：网关现在发 vendor_*，改名（2026-11-18）前的日志行里还是 upstream_*。
+  const errorCodes = [
+    'upstream_5xx',
+    'upstream_timeout',
+    'vendor_error',
+    'vendor_timeout',
+    'vendor_bad_request',
+    'vendor_refused',
+    'rate_limited',
+    'context_too_long',
+  ];
 
   if (providers.length === 0) return out;
 
@@ -723,6 +733,10 @@ function seedLogs(providers: Provider[]): LogEntry[] {
   const errorCodeToHttp: Record<string, number> = {
     upstream_5xx: 502,
     upstream_timeout: 504,
+    vendor_error: 502,
+    vendor_timeout: 504,
+    vendor_bad_request: 400,
+    vendor_refused: 400,
     rate_limited: 429,
     context_too_long: 400,
     cancelled: 0,

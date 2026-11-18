@@ -217,12 +217,25 @@ describe('展示层兜底', () => {
     expect(logErrorCodeText('some_vendor_code')).toBe('some_vendor_code');
   });
 
+  it('upstream 改名 vendor 之后新旧码都有标签', () => {
+    // 改名前写入的日志行里还是旧码，旧码从字典里删掉就会退回显示原始码。
+    expect(logErrorCodeText('upstream_error')).toBe('上游异常');
+    expect(logErrorCodeText('upstream_timeout')).toBe('上游超时');
+    expect(logErrorCodeText('vendor_error')).toBe(logErrorCodeText('upstream_error'));
+    expect(logErrorCodeText('vendor_timeout')).toBe(logErrorCodeText('upstream_timeout'));
+    for (const code of ['vendor_bad_request', 'vendor_refused']) {
+      expect(logErrorCodeText(code)).not.toBe(code);
+    }
+  });
+
   it('没有真实错误码时不当错误展示', () => {
     expect(logHasErrorCode(null)).toBe(false);
     expect(logHasErrorCode({ code: '' })).toBe(false);
     expect(logHasErrorCode({ code: 'upstream_error' })).toBe(false);
     expect(logHasErrorCode({ code: 'upstream_error', message: 'Service unavailable' })).toBe(true);
     expect(logHasErrorCode({ code: '503' })).toBe(true);
+    // 没摘要就不认的只有旧码：后端捏造的那批行是改名之前写的，vendor_error 一定是真报出来的。
+    expect(logHasErrorCode({ code: 'vendor_error' })).toBe(true);
   });
 
   it('计费类型标签认得 unknown', () => {

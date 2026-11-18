@@ -64,7 +64,7 @@ function buildRows(): UsageLog[] {
     const streamed = rnd() < 0.7;
     const estimated = Number((rnd() * 0.5 + 0.05).toFixed(6));
     const errorCode =
-      status === 'failure' ? pick(['upstream_5xx', 'upstream_timeout', 'rate_limited', 'zero_output'])
+      status === 'failure' ? pick(['upstream_5xx', 'upstream_timeout', 'vendor_error', 'vendor_timeout', 'rate_limited', 'zero_output'])
         : status === 'cancelled' ? 'expired'
           : null;
 
