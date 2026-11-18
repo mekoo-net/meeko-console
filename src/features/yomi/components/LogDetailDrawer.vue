@@ -26,7 +26,6 @@ import {
   billReverseCodeText,
   logErrorCodeText,
   logHasErrorCode,
-  logIsSuccess,
   logProtocolText,
   logStopReasonTruncated,
 } from '@yomi/common';
@@ -80,9 +79,13 @@ const sourceText = computed(() => {
 
 const upstreamModelText = computed(() => props.log?.vendorModel?.trim() || '—');
 
+/**
+ * 扣过钱没有。只看金额，不看成败：内容违规被平台围栏拦截的调用是失败状态，但照样扣了罚金。
+ * 后端只给扣过钱的行下发非零的 `cost.total`（成功扣费的、被罚的），其余失败行一律是 0。
+ */
 const hasCharge = computed(() => {
   const l = props.log;
-  return l != null && logIsSuccess(l) && Number(l.cost.total) > 0;
+  return l != null && Number(l.cost.total) > 0;
 });
 
 const clientIpText = computed(() => props.log?.content.clientIp?.trim() || '—');
