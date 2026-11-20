@@ -6,8 +6,8 @@ import { epochMillisSchema } from '@/shared/lib/epoch';
 /**
  * OneApi 的模型价格（美元牌价，全站一份，各产品按它出价）。
  *
- * 这张表的主人是 OneApi 的号池后台。管理端经平台 Bff 把请求原样转到它的 `/v1/ratecard/*`，成功的回包就是它的 JSON、不包信封，
- * 所以这里的字段照号池后台的 `ModelPriceDtos.cs` / `ModelPriceSyncService.cs` / `IModelPricePublisher.cs`。
+ * 这张表的主人是 OneApi 的号池后台。管理端的请求由平台网关直接转给它的 `/v1/ratecard/*`（对外是 `/oneapi/vault/v1/ratecard/*`，
+ * 不经 Bff），成功的回包就是它的 JSON、不包信封，所以这里的字段照号池后台的 `ModelPriceDtos.cs` / `ModelPriceSyncService.cs` / `IModelPricePublisher.cs`。
  * 和平台别的接口有两处不一样：
  * - 值为 null 的字段号池后台不写出来。缺了和 null 是一回事，读进来统一成 null；
  * - 时间是 Unix 毫秒。
@@ -226,7 +226,7 @@ export type RatecardRelaySubscriber = z.infer<typeof ratecardRelaySubscriberSche
 
 /**
  * `GET relay`：这份表到了平台没有（平台的 Bff 订阅 OneApi 的 NATS，收到以后通知各产品）。
- * 这是 Bff 自己的接口，不转给号池后台。
+ * 只有这一个是 Bff 的接口（`/admin/components/oneapi/ratecard/relay`）：到没到平台、通知到了谁，号池后台不知道。
  */
 export const ratecardRelayStatusSchema = z.object({
   /** Bff 配了连 OneApi 的 NATS。 */

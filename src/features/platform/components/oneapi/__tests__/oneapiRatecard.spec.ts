@@ -61,8 +61,8 @@ function publish(over: Partial<PricePublishResult> = {}): PricePublishResult {
 }
 
 /**
- * 号池后台（OneApi.VaultCustody 的 `/v1/ratecard/*`）回的形状，经 Bff 原样转过来：不包信封、时间是 Unix 毫秒、
- * 值为 null 的字段不写出来。下面的样本照 `ModelPriceDtos.cs` / `ModelPriceSyncService.cs` / `IModelPricePublisher.cs` 写的；
+ * 号池后台（OneApi.VaultCustody 的 `/v1/ratecard/*`）回的形状。平台网关直接把请求转给它（对外是 `/oneapi/vault/v1/ratecard/*`，
+ * 不经 Bff），中间没有人改回包：不包信封、时间是 Unix 毫秒、值为 null 的字段不写出来。下面的样本照 `ModelPriceDtos.cs` / `ModelPriceSyncService.cs` / `IModelPricePublisher.cs` 写的；
  * 那边改了字段，这里先挂，而不是页面上某一格悄悄空着。
  */
 describe('oneapi ratecard adapter', () => {
@@ -118,7 +118,7 @@ describe('oneapi ratecard adapter', () => {
 
     const r = await adapter.listByMaker({ keyword: ' haiku ' });
 
-    expect(path()).toBe('/admin/components/oneapi/ratecard/catalog/by-maker?keyword=haiku');
+    expect(path()).toBe('/oneapi/vault/v1/ratecard/catalog/by-maker?keyword=haiku');
     expect(r.success).toBe(true);
     if (!r.success) return;
     // capabilities / sourceRef / fetchedAtUtc 号池后台没写出来：读进来是 null，不是 undefined
@@ -133,7 +133,7 @@ describe('oneapi ratecard adapter', () => {
   it('an empty keyword is not sent', async () => {
     reply({ items: [], total: 0 });
     await adapter.listByMaker({ keyword: '' });
-    expect(path()).toBe('/admin/components/oneapi/ratecard/catalog/by-maker');
+    expect(path()).toBe('/oneapi/vault/v1/ratecard/catalog/by-maker');
   });
 
   it('says which interface is off when the shape changes, instead of rendering blanks', async () => {
@@ -170,7 +170,7 @@ describe('oneapi ratecard adapter', () => {
     reply(wireRow);
     const hit = await adapter.find('anthropic/claude 3');
     // 斜杠原样留着、逐段转义：整个转成 %2F 号池后台的通配路由不还原
-    expect(path()).toBe('/admin/components/oneapi/ratecard/catalog/anthropic/claude%203');
+    expect(path()).toBe('/oneapi/vault/v1/ratecard/catalog/anthropic/claude%203');
     expect(hit.success && hit.data?.id).toBe('42');
 
     reply({ status: 404, code: 'GEN_02' }, 404);
@@ -202,7 +202,7 @@ describe('oneapi ratecard adapter', () => {
     });
 
     expect(calls[0]!.method).toBe('PUT');
-    expect(path()).toBe('/admin/components/oneapi/ratecard/catalog');
+    expect(path()).toBe('/oneapi/vault/v1/ratecard/catalog');
     expect(calls[0]!.body).toMatchObject({
       id: '42',
       modelKey: 'claude-3-haiku-20240307',
@@ -229,7 +229,7 @@ describe('oneapi ratecard adapter', () => {
     reply({ id: '42', publish: { ...wirePublish, written: [], deleted: ['anthropic'] } });
     const r = await adapter.remove('42');
     expect(calls[0]!.method).toBe('DELETE');
-    expect(path()).toBe('/admin/components/oneapi/ratecard/catalog/42');
+    expect(path()).toBe('/oneapi/vault/v1/ratecard/catalog/42');
     expect(r.success && r.data.publish.deleted).toEqual(['anthropic']);
   });
 
@@ -282,7 +282,7 @@ describe('oneapi ratecard adapter', () => {
 
     const one = await adapter.fetchCandidates({ maker: 'openai' });
     expect(calls[0]!.method).toBe('POST');
-    expect(path()).toBe('/admin/components/oneapi/ratecard/sync/fetch');
+    expect(path()).toBe('/oneapi/vault/v1/ratecard/sync/fetch');
     expect(calls[0]!.body).toEqual({
       sources: [{ kind: 'models_dev', name: 'models.dev' }],
       makers: ['openai'],
@@ -308,13 +308,13 @@ describe('oneapi ratecard adapter', () => {
       sourceRef: 'openai/gpt-5.2-pro',
     };
     const applied = await adapter.applyCandidates([item]);
-    expect(path()).toBe('/admin/components/oneapi/ratecard/sync/apply');
+    expect(path()).toBe('/oneapi/vault/v1/ratecard/sync/apply');
     expect(calls[0]!.body).toMatchObject({ items: [item] });
     expect(applied.success && [applied.data.added, applied.data.updated]).toEqual([1, 2]);
 
     reply({ added: 3, overwritten: 1, skipped: 2, publish: wirePublish });
     const imported = await adapter.importPrices({ items: [wireRow], overwrite: true });
-    expect(path(1)).toBe('/admin/components/oneapi/ratecard/import');
+    expect(path(1)).toBe('/oneapi/vault/v1/ratecard/import');
     expect(calls[1]!.body).toEqual({ overwrite: true, items: [wireRow] });
     expect(imported.success && imported.data).toMatchObject({
       added: 3,
@@ -339,18 +339,19 @@ describe('oneapi ratecard adapter', () => {
     reply(failed);
     const plain = await adapter.publish();
     expect(calls[0]!.method).toBe('POST');
-    expect(path()).toBe('/admin/components/oneapi/ratecard/publish');
+    expect(path()).toBe('/oneapi/vault/v1/ratecard/publish');
     // 没发布出去不是请求失败：HTTP 200，原因在 failures 里
     expect(plain.success && plain.data).toEqual(failed);
 
     reply(wirePublish);
     await adapter.publish({ takeover: true });
-    expect(path(1)).toBe('/admin/components/oneapi/ratecard/publish?takeover=true');
+    expect(path(1)).toBe('/oneapi/vault/v1/ratecard/publish?takeover=true');
     await adapter.publish({ takeover: false });
-    expect(path(2)).toBe('/admin/components/oneapi/ratecard/publish');
+    expect(path(2)).toBe('/oneapi/vault/v1/ratecard/publish');
   });
 
-  it('reads the relay status the Bff answers itself', async () => {
+  // 只有这一个还打平台的 Bff：订阅 OneApi 的 NATS、通知各产品的是它，号池后台不知道这份表到没到平台
+  it('reads the relay status from the Bff, not from the vault', async () => {
     const relay = {
       configured: true,
       loaded: true,
@@ -662,7 +663,7 @@ describe('oneapi ratecard publish results', () => {
   });
 
   it('shows what the vault said when it is the vault that refused', () => {
-    // 号池后台拒的：它的话在 errors 的 upstream 键下（Bff 放的），界面上那句按种类出的通用文案说明不了问题
+    // 号池后台拒的：它的话在 errors 的 upstream 键下（它自己放的），界面上那句按种类出的通用文案说明不了问题
     expect(
       failureText({
         message: '提交的内容有误',
@@ -683,14 +684,19 @@ describe('oneapi ratecard publish results', () => {
     expect(
       failureText({ message: '没有找到', reason: 'oneapi_vault_rejected', details: { upstream: [' '] } }),
     ).toBe('没有找到');
-    // 别的失败（连不上、没权限）照旧按原因码出的那句，不把 errors 里的东西翻出来
+    // 别的失败照旧出通用的那句，不把 errors 里的东西翻出来。
+    // 号池后台不在线：平台网关回的 502 / 503，没有原因码
+    expect(
+      failureText({ message: '依赖的服务暂时不可用', details: { upstream: ['x'] } }),
+    ).toBe('依赖的服务暂时不可用');
+    // 带着别的原因码的也一样（随手拿了一个平台的码，只要不是号池后台拒的那个）
     expect(
       failureText({
-        message: '依赖的服务暂时不可用',
-        reason: 'oneapi_vault_unreachable',
+        message: '角色还在用着',
+        reason: 'role_in_use',
         details: { upstream: ['x'] },
       }),
-    ).toBe('依赖的服务暂时不可用');
+    ).toBe('角色还在用着');
     expect(failureText({ message: '没有权限' })).toBe('没有权限');
   });
 });

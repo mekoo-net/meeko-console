@@ -16,10 +16,10 @@ import type {
 } from '../../model/ratecard.types';
 
 /**
- * OneApi 的模型价格（美元牌价）—— 对应平台 Bff 的 `/admin/components/oneapi/ratecard`。
+ * OneApi 的模型价格（美元牌价）—— 对应号池后台的 `/v1/ratecard/**`，对外是 `/oneapi/vault/v1/ratecard/**`。
  *
- * 表的主人是 OneApi 的号池后台；Bff 把 `…/ratecard/{rest}` 原样转到它的 `/v1/ratecard/{rest}`，
- * 只有 `relay`（这份表到没到平台）是 Bff 自己答的。
+ * 表的主人是 OneApi 的号池后台；它自己登记路由，平台网关验完身份直接把请求转给它，不经 Bff。
+ * 只有 `relayStatus`（这份表到没到平台）问的是平台的 Bff：订阅 OneApi 的 NATS、通知各产品的是它。
  *
  * 每个写操作号池后台都当场把受影响的厂家发布出去，回包里带发布结果（`publish`）：
  * 「库里写成了」和「发布出去了」是两件事，这里原样交回去，怎么告诉人由页面统一做。

@@ -24,6 +24,8 @@ export default defineConfig(({ mode }) => {
   //   /billing/**、/storage/**、/notifications/**、/user/**、/status → 各领域服务
   //   /auth/**    → Keystone（匿名登录/注册/刷新）
   //   /staff/**   → Keystone（staff 登录）
+  //   /oneapi/**  → OneApi 的号池后台（它自己登记路由，网关直接转过去，不经 Bff；价格表在 /oneapi/vault/v1/ratecard）。
+  //                 页面路由里没有 /oneapi 开头的（价格表那一页是 /components/oneapi/ratecard），所以不用 spaBypass
   //   /me/**      → Keystone（当前用户自助）
   //   /yomi/**  → Yomi 产品门面（前端页面路由仍是 /yomi/*，不经代理）
   //   /tavern/**  → Tavern 产品门面
@@ -38,6 +40,7 @@ export default defineConfig(({ mode }) => {
     '/status':        { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
     '/auth':    { target: gatewayTarget, changeOrigin: true },
     '/staff':   { target: gatewayTarget, changeOrigin: true },
+    '/oneapi':  { target: gatewayTarget, changeOrigin: true },
     '/me':      { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
     '/yomi':   { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },
     '/tavern': { target: gatewayTarget, changeOrigin: true, bypass: spaBypass },

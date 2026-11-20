@@ -350,7 +350,7 @@ export function _resetOneApiRatecardMock(): void {
 
 // ---------- 归一、校验 ----------
 
-// 照真的来：拒掉请求的是号池后台，经 Bff 回来时界面上的那句话是按种类出的通用文案，
+// 照真的来：拒掉请求的是号池后台，它回的失败到了界面上，那句话是按种类出的通用文案，
 // 号池后台自己的说明在 errors 的 upstream 键下——页面要是只显示 message，在 mock 里就看得出来漏了。
 const rejected = (code: 'validation' | 'not_found', generic: string, said: string): AppFail =>
   fail({ code, message: generic, reason: VAULT_REJECTED, details: { upstream: [said] } });

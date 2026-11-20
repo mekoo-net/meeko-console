@@ -252,10 +252,16 @@ Console 页面：`/demux/pricing`（价格表 + 拉价 diff）、`/demux/rate`�
 | 视图 | `src/features/platform/components/oneapi/views/RatecardView.vue` |
 | Port | `OneApiRatecardPort`（`src/features/platform/components/oneapi/services/ports`） |
 
-表的主人是 OneApi 的号池后台。Bff 把 `/admin/components/oneapi/ratecard/{rest}` 原样转到它的 `/v1/ratecard/{rest}`：
-成功的回包就是号池后台的 JSON（不包信封），失败由 Bff 转成平台的标准错误；时间是 Unix 毫秒，值为 null 的字段不写出来。
+表的主人是 OneApi 的号池后台。它自己登记到 Consul、自己声明路由，平台网关验完身份直接把 `/oneapi/vault/v1/ratecard/{rest}`
+转给它的 `/v1/ratecard/{rest}`，不经 Bff：成功的回包就是号池后台的 JSON（不包信封），失败也是它自己按平台的标准错误回的
+（它拒的是 `reason: "oneapi_vault_rejected"`，原话在 `errors.upstream[0]`；它不在线时是平台网关回的 502 / 503，没有原因码）；
+时间是 Unix 毫秒，值为 null 的字段不写出来。接口上 GET 不用登录（牌价是公开的），POST / PUT / DELETE 要 Staff 且有
+`platform.settings.write`——上表的「看」权限管的是这一页进不进得去。
 
-| 业务动作 | Port 方法 | HTTP | 端点（前缀 `/admin/components/oneapi/ratecard`） |
+只有「转发状态」还在平台的 Bff 上（`GET /admin/components/oneapi/ratecard/relay`）：订阅 OneApi 的 NATS、收到新牌价再通知各产品的是 Bff，
+这份表到没到平台只有它知道。开发反代（`vite.config.ts`）因此多一条 `/oneapi` → 网关。
+
+| 业务动作 | Port 方法 | HTTP | 端点（前缀 `/oneapi/vault/v1/ratecard`，转发状态除外） |
 | --- | --- | --- | --- |
 | 整张表，按厂家分组 / 搜索 | `listByMaker` | GET | `/catalog/by-maker?keyword` → `{ items: [{ maker, items }], total }` |
 | 新建前查重 | `find` | GET | `/catalog/{modelKey}`（没有回 404） |
@@ -264,7 +270,7 @@ Console 页面：`/demux/pricing`（价格表 + 拉价 diff）、`/demux/rate`�
 | 上游同步 | `fetchCandidates` → `applyCandidates` | POST | `/sync/fetch`（只读）→ 勾选 → `/sync/apply` |
 | 导入 | `importPrices` | POST | `/import` `{ overwrite, items }` |
 | 发布 / 接管 | `publish` | POST | `/publish`、`/publish?takeover=true` |
-| 转发状态 | `relayStatus` | GET | `/relay`（Bff 自己答，不转） |
+| 转发状态 | `relayStatus` | GET | `/admin/components/oneapi/ratecard/relay`（平台的 Bff 答，不是号池后台的接口） |
 
 每个写操作的回包都带 `publish: { ok, written, deleted, unchanged, failures: [{ maker, error }] }`。`ok = false` 时表里的改动是成了的，
 只是没发布出去：页面顶上留一块提示逐条列出厂家和原因（`maker` 是 `*` 的写成「整张表」），直到整张表发布成功或手动关掉。

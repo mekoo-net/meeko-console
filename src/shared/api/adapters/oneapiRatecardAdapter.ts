@@ -27,11 +27,21 @@ import type { OneApiRatecardPort } from '@/features/platform/components/oneapi/s
 import { request } from '@/shared/api/httpClient';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 
+// 这一页的请求打两处，所以是两个常量，不能并成一个前缀：
+
 /**
- * Bff 把这个前缀下面的 `{rest}` 原样转到号池后台的 `/v1/ratecard/{rest}`：成功的回包就是号池后台的 JSON（不包信封），
- * 失败由 Bff 转成平台的标准错误。`relay` 例外，是 Bff 自己答的。
+ * 价格表本身（增删改查、同步、导入、发布）是号池后台自己的接口。号池后台自己登记到 Consul、自己声明路由，
+ * 平台网关验完身份直接转给它，不经 Bff：`/oneapi/vault` 后面的 `/v1/ratecard/**` 就是它原来的路径。
+ * 所以成功的回包就是号池后台的 JSON（不包信封），失败也是它自己按平台的标准错误回的。
+ * 读不用登录（牌价是公开的），写要 Staff 且有 `platform.settings.write`。
  */
-const BASE = '/admin/components/oneapi/ratecard';
+const VAULT_RATECARD_BASE = '/oneapi/vault/v1/ratecard';
+
+/**
+ * 转发状态问的是平台的 Bff，不是号池后台：订阅 OneApi 的 NATS、收到新牌价再通知各产品的是 Bff，
+ * 「这份表到没到平台、通知到了谁」只有它知道。Bff 在价格表上只剩这一个接口，所以写的是整条地址。
+ */
+const BFF_RELAY_STATUS_PATH = '/admin/components/oneapi/ratecard/relay';
 
 /** 回包照类型校验一遍：号池后台改了形状，这里就说清楚是哪个接口对不上，而不是页面上某一格悄悄空着。 */
 function parse<T>(schema: z.ZodType<T>, value: unknown, what: string): AppResult<T> {
@@ -41,7 +51,7 @@ function parse<T>(schema: z.ZodType<T>, value: unknown, what: string): AppResult
 
 export class OneApiRatecardHttpAdapter implements OneApiRatecardPort {
   async listByMaker(input: { keyword: string }): Promise<AppResult<PriceMakerGroup[]>> {
-    const res = await request<unknown>(`${BASE}/catalog/by-maker`, {
+    const res = await request<unknown>(`${VAULT_RATECARD_BASE}/catalog/by-maker`, {
       query: { keyword: input.keyword.trim() || undefined },
     });
     if (!res.success) return res;
@@ -55,13 +65,13 @@ export class OneApiRatecardHttpAdapter implements OneApiRatecardPort {
     if (!key) return ok(null);
     // 模型名可以带斜杠（渠道前缀）。斜杠原样留在路径里、逐段转义：整个转成 %2F 的话后端的通配路由不还原，就查不到了。
     const path = key.split('/').map(encodeURIComponent).join('/');
-    const res = await request<unknown>(`${BASE}/catalog/${path}`);
+    const res = await request<unknown>(`${VAULT_RATECARD_BASE}/catalog/${path}`);
     if (!res.success) return res.error.code === 'not_found' ? ok(null) : res;
     return parse(modelPriceRowSchema, res.data, '模型价格');
   }
 
   async upsert(input: UpsertPriceInput): Promise<AppResult<PriceWriteResult>> {
-    const res = await request<unknown>(`${BASE}/catalog`, {
+    const res = await request<unknown>(`${VAULT_RATECARD_BASE}/catalog`, {
       method: 'PUT',
       // reason 只进号池后台的日志
       body: { ...input, reason: '管理端手工录入' },
@@ -70,14 +80,14 @@ export class OneApiRatecardHttpAdapter implements OneApiRatecardPort {
   }
 
   async remove(id: string): Promise<AppResult<PriceDeleteResult>> {
-    const res = await request<unknown>(`${BASE}/catalog/${encodeURIComponent(id)}`, {
+    const res = await request<unknown>(`${VAULT_RATECARD_BASE}/catalog/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
     return res.success ? parse(priceDeleteResultSchema, res.data, '删除牌价') : res;
   }
 
   async fetchCandidates(input: { maker: string | null }): Promise<AppResult<PriceFetchResult>> {
-    const res = await request<unknown>(`${BASE}/sync/fetch`, {
+    const res = await request<unknown>(`${VAULT_RATECARD_BASE}/sync/fetch`, {
       method: 'POST',
       body: {
         // 来源只拉 models.dev（也是号池后台的默认）；明写出来是为了来源状态里有个看得懂的名字
@@ -89,7 +99,7 @@ export class OneApiRatecardHttpAdapter implements OneApiRatecardPort {
   }
 
   async applyCandidates(items: ApplyPriceItem[]): Promise<AppResult<PriceApplyResult>> {
-    const res = await request<unknown>(`${BASE}/sync/apply`, {
+    const res = await request<unknown>(`${VAULT_RATECARD_BASE}/sync/apply`, {
       method: 'POST',
       body: { items, reason: '管理端上游同步' },
     });
@@ -97,7 +107,7 @@ export class OneApiRatecardHttpAdapter implements OneApiRatecardPort {
   }
 
   async importPrices(input: ImportPricesInput): Promise<AppResult<PriceImportResult>> {
-    const res = await request<unknown>(`${BASE}/import`, {
+    const res = await request<unknown>(`${VAULT_RATECARD_BASE}/import`, {
       method: 'POST',
       body: { overwrite: input.overwrite, items: input.items },
     });
@@ -105,7 +115,7 @@ export class OneApiRatecardHttpAdapter implements OneApiRatecardPort {
   }
 
   async publish(input?: { takeover?: boolean }): Promise<AppResult<PricePublishResult>> {
-    const res = await request<unknown>(`${BASE}/publish`, {
+    const res = await request<unknown>(`${VAULT_RATECARD_BASE}/publish`, {
       method: 'POST',
       query: { takeover: input?.takeover ? true : undefined },
     });
@@ -113,7 +123,7 @@ export class OneApiRatecardHttpAdapter implements OneApiRatecardPort {
   }
 
   async relayStatus(): Promise<AppResult<RatecardRelayStatus>> {
-    const res = await request<unknown>(`${BASE}/relay`);
+    const res = await request<unknown>(BFF_RELAY_STATUS_PATH);
     return res.success ? parse(ratecardRelayStatusSchema, res.data, '转发状态') : res;
   }
 }

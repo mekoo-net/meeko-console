@@ -304,18 +304,18 @@ export function needsTakeover(failures: readonly PricePublishFailure[]): boolean
 
 // ---------- 接口报错 ----------
 
-/** 号池后台把请求拒了（模型键不对、价格缺哪一项、导入的第几行不过）时 Bff 给的原因码。 */
+/** 号池后台把请求拒了（模型键不对、价格缺哪一项、导入的第几行不过）时它回的原因码：它拒的都是这一个。 */
 export const VAULT_REJECTED = 'oneapi_vault_rejected';
 
-/** Bff 把号池后台那句说明放在 `errors` 的这个键下（Meeko.Bff 的 `VaultRatecardForwarder.UpstreamErrorsKey`）。 */
+/** 号池后台把它那句说明放在 `errors` 的这个键下。 */
 const UPSTREAM_KEY = 'upstream';
 
 /**
  * 一次失败给人看的那句话。
  *
- * 平台别处的失败只有原因码，界面上的话按码出；这一组接口不一样：拒掉请求的是号池后台，它没有原因码，
+ * 平台别处的失败一种原因一个码，界面上的话按码出；这一组接口不一样：拒掉请求的是号池后台，它拒的都是同一个码，
  * 「哪个模型键不对」「缺哪一项」只在它那句话里。只按码出的话，导入二十行有一行不过，页面上只有一句「提交的内容有误」。
- * 所以是号池后台拒的，就把它的话摆出来；别的失败（连不上、没权限）照旧按码。
+ * 所以是号池后台拒的，就把它的话摆出来；别的失败（号池后台不在线时平台网关回的 502 / 503、没权限）照旧出通用的那句。
  */
 export function failureText(error: Pick<AppError, 'message' | 'reason' | 'details'>): string {
   if (error.reason !== VAULT_REJECTED || !error.details) return error.message;
