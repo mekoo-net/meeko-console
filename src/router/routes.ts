@@ -575,7 +575,7 @@ export const routes: RouteRecordRaw[] = [
             path: 'rates',
             name: 'jastalk-rates',
             component: () => import('@/features/jastalk/views/JastalkRatesView.vue'),
-            meta: { title: '价格表', requiresAuth: true, roles: ['Admin'] },
+            meta: { title: '模型定价', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'usage',

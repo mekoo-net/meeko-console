@@ -1,399 +1,619 @@
 <script setup lang="ts">
 /**
- * Jastalk 价格表：每个模型用一次扣多少积分（1 元 = 100 积分），扣积分只认这张表。
- * 大多数行是「渠道」页按牌价 × 渠道倍率算出来的，这里看得到它们各自对上的牌价键和用的倍率；
- * 人在这里加的、改的行是单独定价（改一行算出来的也会变成单独定价，重算不再碰它）。这一页主要用来定通配的价：
- * 渠道写 `*` 是不分渠道，两个都写 `*` 是默认价。找价格的顺序是（渠道, 模型）→（*, 模型）→（*, *），
- * 取第一个单位对得上的；都找不到的模型用户选不了。
- * 改价最迟 30 秒生效；已经结算的不受影响（用量明细里抄着当时的单价）。
+ * Jastalk 模型定价（照 Yomi 的模型定价页，少了别名那一层：Jastalk 的模型就叫它在渠道里的名字）。
+ * 左边是渠道，右边是这个渠道接进来的模型各卖多少积分。
+ *
+ * 价格按渠道定：渠道上定一个倍率，积分 = 全站共用的美元牌价 × 倍率 × 100，后端算好，这里只显示；
+ * 右上角那个数就是这个渠道的倍率，点它改。个别模型可以单独定价，不跟倍率走。
+ * 接哪些模型在「渠道」页，这里只管价。
+ *
+ * 没有价的模型用户选不了：单列一栏，每个写着差的是什么（渠道没设倍率、牌价里没有它、折不成它的单位）。
+ *
+ * 没有「重算」：改倍率、接模型、牌价变了，后端自己会算。
+ *
+ * 不分渠道的价（渠道写 `*`，以前在平铺的价格表里手填的）这里不能新加——价格只跟着渠道走。
+ * 库里还留着的在页面顶上列出来：它们还在生效（没有自己价格的模型会落到上面），要看得见、删得掉。
  */
-import { computed, onMounted, ref } from 'vue';
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
-import { Plus } from '@element-plus/icons-vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { ElMessage } from 'element-plus';
+import { Refresh } from '@element-plus/icons-vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
-import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
-import { formatDateTime } from '@/shared/lib/date';
+import WorkspaceLayout from '@/shared/ui/workspace/WorkspaceLayout.vue';
+import WorkspaceDetailPanel from '@/shared/ui/workspace/WorkspaceDetailPanel.vue';
 import { confirmDanger } from '@/shared/composables/useConfirm';
 
-import { multiplierText, pricingLabels, pricingTones } from '../model/channelPricing';
-import { ANY, rateUnits, type PointRate, type PointRateEdit, type RateUnit } from '../model/jastalk.types';
-import { describePrice, formatPrice, unitLabels, unitPer } from '../model/jastalkFormat';
+import ChannelEditDrawer from '../components/channel/ChannelEditDrawer.vue';
+import ChannelSidebar from '../components/channel/ChannelSidebar.vue';
+import ModelRateDrawer from '../components/channel/ModelRateDrawer.vue';
+import {
+  describeModelPrice,
+  followBlock,
+  followBlockText,
+  multiplierText,
+  pricingLabels,
+  pricingTones,
+} from '../model/channelPricing';
+import { ANY, type ChannelBoard, type ChannelDetail, type ChannelModel, type PointRate } from '../model/jastalk.types';
+import { categoryLabels, describePrice } from '../model/jastalkFormat';
 import { getJastalkAdminPort } from '../services';
 
 const port = getJastalkAdminPort();
 
-const rates = ref<PointRate[]>([]);
-const loading = ref(false);
+const board = ref<ChannelBoard | null>(null);
+const boardLoading = ref(false);
+const selectedKey = ref('');
 
-async function load(): Promise<void> {
-  loading.value = true;
+const detail = ref<ChannelDetail | null>(null);
+const detailLoading = ref(false);
+let detailSeq = 0;
+
+type Tab = 'priced' | 'unpriced';
+const tab = ref<Tab>('priced');
+
+const channels = computed(() => board.value?.channels ?? []);
+const selected = computed(() => channels.value.find((c) => c.vendorKey === selectedKey.value) ?? null);
+/** 右边摆的那一份详情：只认现在选中的渠道的，切渠道时不把上一个渠道的模型晃一下。 */
+const current = computed(() => (detail.value?.channel.vendorKey === selectedKey.value ? detail.value : null));
+
+const upstreamReachable = computed(() => board.value?.upstreamReachable ?? true);
+const listPricesLoaded = computed(() => board.value?.listPricesLoaded ?? true);
+
+const priced = computed(() => current.value?.models.filter((m) => m.model.priced) ?? []);
+const unpriced = computed(() => current.value?.models.filter((m) => !m.model.priced) ?? []);
+const compiledCount = computed(() => current.value?.models.filter((m) => m.pricing === 'compiled').length ?? 0);
+
+async function loadBoard(): Promise<void> {
+  boardLoading.value = true;
   try {
-    const r = await port.rates();
-    if (r.success) rates.value = r.data;
-    else ElMessage.error(r.error.message);
-  } finally {
-    loading.value = false;
-  }
-}
-
-/** 这一行管到谁。 */
-function scope(r: Pick<PointRate, 'vendorKey' | 'modelName'>): string {
-  if (r.vendorKey === ANY && r.modelName === ANY) return '默认价：没有自己价格的都照它';
-  if (r.vendorKey === ANY) return '不分渠道';
-  return '只管这个渠道';
-}
-
-// ─── 编辑 ────────────────────────────────────────────────
-
-const dialogOpen = ref(false);
-const saving = ref(false);
-const editing = ref(false);
-const formRef = ref<FormInstance>();
-const form = ref<PointRateEdit>(blank());
-
-function blank(): PointRateEdit {
-  return { vendorKey: ANY, modelName: '', unit: 'token', inputPrice: 300, outputPrice: 1500 };
-}
-
-const rules: FormRules<PointRateEdit> = {
-  vendorKey: [{ required: true, message: '填渠道，不分渠道写 *', trigger: 'blur' }],
-  modelName: [
-    { required: true, message: '填模型名，默认价写 *', trigger: 'blur' },
-    {
-      trigger: 'blur',
-      validator: (_: unknown, value: string, done: (e?: Error) => void) =>
-        done(value.trim() === ANY && form.value.vendorKey.trim() !== ANY ? new Error('模型写 * 时渠道也得是 *（默认价）') : undefined),
-    },
-  ],
-};
-
-/** 已经有这一对了：保存是改价，不是多一行。 */
-const existing = computed(() =>
-  rates.value.find((r) => r.vendorKey === form.value.vendorKey.trim() && r.modelName === form.value.modelName.trim()),
-);
-
-/** 每种单位下两个价格各是什么意思；用不上的那个不给填。 */
-const priceFields: Readonly<Record<RateUnit, { input: string | null; output: string | null }>> = {
-  token: { input: '输入', output: '输出' },
-  image: { input: null, output: '每张' },
-  audio_second: { input: '听写', output: '合成' },
-};
-
-function onUnitChange(): void {
-  if (priceFields[form.value.unit].input === null) form.value.inputPrice = 0;
-}
-
-function create(): void {
-  editing.value = false;
-  form.value = blank();
-  dialogOpen.value = true;
-}
-
-async function edit(r: PointRate): Promise<void> {
-  // 算出来的行一改就变成单独定价、不再跟牌价和倍率变：先说清楚，免得改完才发现它不跟了
-  if (r.source === 'compiled') {
-    const okp = await confirmDanger({
-      title: '改成单独定价',
-      message: `${r.vendorKey} / ${r.modelName} 的价是跟渠道倍率算出来的。改了以后它变成单独定价，牌价和倍率再变也不跟着变。`,
-      confirmText: '继续改价',
-    });
-    if (!okp) return;
-  }
-  editing.value = true;
-  form.value = { vendorKey: r.vendorKey, modelName: r.modelName, unit: r.unit, inputPrice: r.inputPrice, outputPrice: r.outputPrice };
-  dialogOpen.value = true;
-}
-
-async function save(): Promise<void> {
-  if (!(await formRef.value?.validate().catch(() => false))) return;
-  saving.value = true;
-  try {
-    const r = await port.saveRate({ ...form.value, vendorKey: form.value.vendorKey.trim(), modelName: form.value.modelName.trim() });
+    const r = await port.channels();
     if (!r.success) {
       ElMessage.error(r.error.message);
       return;
     }
-    ElMessage.success('已保存，最迟 30 秒生效');
-    dialogOpen.value = false;
-    await load();
+    board.value = r.data;
+    if (!r.data.channels.some((c) => c.vendorKey === selectedKey.value)) selectedKey.value = r.data.channels[0]?.vendorKey ?? '';
   } finally {
-    saving.value = false;
+    boardLoading.value = false;
   }
 }
 
-/** 删一行以后这个模型照什么算，四种行各不一样。 */
-function removeText(r: PointRate): string {
-  const pair = `${r.vendorKey} / ${r.modelName}`;
-  if (r.vendorKey === ANY && r.modelName === ANY) return '删掉默认价？没有别的价格可用的模型会变成没有价格，用户选不了。';
-  if (r.vendorKey === ANY) return `删掉 ${r.modelName} 不分渠道的价？没有自己价格的渠道会改照默认价算；默认价也用不上的话用户选不了它。`;
-  if (r.source === 'compiled')
-    return `删掉 ${pair} 算出来的价？下次重算它还会按渠道倍率算回来；在那之前照更宽的那一行算（不分渠道的价、默认价）。想让它不跟渠道，改成单独定价。`;
-  return `删掉 ${pair} 单独定的价？它会跟回渠道倍率；渠道没设倍率、或者牌价里没有它的话，照更宽的那一行算（不分渠道的价、默认价），都没有用户就选不了它。`;
-}
-
-async function remove(r: PointRate): Promise<void> {
-  try {
-    await ElMessageBox.confirm(
-      removeText(r),
-      '删除价格',
-      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
-    );
-  } catch {
+/** 只认最后一次请求的回包：连着点两个渠道，慢的那个回来不会盖掉后点的。 */
+async function loadDetail(): Promise<void> {
+  const key = selectedKey.value;
+  const mine = ++detailSeq;
+  if (!key) {
+    detail.value = null;
+    detailLoading.value = false;
     return;
   }
-  const res = await port.deleteRate(r.id);
-  if (!res.success) {
-    ElMessage.error(res.error.message);
+  detailLoading.value = true;
+  try {
+    const r = await port.channel(key);
+    if (mine !== detailSeq) return;
+    if (r.success) detail.value = r.data;
+    else ElMessage.error(r.error.message);
+  } finally {
+    if (mine === detailSeq) detailLoading.value = false;
+  }
+}
+
+// ─── 不分渠道的旧价格 ────────────────────────────────────
+
+/** 渠道写 `*` 的那几行。平时是空的，这一块不出现。 */
+const wildcards = ref<PointRate[]>([]);
+
+async function loadWildcards(): Promise<void> {
+  const r = await port.rates();
+  // 读不到不弹：这一块只是提醒还有旧账，不耽误按渠道定价
+  if (r.success) wildcards.value = r.data.filter((rate) => rate.vendorKey === ANY);
+}
+
+function wildcardScope(rate: PointRate): string {
+  return rate.modelName === ANY ? '所有模型' : rate.modelName;
+}
+
+async function removeWildcard(rate: PointRate): Promise<void> {
+  const okp = await confirmDanger({
+    title: '删除不分渠道的价',
+    message: `删掉「${wildcardScope(rate)}」不分渠道的价？现在落在它上面的模型会变成没有价格，用户选不了，直到它所在的渠道给它算出价、或者单独定价。`,
+    confirmText: '删除',
+  });
+  if (!okp) return;
+  const r = await port.deleteRate(rate.id);
+  if (!r.success) {
+    ElMessage.error(r.error.message);
     return;
   }
   ElMessage.success('已删除');
-  await load();
+  await reload();
 }
 
-onMounted(load);
+/** 改完任何一样都一起重拉：左边的数（倍率、未定价几个）、右边的模型、顶上的旧价格是同一份数据的几个面。 */
+async function reload(): Promise<void> {
+  await Promise.all([loadBoard(), loadDetail(), loadWildcards()]);
+}
+
+// ─── 定价 ────────────────────────────────────────────────
+
+const settingsOpen = ref(false);
+
+const rateOpen = ref(false);
+const rateTarget = ref<ChannelModel | null>(null);
+
+function priceModel(row: ChannelModel): void {
+  rateTarget.value = row;
+  rateOpen.value = true;
+}
+
+/** 这个模型为什么没有价。算得出来、只是还没算的（刚接进来、当时手上没有牌价）不说成缺什么。 */
+function unpricedReason(row: ChannelModel): string {
+  const block = followBlock({
+    multiplier: selected.value?.multiplier ?? null,
+    listPrice: row.listPrice,
+    listPricesLoaded: listPricesLoaded.value,
+  });
+  return block ? followBlockText(block, row.listPrice, row.model.unit) : '还没算出来';
+}
+
+watch(selectedKey, () => {
+  tab.value = 'priced';
+  void loadDetail();
+});
+
+// 选中第一个渠道以后，上面那条 watch 去拉它的详情
+onMounted(() => {
+  void loadBoard();
+  void loadWildcards();
+});
 </script>
 
 <template>
-  <FillListPageLayout>
+  <WorkspaceLayout :loading="boardLoading && !board">
     <template #header>
-      <PageHeader
-        title="价格表"
-        description="单位是积分，1 元 = 100 积分。按 token 的是每百万 token 多少积分。"
-      >
+      <PageHeader title="模型定价">
         <template #actions>
           <el-button
-            type="primary"
-            :icon="Plus"
-            @click="create"
+            :icon="Refresh"
+            plain
+            :loading="boardLoading"
+            @click="reload"
           >
-            添加价格
+            刷新
           </el-button>
         </template>
       </PageHeader>
+      <div
+        v-if="!listPricesLoaded || wildcards.length > 0"
+        class="notices"
+      >
+        <el-alert
+          v-if="!listPricesLoaded"
+          type="warning"
+          :closable="false"
+          show-icon
+          title="手上没有牌价：算不了新价，已经算好的照旧在用。"
+        />
+        <el-alert
+          v-if="wildcards.length > 0"
+          class="wildcards"
+          type="warning"
+          :closable="false"
+          show-icon
+        >
+          <template #title>
+            还有 {{ wildcards.length }} 条不分渠道的旧价格在生效：没有自己价格的模型会按它们收（来源写着「{{ pricingLabels.default }}」）。
+          </template>
+          <ul class="wildcards__list">
+            <li
+              v-for="rate in wildcards"
+              :key="rate.id"
+            >
+              <span class="wildcards__scope">{{ wildcardScope(rate) }}</span>
+              <span class="num">{{ describePrice(rate.unit, rate.inputPrice, rate.outputPrice) }}</span>
+              <el-button
+                link
+                type="danger"
+                size="small"
+                @click="removeWildcard(rate)"
+              >
+                删除
+              </el-button>
+            </li>
+          </ul>
+        </el-alert>
+      </div>
     </template>
 
-    <el-table
-      v-loading="loading"
-      :data="rates"
-      row-key="id"
-      size="small"
-      stripe
-      height="100%"
-      :empty-text="' '"
-    >
-      <el-table-column
-        label="渠道"
-        min-width="130"
-      >
-        <template #default="{ row }: { row: PointRate }">
-          <span class="mono">{{ row.vendorKey }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column
-        label="模型"
-        min-width="220"
-      >
-        <template #default="{ row }: { row: PointRate }">
-          <div class="cell-stack">
-            <span class="mono">{{ row.modelName }}</span>
-            <!-- 只给通配的行注一句它管到谁；具体渠道的行（现在大多数是）渠道那一列已经写了 -->
-            <span
-              v-if="row.vendorKey === ANY"
-              class="cell-sub"
-            >{{ scope(row) }}</span>
+    <ChannelSidebar
+      v-model="selectedKey"
+      :channels="channels"
+      :upstream-reachable="upstreamReachable"
+    />
+
+    <WorkspaceDetailPanel v-if="selected">
+      <template #header>
+        <div class="detail-main">
+          <h2 class="provider-detail__title">
+            {{ selected.vendorName }}
+          </h2>
+          <p class="provider-detail__sub">
+            {{ selected.vendorKey }}
+          </p>
+          <div class="provider-detail__stats">
+            <span>已定价 {{ selected.priced }}</span>
+            <span :class="{ 'stat-warn': selected.unpriced > 0 }">未定价 {{ selected.unpriced }}</span>
           </div>
-        </template>
-      </el-table-column>
-      <el-table-column
-        label="计价"
-        width="90"
+        </div>
+        <button
+          type="button"
+          class="mult"
+          @click="settingsOpen = true"
+        >
+          <span
+            class="mult__v"
+            :class="{ 'mult__v--unset': selected.multiplier === null }"
+          >{{ multiplierText(selected.multiplier) }}</span>
+          <span class="mult__k">渠道倍率</span>
+        </button>
+      </template>
+
+      <template #toolbar>
+        <el-tabs
+          v-model="tab"
+          class="channel-tabs"
+        >
+          <el-tab-pane name="priced">
+            <template #label>
+              <span class="tab-label">
+                已定价
+                <el-tag
+                  v-if="priced.length > 0"
+                  size="small"
+                  type="info"
+                  effect="plain"
+                  round
+                >
+                  {{ priced.length }}
+                </el-tag>
+              </span>
+            </template>
+          </el-tab-pane>
+          <el-tab-pane name="unpriced">
+            <template #label>
+              <span class="tab-label">
+                未定价
+                <el-tag
+                  v-if="unpriced.length > 0"
+                  size="small"
+                  type="danger"
+                  effect="plain"
+                  round
+                >
+                  {{ unpriced.length }}
+                </el-tag>
+              </span>
+            </template>
+          </el-tab-pane>
+        </el-tabs>
+      </template>
+
+      <div
+        v-show="tab === 'priced'"
+        v-loading="detailLoading"
+        class="provider-detail__table-wrap"
       >
-        <template #default="{ row }: { row: PointRate }">
-          {{ unitLabels[row.unit] }}
-        </template>
-      </el-table-column>
-      <el-table-column
-        label="价格（积分）"
-        min-width="280"
-      >
-        <template #default="{ row }: { row: PointRate }">
-          <span class="num">{{ describePrice(row.unit, row.inputPrice, row.outputPrice) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column
-        label="来源"
-        min-width="180"
-      >
-        <template #default="{ row }: { row: PointRate }">
-          <div class="cell-stack">
-            <span>
+        <el-table
+          :data="priced"
+          :row-key="(row: ChannelModel) => String(row.model.id)"
+          size="small"
+          class="compact-table"
+          height="100%"
+          :empty-text="' '"
+        >
+          <el-table-column
+            label="模型"
+            min-width="220"
+          >
+            <template #default="{ row }: { row: ChannelModel }">
+              <div class="cell-stack">
+                <span class="model-name">
+                  <span :class="{ 'cell-muted': !row.model.enabled }">{{ row.model.displayName }}</span>
+                  <!-- 开着是常态，不占一列：只把停用的标出来 -->
+                  <el-tag
+                    v-if="!row.model.enabled"
+                    size="small"
+                    type="info"
+                    effect="plain"
+                  >
+                    停用
+                  </el-tag>
+                </span>
+                <!-- 刚接进来的模型名称就是模型名：不把同一个字符串写两行 -->
+                <span
+                  v-if="row.model.displayName !== row.model.modelName"
+                  class="cell-sub mono"
+                >{{ row.model.modelName }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column
+            label="类别"
+            width="76"
+          >
+            <template #default="{ row }: { row: ChannelModel }">
+              {{ categoryLabels[row.model.category] }}
+            </template>
+          </el-table-column>
+          <el-table-column
+            label="价格（积分）"
+            min-width="260"
+          >
+            <template #default="{ row }: { row: ChannelModel }">
+              <span class="num">{{ describeModelPrice(row.model.category, row.model.inputPrice, row.model.outputPrice) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column
+            label="来源"
+            width="100"
+          >
+            <template #default="{ row }: { row: ChannelModel }">
               <el-tag
                 size="small"
-                :type="pricingTones[row.source]"
+                :type="pricingTones[row.pricing]"
                 effect="plain"
               >
-                {{ pricingLabels[row.source] }}
+                {{ pricingLabels[row.pricing] }}
               </el-tag>
-            </span>
-            <span
-              v-if="row.source === 'compiled'"
-              class="cell-sub"
-            >
-              牌价 <span class="mono">{{ row.sourceModelKey ?? '—' }}</span>
-              <span v-if="row.multiplierApplied !== null"> · {{ multiplierText(row.multiplierApplied) }}</span>
-            </span>
-          </div>
-        </template>
-      </el-table-column>
-      <el-table-column
-        label="更新时间"
-        width="150"
-      >
-        <template #default="{ row }: { row: PointRate }">
-          <span class="mono cell-time">{{ formatDateTime(row.updatedAt, 'YYYY-MM-DD HH:mm') }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column
-        label="操作"
-        width="110"
-        align="center"
-        fixed="right"
-      >
-        <template #default="{ row }: { row: PointRate }">
-          <el-button
-            link
-            type="primary"
-            @click="edit(row)"
+            </template>
+          </el-table-column>
+          <el-table-column
+            label="操作"
+            width="76"
+            align="right"
+            fixed="right"
           >
-            改价
-          </el-button>
-          <el-button
-            link
-            type="danger"
-            @click="remove(row)"
-          >
-            删除
-          </el-button>
-        </template>
-      </el-table-column>
+            <template #default="{ row }: { row: ChannelModel }">
+              <el-button
+                link
+                type="primary"
+                @click="priceModel(row)"
+              >
+                定价
+              </el-button>
+            </template>
+          </el-table-column>
 
-      <template #empty>
+          <!-- 详情没拉到（还在拉、或者拉失败了）时不说「没有」：那是不知道，不是没有 -->
+          <template #empty>
+            <EmptyState
+              v-if="current && !detailLoading"
+              :title="current.models.length === 0 ? '这个渠道还没有接入模型' : '这个渠道还没有定好价的模型'"
+              :description="current.models.length === 0 ? '在「渠道」页接入模型' : undefined"
+            />
+          </template>
+        </el-table>
+      </div>
+
+      <div
+        v-show="tab === 'unpriced'"
+        v-loading="detailLoading"
+        class="provider-detail__table-wrap"
+      >
+        <el-table
+          :data="unpriced"
+          :row-key="(row: ChannelModel) => String(row.model.id)"
+          size="small"
+          class="compact-table"
+          height="100%"
+          :empty-text="' '"
+        >
+          <el-table-column
+            label="模型"
+            min-width="220"
+          >
+            <template #default="{ row }: { row: ChannelModel }">
+              <div class="cell-stack">
+                <span class="model-name">
+                  <span :class="{ 'cell-muted': !row.model.enabled }">{{ row.model.displayName }}</span>
+                  <el-tag
+                    v-if="!row.model.enabled"
+                    size="small"
+                    type="info"
+                    effect="plain"
+                  >
+                    停用
+                  </el-tag>
+                </span>
+                <span
+                  v-if="row.model.displayName !== row.model.modelName"
+                  class="cell-sub mono"
+                >{{ row.model.modelName }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column
+            label="类别"
+            width="76"
+          >
+            <template #default="{ row }: { row: ChannelModel }">
+              {{ categoryLabels[row.model.category] }}
+            </template>
+          </el-table-column>
+          <el-table-column
+            label="差什么"
+            min-width="260"
+          >
+            <template #default="{ row }: { row: ChannelModel }">
+              <span class="unpriced-reason">{{ unpricedReason(row) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column
+            label="操作"
+            width="76"
+            align="right"
+            fixed="right"
+          >
+            <template #default="{ row }: { row: ChannelModel }">
+              <el-button
+                link
+                type="primary"
+                @click="priceModel(row)"
+              >
+                定价
+              </el-button>
+            </template>
+          </el-table-column>
+
+          <template #empty>
+            <EmptyState
+              v-if="current && !detailLoading"
+              title="都定好价了"
+            />
+          </template>
+        </el-table>
+      </div>
+    </WorkspaceDetailPanel>
+
+    <WorkspaceDetailPanel
+      v-else
+      show-placeholder
+    >
+      <template #placeholder>
         <EmptyState
-          title="还没有定价"
-          description="在「渠道」里给渠道设倍率，价格就按牌价算出来了；这里可以加一行默认价（渠道、模型都写 *）兜底。"
+          v-if="!boardLoading"
+          title="还没有渠道"
         />
       </template>
-    </el-table>
-  </FillListPageLayout>
+    </WorkspaceDetailPanel>
 
-  <el-dialog
-    v-model="dialogOpen"
-    :title="editing ? '改价' : '添加价格'"
-    width="520px"
-    align-center
-    :close-on-click-modal="false"
-  >
-    <el-form
-      ref="formRef"
-      :model="form"
-      :rules="rules"
-      label-width="72px"
-    >
-      <el-form-item
-        label="渠道"
-        prop="vendorKey"
-      >
-        <el-input
-          v-model="form.vendorKey"
-          :disabled="editing"
-          maxlength="64"
-          placeholder="如：kiro；不分渠道写 *"
-        />
-      </el-form-item>
-      <el-form-item
-        label="模型"
-        prop="modelName"
-      >
-        <el-input
-          v-model="form.modelName"
-          :disabled="editing"
-          maxlength="128"
-          placeholder="如：claude-opus-5.5；默认价写 *"
-        />
-        <span
-          v-if="!editing && existing"
-          class="hint hint--warn"
-        >这一对已经有价格了（{{ describePrice(existing.unit, existing.inputPrice, existing.outputPrice) }}），保存会改掉它。</span>
-        <span
-          v-else-if="!editing"
-          class="hint"
-        >{{ scope({ vendorKey: form.vendorKey.trim(), modelName: form.modelName.trim() }) }}</span>
-      </el-form-item>
-      <el-form-item label="计价">
-        <el-radio-group
-          v-model="form.unit"
-          @change="onUnitChange"
-        >
-          <el-radio-button
-            v-for="u in rateUnits"
-            :key="u"
-            :value="u"
-          >
-            {{ unitLabels[u] }}
-          </el-radio-button>
-        </el-radio-group>
-        <span class="hint">对话、向量、重排按 token；生图按张；语音按秒。单位和模型的类别对不上，这一行就用不上。</span>
-      </el-form-item>
-      <el-form-item
-        v-if="priceFields[form.unit].input"
-        :label="priceFields[form.unit].input ?? ''"
-      >
-        <el-input-number
-          v-model="form.inputPrice"
-          :min="0"
-          :precision="form.unit === 'token' ? 2 : 4"
-          :step="form.unit === 'token' ? 100 : 0.01"
-          controls-position="right"
-        />
-        <span class="unit">积分 {{ unitPer[form.unit] }}</span>
-      </el-form-item>
-      <el-form-item :label="priceFields[form.unit].output ?? ''">
-        <el-input-number
-          v-model="form.outputPrice"
-          :min="0"
-          :precision="form.unit === 'token' ? 2 : 4"
-          :step="form.unit === 'token' ? 100 : form.unit === 'image' ? 1 : 0.01"
-          controls-position="right"
-        />
-        <span class="unit">积分 {{ unitPer[form.unit] }}</span>
-      </el-form-item>
-      <el-form-item
-        v-if="form.unit === 'token'"
-        label="折合"
-      >
-        <span class="hint hint--inline">
-          每百万 token 输入 ¥{{ formatPrice(form.inputPrice / 100) }}、输出 ¥{{ formatPrice(form.outputPrice / 100) }}
-        </span>
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <el-button @click="dialogOpen = false">
-        取消
-      </el-button>
-      <el-button
-        type="primary"
-        :loading="saving"
-        @click="save"
-      >
-        保存
-      </el-button>
-    </template>
-  </el-dialog>
+    <ChannelEditDrawer
+      v-model="settingsOpen"
+      :channel="selected"
+      :compiled-count="compiledCount"
+      @saved="reload"
+    />
+
+    <ModelRateDrawer
+      v-model="rateOpen"
+      :target="rateTarget"
+      :channel="selected"
+      :list-prices-loaded="listPricesLoaded"
+      @saved="reload"
+    />
+  </WorkspaceLayout>
 </template>
 
 <style scoped>
+.notices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.notices :deep(.el-alert) {
+  padding: 6px 12px;
+}
+
+.wildcards__list {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wildcards__list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  line-height: 1.8;
+}
+
+.wildcards__scope {
+  min-width: 120px;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--el-text-color-primary);
+}
+
+.detail-main {
+  flex: 1;
+  min-width: 0;
+}
+
+:deep(.provider-detail__header) {
+  align-items: center;
+}
+
+.provider-detail__stats {
+  align-items: center;
+}
+
+.stat-warn {
+  color: var(--el-color-danger);
+}
+
+/* 倍率：这一页最要紧的一个数，点它改（照 Yomi 定价页右上角那一个） */
+.mult {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.mult__v {
+  font-size: 22px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  color: var(--el-text-color-primary);
+}
+
+/* 「未设置」是字不是数：不用数字的字距，颜色提醒一下 */
+.mult__v--unset {
+  font-size: 18px;
+  letter-spacing: 0;
+  color: var(--el-color-warning);
+}
+
+.mult:hover .mult__v {
+  color: var(--el-color-primary);
+}
+
+.mult__k {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.channel-tabs {
+  margin-bottom: 4px;
+}
+
+.channel-tabs :deep(.el-tabs__header) {
+  margin-bottom: 0;
+}
+
+.channel-tabs :deep(.el-tabs__nav-wrap)::after {
+  height: 1px;
+}
+
+.tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.unpriced-reason {
+  color: var(--el-color-danger);
+}
+
 .mono {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
@@ -410,35 +630,10 @@ onMounted(load);
   line-height: 1.35;
 }
 
-.cell-time {
-  font-size: 12px;
-}
-
-/* 全局的 .cell-sub 只在 compact-table 里生效，这张表不是，自己带一份 */
-.cell-sub {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.unit {
-  margin-left: 10px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.hint {
-  display: block;
-  width: 100%;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--el-text-color-secondary);
-}
-
-.hint--inline {
-  display: inline;
-}
-
-.hint--warn {
-  color: var(--el-color-warning);
+.model-name {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 </style>

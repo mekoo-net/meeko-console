@@ -193,11 +193,11 @@ export const navViews: readonly NavView[] = [
     title: 'Jastalk',
     icon: ChatDotRound,
     roles: ['Admin'],
-    // 用户进去看他的积分；渠道里接模型、定倍率，价格表是算出来的结果（加上人单独定的、通配的默认价）；用量明细是查账用的。
+    // 用户进去看他的积分；渠道里接模型，模型定价里按渠道定倍率（照 Yomi 的供应商组、模型定价两页分）；用量明细是查账用的。
     menu: [
       { type: 'leaf', index: '/jastalk/users', title: '用户', icon: User },
       { type: 'leaf', index: '/jastalk/channels', title: '渠道', icon: Link },
-      { type: 'leaf', index: '/jastalk/rates', title: '价格表', icon: PriceTag },
+      { type: 'leaf', index: '/jastalk/rates', title: '模型定价', icon: PriceTag },
       { type: 'leaf', index: '/jastalk/usage', title: '用量明细', icon: DataLine },
     ],
   },
