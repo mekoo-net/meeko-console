@@ -2,9 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   catalogBoardSchema,
+  channelBoardSchema,
+  channelDetailSchema,
+  channelSavedSchema,
   jastalkUserSchema,
+  modelImportResultSchema,
   pointAccountSchema,
   pointRateSchema,
+  rateCompileResultSchema,
   usageLogSchema,
 } from '../model/jastalk.types';
 import { describePrice, formatPoints, parseAccountUid, purposeLabel, txnAmountText } from '../model/jastalkFormat';
@@ -56,7 +61,75 @@ describe('jastalk admin wire shapes', () => {
       ],
     });
     expect(board.models[1]?.priced).toBe(false);
-    expect(pointRateSchema.parse({ id: 5, vendorKey: '*', modelName: '*', unit: 'token', inputPrice: 300, outputPrice: 1500, updatedAt: 1763452800000 }).unit).toBe('token');
+
+    // 人定的行没有牌价键和倍率；算出来的行两样都有
+    const manual = { id: 5, vendorKey: '*', modelName: '*', unit: 'token', inputPrice: 300, outputPrice: 1500, updatedAt: 1763452800000, source: 'manual', sourceModelKey: null, multiplierApplied: null };
+    const compiled = { id: 6, vendorKey: 'kiro', modelName: 'claude-opus-5.5', unit: 'token', inputPrice: 3500, outputPrice: 17500, updatedAt: 1763452800000, source: 'compiled', sourceModelKey: 'claude-opus-5.5', multiplierApplied: 7 };
+    expect(pointRateSchema.parse(manual)).toEqual(manual);
+    expect(pointRateSchema.parse(compiled)).toEqual(compiled);
+    // 没带 source 的是改之前的后端：先挂，不把它当成单独定价悄悄显示
+    expect(() => pointRateSchema.parse({ ...manual, source: undefined })).toThrow();
+  });
+
+  const channel = { vendorKey: 'kiro', vendorName: 'Kiro', multiplier: 7, online: true, upstreamModels: 4, models: 2, priced: 2, unpriced: 0, updatedAt: 1763452800000 };
+  const compile = { compiled: 2, unchanged: 0, removed: 0, unmatched: [], listPricesEmpty: false, newVersion: 15 };
+
+  it('reads the channel board (ChannelBoardDto)', () => {
+    // 没在这边设置过的渠道：没有倍率、没有更新时间；不在线的照样在清单里
+    const untouched = { vendorKey: 'antigravity', vendorName: 'antigravity', multiplier: null, online: false, upstreamModels: 0, models: 0, priced: 0, unpriced: 0, updatedAt: null };
+    const board = { version: 15, channels: [channel, untouched], upstreamReachable: true, listPricesLoaded: false, listPriceCount: 0 };
+    expect(channelBoardSchema.parse(board)).toEqual(board);
+    // 页头要显示版本号：后端没带就先挂，不显示成「版本 undefined」
+    expect(() => channelBoardSchema.parse({ ...board, version: undefined })).toThrow();
+    // 时间是 Unix 毫秒，不是 ISO 字符串
+    expect(() => channelBoardSchema.parse({ ...board, channels: [{ ...channel, updatedAt: '2026-11-19T17:43:42Z' }] })).toThrow();
+  });
+
+  it('reads a channel with its models and what can still be imported (ChannelDetailDto)', () => {
+    const model = {
+      id: 1, category: 'chat', vendorKey: 'kiro', vendorName: 'Kiro', modelName: 'claude-opus-5.5', displayName: 'Claude Opus 5.5',
+      enabled: true, sort: 10, priced: true, unit: 'token', inputPrice: 3500, outputPrice: 17500, ratedBy: 'kiro/claude-opus-5.5', updatedAt: 1763452800000,
+    };
+    const listPrice = {
+      modelKey: 'claude-opus-5.5', maker: 'anthropic', billingType: 'per_token', rate: { input: { perMToken: 5, cachedRead: 0.5 }, output: { perMToken: 25 } },
+      usdInput: 5, usdOutput: 25, convertible: true, pointsInput: 3500, pointsOutput: 17500,
+    };
+    // 牌价按字符算、折不成按秒：美元和积分那四个数都是空的
+    const unconvertible = {
+      modelKey: 'cosyvoice2-0.5b', maker: 'funaudiollm', billingType: 'per_character', rate: { pricePerKChar: 0.007 },
+      usdInput: null, usdOutput: null, convertible: false, pointsInput: null, pointsOutput: null,
+    };
+    const detail = channelDetailSchema.parse({
+      channel,
+      models: [
+        { model, pricing: 'compiled', rateId: 6, listPrice, upstream: true },
+        // 没有自己的价格行（没有价、或者落在通配价上）：编号是 null
+        { model: { ...model, id: 2, category: 'tts', unit: 'audio_second', priced: false, inputPrice: 0, outputPrice: 0, ratedBy: null }, pricing: 'none', rateId: null, listPrice: unconvertible, upstream: false },
+      ],
+      available: [
+        { modelName: 'claude-haiku-5-5', listPrice: { ...listPrice, modelKey: 'claude-haiku-5-5' } },
+        { modelName: 'imagen-5', listPrice: null },
+      ],
+    });
+    expect(detail.models.map((m) => [m.pricing, m.rateId])).toEqual([['compiled', 6], ['none', null]]);
+    expect(detail.models[1]?.listPrice?.convertible).toBe(false);
+    expect(detail.available[1]?.listPrice).toBeNull();
+    // 来源只有四种；后端加了第五种，页面上的标签和「能不能跟渠道」都得跟着改
+    expect(() => channelDetailSchema.parse({ channel, models: [{ model, pricing: 'inherited', rateId: 6, listPrice, upstream: true }], available: [] })).toThrow();
+    // 切回跟渠道要靠 rateId 去删那一行：没带这个字段的是改之前的后端
+    expect(() => channelDetailSchema.parse({ channel, models: [{ model, pricing: 'manual', listPrice, upstream: true }], available: [] })).toThrow();
+  });
+
+  it('reads what comes back from saving a channel, importing models and recompiling (ChannelSavedDto, ModelImportResult, RateCompileResult)', () => {
+    const unmatched = [
+      { vendorKey: 'media', modelName: 'FunAudioLLM/SenseVoiceSmall', reason: 'no_list_price' },
+      { vendorKey: 'media', modelName: 'fishaudio/fish-speech-1.5', reason: 'unit_mismatch' },
+    ];
+    expect(channelSavedSchema.parse({ channel, compile })).toEqual({ channel, compile });
+    expect(modelImportResultSchema.parse({ added: 2, skipped: 1, compile: { ...compile, unmatched } }).compile.unmatched).toEqual(unmatched);
+    // 没有改动时版本号是 null；没读到牌价时什么都没重算
+    const idle = { compiled: 0, unchanged: 0, removed: 0, unmatched: [], listPricesEmpty: true, newVersion: null };
+    expect(rateCompileResultSchema.parse(idle)).toEqual(idle);
   });
 
   it('reads a usage log with its lines (AdminUsageLogDto)', () => {

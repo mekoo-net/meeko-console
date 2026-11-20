@@ -1,8 +1,10 @@
 <script setup lang="ts">
 /**
- * Jastalk 定价：每个模型用一次扣多少积分（1 元 = 100 积分）。
- * 一行管一个（渠道, 模型）。渠道写 `*` 是不分渠道，两个都写 `*` 是默认价；找价格的顺序是
- * （渠道, 模型）→（*, 模型）→（*, *），取第一个单位对得上的。都找不到的模型用户选不了。
+ * Jastalk 价格表：每个模型用一次扣多少积分（1 元 = 100 积分），扣积分只认这张表。
+ * 大多数行是「渠道」页按牌价 × 渠道倍率算出来的，这里看得到它们各自对上的牌价键和用的倍率；
+ * 人在这里加的、改的行是单独定价（改一行算出来的也会变成单独定价，重算不再碰它）。这一页主要用来定通配的价：
+ * 渠道写 `*` 是不分渠道，两个都写 `*` 是默认价。找价格的顺序是（渠道, 模型）→（*, 模型）→（*, *），
+ * 取第一个单位对得上的；都找不到的模型用户选不了。
  * 改价最迟 30 秒生效；已经结算的不受影响（用量明细里抄着当时的单价）。
  */
 import { computed, onMounted, ref } from 'vue';
@@ -13,7 +15,9 @@ import PageHeader from '@/shared/ui/PageHeader.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import FillListPageLayout from '@/shared/ui/FillListPageLayout.vue';
 import { formatDateTime } from '@/shared/lib/date';
+import { confirmDanger } from '@/shared/composables/useConfirm';
 
+import { multiplierText, pricingLabels, pricingTones } from '../model/channelPricing';
 import { ANY, rateUnits, type PointRate, type PointRateEdit, type RateUnit } from '../model/jastalk.types';
 import { describePrice, formatPrice, unitLabels, unitPer } from '../model/jastalkFormat';
 import { getJastalkAdminPort } from '../services';
@@ -36,7 +40,7 @@ async function load(): Promise<void> {
 
 /** 这一行管到谁。 */
 function scope(r: Pick<PointRate, 'vendorKey' | 'modelName'>): string {
-  if (r.vendorKey === ANY && r.modelName === ANY) return '默认价：没单独定价的都照它';
+  if (r.vendorKey === ANY && r.modelName === ANY) return '默认价：没有自己价格的都照它';
   if (r.vendorKey === ANY) return '不分渠道';
   return '只管这个渠道';
 }
@@ -87,7 +91,16 @@ function create(): void {
   dialogOpen.value = true;
 }
 
-function edit(r: PointRate): void {
+async function edit(r: PointRate): Promise<void> {
+  // 算出来的行一改就变成单独定价、不再跟牌价和倍率变：先说清楚，免得改完才发现它不跟了
+  if (r.source === 'compiled') {
+    const okp = await confirmDanger({
+      title: '改成单独定价',
+      message: `${r.vendorKey} / ${r.modelName} 的价是跟渠道倍率算出来的。改了以后它变成单独定价，牌价和倍率再变也不跟着变。`,
+      confirmText: '继续改价',
+    });
+    if (!okp) return;
+  }
   editing.value = true;
   form.value = { vendorKey: r.vendorKey, modelName: r.modelName, unit: r.unit, inputPrice: r.inputPrice, outputPrice: r.outputPrice };
   dialogOpen.value = true;
@@ -110,13 +123,20 @@ async function save(): Promise<void> {
   }
 }
 
+/** 删一行以后这个模型照什么算，四种行各不一样。 */
+function removeText(r: PointRate): string {
+  const pair = `${r.vendorKey} / ${r.modelName}`;
+  if (r.vendorKey === ANY && r.modelName === ANY) return '删掉默认价？没有别的价格可用的模型会变成没有价格，用户选不了。';
+  if (r.vendorKey === ANY) return `删掉 ${r.modelName} 不分渠道的价？没有自己价格的渠道会改照默认价算；默认价也用不上的话用户选不了它。`;
+  if (r.source === 'compiled')
+    return `删掉 ${pair} 算出来的价？下次重算它还会按渠道倍率算回来；在那之前照更宽的那一行算（不分渠道的价、默认价）。想让它不跟渠道，改成单独定价。`;
+  return `删掉 ${pair} 单独定的价？它会跟回渠道倍率；渠道没设倍率、或者牌价里没有它的话，照更宽的那一行算（不分渠道的价、默认价），都没有用户就选不了它。`;
+}
+
 async function remove(r: PointRate): Promise<void> {
-  const isDefault = r.vendorKey === ANY && r.modelName === ANY;
   try {
     await ElMessageBox.confirm(
-      isDefault
-        ? '删掉默认价？没单独定价的模型会变成没有价格，用户选不了。'
-        : `删掉 ${r.vendorKey} / ${r.modelName} 的价格？它会改照更宽的那一行算（不分渠道的价、默认价）；都没有的话用户选不了它。`,
+      removeText(r),
       '删除价格',
       { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
     );
@@ -139,7 +159,7 @@ onMounted(load);
   <FillListPageLayout>
     <template #header>
       <PageHeader
-        title="定价"
+        title="价格表"
         description="单位是积分，1 元 = 100 积分。按 token 的是每百万 token 多少积分。"
       >
         <template #actions>
@@ -178,7 +198,11 @@ onMounted(load);
         <template #default="{ row }: { row: PointRate }">
           <div class="cell-stack">
             <span class="mono">{{ row.modelName }}</span>
-            <span class="cell-sub">{{ scope(row) }}</span>
+            <!-- 只给通配的行注一句它管到谁；具体渠道的行（现在大多数是）渠道那一列已经写了 -->
+            <span
+              v-if="row.vendorKey === ANY"
+              class="cell-sub"
+            >{{ scope(row) }}</span>
           </div>
         </template>
       </el-table-column>
@@ -196,6 +220,31 @@ onMounted(load);
       >
         <template #default="{ row }: { row: PointRate }">
           <span class="num">{{ describePrice(row.unit, row.inputPrice, row.outputPrice) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="来源"
+        min-width="180"
+      >
+        <template #default="{ row }: { row: PointRate }">
+          <div class="cell-stack">
+            <span>
+              <el-tag
+                size="small"
+                :type="pricingTones[row.source]"
+                effect="plain"
+              >
+                {{ pricingLabels[row.source] }}
+              </el-tag>
+            </span>
+            <span
+              v-if="row.source === 'compiled'"
+              class="cell-sub"
+            >
+              牌价 <span class="mono">{{ row.sourceModelKey ?? '—' }}</span>
+              <span v-if="row.multiplierApplied !== null"> · {{ multiplierText(row.multiplierApplied) }}</span>
+            </span>
+          </div>
         </template>
       </el-table-column>
       <el-table-column
@@ -233,7 +282,7 @@ onMounted(load);
       <template #empty>
         <EmptyState
           title="还没有定价"
-          description="没有价格的模型用户选不了。先加一行默认价（渠道、模型都写 *），再给贵的模型单独定价。"
+          description="在「渠道」里给渠道设倍率，价格就按牌价算出来了；这里可以加一行默认价（渠道、模型都写 *）兜底。"
         />
       </template>
     </el-table>
@@ -363,6 +412,12 @@ onMounted(load);
 
 .cell-time {
   font-size: 12px;
+}
+
+/* 全局的 .cell-sub 只在 compact-table 里生效，这张表不是，自己带一份 */
+.cell-sub {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 .unit {

@@ -192,7 +192,7 @@ export class YomiRateMock implements YomiRatePort {
         effectiveFromUtc: t,
         updatedAtUtc: t,
         updatedBy: cur.updatedBy ?? null,
-        sourcePriceId: null,
+        sourceModelKey: null,
         multiplierApplied: null,
       } as Rate;
       const p = parseRate(next);
@@ -208,7 +208,7 @@ export class YomiRateMock implements YomiRatePort {
       effectiveFromUtc: t,
       updatedAtUtc: t,
       updatedBy: null,
-      sourcePriceId: null,
+      sourceModelKey: null,
       multiplierApplied: null,
     } as Rate;
     const p = parseRate(row);

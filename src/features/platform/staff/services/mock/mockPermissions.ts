@@ -28,6 +28,8 @@ export const MOCK_ALL_STAFF_PERMISSIONS = [
   'billing.voucher.write',
   'account.admin.read',
   'account.admin.write',
+  'oneapi.vault.read',
+  'oneapi.vault.write',
   'storage.backend.read',
   'storage.backend.write',
   'yomi:redemption:read',

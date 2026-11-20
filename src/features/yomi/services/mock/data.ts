@@ -43,7 +43,6 @@ export interface YomiStore {
 }
 
 export const genProviderUid = createUidSeq(12_000_000);
-export const genModelPriceUid = createUidSeq(20_000_000);
 export const genProviderModelUid = createUidSeq(15_000_000);
 export const genMappingUid = createUidSeq(16_000_000);
 export const genModelUid = createUidSeq(13_000_000);
@@ -1193,7 +1192,7 @@ function seedCompiledRates(
         effectiveFromUtc: t - 2 * 86_400_000,
         updatedAtUtc: t,
         updatedBy: { iamUid: '200000001' },
-        sourcePriceId: null,
+        sourceModelKey: null,
         multiplierApplied: null,
       });
       continue;
@@ -1213,7 +1212,7 @@ function seedCompiledRates(
       effectiveFromUtc: t - 2 * 86_400_000,
       updatedAtUtc: t,
       updatedBy: { iamUid: '200000001' },
-      sourcePriceId: price.id,
+      sourceModelKey: price.modelKey,
       multiplierApplied: multiplier,
     } as Rate);
   }
@@ -1221,39 +1220,23 @@ function seedCompiledRates(
 }
 
 /**
- * 这几条种子假装被人改过价（偏离官方牌价），好让「上游同步」的 diff 有东西可看。
- * 固定几个键、固定倍数——mock 每次打开要一模一样。
- */
-const ADJUSTED: Readonly<Record<string, number>> = {
-  'gpt-4.1': 1.1,
-  'claude-sonnet-4-5': 1.15,
-  'gemini-2.5-flash': 0.9,
-};
-
-/**
- * 价格表种子 = 固化的官方美元牌价。编译：美元 × 渠道倍率 = 人民币。
+ * 价格表种子 = 固化的官方美元牌价，当作号池管理台发布出来的那一份（这边只读）。编译：美元 × 渠道倍率 = 人民币。
  * 与渠道里用到哪些模型无关：价格表是一套官方基准目录，不是「在用清单」。
  */
 function seedModelPrices(): ModelPrice[] {
   const t = epochMs(now);
   return OFFICIAL_USD_PRICES.map((row) => {
-    const adjusted = ADJUSTED[row.modelKey];
-    const f = adjusted ?? 1;
-    const body = scaleRateBody(officialUsdRateBody(row), f);
-    const catalogued = row.kind === 'llm' || row.kind === 'embedding';
-    const sourced = adjusted == null && catalogued;
+    const body = officialUsdRateBody(row);
     return {
-      id: genModelPriceUid(),
       modelKey: row.modelKey,
       maker: row.maker,
       billingType: body.billingType,
       rate: body.rate,
       currency: MODEL_PRICE_CURRENCY,
       capabilities: officialUsdCapabilities(row),
-      source: sourced ? 'models_dev' : '',
-      sourceRef: sourced ? `models_dev:${row.maker}/${row.modelKey}` : null,
-      fetchedAtUtc: sourced ? t - 86_400_000 : null,
-      effectiveFromUtc: t - 7 * 86_400_000,
+      // 按厂家分组的视图和单条查询，后端不填路由数
+      routeCount: 0,
+      updatedAtUtc: t - 7 * 86_400_000,
     } as ModelPrice;
   });
 }

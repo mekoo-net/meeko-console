@@ -1,0 +1,18 @@
+/*
+ * 渠道页两个抽屉（渠道设置、模型定价）共用的头、身、脚。
+ * el-drawer 的这三块渲染在组件根之外，scoped 样式够不着，所以用全局类名（带 jastalk 前缀，不和别的分区撞）。
+ */
+.jastalk-drawer-header {
+  margin-bottom: 0 !important;
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.jastalk-drawer-body {
+  padding: 20px;
+}
+
+.jastalk-drawer-footer {
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}

@@ -30,7 +30,7 @@ export const categoryLabels: Readonly<Record<ModelCategory, string>> = {
   rerank: '重排',
 };
 
-/** 每一类按什么算：定价表里那一行的单位得和它一样，这个模型才算有价格。 */
+/** 每一类按什么算：价格表里那一行的单位得和它一样，这个模型才算有价格。 */
 export const categoryUnits: Readonly<Record<ModelCategory, RateUnit>> = {
   chat: 'token',
   embed: 'token',

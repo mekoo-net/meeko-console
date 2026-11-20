@@ -27,6 +27,7 @@ import {
   Lock,
   Discount,
   Setting,
+  SetUp,
   Shop,
   Ticket,
   Tickets,
@@ -119,7 +120,6 @@ export const navViews: readonly NavView[] = [
     menu: [
       { type: 'leaf', index: '/yomi/overview', title: '概览', icon: DataAnalysis },
       { type: 'leaf', index: '/yomi/report', title: '报表', icon: Histogram },
-      { type: 'leaf', index: '/yomi/pricing', title: '价格表', icon: Coin },
       { type: 'leaf', index: '/yomi/vendors', title: '供应商组', icon: Link },
       { type: 'leaf', index: '/yomi/rate', title: '模型定价', icon: PriceTag },
       { type: 'leaf', index: '/yomi/logs', title: '调用日志', icon: DataLine },
@@ -193,11 +193,11 @@ export const navViews: readonly NavView[] = [
     title: 'Jastalk',
     icon: ChatDotRound,
     roles: ['Admin'],
-    // 用户进去看他的积分；目录和定价是一对（目录里有、定价里没有的模型用户选不了）；用量明细是查账用的。
+    // 用户进去看他的积分；渠道里接模型、定倍率，价格表是算出来的结果（加上人单独定的、通配的默认价）；用量明细是查账用的。
     menu: [
       { type: 'leaf', index: '/jastalk/users', title: '用户', icon: User },
-      { type: 'leaf', index: '/jastalk/catalog', title: '模型目录', icon: List },
-      { type: 'leaf', index: '/jastalk/rates', title: '定价', icon: PriceTag },
+      { type: 'leaf', index: '/jastalk/channels', title: '渠道', icon: Link },
+      { type: 'leaf', index: '/jastalk/rates', title: '价格表', icon: PriceTag },
       { type: 'leaf', index: '/jastalk/usage', title: '用量明细', icon: DataLine },
     ],
   },
@@ -283,6 +283,30 @@ export const navViews: readonly NavView[] = [
         children: [
           { type: 'leaf', index: '/settings/gateway/issue', title: '签发凭据', icon: Key, roles: ['Admin'] },
           { type: 'leaf', index: '/settings/gateway/credentials', title: '凭据列表', icon: Tickets, roles: ['Admin'] },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'components',
+    title: '组件设置',
+    icon: SetUp,
+    perm: 'platform.settings.read',
+    // 平台依赖的组件各占一组，组里是这个组件自己的设置页。现在只有 OneApi；它的别的设置以后加在同一组里。
+    menu: [
+      {
+        type: 'group',
+        index: '/components/oneapi',
+        title: 'OneApi',
+        icon: Connection,
+        children: [
+          {
+            type: 'leaf',
+            index: '/components/oneapi/ratecard',
+            title: '模型价格',
+            icon: PriceTag,
+            perm: 'platform.settings.read',
+          },
         ],
       },
     ],

@@ -5,15 +5,27 @@ import { jastalkPaths } from '@/features/jastalk/api/routes';
 import {
   catalogBoardSchema,
   catalogModelSchema,
+  channelBoardSchema,
+  channelDetailSchema,
+  channelSavedSchema,
   jastalkUserSchema,
+  modelImportResultSchema,
   pointAccountSchema,
   pointBalanceSchema,
   pointRateSchema,
+  rateCompileResultSchema,
   usageLogSchema,
   type CatalogBoard,
   type CatalogModel,
   type CatalogModelEdit,
+  type ChannelBoard,
+  type ChannelDetail,
+  type ChannelEdit,
+  type ChannelSaved,
   type JastalkUser,
+  type ModelCategory,
+  type ModelImport,
+  type ModelImportResult,
   type PageQuery,
   type Paged,
   type PointAccount,
@@ -21,6 +33,7 @@ import {
   type PointBalance,
   type PointRate,
   type PointRateEdit,
+  type RateCompileResult,
   type UsageLog,
   type UsageLogQuery,
   type UserQuery,
@@ -66,6 +79,31 @@ export class JastalkAdminHttpAdapter implements JastalkAdminPort {
     return res.success ? parse(pointBalanceSchema, res.data, '调整积分') : res;
   }
 
+  async channels(): Promise<AppResult<ChannelBoard>> {
+    const res = await requestJastalk<unknown>(jastalkPaths.catalogChannels);
+    return res.success ? parse(channelBoardSchema, res.data, '渠道列表') : res;
+  }
+
+  async channel(vendorKey: string, previewCategory?: ModelCategory): Promise<AppResult<ChannelDetail>> {
+    const res = await requestJastalk<unknown>(jastalkPaths.catalogChannel(vendorKey), { query: { category: previewCategory } });
+    return res.success ? parse(channelDetailSchema, res.data, '渠道') : res;
+  }
+
+  async saveChannel(vendorKey: string, input: ChannelEdit): Promise<AppResult<ChannelSaved>> {
+    const res = await requestJastalk<unknown>(jastalkPaths.catalogChannel(vendorKey), { method: 'PUT', body: input });
+    return res.success ? parse(channelSavedSchema, res.data, '保存渠道') : res;
+  }
+
+  async importModels(vendorKey: string, input: ModelImport): Promise<AppResult<ModelImportResult>> {
+    const res = await requestJastalk<unknown>(jastalkPaths.catalogChannelModels(vendorKey), { method: 'POST', body: input });
+    return res.success ? parse(modelImportResultSchema, res.data, '接入模型') : res;
+  }
+
+  async compileRates(vendorKey?: string): Promise<AppResult<RateCompileResult>> {
+    const res = await requestJastalk<unknown>(jastalkPaths.catalogCompile, { method: 'POST', query: { vendorKey } });
+    return res.success ? parse(rateCompileResultSchema, res.data, '重算价格') : res;
+  }
+
   async catalog(): Promise<AppResult<CatalogBoard>> {
     const res = await requestJastalk<unknown>(jastalkPaths.catalogModels);
     return res.success ? parse(catalogBoardSchema, res.data, '模型目录') : res;
@@ -83,12 +121,12 @@ export class JastalkAdminHttpAdapter implements JastalkAdminPort {
 
   async rates(): Promise<AppResult<PointRate[]>> {
     const res = await requestJastalk<unknown>(jastalkPaths.catalogRates);
-    return res.success ? parse(z.array(pointRateSchema), res.data, '定价表') : res;
+    return res.success ? parse(z.array(pointRateSchema), res.data, '价格表') : res;
   }
 
   async saveRate(input: PointRateEdit): Promise<AppResult<PointRate>> {
     const res = await requestJastalk<unknown>(jastalkPaths.catalogRates, { method: 'PUT', body: input });
-    return res.success ? parse(pointRateSchema, res.data, '保存定价') : res;
+    return res.success ? parse(pointRateSchema, res.data, '保存价格') : res;
   }
 
   async deleteRate(id: number): Promise<AppResult<true>> {

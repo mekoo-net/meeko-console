@@ -1,6 +1,6 @@
 /**
- * 官方价格表：Yomi / ToApi 共用的目录页与展示件。
- * 数据全站一份，当前走 Yomi `/admin/pricing`；编译有效价仍在 Yomi 业务里。
+ * 官方价格表：Yomi / ToApi 共用的展示件。
+ * 数据全站一份，在 OneApi 的号池管理台维护，这边只读（当前走 Yomi `/admin/pricing`）；编译有效价仍在 Yomi 业务里。
  */
 export type { PriceTablePort } from './port';
 

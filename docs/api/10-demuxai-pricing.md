@@ -88,7 +88,7 @@
       "effectiveFromUtc": "2025-09-01T00:00:00Z",
       "updatedAtUtc": "2025-09-01T00:00:00Z",
       "updatedBy": { "iamUserUid": "200000099" },
-      "sourcePriceId": "3001",
+      "sourceModelKey": "gpt-4o",
       "multiplierApplied": 1.2
     }
   ],
@@ -102,7 +102,7 @@
 | `id` | 定价行主键（如 `PRC-001`） |
 | `modelId` | = 模型路由 `alias` |
 | `updatedBy` | 可选 `{ iamUserUid }`，操作人 IAM userId |
-| `sourcePriceId` / `multiplierApplied` | 编译审计：由哪条基准价 × 倍率算出；亲手写入的两者皆 `null` |
+| `sourceModelKey` / `multiplierApplied` | 编译审计：由价格表里哪个键的基准价 × 倍率算出（价格表没有行号，按键认行）；亲手写入的两者皆 `null` |
 
 `summary` 按 `billingType` 形状见下表（与实现一致）。
 
@@ -189,26 +189,30 @@ onMounted → listProviderGroups + loadAllPricing + listModels + listModelRoutes
 
 | 业务动作 | Port 方法（`DemuxPricingPort`） | HTTP | REST 端点 |
 | --- | --- | --- | --- |
-| 价格表（按厂家分组） | `listModelPricesByMaker` | GET | `/demux/api/admin/pricing/catalog/by-maker?keyword&maker` → `items: [{ maker, items: ModelPrice[] }]`，不分页 |
 | 单条基准价 | `getModelPrice` | GET | `/demux/api/admin/pricing/catalog/{modelKey}` |
-| 写基准价（含编译） | `upsertModelPrice` | PUT | `/demux/api/admin/pricing/catalog` |
-| 删基准价（有效价保留） | `deleteModelPrice` | DELETE | `/demux/api/admin/pricing/catalog/{id}` |
 | 渠道倍率 | `setVendorMultiplier` | PATCH | `/demux/api/admin/pricing/vendors/{id}/multiplier` |
 | 路由模式 / 倍率 | `setRoutePricing` | PATCH | `/demux/api/admin/pricing/routes/{id}` `{ mode: compiled\|manual, multiplier }` |
 | 手动重编译 | `compile` | POST | `/demux/api/admin/pricing/compile` `{ modelKeys?, vendorKeys? }` |
-| 拉官方价 | `fetchPrices` | POST | `/demux/api/admin/pricing/sync/fetch` `{ sources: [{ kind, baseUrl?, apiKey?, name? }], makers?, onlyMatched }` |
-| 套用候选 | `applyPrices` | POST | `/demux/api/admin/pricing/sync/apply` `{ items: [{ modelKey, maker, billingType, rate, sourceKind, sourceRef }] }`（`rate` 为 fetch 返回的人民币数值） |
+
+**价格表不在这边（2026-11）**：价格表归 OneApi，全站一份，在管理端的「组件设置 → OneApi → 模型价格」（`/components/oneapi/ratecard`）里维护，
+见本文末尾[模型价格](#模型价格组件设置--oneapi2026-11)。Yomi 分组下原来的价格表页（`/yomi/pricing`）已经去掉，旧地址跳到新页面。
+写基准价（`PUT …/catalog`）、删基准价（`DELETE …/catalog/{id}`）、拉官方价（`POST …/sync/fetch`）、套用候选（`POST …/sync/apply`）
+四个接口 Yomi 后端已经删掉；这边的端口只剩按键查一行（定价抽屉预览「牌价 × 倍率」用）。
+
+单条查询回的一行是 `{ modelKey, maker, billingType, rate, currency: "USD", capabilities, routeCount, updatedAtUtc }`：
+没有行号（按 `modelKey` 认行）、没有来源和生效时间；`updatedAtUtc` 是 Unix 毫秒；`routeCount` 单条查询是 0。
+
+重算结果（改渠道定价、改路由定价、手动重编译都回它）是
+`{ compiled, unchanged, unmatchedModelKeys, newVersion, priceTableEmpty, invalidPriceKeys }`：
+`priceTableEmpty = true` 是手上没有牌价（没读到、或者号池管理台还没发布），按牌价出价的路由这一遍都没重算、现有的有效价原样在用，
+界面上要说「手上没有牌价，没有重算」而不是「无变化」；`invalidPriceKeys` 是牌价表里形状不对的那几行的键，用到它们的路由保留原价，界面上列出来。
 
 **厂家（maker）**：`model_prices.maker` 是模型是谁做的（`openai` / `anthropic` / `google` / …，开放集合，见 `@demux/common` `maker.ts`），
 与渠道（vendor / queueGroup）无关。判定按模型键而不是按源——阿里云也转售 `glm-5.2` / `kimi-k3`，厂家仍是智谱 / Moonshot。
-价格表页按 maker 分组（左侧厂家、右侧价目）。点「上游同步」直接拉 **models.dev** 官方价（美元按 1:7 折人民币），弹出当前 vs 官方的 diff，勾选后套用——没有「选价格源」这一步。
-页头下拉里是「全部上游同步」（不按厂家过滤），厂家面板里是「新建模型」。
-`fetchPrices.sources` 仍可指定 openrouter / litellm / newapi，那是接口能力，控制台不同步渠道倍率、也不让人选源。
-NewAPI 的「上游倍率同步」是从**已配置渠道**抄 `model_ratio`，和价格表不是一回事。
-写入时不传 `maker` 后端按 `inferMaker(modelKey)` 推断；官方源候选带源给出的 maker。
+「全量重算有效价」是这边自己的事，在模型定价页（`/yomi/rate`）的页头。
 
 **方向是模型名映射到价格表**：价格表登记的是厂家发布的模型，与下游用了哪些别名无关，
-所以 `by-maker` / `fetchPrices` 都不带路由侧字段（`routeCount` / `vendorKeys` / 「在用但未定价」）。
+所以 `by-maker` 不带路由侧字段（`routeCount` / `vendorKeys` / 「在用但未定价」）。
 哪条别名没映射上基准价，在 `/demux/rate` 的「未配置」里按路由看，可以选渠道定价（需价格表有这条）或自定义。
 
 `source` 只标官方源（`priceSourceKindValues`）；运营自己改出来的价没有来源可标，落空串，页面不显示来源。
@@ -238,3 +242,35 @@ Console 页面：`/demux/pricing`（价格表 + 拉价 diff）、`/demux/rate`�
 
 - `effectiveFromUtc` 只在响应里出现（审计用），upsert 入参没有它。
 - 日志扣费快照形状见 [`11-demuxai-logs.md`](./11-demuxai-logs.md)。
+
+## 模型价格（组件设置 · OneApi，2026-11）
+
+| 项 | 值 |
+| --- | --- |
+| 路由 | `/components/oneapi/ratecard`（`/components`、`/components/oneapi`、旧的 `/yomi/pricing` 都跳到它） |
+| 权限 | 看：`platform.settings.read`；新建 / 改 / 删 / 同步 / 导入 / 发布：`platform.settings.write` |
+| 视图 | `src/features/platform/components/oneapi/views/RatecardView.vue` |
+| Port | `OneApiRatecardPort`（`src/features/platform/components/oneapi/services/ports`） |
+
+表的主人是 OneApi 的号池后台。Bff 把 `/admin/components/oneapi/ratecard/{rest}` 原样转到它的 `/v1/ratecard/{rest}`：
+成功的回包就是号池后台的 JSON（不包信封），失败由 Bff 转成平台的标准错误；时间是 Unix 毫秒，值为 null 的字段不写出来。
+
+| 业务动作 | Port 方法 | HTTP | 端点（前缀 `/admin/components/oneapi/ratecard`） |
+| --- | --- | --- | --- |
+| 整张表，按厂家分组 / 搜索 | `listByMaker` | GET | `/catalog/by-maker?keyword` → `{ items: [{ maker, items }], total }` |
+| 新建前查重 | `find` | GET | `/catalog/{modelKey}`（没有回 404） |
+| 新建 / 改价 | `upsert` | PUT | `/catalog`：改价带 `id`（改的就是那一行，键不动），新建不带（键会收成干净名） |
+| 删除 | `remove` | DELETE | `/catalog/{id}` |
+| 上游同步 | `fetchCandidates` → `applyCandidates` | POST | `/sync/fetch`（只读）→ 勾选 → `/sync/apply` |
+| 导入 | `importPrices` | POST | `/import` `{ overwrite, items }` |
+| 发布 / 接管 | `publish` | POST | `/publish`、`/publish?takeover=true` |
+| 转发状态 | `relayStatus` | GET | `/relay`（Bff 自己答，不转） |
+
+每个写操作的回包都带 `publish: { ok, written, deleted, unchanged, failures: [{ maker, error }] }`。`ok = false` 时表里的改动是成了的，
+只是没发布出去：页面顶上留一块提示逐条列出厂家和原因（`maker` 是 `*` 的写成「整张表」），直到整张表发布成功或手动关掉。
+`relay` 回 `{ configured, loaded, fingerprint, documentCount, receivedAtUtc, error, subscribers: [{ service, notifiedAtUtc, ok, error }] }`，
+页头下面的状态条用它显示「转发」「通知」两段。
+
+行是 `{ id, modelKey, maker, billingType, rate, currency, capabilities?, source, sourceRef?, fetchedAtUtc?, effectiveFromUtc }`。
+`rate` 原样留着：页面按 Yomi 那七种形状读来显示和填表单，读不出来的行照样列出来（能删、不能改）；
+改价时表单里没有的键（按 token 计价的图像入出价、按次计价的缓存命中价）从原来的 `rate` 上带回去，不丢。

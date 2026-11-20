@@ -82,7 +82,7 @@ export type RateUnit = z.infer<typeof rateUnitSchema>;
 
 /**
  * 目录里的一行：用户能选的一个模型。渠道和模型名原样发给 OneApi。
- * `priced`：定价表里找得到按 `unit` 算的价格；找不到的用户选不了（不能不冻积分就调）。
+ * `priced`：价格表里找得到按 `unit` 算的价格；找不到的用户选不了（不能不冻积分就调）。
  */
 export const catalogModelSchema = z.object({
   id: z.number().int(),
@@ -97,7 +97,7 @@ export const catalogModelSchema = z.object({
   unit: rateUnitSchema,
   inputPrice: z.number(),
   outputPrice: z.number(),
-  /** 照定价表里哪一行算的：「渠道/模型」，通配写 `*`；没有是 null。 */
+  /** 照价格表里哪一行算的：「渠道/模型」，通配写 `*`；没有是 null。 */
   ratedBy: z.string().nullable(),
   updatedAt: epochMillisSchema,
 });
@@ -122,14 +122,158 @@ export interface CatalogModelEdit {
   sort: number;
 }
 
-// ---------- 定价 ----------
+// ---------- 渠道 ----------
+
+/**
+ * 一个渠道：OneApi 上的一个 provider（kiro、claude……），清单是后端回的，不手敲。
+ * 渠道上只定一个倍率：有效价（元）= 牌价（美元）× 倍率，再 × 100 折成积分——倍率本身就是美元到人民币的换算，
+ * 和 Yomi 的渠道倍率同一个意思。价格后端算好，这边只显示。
+ */
+export const channelSchema = z.object({
+  vendorKey: z.string(),
+  vendorName: z.string(),
+  /** 没设是 null：这个渠道不按牌价算，它的模型只认单独定的价。 */
+  multiplier: z.number().nullable(),
+  /** OneApi 那边现在有这个渠道的 provider 在跑。 */
+  online: z.boolean(),
+  /** OneApi 那边这个渠道发布了多少个模型。 */
+  upstreamModels: z.number().int(),
+  /** 接进目录的有多少个；`priced + unpriced` 就是它。 */
+  models: z.number().int(),
+  priced: z.number().int(),
+  unpriced: z.number().int(),
+  /** 没在这边设置过（没定过名字、倍率）的渠道是 null。 */
+  updatedAt: epochMillisNullableSchema,
+});
+export type Channel = z.infer<typeof channelSchema>;
+
+export const channelBoardSchema = z.object({
+  /** 目录和价格表合起来的版本号，每改一次加一；网关凭它知道手上那份还新不新。 */
+  version: z.number().int().nonnegative(),
+  channels: z.array(channelSchema),
+  /** false = 这次没读到 OneApi 的渠道目录，在线状态和可接入的模型不准。 */
+  upstreamReachable: z.boolean(),
+  /** false = 手上没有牌价，算不了新价；已经算好的照旧在用。 */
+  listPricesLoaded: z.boolean(),
+  listPriceCount: z.number().int(),
+});
+export type ChannelBoard = z.infer<typeof channelBoardSchema>;
+
+/**
+ * 一个模型在牌价（OneApi 的价格表，美元，全站一份，在别处维护）里对上的那一行。
+ * `usdInput` / `usdOutput` 是折算时取的那两个数：按 token 的是每百万 token 的输入价、输出价；按张的只有输出；按秒的两个一样。
+ */
+export const listPriceSchema = z.object({
+  modelKey: z.string(),
+  maker: z.string(),
+  /** 牌价的计价方式（per_token、per_image……），只拿来显示；后端加了新的这边原样显示。 */
+  billingType: z.string(),
+  /** 牌价原文，形状随 `billingType`。 */
+  rate: z.unknown(),
+  usdInput: z.number().nullable(),
+  usdOutput: z.number().nullable(),
+  /** false = 牌价的计价方式折不成这个模型的计量单位，只能单独定价。 */
+  convertible: z.boolean(),
+  /** 按渠道现在的倍率折出来的积分；渠道没设倍率、或者折不了是 null。 */
+  pointsInput: z.number().nullable(),
+  pointsOutput: z.number().nullable(),
+});
+export type ListPrice = z.infer<typeof listPriceSchema>;
+
+/**
+ * 一个模型现在的价格是怎么来的：compiled 按牌价 × 渠道倍率算出来的；manual 这个模型单独定的；
+ * default 落在通配的默认价上；none 没有价格（用户选不了）。
+ */
+export const channelPricings = ['compiled', 'manual', 'default', 'none'] as const;
+export const channelPricingSchema = z.enum(channelPricings);
+export type ChannelPricing = z.infer<typeof channelPricingSchema>;
+
+export const channelModelSchema = z.object({
+  model: catalogModelSchema,
+  pricing: channelPricingSchema,
+  /**
+   * 这个模型自己那一行价格的编号：单独定的、算出来的才有。落在通配价上的是 null——那一行不归它，
+   * 不能让页面顺手删了。从单独定价切回跟渠道，就是拿它去删那一行。
+   */
+  rateId: z.number().int().nullable(),
+  /** null = 牌价里对不上这个模型。 */
+  listPrice: listPriceSchema.nullable(),
+  /** false = OneApi 那边现在没发布这个模型了。 */
+  upstream: z.boolean(),
+});
+export type ChannelModel = z.infer<typeof channelModelSchema>;
+
+/** OneApi 有、还没接进来的模型。还没接的不知道归哪一类，牌价按取详情时带的那个类别的计量单位折（不带是对话）。 */
+export const upstreamModelSchema = z.object({
+  modelName: z.string(),
+  listPrice: listPriceSchema.nullable(),
+});
+export type UpstreamModel = z.infer<typeof upstreamModelSchema>;
+
+export const channelDetailSchema = z.object({
+  channel: channelSchema,
+  models: z.array(channelModelSchema),
+  available: z.array(upstreamModelSchema),
+});
+export type ChannelDetail = z.infer<typeof channelDetailSchema>;
+
+/** 和后端的上限一样（只拦手滑多敲几个 0）。 */
+export const MULTIPLIER_MAX = 1000;
+
+/** `vendorName` 不给就用渠道的键；`multiplier` 给 null = 这个渠道不按牌价算，它算出来的价会被删掉。 */
+export interface ChannelEdit {
+  vendorName: string | null;
+  multiplier: number | null;
+}
+
+export const unmatchedReasonSchema = z.enum(['no_list_price', 'unit_mismatch']);
+export type UnmatchedReason = z.infer<typeof unmatchedReasonSchema>;
+
+/**
+ * 一次重算的结果。`unmatched` 是设了倍率但这次算不出价的模型（原来有价的还在用原来的）；
+ * `listPricesEmpty` 是这次手上没有牌价、什么都没重算，不代表模型没有价格。
+ */
+export const rateCompileResultSchema = z.object({
+  compiled: z.number().int(),
+  unchanged: z.number().int(),
+  removed: z.number().int(),
+  unmatched: z.array(z.object({ vendorKey: z.string(), modelName: z.string(), reason: unmatchedReasonSchema })),
+  listPricesEmpty: z.boolean(),
+  /** 有改动时目录的新版本号；没改动是 null。 */
+  newVersion: z.number().int().nullable(),
+});
+export type RateCompileResult = z.infer<typeof rateCompileResultSchema>;
+
+export const channelSavedSchema = z.object({ channel: channelSchema, compile: rateCompileResultSchema });
+export type ChannelSaved = z.infer<typeof channelSavedSchema>;
+
+/** 从 OneApi 的清单里接一批模型，一次接一类。 */
+export interface ModelImport {
+  category: ModelCategory;
+  models: string[];
+  enabled: boolean;
+}
+
+export const modelImportResultSchema = z.object({
+  added: z.number().int(),
+  /** 这一类里本来就有、跳过的。 */
+  skipped: z.number().int(),
+  compile: rateCompileResultSchema,
+});
+export type ModelImportResult = z.infer<typeof modelImportResultSchema>;
+
+// ---------- 价格表 ----------
 
 /** 通配：渠道写 `*` 即不分渠道；`*` / `*` 是默认价。 */
 export const ANY = '*';
 
+export const rateSourceSchema = z.enum(['manual', 'compiled']);
+export type RateSource = z.infer<typeof rateSourceSchema>;
+
 /**
- * 定价表的一行。单价的意思看 `unit`：token 是每百万 token 多少积分（输入、输出分开）；
+ * 价格表的一行。单价的意思看 `unit`：token 是每百万 token 多少积分（输入、输出分开）；
  * image 是每张（输出价）；audio_second 是每秒（合成算输出价，听写算输入价）。
+ * `source`：compiled 是按牌价 × 渠道倍率算出来的，牌价或倍率一变就跟着重算；manual 是人单独定的，重算不碰它。
  */
 export const pointRateSchema = z.object({
   id: z.number().int(),
@@ -139,6 +283,11 @@ export const pointRateSchema = z.object({
   inputPrice: z.number(),
   outputPrice: z.number(),
   updatedAt: epochMillisSchema,
+  source: rateSourceSchema,
+  /** 算出来的行对上的是牌价里哪个键；单独定的没有。 */
+  sourceModelKey: z.string().nullable(),
+  /** 算出来的行用的渠道倍率；单独定的没有。 */
+  multiplierApplied: z.number().nullable(),
 });
 export type PointRate = z.infer<typeof pointRateSchema>;
 
@@ -166,7 +315,7 @@ export const usageLineSchema = z.object({
   quantity: z.number(),
   /** 上游没报用量，是按字数估的。 */
   estimated: z.boolean(),
-  /** 照定价表里哪一行算的；没找到价格是 `-`。 */
+  /** 照价格表里哪一行算的；没找到价格是 `-`。 */
   ratedBy: z.string(),
   inputPrice: z.number(),
   outputPrice: z.number(),

@@ -7,7 +7,7 @@
  */
 import { computed, onMounted, ref, watch } from 'vue';
 
-import { Delete, Edit } from '@element-plus/icons-vue';
+import { Delete, Edit, Refresh } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
@@ -22,17 +22,19 @@ import type { UnconfiguredRoute, VendorRateStatsMap } from '@yomi/common';
 import type { ProviderGroup } from '../model/catalog.types';
 import { formatVendorPricing } from '../model/vendorPricing';
 import { isEmbeddingPrice, rateBodyDisplay, type PriceDisplay } from '../model/priceTable';
-import { getYomiCatalogPort, getYomiRatePort } from '../services';
+import { getYomiCatalogPort, getYomiPricingPort, getYomiRatePort } from '../services';
 import ProviderWorkspaceLayout from '../components/provider/ProviderWorkspaceLayout.vue';
 import ProviderGroupSidebar from '../components/provider/ProviderGroupSidebar.vue';
 import ProviderDetailPanel from '../components/provider/ProviderDetailPanel.vue';
 import AliasMap from '../components/AliasMap.vue';
 import PriceCells from '../components/pricing/PriceCells.vue';
+import { notifyCompile } from '../components/pricing/compileFeedback';
 import RouteRateDrawer, { type RouteRateTarget } from '../components/RouteRateDrawer.vue';
 import ProviderGroupEditDrawer from '../components/provider/ProviderGroupEditDrawer.vue';
 
 const catalogPort = getYomiCatalogPort();
 const ratePort = getYomiRatePort();
+const pricingPort = getYomiPricingPort();
 
 const groups = ref<ProviderGroup[]>([]);
 const groupsLoading = ref(false);
@@ -193,6 +195,27 @@ async function reloadAll(): Promise<void> {
   if (activeTab.value === 'unconfigured') await loadUnconfiguredRoutes();
 }
 
+const compiling = ref(false);
+
+/**
+ * 把跟渠道定价走的有效价照手上的牌价全部重算一遍。平时不用点（牌价、倍率一变后端自己会算），漏算了不想等的时候用。
+ * 原来挂在价格表页上；价格表搬去了组件设置，重算有效价仍是悠米自己的事，所以留在这一页。
+ */
+async function onCompileAll(): Promise<void> {
+  compiling.value = true;
+  try {
+    const r = await pricingPort.compile({ reason: 'console manual compile' });
+    if (!r.success) {
+      ElMessage.error(r.error.message);
+      return;
+    }
+    notifyCompile('全量重算完成', r.data);
+    await reloadAll();
+  } finally {
+    compiling.value = false;
+  }
+}
+
 async function onRouteRateSaved(): Promise<void> {
   await reloadAll();
 }
@@ -260,7 +283,13 @@ onMounted(async () => {
 <template>
   <ProviderWorkspaceLayout :loading="groupsLoading && groups.length === 0">
     <template #header>
-      <PageHeader title="模型定价" />
+      <PageHeader title="模型定价">
+        <template #actions>
+          <el-button :icon="Refresh" plain :loading="compiling" @click="onCompileAll">
+            全量重算有效价
+          </el-button>
+        </template>
+      </PageHeader>
     </template>
 
     <ProviderGroupSidebar

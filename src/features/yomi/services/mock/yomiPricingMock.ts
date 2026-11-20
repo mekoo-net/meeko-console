@@ -2,38 +2,21 @@ import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 import { delay } from '@/shared/lib/delay';
 
 import {
-  MODEL_PRICE_CURRENCY,
   PRICE_CURRENCY,
   canonicalizeModelKey,
-  compareMakers,
   findBestModelKey,
   modelKeyMatches,
-  modelPriceSchema,
-  normalizeMaker,
-  upsertModelPriceInputSchema,
-  type ApplyPricesInput,
-  type FetchCandidate,
-  type FetchPricesInput,
-  type FetchPricesResult,
   type ModelPrice,
-  type ModelPriceMakerGroup,
-  type ModelPriceWriteResult,
   type PriceCompileResult,
   type Rate,
   type RateBody,
   type RoutePricingMode,
-  type UpsertModelPriceInput,
 } from '@yomi/common';
 import type { YomiPricingPort } from '../ports/yomiPricingPort';
 import type { VendorPricingMode } from '../../model/catalog.types';
 
-import { genModelPriceUid, genRateUid, getYomiStore, type YomiStore } from './data';
-import {
-  OFFICIAL_USD_PRICES,
-  officialUsdCapabilities,
-  officialUsdRateBody,
-  scaleRateBody,
-} from './officialUsdPrices';
+import { genRateUid, getYomiStore, type YomiStore } from './data';
+import { scaleRateBody } from './officialUsdPrices';
 
 function normalizeModelKey(v: string): string {
   return canonicalizeModelKey(v) || v.trim().toLowerCase();
@@ -47,6 +30,9 @@ function sameBody(a: RateBody, b: RateBody): boolean {
  * Mock 版编译器，与后端同一口径：倍率渠道是基准价(USD) × 渠道倍率 → store.rate（CNY），不再另乘 7；
  * 积分渠道直接编成 per_credit、单价取渠道积分单价，价格表和倍率都不参与。
  * 只处理 Compiled 路由；Manual 路由的有效价原样保留。
+ *
+ * 价格表是空的（没发布过 / 读不到）时，按牌价出价的路由整条跳过、现有的有效价一个字不动，也不报「无基准价」：
+ * 空表说明不了哪个模型缺价。积分渠道不看价格表，照编。
  */
 function compile(
   store: YomiStore,
@@ -61,6 +47,7 @@ function compile(
 
   let compiled = 0;
   let unchanged = 0;
+  let skippedForEmptyTable = false;
   const unmatched = new Set<string>();
   const t = Date.now();
 
@@ -72,12 +59,16 @@ function compile(
 
     const vendor = vendorPricing.get(route.vendorKey);
     let body: RateBody;
-    let sourcePriceId: string | null = null;
+    let sourceModelKey: string | null = null;
     let multiplier: number | null = null;
     if (vendor?.pricingMode === 'credit') {
       // 不找基准价：价格表里没有这条模型也照样定得出价，所以也不会算进 unmatched。
       body = { billingType: 'per_credit', rate: { pricePerCredit: vendor.pricingValue } };
     } else {
+      if (priceKeys.length === 0) {
+        skippedForEmptyTable = true;
+        continue;
+      }
       const best = findBestModelKey(route.vendorModel, priceKeys);
       const price = best ? store.modelPrices.find((p) => p.modelKey === best) : undefined;
       if (!price) {
@@ -86,7 +77,7 @@ function compile(
       }
       multiplier = (vendor?.pricingValue ?? 1) * (route.priceMultiplier ?? 1);
       body = scaleRateBody({ billingType: price.billingType, rate: price.rate } as RateBody, multiplier);
-      sourcePriceId = price.id;
+      sourceModelKey = price.modelKey;
     }
 
     const idx = store.rate.findIndex((r) => r.modelId === route.routeKey);
@@ -108,7 +99,7 @@ function compile(
       effectiveFromUtc: t,
       updatedAtUtc: t,
       updatedBy: null,
-      sourcePriceId,
+      sourceModelKey,
       multiplierApplied: multiplier,
     } as Rate;
     if (idx >= 0) store.rate[idx] = next;
@@ -121,33 +112,19 @@ function compile(
     unchanged,
     unmatchedModelKeys: [...unmatched].sort(),
     newVersion: compiled > 0 ? Math.floor(t / 1000) : null,
+    priceTableEmpty: skippedForEmptyTable,
+    // 种子里的价都是照形状生成的，没有坏行
+    invalidPriceKeys: [],
   };
 }
 
+/**
+ * 价格表是 OneApi 的（在「组件设置 → OneApi → 模型价格」里维护），这里和接了后端一样只能按键查一行；
+ * 种子里的那一份就是悠米「收到的」牌价，和模型价格页的 mock 是两份数据，互不相干。
+ */
 export class YomiPricingMock implements YomiPricingPort {
   private get store() {
     return getYomiStore();
-  }
-
-  async listModelPricesByMaker(input: {
-    keyword: string;
-    maker?: string | null;
-  }): Promise<AppResult<ModelPriceMakerGroup[]>> {
-    await delay();
-    const kw = input.keyword.trim().toLowerCase();
-    const only = input.maker?.trim().toLowerCase() || null;
-
-    const groups = new Map<string, ModelPriceMakerGroup>();
-    for (const p of this.store.modelPrices) {
-      if (kw && !p.modelKey.includes(kw)) continue;
-      if (only && p.maker !== only) continue;
-      let g = groups.get(p.maker);
-      if (!g) groups.set(p.maker, (g = { maker: p.maker, items: [] }));
-      g.items.push(p);
-    }
-
-    for (const g of groups.values()) g.items.sort((a, b) => a.modelKey.localeCompare(b.modelKey));
-    return ok([...groups.values()].sort((a, b) => compareMakers(a.maker, b.maker)));
   }
 
   async getModelPrice(modelKey: string): Promise<AppResult<ModelPrice>> {
@@ -155,56 +132,6 @@ export class YomiPricingMock implements YomiPricingPort {
     const row = this.store.modelPrices.find((p) => p.modelKey === normalizeModelKey(modelKey));
     if (!row) return fail({ code: 'not_found', message: `基准价 ${modelKey} 不存在` });
     return ok(row);
-  }
-
-  async upsertModelPrice(input: UpsertModelPriceInput): Promise<AppResult<ModelPriceWriteResult>> {
-    await delay();
-    const v = upsertModelPriceInputSchema.safeParse(input);
-    if (!v.success) {
-      return fail({ code: 'validation', message: v.error.issues[0]?.message ?? '入参不合法' });
-    }
-    const written = this.writePrice(input);
-    if (!written.success) return written;
-    const compileResult = compile(this.store, { modelKeys: [written.data.modelKey] });
-    return ok({ price: written.data, compile: compileResult });
-  }
-
-  private writePrice(input: UpsertModelPriceInput): AppResult<ModelPrice> {
-    const modelKey = normalizeModelKey(input.modelKey);
-    const t = Date.now();
-    const idx = this.store.modelPrices.findIndex((p) => p.modelKey === modelKey);
-    const official = OFFICIAL_USD_PRICES.find((r) => r.modelKey === modelKey);
-    const parsed = modelPriceSchema.safeParse({
-      id: idx >= 0 ? this.store.modelPrices[idx]!.id : genModelPriceUid(),
-      modelKey,
-      maker: normalizeMaker(input.maker, modelKey),
-      billingType: input.billingType,
-      rate: input.rate,
-      currency: MODEL_PRICE_CURRENCY,
-      // 模型能力跟着目录走：改价不动它，新加的键能在目录里查到就带上。
-      capabilities:
-        idx >= 0
-          ? this.store.modelPrices[idx]!.capabilities ?? null
-          : (input.capabilities ??
-            (official ? officialUsdCapabilities(official) : null)),
-      // 自己填的价没有来源可标：清成空串，页面上那一行来源就不显示。
-      source: input.source ?? '',
-      sourceRef: input.sourceRef ?? null,
-      fetchedAtUtc: null,
-      effectiveFromUtc: t,
-    });
-    if (!parsed.success) return fail({ code: 'validation', message: '基准价格式错误' });
-    if (idx >= 0) this.store.modelPrices[idx] = parsed.data;
-    else this.store.modelPrices.push(parsed.data);
-    return ok(parsed.data);
-  }
-
-  async deleteModelPrice(id: string): Promise<AppResult<void>> {
-    await delay();
-    const idx = this.store.modelPrices.findIndex((p) => p.id === id);
-    if (idx < 0) return fail({ code: 'not_found', message: `基准价 ${id} 不存在` });
-    this.store.modelPrices.splice(idx, 1);
-    return ok(undefined);
   }
 
   async setVendorPricing(input: {
@@ -242,7 +169,7 @@ export class YomiPricingMock implements YomiPricingPort {
     r.priceMultiplier = input.multiplier;
     r.updatedAtUtc = Date.now();
     if (input.mode === 'manual') {
-      return ok({ compiled: 0, unchanged: 0, unmatchedModelKeys: [], newVersion: null });
+      return ok({ compiled: 0, unchanged: 0, unmatchedModelKeys: [], newVersion: null, priceTableEmpty: false, invalidPriceKeys: [] });
     }
     return ok(compile(this.store, { routeIds: [r.uid] }));
   }
@@ -253,77 +180,5 @@ export class YomiPricingMock implements YomiPricingPort {
   }): Promise<AppResult<PriceCompileResult>> {
     await delay();
     return ok(compile(this.store, { modelKeys: input?.modelKeys, vendorKeys: input?.vendorKeys }));
-  }
-
-  /**
-   * 官方价：直接回放固化的 models.dev 快照（美元），价格表不折人民币。
-   * 所以 mock 里同步出来的结果与目录一致——差异只出在种子里被改过价的那几条。
-   */
-  async fetchPrices(input: FetchPricesInput): Promise<AppResult<FetchPricesResult>> {
-    await delay(400);
-    const t = Date.now();
-    const priced = new Map(this.store.modelPrices.map((p) => [p.modelKey, p]));
-
-    let catalog = OFFICIAL_USD_PRICES.slice();
-    if (input.makers?.length) {
-      const only = new Set(input.makers.map((m) => m.trim().toLowerCase()));
-      catalog = catalog.filter((r) => only.has(r.maker));
-    }
-    if (input.modelKeys?.length) {
-      const only = new Set(input.modelKeys.map(normalizeModelKey));
-      catalog = catalog.filter((r) => only.has(r.modelKey));
-    }
-
-    const items = catalog.map((row) => {
-      const current = priced.get(row.modelKey) ?? null;
-      const body = officialUsdRateBody(row);
-      const candidates: FetchCandidate[] = input.sources.map((s) => ({
-        ...body,
-        sourceKind: s.kind,
-        sourceName: s.name ?? s.kind,
-        sourceRef: `${s.kind}:${row.maker}/${row.modelKey}`,
-        maker: row.maker,
-        modelId: row.modelKey,
-        matchKind: 'exact',
-        sourceCurrency: 'USD',
-        fxApplied: 1,
-        sameAsCurrent:
-          current != null &&
-          current.billingType === body.billingType &&
-          sameBody({ billingType: current.billingType, rate: current.rate } as RateBody, body),
-      }));
-      return { modelKey: row.modelKey, maker: row.maker, current, candidates };
-    });
-
-    return ok({
-      sources: input.sources.map((s) => ({
-        kind: s.kind,
-        name: s.name ?? s.kind,
-        ok: true,
-        error: null,
-        candidateCount: items.length,
-        elapsedMs: 80,
-      })),
-      items: input.onlyMatched ? items.filter((it) => it.candidates.length > 0) : items,
-      fetchedAtUtc: t,
-    });
-  }
-
-  async applyPrices(input: ApplyPricesInput): Promise<AppResult<PriceCompileResult>> {
-    await delay();
-    const keys: string[] = [];
-    for (const item of input.items) {
-      const w = this.writePrice({
-        modelKey: item.modelKey,
-        maker: item.maker,
-        billingType: item.billingType,
-        rate: item.rate,
-        source: item.sourceKind,
-        sourceRef: item.sourceRef,
-      } as UpsertModelPriceInput);
-      if (!w.success) return w;
-      keys.push(w.data.modelKey);
-    }
-    return ok(compile(this.store, { modelKeys: keys }));
   }
 }

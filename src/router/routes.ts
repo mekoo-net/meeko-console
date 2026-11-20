@@ -273,10 +273,9 @@ export const routes: RouteRecordRaw[] = [
             redirect: { name: 'yomi-vendors' },
           },
           {
+            // 价格表全站一份，搬到了「组件设置 → OneApi → 模型价格」；旧地址留着让书签还能打开。
             path: 'pricing',
-            name: 'yomi-pricing',
-            component: () => import('@/features/yomi/views/ModelPriceView.vue'),
-            meta: { title: '价格表', requiresAuth: true, roles: ['Admin'] },
+            redirect: { name: 'components-oneapi-ratecard' },
           },
           {
             path: 'rate',
@@ -567,16 +566,16 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '用户', requiresAuth: true, roles: ['Admin'] },
           },
           {
-            path: 'catalog',
-            name: 'jastalk-catalog',
-            component: () => import('@/features/jastalk/views/JastalkCatalogView.vue'),
-            meta: { title: '模型目录', requiresAuth: true, roles: ['Admin'] },
+            path: 'channels',
+            name: 'jastalk-channels',
+            component: () => import('@/features/jastalk/views/JastalkChannelsView.vue'),
+            meta: { title: '渠道', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'rates',
             name: 'jastalk-rates',
             component: () => import('@/features/jastalk/views/JastalkRatesView.vue'),
-            meta: { title: '定价', requiresAuth: true, roles: ['Admin'] },
+            meta: { title: '价格表', requiresAuth: true, roles: ['Admin'] },
           },
           {
             path: 'usage',
@@ -723,6 +722,25 @@ export const routes: RouteRecordRaw[] = [
             name: 'settings-gateway-credentials',
             component: () => import('@/features/platform/gateway/views/GatewayCredentialListView.vue'),
             meta: { title: '凭据列表', requiresAuth: true, roles: ['Admin'] },
+          },
+        ],
+      },
+      {
+        // 组件设置：平台依赖的各个组件自己的设置，地址按组件分（/components/<组件>/<页面>）。现在只有 OneApi。
+        path: 'components',
+        component: () => import('@/features/platform/components/views/ComponentsLayout.vue'),
+        redirect: { name: 'components-oneapi-ratecard' },
+        meta: { title: '组件设置', requiresAuth: true, permissions: ['platform.settings.read'] },
+        children: [
+          {
+            path: 'oneapi',
+            redirect: { name: 'components-oneapi-ratecard' },
+          },
+          {
+            path: 'oneapi/ratecard',
+            name: 'components-oneapi-ratecard',
+            component: () => import('@/features/platform/components/oneapi/views/RatecardView.vue'),
+            meta: { title: '模型价格', requiresAuth: true, permissions: ['platform.settings.read'] },
           },
         ],
       },

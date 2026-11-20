@@ -31,7 +31,7 @@ interface RateWire {
   currency: string;
   effectiveFromUtc: string;
   updatedAtUtc: string;
-  sourcePriceId?: string | number | null;
+  sourceModelKey?: string | null;
   multiplierApplied?: number | null;
 }
 
@@ -49,7 +49,7 @@ function wireToRate(row: RateWire): AppResult<Rate> {
     currency: row.currency,
     effectiveFromUtc: row.effectiveFromUtc,
     updatedAtUtc: row.updatedAtUtc,
-    sourcePriceId: row.sourcePriceId ?? null,
+    sourceModelKey: row.sourceModelKey ?? null,
     multiplierApplied: row.multiplierApplied ?? null,
   });
 }

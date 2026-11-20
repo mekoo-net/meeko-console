@@ -85,6 +85,7 @@ export const PERMISSION_DOMAIN_LABELS: Record<string, string> = {
   billing: '计费账务',
   account: '账户管理',
   storage: '对象存储',
+  oneapi: 'OneApi',
   yomi: 'Yomi',
 };
 
@@ -102,6 +103,8 @@ export const PERMISSION_RESOURCE_LABELS: Record<string, string> = {
   'billing.voucher': '代金券',
   'account.admin': '平台账户',
   'storage.backend': '存储后端',
+  // 号池管理台（另一个前端）用平台的 Staff 账号登录，认的就是这一对：有读权限才登得进去
+  'oneapi.vault': '号池账号',
   'yomi.redemption': '兑换码',
   'yomi.models': '模型目录',
   'yomi.providers': '模型通道',

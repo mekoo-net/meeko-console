@@ -9,9 +9,9 @@ import {
   modelPriceSchema,
   rateBodySchema,
   rateSchema,
-  upsertModelPriceInputSchema,
 } from '@yomi/common';
 
+import { describeCompile } from '../components/pricing/compileFeedback';
 import { _resetYomiStore, getYomiStore } from '../services/mock/data';
 import { allowedManualBillingTypes, priceDisplay, rateBodyDisplay, resolvePriceModelKind } from '../model/priceTable';
 import { scaleRateBody } from '../model/rateScale';
@@ -24,8 +24,10 @@ import { YomiPricingMock } from '../services/mock/yomiPricingMock';
  * 价格表契约：这些用例是给后端看的验收标准，而不是前端的自娱自乐。
  *
  * - 价格表是美元，没有汇率设置项；
- * - 官方美元价原样进价格表，候选带 `sourceCurrency` / `fxApplied`（USD 源为 1）；
- * - 有效价(CNY) = 基准价(USD) × 渠道倍率，审计列只有 `sourcePriceId` / `multiplierApplied`；
+ * - 价格表是 OneApi 的（在「组件设置 → OneApi → 模型价格」里维护），悠米只按键查一行：
+ *   端口上没有写基准价、删基准价、拉官方价、套用候选这四样，也没有整张表的列表；
+ * - 有效价(CNY) = 基准价(USD) × 渠道倍率，审计列只有 `sourceModelKey`（价格表的键，没有行号）/ `multiplierApplied`；
+ * - 重算结果带 `priceTableEmpty` / `invalidPriceKeys`：没有牌价、牌价有坏行都要明说，不能说成「无变化」；
  * - 不再另乘 7；`PriceCompileResult` 没有 `skipped`。
  */
 describe('pricing contract', () => {
@@ -70,38 +72,32 @@ describe('pricing contract', () => {
     expect(caps('text-embedding-3-large')).toEqual({ audio: false, reasoning: false, embedding: true });
   });
 
-  it('model_prices wire row must be USD and carry a maker; any other currency is rejected', () => {
+  it('a price table row is what the pool console publishes: keyed by modelKey, USD, no row id or source', () => {
     const row = {
-      id: '20000001',
       modelKey: 'gpt-4o',
       maker: 'openai',
       billingType: 'per_token',
       rate: { input: { perMToken: 2.5 }, output: { perMToken: 10 } },
       currency: 'USD',
-      source: 'models_dev',
-      sourceRef: 'openai/gpt-4o',
-      fetchedAtUtc: 1758200000000,
-      effectiveFromUtc: 1758200000000,
+      capabilities: { audio: false, reasoning: false, embedding: false },
       routeCount: 2,
+      updatedAtUtc: 1758200000000,
     };
-    expect(modelPriceSchema.safeParse(row).success).toBe(true);
+    expect(modelPriceSchema.parse(row)).toEqual(row);
+    expect(modelPriceSchema.safeParse({ ...row, capabilities: null }).success).toBe(true);
     expect(modelPriceSchema.safeParse({ ...row, currency: 'CNY' }).success).toBe(false);
+    // 时间是 Unix 毫秒
+    expect(modelPriceSchema.safeParse({ ...row, updatedAtUtc: '2026-11-19T00:00:00Z' }).success).toBe(false);
+
+    // 改之前的行（有行号、来源、生效时间，没有 updatedAtUtc）不再认；多带的旧字段读进来也会被丢掉
+    const legacy: Record<string, unknown> = { ...row, id: '20000001', source: 'models_dev', effectiveFromUtc: 1758200000000 };
+    delete legacy.updatedAtUtc;
+    expect(modelPriceSchema.safeParse(legacy).success).toBe(false);
+    const parsed = modelPriceSchema.parse({ ...row, id: '20000001', source: 'models_dev' });
+    expect('id' in parsed || 'source' in parsed).toBe(false);
   });
 
-  it('upsert model price input carries neither currency nor effective time', () => {
-    const parsed = upsertModelPriceInputSchema.safeParse({
-      modelKey: 'gpt-4o',
-      billingType: 'per_token',
-      rate: { input: { perMToken: 2.5 }, output: { perMToken: 10 } },
-      source: 'manual',
-      effectiveFromUtc: 1758200000000,
-    });
-    expect(parsed.success).toBe(true);
-    expect(parsed.success && 'currency' in parsed.data).toBe(false);
-    expect(parsed.success && 'effectiveFromUtc' in parsed.data).toBe(false);
-  });
-
-  it('vendor_rates wire row audit columns are sourcePriceId + multiplierApplied only', () => {
+  it('vendor_rates wire row audit columns are sourceModelKey + multiplierApplied only', () => {
     const parsed = rateSchema.safeParse({
       id: '30000001',
       modelId: 'yomi-gpt-4o',
@@ -110,29 +106,17 @@ describe('pricing contract', () => {
       currency: 'CNY',
       effectiveFromUtc: 1758200000000,
       updatedAtUtc: 1758200000000,
-      sourcePriceId: '20000001',
+      sourceModelKey: 'gpt-4o',
       multiplierApplied: 1.2,
+      // 改名之前的字段：价格表没有行号了，带过来也不读
+      sourcePriceId: '20000001',
       // 后端若仍下发 fxApplied，zod 会静默丢掉——前端不再读它。
       fxApplied: 7,
     });
     expect(parsed.success).toBe(true);
     expect(parsed.success && 'fxApplied' in parsed.data).toBe(false);
-  });
-
-  it('fetched candidates stay USD and do not convert at fetch', async () => {
-    const port = new YomiPricingMock();
-    const r = await port.fetchPrices({ sources: [{ kind: 'models_dev' }], onlyMatched: true });
-    expect(r.success).toBe(true);
-    if (!r.success) return;
-
-    const candidates = r.data.items.flatMap((it) => it.candidates);
-    expect(candidates.length).toBeGreaterThan(0);
-    for (const c of candidates) {
-      expect(c.sourceCurrency).toBe('USD');
-      expect(c.fxApplied).toBe(1);
-      expect(c.maker).toBeTruthy();
-      expect('currency' in c).toBe(false);
-    }
+    expect(parsed.success && parsed.data.sourceModelKey).toBe('gpt-4o');
+    expect(parsed.success && 'sourcePriceId' in parsed.data).toBe(false);
   });
 
   it('the catalog is the whole official snapshot in USD, not a list of in-use models', () => {
@@ -289,43 +273,29 @@ describe('pricing contract', () => {
     expect(scaledBare.billingType === 'per_token' && 'cachedWrite1h' in scaledBare.rate.input).toBe(false);
   });
 
-  it('a few seeded rows deviate from the official sheet so the sync diff has something to show', async () => {
-    const port = new YomiPricingMock();
-    const r = await port.fetchPrices({ sources: [{ kind: 'models_dev' }] });
-    expect(r.success).toBe(true);
-    if (!r.success) return;
-
-    const changed = r.data.items.filter((it) => it.candidates.some((c) => !c.sameAsCurrent));
-    expect(changed.map((it) => it.modelKey).sort()).toEqual([
-      'claude-sonnet-4-5',
-      'gemini-2.5-flash',
-      'gpt-4.1',
-    ]);
-    // 其余的目录行就是官方价，同步出来不该有差异。
-    expect(changed.length).toBeLessThan(r.data.items.length);
+  it('the price table is not Yomi\'s: the port cannot write, delete, sync or list it', () => {
+    const port: object = new YomiPricingMock();
+    // 写、删、拉官方价、套用候选这四样对应的接口后端已经删了；整张表的列表页也搬到了「组件设置 → OneApi → 模型价格」。
+    // 端口上再长出来就是有人又接了回去
+    for (const gone of ['upsertModelPrice', 'deleteModelPrice', 'fetchPrices', 'applyPrices', 'listModelPricesByMaker']) {
+      expect(gone in port).toBe(false);
+    }
   });
 
-  it('fetch can be scoped to one maker, and the grouped list is models only — no route-side gaps', async () => {
+  it('one list price can still be looked up by key, for the route pricing preview', async () => {
     const port = new YomiPricingMock();
 
-    const scoped = await port.fetchPrices({ sources: [{ kind: 'models_dev' }], makers: ['anthropic'] });
-    expect(scoped.success).toBe(true);
-    if (!scoped.success) return;
-    expect(scoped.data.items.length).toBe(OFFICIAL_USD_PRICES.filter((r) => r.maker === 'anthropic').length);
-    for (const it of scoped.data.items) expect(it.maker).toBe('anthropic');
+    const exact = await port.getModelPrice('gemini-2.5-pro');
+    expect(exact.success && exact.data.maker).toBe('google');
+    expect(exact.success && exact.data.currency).toBe(MODEL_PRICE_CURRENCY);
 
-    const grouped = await port.listModelPricesByMaker({ keyword: '' });
-    expect(grouped.success).toBe(true);
-    if (!grouped.success) return;
-    const makers = grouped.data.map((g) => g.maker);
-    expect(new Set(makers).size).toBe(makers.length);
-    for (const g of grouped.data) {
-      // 价格表只登记厂家发布的模型：分组里除了 items 没有别的（路由缺口归模型页）。
-      expect(Object.keys(g).sort()).toEqual(['items', 'maker']);
-      for (const p of g.items) expect(p.maker).toBe(g.maker);
-    }
-    const google = grouped.data.find((g) => g.maker === 'google');
-    expect(google?.items.some((p) => p.modelKey === 'gemini-2.5-pro')).toBe(true);
+    // 路由上的上游模型名可以带渠道前缀和日期钉：先收成价格表的键再找
+    const decorated = await port.getModelPrice('anthropic/claude-sonnet-4-5-20250929');
+    expect(decorated.success && decorated.data.modelKey).toBe('claude-sonnet-4-5');
+
+    const missing = await port.getModelPrice('no-such-model');
+    expect(missing.success).toBe(false);
+    expect(!missing.success && missing.error.code).toBe('not_found');
   });
 
   it('compile = USD catalog × vendor multiplier → CNY', async () => {
@@ -351,12 +321,60 @@ describe('pricing contract', () => {
 
     const rate = store.rate.find((x) => x.modelId === route.routeKey)!;
     expect(rate.currency).toBe(PRICE_CURRENCY);
-    expect(rate.sourcePriceId).toBe(price.id);
+    expect(rate.sourceModelKey).toBe(price.modelKey);
     expect(rate.multiplierApplied).toBe(3);
     expect('fxApplied' in rate).toBe(false);
     if (price.billingType === 'per_token' && rate.billingType === 'per_token') {
       expect(rate.rate.input.perMToken).toBeCloseTo(price.rate.input.perMToken * 3, 6);
     }
+  });
+
+  it('with no price table at hand, list-priced routes are left alone and the result says so', async () => {
+    const store = getYomiStore();
+    const port = new YomiPricingMock();
+    const multiplierGroup = store.providerGroups.find(
+      (g) => g.pricingMode === 'multiplier' && store.vendorRoutes.some((v) => v.vendorKey === g.queueGroup && v.pricingMode === 'compiled'),
+    )!;
+    const before = JSON.stringify(store.rate);
+
+    // 号池管理台还没发布 / 这次没读到：表是空的
+    store.modelPrices.splice(0);
+    const r = await port.setVendorPricing({ vendorId: multiplierGroup.id, mode: 'multiplier', value: 9 });
+    expect(r.success).toBe(true);
+    if (!r.success) return;
+    // 不重算、不报「无基准价」（空表说明不了哪个模型缺价），现有的有效价一个字不动
+    expect(r.data).toMatchObject({ compiled: 0, unmatchedModelKeys: [], newVersion: null, priceTableEmpty: true, invalidPriceKeys: [] });
+    expect(JSON.stringify(store.rate)).toBe(before);
+
+    // 积分渠道不看价格表：没有牌价照样编得出来，也不算「没有牌价」
+    const credit = await port.setVendorPricing({ vendorId: multiplierGroup.id, mode: 'credit', value: 0.03 });
+    expect(credit.success).toBe(true);
+    if (!credit.success) return;
+    expect(credit.data.compiled).toBeGreaterThan(0);
+    expect(credit.data.priceTableEmpty).toBe(false);
+  });
+
+  it('the compile summary says "no list prices" instead of "nothing changed", and names the unusable price keys', () => {
+    const result = (over: Partial<Parameters<typeof describeCompile>[0]>) => ({
+      compiled: 0, unchanged: 0, unmatchedModelKeys: [], newVersion: null, priceTableEmpty: false, invalidPriceKeys: [], ...over,
+    });
+    expect(describeCompile(result({}))).toBe('有效价无变化');
+    expect(describeCompile(result({ compiled: 3, unchanged: 2, unmatchedModelKeys: ['x'], newVersion: 7 }))).toBe(
+      '已重算 3 条有效价，2 条数值相同未动，1 个模型无基准价，版本 → v7',
+    );
+    // 没有牌价是没法算，不是没有变化
+    expect(describeCompile(result({ priceTableEmpty: true }))).toBe('手上没有牌价，没有重算');
+    // 积分渠道不看价格表，没有牌价时也可能编出几条
+    expect(describeCompile(result({ compiled: 2, priceTableEmpty: true, newVersion: 8 }))).toBe(
+      '已重算 2 条有效价，手上没有牌价，按牌价出价的没有重算，版本 → v8',
+    );
+    expect(describeCompile(result({ compiled: 1, invalidPriceKeys: ['gpt-9', 'claude-x'], newVersion: 9 }))).toBe(
+      '已重算 1 条有效价，2 行牌价用不了：gpt-9、claude-x，版本 → v9',
+    );
+    // 坏行多了只列前五个，报总数
+    expect(describeCompile(result({ invalidPriceKeys: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] }))).toBe(
+      '有效价无变化，7 行牌价用不了：a、b、c、d、e 等 7 个',
+    );
   });
 
   it('custom rates can only switch metering within the same product family — credits cross every family', () => {
@@ -441,7 +459,7 @@ describe('pricing contract', () => {
     const rate = store.rate.find((x) => x.modelId === route.routeKey)!;
     expect(rate.billingType).toBe('per_credit');
     expect(rate.billingType === 'per_credit' && rate.rate.pricePerCredit).toBe(0.028);
-    expect(rate.sourcePriceId).toBeNull();
+    expect(rate.sourceModelKey).toBeNull();
     expect(rate.multiplierApplied).toBeNull();
 
     // 换回倍率：只存一个值，倍率要重新给；回到价格表 × 倍率。
