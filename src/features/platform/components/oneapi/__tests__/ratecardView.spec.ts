@@ -11,7 +11,7 @@ import {
 import RatecardView from '../views/RatecardView.vue';
 
 /**
- * 模型价格页整页挂起来点一遍：列表、搜索、改价、删除、发布结果这几条线接没接对。
+ * 模型价格页整页挂起来点一遍：列表、搜索、改价、删除、同步、没发布出去时的提示这几条线接没接对。
  * 数据用这一页自己的 mock（规矩在 oneapiRatecard.spec.ts 里钉着），这里只看页面把它用对了没有。
  */
 
@@ -53,8 +53,18 @@ async function open(): Promise<void> {
 
 const makers = (): string[] => wrapper.findAll('.maker-item__name').map((n) => n.text());
 const models = (): string[] => wrapper.findAll('.price-row__name').map((n) => n.text());
-/** 状态条上的字，去掉空白再比：段和段之间有没有空格是排版的事。 */
-const strip = (): string => wrapper.find('.status-strip').text().replace(/\s+/g, '');
+/** 弹出来的那几句提示（ElMessage 挂在 body 上）。 */
+const toasts = (): string[] =>
+  [...document.body.querySelectorAll('.el-message')].map((m) => m.textContent?.trim() ?? '');
+/**
+ * 发布顺利的时候页面上一个字都不提它：没有提示块、没有状态条、弹出来的话里也没有「发布」。
+ * 发布是号池后台在每个写操作之后自己做的，成了不是一件要告诉人的事。
+ */
+function expectSilentAboutPublishing(): void {
+  expect(wrapper.find('.publish-alert').exists()).toBe(false);
+  expect(wrapper.find('.status-strip').exists()).toBe(false);
+  expect(toasts().join('|')).not.toContain('发布');
+}
 
 function button(label: string): ReturnType<VueWrapper['find']> | undefined {
   return wrapper.findAll('button').find((b) => b.text().trim() === label);
@@ -111,7 +121,7 @@ afterEach(() => {
 });
 
 describe('model ratecard page', () => {
-  it("lists the makers and the first maker's models, with where the table stands", async () => {
+  it("lists the makers and the first maker's models", async () => {
     await open();
 
     expect(makers()).toEqual(['OpenAI', 'Anthropic', 'Google', 'DeepSeek', 'NovelAI', '其他']);
@@ -125,11 +135,11 @@ describe('model ratecard page', () => {
       'whisper-1',
     ]);
     expect(wrapper.find('.maker-sidebar__foot').text()).toContain('18 个模型');
-    // 还没改过东西：只有转发、通知两段，没有「发布」
-    expect(strip()).toContain('转发已收到6家');
-    expect(strip()).toContain('通知yomijastalk');
-    expect(strip()).not.toContain('发布');
-    expect(wrapper.find('.publish-alert').exists()).toBe(false);
+    expectSilentAboutPublishing();
+    // 页头上只有一个动作：没有「发布」，也没有「导入」
+    expect(
+      wrapper.findAll('.page-header__actions button').map((b) => b.text().trim()),
+    ).toEqual(['同步全部']);
 
     await selectMaker('Anthropic');
     expect(models()).toContain('claude-3-haiku-20240307');
@@ -152,7 +162,7 @@ describe('model ratecard page', () => {
     await open();
 
     expect(models().length).toBeGreaterThan(0);
-    for (const label of ['导入', '发布', '新建厂家', '新建模型', '上游同步'])
+    for (const label of ['同步全部', '新建厂家', '新建模型', '上游同步'])
       expect(button(label)).toBeUndefined();
     expect(wrapper.find('.price-row__ops').exists()).toBe(false);
   });
@@ -172,7 +182,7 @@ describe('model ratecard page', () => {
     expect(wrapper.text()).toContain('没有匹配的模型');
   });
 
-  it('deletes a row, says what was published, and drops a maker left with nothing', async () => {
+  it('deletes a row and drops a maker left with nothing', async () => {
     await open();
     await selectMaker('NovelAI');
     await (await rowOf('nai-diffusion-4-5-full'))
@@ -183,8 +193,8 @@ describe('model ratecard page', () => {
     expect(makers()).not.toContain('NovelAI');
     // 选中的那家没了：落到第一家
     expect(wrapper.find('.provider-detail__title').text()).toBe('OpenAI');
-    expect(strip()).toContain('发布已撤下NovelAI');
-    expect(strip()).toContain('转发已收到5家');
+    expect(toasts()).toContain('已删除 nai-diffusion-4-5-full');
+    expectSilentAboutPublishing();
   });
 
   it('edits the very row that was clicked and keeps the tiers the form does not know', async () => {
@@ -211,7 +221,8 @@ describe('model ratecard page', () => {
       // 表单里没有图像出价这一档：改了入价，它还在
       output: { perMToken: 2.5, image: 30 },
     });
-    expect(strip()).toContain('发布已发布Google');
+    expect(toasts()).toContain('已保存 gemini-2.5-flash-image');
+    expectSilentAboutPublishing();
     expect((await rowOf('gemini-2.5-flash-image')).find('.price-row__price').text()).toContain(
       '0.35',
     );
@@ -258,7 +269,7 @@ describe('model ratecard page', () => {
       rate: { input: { perMToken: 4 }, output: { perMToken: 20 } },
     });
     expect(models()).toContain('claude-next');
-    expect(strip()).toContain('发布已发布Anthropic');
+    expectSilentAboutPublishing();
   });
 
   it('syncs one maker from upstream: differences come ticked, applying writes them', async () => {
@@ -283,56 +294,25 @@ describe('model ratecard page', () => {
 
     expect(models()).toContain('gpt-5.2-pro');
     expect((await rowOf('gpt-5-mini')).find('.price-row__price').text()).toContain('0.025');
-    expect(strip()).toContain('发布已发布OpenAI');
+    expectSilentAboutPublishing();
   });
 
-  it('imports a pasted table and shows how many rows went where', async () => {
+  it('an empty table offers to sync it from upstream, not to import one', async () => {
+    // 把表删空：新装的环境就是这样，价格要从上游同步进来
+    const all = await port.listByMaker({ keyword: '' });
+    if (all.success)
+      for (const row of all.data.flatMap((g) => g.items)) await port.remove(row.id);
     await open();
-    await button('导入')!.trigger('click');
-    await settle();
 
-    const text = dialog().querySelector<HTMLTextAreaElement>('textarea')!;
-    text.value = '{ "items": [';
-    text.dispatchEvent(new Event('input'));
-    await settle();
-    expect(dialog().textContent).toContain('不是合法的 JSON');
-    expect(dialogButton('导入').disabled).toBe(true);
-
-    text.value = JSON.stringify({
-      items: [
-        {
-          modelKey: 'gpt-5.2',
-          billingType: 'per_token',
-          rate: { input: { perMToken: 9 }, output: { perMToken: 9 } },
-        },
-        {
-          modelKey: 'acme-x',
-          maker: 'acme',
-          billingType: 'per_call',
-          rate: { pricePerCall: 0.01 },
-        },
-      ],
-    });
-    text.dispatchEvent(new Event('input'));
-    await settle();
-    expect(dialog().textContent).toContain('2 行');
-    dialogButton('导入').click();
-    await settle();
-
-    // 没勾「覆盖已有的」：表里已有的那一行跳过
-    expect(
-      [...dialog().querySelectorAll('.import-count')].map((c) =>
-        c.textContent?.replace(/\s+/g, ''),
-      ),
-    ).toEqual(['新增1', '覆盖0', '跳过1']);
-    dialogButton('完成').click();
-    await settle();
-    expect(makers()).toContain('Acme');
-    expect(strip()).toContain('发布已发布Acme');
+    expect(wrapper.text()).toContain('还没有模型价格');
+    expect(button('导入')).toBeUndefined();
+    expect(button('新建厂家')).toBeDefined();
+    // 空表里和页头上各有一个「同步全部」
+    expect(wrapper.findAll('button').filter((b) => b.text().trim() === '同步全部')).toHaveLength(2);
   });
 
   it('takes the table over when it is registered to another database', async () => {
-    // mock 里往这个厂家写一行，这份表登记的主人就成了别的库：之后的发布一律不写
+    // mock 里往这个厂家写一行，这份表登记的主人就成了别的库：之后的写操作一律发布不出去
     await port.upsert({
       modelKey: 'moved-1',
       maker: MOCK_OWNER_MAKER,
@@ -340,24 +320,23 @@ describe('model ratecard page', () => {
       rate: { pricePerCall: 1 },
     });
     await open();
-    await button('发布')!.trigger('click');
-    await settle();
-    expect(wrapper.find('.publish-alert').text()).toContain('整张表：');
-    expect(strip()).toContain('发布没有发布出去');
+    // 打开页面本身不去发布，也就不知道：要到下一次改东西，回包才说没发出去
+    expect(wrapper.find('.publish-alert').exists()).toBe(false);
 
-    // 这种失败再点发布还是同一个结果：提示里摆的是「接管发布」，不是「重新发布」。
-    // 它只在这时候出现，平时不在更多菜单里摆着。
+    await selectMaker('NovelAI');
+    await (await rowOf('nai-diffusion-4-5-full'))
+      .find('.price-row__ops button[title="删除"]')
+      .trigger('click');
+    await settle();
+
+    const alert = wrapper.find('.publish-alert');
+    expect(alert.text()).toContain('还没有发布出去');
+    expect(alert.text()).toContain('整张表：');
+    // 这一种号池后台自己重发多少次都一样：不说「会自动重发」，摆的是「接管发布」
+    expect(alert.text()).not.toContain('自动重发');
     const actions = (): string[] =>
       wrapper.findAll('.publish-alert__actions button').map((b) => b.text().trim());
-    expect(actions()).toContain('接管发布');
-    expect(actions()).not.toContain('重新发布');
-    await wrapper.find('.page-header__actions .el-dropdown button').trigger('click');
-    await settle();
-    expect(
-      [...document.body.querySelectorAll<HTMLElement>('.el-dropdown-menu__item')].map((i) =>
-        i.textContent?.trim(),
-      ),
-    ).not.toContain('接管发布');
+    expect(actions()).toEqual(['接管发布', '关闭']);
 
     await wrapper
       .findAll('.publish-alert__actions button')
@@ -366,39 +345,51 @@ describe('model ratecard page', () => {
     await settle();
 
     expect(wrapper.find('.publish-alert').exists()).toBe(false);
-    expect(strip()).toContain('发布已发布Owner-demo');
-    const again = await port.publish();
-    expect(again.success && again.data.ok).toBe(true);
+    // 接管以后写操作照常发布
+    const again = await port.upsert({
+      modelKey: 'gpt-6',
+      maker: 'openai',
+      billingType: 'per_call',
+      rate: { pricePerCall: 1 },
+    });
+    expect(again.success && again.data.publish.ok).toBe(true);
   });
 
-  it('keeps a failed publish on top of the page until the whole table goes out', async () => {
+  it('says so when a change was saved but did not go out, with nothing to click but close', async () => {
     // 表里有一家发布不出去（mock 里叫这个名字的厂家总是失败）
-    const flaky = await port.upsert({
+    await port.upsert({
       modelKey: 'flaky-1',
       maker: MOCK_FAIL_MAKER,
       billingType: 'per_call',
       rate: { pricePerCall: 1 },
     });
     await open();
+    expect(wrapper.find('.publish-alert').exists()).toBe(false);
 
-    await button('发布')!.trigger('click');
+    await selectMaker('Fail-demo');
+    await (await rowOf('flaky-1')).find('.price-row__ops button[title="删除"]').trigger('click');
     await settle();
-    const alert = wrapper.find('.publish-alert');
-    expect(alert.text()).toContain('没有发布出去');
-    expect(alert.text()).toContain('Fail-demo：mock：模拟这个厂家发布失败。');
-    expect(strip()).toContain('发布1家没有发布出去');
 
-    // 别的厂家的写操作发布成了，这一条不会跟着消失
+    const alert = wrapper.find('.publish-alert');
+    expect(alert.text()).toContain('已保存，但还没有发布出去');
+    expect(alert.text()).toContain('Fail-demo：mock：模拟这个厂家发布失败。');
+    // 号池后台自己会重发：说一声，不给「发布」「重新发布」按钮
+    expect(alert.text()).toContain('号池后台会自动重发');
+    expect(
+      wrapper.findAll('.publish-alert__actions button').map((b) => b.text().trim()),
+    ).toEqual(['关闭']);
+    for (const label of ['发布', '重新发布', '接管发布']) expect(button(label)).toBeUndefined();
+    expect(toasts().join('|')).toContain('已删除 flaky-1，但还没有发布出去');
+
+    // 别的厂家的写操作发布成了，这一家的提示不会跟着消失
     await selectMaker('NovelAI');
     await (await rowOf('nai-diffusion-4-5-full'))
       .find('.price-row__ops button[title="删除"]')
       .trigger('click');
     await settle();
-    expect(wrapper.find('.publish-alert').exists()).toBe(true);
+    expect(wrapper.find('.publish-alert').text()).toContain('Fail-demo');
 
-    // 把发布不出去的那一行删了，再整张表发布一遍：成了，提示才清掉
-    if (flaky.success) await port.remove(flaky.data.price.id);
-    await button('重新发布')!.trigger('click');
+    await button('关闭')!.trigger('click');
     await settle();
     expect(wrapper.find('.publish-alert').exists()).toBe(false);
   });

@@ -6,11 +6,10 @@ import { OneApiRatecardHttpAdapter } from '@/shared/api/adapters/oneapiRatecardA
 import {
   applyItems,
   defaultPicked,
-  describePublish,
   extraPriceParts,
   failureScope,
   failureText,
-  failuresAfterFullPublish,
+  failuresAfterTakeover,
   failuresAfterWrite,
   formCapabilities,
   hasZeroPrice,
@@ -18,16 +17,13 @@ import {
   mergeRate,
   needsTakeover,
   newModelFormCapabilities,
-  parseImportText,
   priceRowView,
   priceSummary,
   readRateBody,
-  relaySummary,
   syncRows,
 } from '../model/ratecard';
 import {
   ALL_MAKERS,
-  ratecardRelayStatusSchema,
   type ModelPriceRow,
   type PricePublishResult,
   type RateJson,
@@ -297,7 +293,7 @@ describe('oneapi ratecard adapter', () => {
     expect(calls[1]!.body).toEqual({ sources: [{ kind: 'models_dev', name: 'models.dev' }] });
   });
 
-  it('applies picked candidates and imports a pasted table', async () => {
+  it('applies picked candidates', async () => {
     reply({ added: 1, updated: 2, publish: wirePublish });
     const item = {
       modelKey: 'gpt-5.2-pro',
@@ -311,76 +307,28 @@ describe('oneapi ratecard adapter', () => {
     expect(path()).toBe('/oneapi/vault/v1/ratecard/sync/apply');
     expect(calls[0]!.body).toMatchObject({ items: [item] });
     expect(applied.success && [applied.data.added, applied.data.updated]).toEqual([1, 2]);
-
-    reply({ added: 3, overwritten: 1, skipped: 2, publish: wirePublish });
-    const imported = await adapter.importPrices({ items: [wireRow], overwrite: true });
-    expect(path(1)).toBe('/oneapi/vault/v1/ratecard/import');
-    expect(calls[1]!.body).toEqual({ overwrite: true, items: [wireRow] });
-    expect(imported.success && imported.data).toMatchObject({
-      added: 3,
-      overwritten: 1,
-      skipped: 2,
-    });
   });
 
-  it('publishes; a takeover has to be asked for', async () => {
+  // 平时的发布不用页面来要：每个写操作号池后台当场发布，没发出去的它自己定时重发。
+  // 页面只在一种时候要发布——这份表登记的主人是别的库，要人确认接管。
+  it('asks for a publish only to take the table over', async () => {
+    reply(wirePublish);
+    const taken = await adapter.takeover();
+    expect(calls[0]!.method).toBe('POST');
+    expect(path()).toBe('/oneapi/vault/v1/ratecard/publish?takeover=true');
+    expect(taken.success && taken.data).toEqual(wirePublish);
+
+    // 没发布出去不是请求失败：HTTP 200，原因在 failures 里
     const failed = {
       ok: false,
       written: [],
       deleted: [],
       unchanged: 0,
-      failures: [
-        {
-          maker: '*',
-          error: '这份价格表登记的主人是「a」，本实例连的库是「b」，没有发布。',
-        },
-      ],
+      failures: [{ maker: '*', error: 'nats: no servers available' }],
     };
     reply(failed);
-    const plain = await adapter.publish();
-    expect(calls[0]!.method).toBe('POST');
-    expect(path()).toBe('/oneapi/vault/v1/ratecard/publish');
-    // 没发布出去不是请求失败：HTTP 200，原因在 failures 里
-    expect(plain.success && plain.data).toEqual(failed);
-
-    reply(wirePublish);
-    await adapter.publish({ takeover: true });
-    expect(path(1)).toBe('/oneapi/vault/v1/ratecard/publish?takeover=true');
-    await adapter.publish({ takeover: false });
-    expect(path(2)).toBe('/oneapi/vault/v1/ratecard/publish');
-  });
-
-  // 只有这一个还打平台的 Bff：订阅 OneApi 的 NATS、通知各产品的是它，号池后台不知道这份表到没到平台
-  it('reads the relay status from the Bff, not from the vault', async () => {
-    const relay = {
-      configured: true,
-      loaded: true,
-      fingerprint: 'ab12cd34',
-      documentCount: 7,
-      receivedAtUtc: 1763600000000,
-      error: null,
-      subscribers: [{ service: 'yomi', notifiedAtUtc: 1763600001000, ok: true, error: null }],
-    };
-    reply(relay);
-    const r = await adapter.relayStatus();
-    expect(path()).toBe('/admin/components/oneapi/ratecard/relay');
-    expect(r.success && r.data).toEqual(relay);
-
-    // 还没配 / 还没收到：别的字段可以是 null，也可以干脆没有
-    expect(ratecardRelayStatusSchema.parse({ configured: false, loaded: false })).toEqual({
-      configured: false,
-      loaded: false,
-      fingerprint: null,
-      documentCount: 0,
-      receivedAtUtc: null,
-      error: null,
-      subscribers: [],
-    });
-    // 时间是 Unix 毫秒，不是 ISO 字符串
-    expect(
-      ratecardRelayStatusSchema.safeParse({ ...relay, receivedAtUtc: '2026-11-20T00:00:00Z' })
-        .success,
-    ).toBe(false);
+    const again = await adapter.takeover();
+    expect(again.success && again.data).toEqual(failed);
   });
 });
 
@@ -614,36 +562,37 @@ describe('oneapi ratecard publish results', () => {
     expect(failures).toEqual([]);
   });
 
-  it('a whole-table failure is only cleared by a whole-table publish', () => {
-    let failures = failuresAfterWrite([], publish({ ok: false, failures: [natsDown] }));
-    // 之后一次写操作发布成了一家，不代表之前没发出去的都补上了
-    failures = failuresAfterWrite(failures, publish({ written: ['openai'] }));
+  it('a whole-table failure goes once a later write really publishes', () => {
+    const failures = failuresAfterWrite([], publish({ ok: false, failures: [natsDown] }));
     expect(failures).toEqual([natsDown]);
 
-    expect(failuresAfterFullPublish(publish({ ok: false, failures: [openaiFailed] }))).toEqual([
-      openaiFailed,
+    // 什么都没发布的一次（没有碰到任何厂家）说明不了发布这条路通没通
+    expect(failuresAfterWrite(failures, publish())).toEqual([natsDown]);
+
+    // 之后一次写操作真的发布出去了：路通了，之前没发出去的号池后台自己会补，提示不再挂着
+    expect(failuresAfterWrite(failures, publish({ written: ['openai'] }))).toEqual([]);
+    expect(failuresAfterWrite(failures, publish({ unchanged: 1 }))).toEqual([]);
+
+    // 这一次还是没成：换成最新的原因
+    const still = { maker: ALL_MAKERS, error: 'timeout' };
+    expect(failuresAfterWrite(failures, publish({ ok: false, failures: [still] }))).toEqual([
+      still,
     ]);
-    expect(failuresAfterFullPublish(publish({ written: ['openai'], unchanged: 6 }))).toEqual([]);
+
+    // 单个厂家的失败不跟着清：它得自己发布成了才算
+    expect(
+      failuresAfterWrite([natsDown, openaiFailed], publish({ written: ['anthropic'] })),
+    ).toEqual([openaiFailed]);
   });
 
-  it('says which makers were published, and when nothing was', () => {
-    expect(describePublish(publish({ written: ['openai'] }))).toBe('已发布 OpenAI');
-    expect(describePublish(publish({ deleted: ['novelai'] }))).toBe('已撤下 NovelAI');
-    expect(describePublish(publish({ written: ['openai', 'anthropic'], unchanged: 5 }))).toBe(
-      '已发布 OpenAI、Anthropic，另 5 家没变',
-    );
-    expect(
-      describePublish(publish({ written: ['openai', 'anthropic', 'google', 'deepseek'] })),
-    ).toBe('已发布 OpenAI、Anthropic、Google 等 4 家');
-    // 发布着的本来就和表里一样：没写不是没成
-    expect(describePublish(publish({ unchanged: 7 }))).toBe('发布的没有变化');
-    expect(
-      describePublish(
-        publish({ ok: false, failures: [openaiFailed, { maker: 'google', error: 'x' }] }),
-      ),
-    ).toBe('2 家没有发布出去');
-    expect(describePublish(publish({ ok: false, failures: [natsDown] }))).toBe('没有发布出去');
+  it('a takeover clears everything when it goes through', () => {
+    expect(failuresAfterTakeover(publish({ ok: false, failures: [openaiFailed] }))).toEqual([
+      openaiFailed,
+    ]);
+    expect(failuresAfterTakeover(publish({ written: ['openai'], unchanged: 6 }))).toEqual([]);
+  });
 
+  it('names whose failure it is', () => {
     expect(failureScope(natsDown)).toBe('整张表');
     expect(failureScope(openaiFailed)).toBe('OpenAI');
     expect(failureScope({ maker: 'acme', error: 'x' })).toBe('Acme');
@@ -698,70 +647,6 @@ describe('oneapi ratecard publish results', () => {
       }),
     ).toBe('角色还在用着');
     expect(failureText({ message: '没有权限' })).toBe('没有权限');
-  });
-});
-
-describe('oneapi ratecard import text', () => {
-  it('takes an array, an object with items, or a whole enveloped response', () => {
-    const rows = [{ modelKey: 'a' }, { modelKey: 'b' }];
-    expect(parseImportText(JSON.stringify(rows)).items).toEqual(rows);
-    expect(parseImportText(JSON.stringify({ items: rows, total: 2 })).items).toEqual(rows);
-    expect(parseImportText(JSON.stringify({ success: true, data: { items: rows } })).items).toEqual(
-      rows,
-    );
-  });
-
-  it('says why it cannot, and says nothing while the box is empty', () => {
-    expect(parseImportText('   ')).toEqual({ items: null, problem: '' });
-    expect(parseImportText('[{')).toEqual({ items: null, problem: '不是合法的 JSON' });
-    expect(parseImportText('{"rows":[]}')).toEqual({
-      items: null,
-      problem: '要一个数组，或者带 items 的对象',
-    });
-    expect(parseImportText('"gpt"')).toEqual({
-      items: null,
-      problem: '要一个数组，或者带 items 的对象',
-    });
-    expect(parseImportText('[]')).toEqual({ items: null, problem: '里面一行都没有' });
-  });
-});
-
-describe('oneapi ratecard relay status', () => {
-  const relay = ratecardRelayStatusSchema.parse({
-    configured: true,
-    loaded: true,
-    fingerprint: 'ab12cd34',
-    documentCount: 7,
-    receivedAtUtc: 1763600000000,
-    subscribers: [],
-  });
-
-  it('one word for where the table stands', () => {
-    expect(relaySummary(relay, null)).toEqual({
-      tone: 'success',
-      text: '已收到 7 家',
-      tip: '指纹 ab12cd34',
-    });
-    expect(relaySummary({ ...relay, loaded: false, documentCount: 0 }, null)).toMatchObject({
-      tone: 'warning',
-      text: '还没收到',
-    });
-    expect(relaySummary({ ...relay, configured: false, loaded: false }, null)).toMatchObject({
-      tone: 'info',
-      text: '未配置',
-    });
-    // 订阅出着错：手上还有上一份也先说出错，各产品接下来收不到新改的价
-    expect(relaySummary({ ...relay, error: 'nats: connection closed' }, null)).toEqual({
-      tone: 'danger',
-      text: '订阅出错',
-      tip: 'nats: connection closed；手上是 7 家的那一份',
-    });
-    expect(relaySummary(null, '没有权限')).toEqual({
-      tone: 'danger',
-      text: '读不到',
-      tip: '没有权限',
-    });
-    expect(relaySummary(null, null).tone).toBe('info');
   });
 });
 
@@ -888,11 +773,7 @@ describe('oneapi ratecard mock', () => {
     expect((await table()).some((p) => p.modelKey === 'gpt-6')).toBe(false);
   });
 
-  it('a new model is published for its maker and reaches the platform', async () => {
-    const before = await port.relayStatus();
-    // 种子里留着一个没通知到的产品，页面上看得到失败长什么样
-    expect(before.success && before.data.subscribers.map((s) => s.ok)).toEqual([true, false]);
-
+  it('a new model is published for its maker', async () => {
     const r = await port.upsert({
       modelKey: 'gpt-6',
       maker: 'openai',
@@ -906,14 +787,6 @@ describe('oneapi ratecard mock', () => {
       unchanged: 0,
       failures: [],
     });
-
-    const after = await port.relayStatus();
-    expect(after.success && before.success && after.data.fingerprint).not.toBe(
-      before.success && before.data.fingerprint,
-    );
-    expect(after.success && after.data.subscribers.every((s) => s.ok && s.error === null)).toBe(
-      true,
-    );
 
     // 没带厂家的按模型键推
     const inferred = await port.upsert({
@@ -1075,89 +948,6 @@ describe('oneapi ratecard mock', () => {
     expect(await table()).toEqual(before);
   });
 
-  it('import adds new rows, skips the ones already there unless told to overwrite, and keeps keys as given', async () => {
-    const items = [
-      {
-        modelKey: 'gpt-5.2',
-        maker: 'openai',
-        billingType: 'per_token',
-        rate: perToken(9, 9),
-      },
-      // 导入不收干净名：带日期钉的键原样进表
-      {
-        modelKey: 'GPT-4o-2024-08-06',
-        billingType: 'per_token',
-        rate: perToken(2.5, 10),
-        source: 'models_dev',
-        effectiveFromUtc: 1700000000000,
-      },
-      // 多出来的字段不认也不报错
-      {
-        modelKey: 'acme-x',
-        maker: 'acme',
-        billingType: 'per_call',
-        rate: { pricePerCall: 0.01 },
-        id: 'whatever',
-        routeCount: 3,
-      },
-    ];
-
-    const skipped = await port.importPrices({ items, overwrite: false });
-    expect(skipped.success && skipped.data).toMatchObject({
-      added: 2,
-      overwritten: 0,
-      skipped: 1,
-    });
-    expect((await findRow('gpt-5.2')).rate).not.toEqual(perToken(9, 9));
-    expect(await findRow('gpt-4o-2024-08-06')).toMatchObject({
-      maker: 'openai',
-      source: 'models_dev',
-      effectiveFromUtc: 1700000000000,
-    });
-
-    const overwritten = await port.importPrices({ items, overwrite: true });
-    expect(overwritten.success && overwritten.data).toMatchObject({
-      added: 0,
-      overwritten: 3,
-      skipped: 0,
-    });
-    expect((await findRow('gpt-5.2')).rate).toEqual(perToken(9, 9));
-  });
-
-  it('import is all or nothing, and names the row that is wrong', async () => {
-    const before = await table();
-    const r = await port.importPrices({
-      items: [
-        { modelKey: 'fine-1', billingType: 'per_token', rate: perToken(1, 2) },
-        { modelKey: 'broken-2', billingType: 'per_image', rate: { tiers: [] } },
-      ],
-      overwrite: true,
-    });
-    expect(!r.success && r.error.code).toBe('validation');
-    expect(!r.success && failureText(r.error)).toContain('broken-2');
-    expect(await table()).toEqual(before);
-
-    const dup = await port.importPrices({
-      items: [
-        { modelKey: 'twice', billingType: 'per_token', rate: perToken(1, 2) },
-        { modelKey: 'Twice', billingType: 'per_token', rate: perToken(1, 2) },
-      ],
-      overwrite: false,
-    });
-    expect(!dup.success && failureText(dup.error)).toContain('重复');
-  });
-
-  it('publish: nothing to write when the table is already out there', async () => {
-    const r = await port.publish();
-    expect(r.success && r.data).toEqual({
-      ok: true,
-      written: [],
-      deleted: [],
-      unchanged: 6,
-      failures: [],
-    });
-  });
-
   it(`a maker named ${MOCK_FAIL_MAKER} never publishes: saved, but not out`, async () => {
     const saved = await port.upsert({
       modelKey: 'flaky-1',
@@ -1172,14 +962,14 @@ describe('oneapi ratecard mock', () => {
       MOCK_FAIL_MAKER,
     ]);
 
-    // 整张表再发布一遍也还是它不成，别的厂家不受影响
-    const all = await port.publish();
-    expect(all.success && all.data).toMatchObject({ ok: false, unchanged: 6 });
-
-    // 把那一行删了，整张表才发布得出去
-    if (saved.success) await port.remove(saved.data.price.id);
-    const clean = await port.publish();
-    expect(clean.success && clean.data.ok).toBe(true);
+    // 别的厂家不受影响：照常发布
+    const other = await port.upsert({
+      modelKey: 'gpt-6',
+      maker: 'openai',
+      billingType: 'per_token',
+      rate: perToken(2, 16),
+    });
+    expect(other.success && other.data.publish).toMatchObject({ ok: true, written: ['openai'] });
   });
 
   it(`a maker named ${MOCK_OWNER_MAKER} hands the table to another database, until a takeover`, async () => {
@@ -1203,18 +993,21 @@ describe('oneapi ratecard mock', () => {
       rate: perToken(2, 16),
     });
     expect(blocked.success && blocked.data.publish.ok).toBe(false);
-    expect((await port.publish()).success).toBe(true);
-    const plain = await port.publish();
-    expect(plain.success && plain.data.ok).toBe(false);
 
     // 接管：登记改过来，再把攒着没发出去的全发了
-    const taken = await port.publish({ takeover: true });
+    const taken = await port.takeover();
     expect(taken.success && taken.data.ok).toBe(true);
     expect(taken.success && [...taken.data.written].sort()).toEqual(
       ['openai', MOCK_OWNER_MAKER].sort(),
     );
 
-    const after = await port.publish();
-    expect(after.success && after.data).toMatchObject({ ok: true, written: [] });
+    // 之后的写操作照常发布
+    const after = await port.upsert({
+      modelKey: 'gpt-7',
+      maker: 'openai',
+      billingType: 'per_token',
+      rate: perToken(3, 24),
+    });
+    expect(after.success && after.data.publish).toMatchObject({ ok: true, written: ['openai'] });
   });
 });

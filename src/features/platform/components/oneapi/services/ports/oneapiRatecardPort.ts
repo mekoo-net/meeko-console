@@ -2,16 +2,13 @@ import type { AppResult } from '@/shared/api/httpTypes';
 
 import type {
   ApplyPriceItem,
-  ImportPricesInput,
   ModelPriceRow,
   PriceApplyResult,
   PriceDeleteResult,
   PriceFetchResult,
-  PriceImportResult,
   PriceMakerGroup,
   PricePublishResult,
   PriceWriteResult,
-  RatecardRelayStatus,
   UpsertPriceInput,
 } from '../../model/ratecard.types';
 
@@ -19,9 +16,9 @@ import type {
  * OneApi 的模型价格（美元牌价）—— 对应号池后台的 `/v1/ratecard/**`，对外是 `/oneapi/vault/v1/ratecard/**`。
  *
  * 表的主人是 OneApi 的号池后台；它自己登记路由，平台网关验完身份直接把请求转给它，不经 Bff。
- * 只有 `relayStatus`（这份表到没到平台）问的是平台的 Bff：订阅 OneApi 的 NATS、通知各产品的是它。
  *
- * 每个写操作号池后台都当场把受影响的厂家发布出去，回包里带发布结果（`publish`）：
+ * 每个写操作号池后台都当场把受影响的厂家发布出去，回包里带发布结果（`publish`）；没发出去的它自己定时重发。
+ * 所以这里没有「发布」：页面平时不管发布，只在回包说没发出去的时候提一句。
  * 「库里写成了」和「发布出去了」是两件事，这里原样交回去，怎么告诉人由页面统一做。
  * 这边只有牌价，不算有效价——倍率和有效价是各产品自己的事。
  */
@@ -50,16 +47,10 @@ export interface OneApiRatecardPort {
   /** 把勾选的候选写进表里。任何一行校验不过，整批都不写。 */
   applyCandidates(items: ApplyPriceItem[]): Promise<AppResult<PriceApplyResult>>;
 
-  /** 批量导入一段现成的表。先整批验完再动库，任何一行不过整批都不写。 */
-  importPrices(input: ImportPricesInput): Promise<AppResult<PriceImportResult>>;
-
   /**
-   * 把整张表和发布出去的那一份对一遍：内容不同的厂家重写，多出来的撤下。表本身不变。
-   * `takeover`：由号池后台现在连的这个库接管这份表——发布着的、别的库的牌价会被换掉，各产品收到就照着重算。
-   * 登记的主人是别的库时，不带它的发布一律不写。
+   * 由号池后台现在连的这个库接管这份表，再把整张表发布一遍——发布着的、别的库的牌价会被换掉，各产品收到就照着重算。
+   * 只在一种时候用：这份表登记的主人是别的库，写操作的回包说没发出去（`owner_mismatch`）。
+   * 这种失败号池后台自己重发多少次都一样，要人确认。
    */
-  publish(input?: { takeover?: boolean }): Promise<AppResult<PricePublishResult>>;
-
-  /** 这份表到了平台没有、平台最近一次通知各产品的结果。 */
-  relayStatus(): Promise<AppResult<RatecardRelayStatus>>;
+  takeover(): Promise<AppResult<PricePublishResult>>;
 }

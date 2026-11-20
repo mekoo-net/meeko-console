@@ -5,43 +5,30 @@ import {
   priceApplyResultSchema,
   priceDeleteResultSchema,
   priceFetchResultSchema,
-  priceImportResultSchema,
   priceMakerGroupsSchema,
   pricePublishResultSchema,
   priceWriteResultSchema,
-  ratecardRelayStatusSchema,
   type ApplyPriceItem,
-  type ImportPricesInput,
   type ModelPriceRow,
   type PriceApplyResult,
   type PriceDeleteResult,
   type PriceFetchResult,
-  type PriceImportResult,
   type PriceMakerGroup,
   type PricePublishResult,
   type PriceWriteResult,
-  type RatecardRelayStatus,
   type UpsertPriceInput,
 } from '@/features/platform/components/oneapi/model/ratecard.types';
 import type { OneApiRatecardPort } from '@/features/platform/components/oneapi/services/ports/oneapiRatecardPort';
 import { request } from '@/shared/api/httpClient';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 
-// 这一页的请求打两处，所以是两个常量，不能并成一个前缀：
-
 /**
- * 价格表本身（增删改查、同步、导入、发布）是号池后台自己的接口。号池后台自己登记到 Consul、自己声明路由，
+ * 价格表（增删改查、同步、接管）是号池后台自己的接口。号池后台自己登记到 Consul、自己声明路由，
  * 平台网关验完身份直接转给它，不经 Bff：`/oneapi/vault` 后面的 `/v1/ratecard/**` 就是它原来的路径。
  * 所以成功的回包就是号池后台的 JSON（不包信封），失败也是它自己按平台的标准错误回的。
  * 读不用登录（牌价是公开的），写要 Staff 且有 `platform.settings.write`。
  */
 const VAULT_RATECARD_BASE = '/oneapi/vault/v1/ratecard';
-
-/**
- * 转发状态问的是平台的 Bff，不是号池后台：订阅 OneApi 的 NATS、收到新牌价再通知各产品的是 Bff，
- * 「这份表到没到平台、通知到了谁」只有它知道。Bff 在价格表上只剩这一个接口，所以写的是整条地址。
- */
-const BFF_RELAY_STATUS_PATH = '/admin/components/oneapi/ratecard/relay';
 
 /** 回包照类型校验一遍：号池后台改了形状，这里就说清楚是哪个接口对不上，而不是页面上某一格悄悄空着。 */
 function parse<T>(schema: z.ZodType<T>, value: unknown, what: string): AppResult<T> {
@@ -106,24 +93,13 @@ export class OneApiRatecardHttpAdapter implements OneApiRatecardPort {
     return res.success ? parse(priceApplyResultSchema, res.data, '套用牌价') : res;
   }
 
-  async importPrices(input: ImportPricesInput): Promise<AppResult<PriceImportResult>> {
-    const res = await request<unknown>(`${VAULT_RATECARD_BASE}/import`, {
-      method: 'POST',
-      body: { overwrite: input.overwrite, items: input.items },
-    });
-    return res.success ? parse(priceImportResultSchema, res.data, '导入牌价') : res;
-  }
-
-  async publish(input?: { takeover?: boolean }): Promise<AppResult<PricePublishResult>> {
+  async takeover(): Promise<AppResult<PricePublishResult>> {
+    // 号池后台的 publish 不带 takeover 是「现在就对一遍」，它每次写操作和定时都自己做，页面不去要；
+    // 页面只在登记的主人是别的库、要人确认的时候来要这一种
     const res = await request<unknown>(`${VAULT_RATECARD_BASE}/publish`, {
       method: 'POST',
-      query: { takeover: input?.takeover ? true : undefined },
+      query: { takeover: true },
     });
-    return res.success ? parse(pricePublishResultSchema, res.data, '发布') : res;
-  }
-
-  async relayStatus(): Promise<AppResult<RatecardRelayStatus>> {
-    const res = await request<unknown>(BFF_RELAY_STATUS_PATH);
-    return res.success ? parse(ratecardRelayStatusSchema, res.data, '转发状态') : res;
+    return res.success ? parse(pricePublishResultSchema, res.data, '接管发布') : res;
   }
 }

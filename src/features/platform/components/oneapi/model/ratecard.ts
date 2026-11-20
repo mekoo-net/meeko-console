@@ -1,5 +1,5 @@
 /**
- * 模型价格页的纯函数：一行怎么显示、改价怎么拼回去、发布结果怎么记、导入的文本怎么认、同步的对比怎么排。
+ * 模型价格页的纯函数：一行怎么显示、改价怎么拼回去、没发布出去的怎么记、同步的对比怎么排。
  * 页面、弹窗和 mock 共用，免得同一件事在几处各算一遍。
  *
  * 价格怎么摊成列用的是 Yomi 那一套（`rateBodyDisplay`），只是金额照实显示：这一页的数是各产品算钱的依据。
@@ -31,7 +31,6 @@ import {
   type PriceFetchResult,
   type PricePublishFailure,
   type PricePublishResult,
-  type RatecardRelayStatus,
   type RateJson,
 } from './ratecard.types';
 
@@ -275,27 +274,32 @@ export function failureScope(failure: PricePublishFailure): string {
 }
 
 /**
- * 一次只碰几个厂家的写操作（保存、删除、套用、导入）之后，页面顶上记着的失败怎么变：
+ * 一次写操作（保存、删除、套用）之后，页面顶上记着的失败怎么变：
  * 这次发布成了的厂家划掉，这次没成的记上（同一家只留最新的原因）。
- * 整张表的失败（`*`）不会被划掉：一家发布成了，不代表之前没发出去的那几家也补上了，要等整张表发布成功。
+ *
+ * 整张表的失败（`*`：连不上 NATS、读不到登记的主人）在这次真的发布出去了以后也划掉：发布这条路已经通了，
+ * 之前没发出去的那几家号池后台自己会定时补上，提示再挂着就成了没人收的旧账。
+ * 这次什么都没发布（没有碰到任何厂家）的不算——它说明不了路通没通。
  */
 export function failuresAfterWrite(
   current: readonly PricePublishFailure[],
   result: PricePublishResult,
 ): PricePublishFailure[] {
   const byMaker = new Map(current.map((f) => [f.maker, f]));
+  const published = result.written.length + result.deleted.length + result.unchanged > 0;
+  if (result.ok && published) byMaker.delete(ALL_MAKERS);
   for (const maker of [...result.written, ...result.deleted]) byMaker.delete(maker);
   for (const failure of result.failures) byMaker.set(failure.maker, failure);
   return [...byMaker.values()];
 }
 
-/** 整张表发布（发布、接管）之后：成了就全清，没成就换成这一次的。 */
-export function failuresAfterFullPublish(result: PricePublishResult): PricePublishFailure[] {
+/** 接管之后（整张表重新发布了一遍）：成了就全清，没成就换成这一次的。 */
+export function failuresAfterTakeover(result: PricePublishResult): PricePublishFailure[] {
   return result.ok ? [] : result.failures;
 }
 
 /**
- * 没发出去是因为「这份表登记的主人是别的库」：再点发布还是一样的结果，要接管才行。
+ * 没发出去是因为「这份表登记的主人是别的库」：号池后台自己重发多少次都是一样的结果，要人来接管才行。
  * 认号池后台给的码，不比对那句话——那句话是写给人看的，随时会改。
  */
 export function needsTakeover(failures: readonly PricePublishFailure[]): boolean {
@@ -304,7 +308,7 @@ export function needsTakeover(failures: readonly PricePublishFailure[]): boolean
 
 // ---------- 接口报错 ----------
 
-/** 号池后台把请求拒了（模型键不对、价格缺哪一项、导入的第几行不过）时它回的原因码：它拒的都是这一个。 */
+/** 号池后台把请求拒了（模型键不对、价格缺哪一项、套用的第几行不过）时它回的原因码：它拒的都是这一个。 */
 export const VAULT_REJECTED = 'oneapi_vault_rejected';
 
 /** 号池后台把它那句说明放在 `errors` 的这个键下。 */
@@ -314,7 +318,7 @@ const UPSTREAM_KEY = 'upstream';
  * 一次失败给人看的那句话。
  *
  * 平台别处的失败一种原因一个码，界面上的话按码出；这一组接口不一样：拒掉请求的是号池后台，它拒的都是同一个码，
- * 「哪个模型键不对」「缺哪一项」只在它那句话里。只按码出的话，导入二十行有一行不过，页面上只有一句「提交的内容有误」。
+ * 「哪个模型键不对」「缺哪一项」只在它那句话里。只按码出的话，套用二十行有一行不过，页面上只有一句「提交的内容有误」。
  * 所以是号池后台拒的，就把它的话摆出来；别的失败（号池后台不在线时平台网关回的 502 / 503、没权限）照旧出通用的那句。
  */
 export function failureText(error: Pick<AppError, 'message' | 'reason' | 'details'>): string {
@@ -326,74 +330,6 @@ export function failureText(error: Pick<AppError, 'message' | 'reason' | 'detail
       .map((m) => (field === UPSTREAM_KEY ? m : `${field}：${m}`)),
   );
   return said.length > 0 ? said.join('；') : error.message;
-}
-
-function makerNames(makers: readonly string[]): string {
-  const names = makers.map((m) => makerLabel(m));
-  return names.length <= 3
-    ? names.join('、')
-    : `${names.slice(0, 3).join('、')} 等 ${names.length} 家`;
-}
-
-/** 一次发布的结果说成一句：发布了哪几家、撤下了哪几家；没成的说没成（原因在页面顶上逐条列）。 */
-export function describePublish(result: PricePublishResult): string {
-  if (!result.ok) {
-    return result.failures.some((f) => f.maker === ALL_MAKERS)
-      ? '没有发布出去'
-      : `${result.failures.length} 家没有发布出去`;
-  }
-  const parts: string[] = [];
-  if (result.written.length > 0) parts.push(`已发布 ${makerNames(result.written)}`);
-  if (result.deleted.length > 0) parts.push(`已撤下 ${makerNames(result.deleted)}`);
-  // 发布着的本来就和表里一样：没有写不是没成
-  if (parts.length === 0) return '发布的没有变化';
-  if (result.unchanged > 0) parts.push(`另 ${result.unchanged} 家没变`);
-  return parts.join('，');
-}
-
-// ---------- 批量导入 ----------
-
-export interface ImportDraft {
-  /** 认出来的行；认不出是 null。 */
-  items: unknown[] | null;
-  /** 认不出的原因；还没贴东西时是空串。 */
-  problem: string;
-}
-
-function itemsOf(value: unknown): unknown[] | null {
-  if (Array.isArray(value)) return value;
-  if (value === null || typeof value !== 'object') return null;
-  const obj = value as Record<string, unknown>;
-  if (Array.isArray(obj.items)) return obj.items;
-  // 带信封的整段响应（{ data: { items } }）也认：从别的管理页的接口里整段复制出来的就是这样
-  const data = obj.data;
-  if (
-    data !== null &&
-    typeof data === 'object' &&
-    Array.isArray((data as Record<string, unknown>).items)
-  ) {
-    return (data as Record<string, unknown>).items as unknown[];
-  }
-  return null;
-}
-
-/**
- * 贴进来的一段 JSON 里有几行。数组、带 `items` 的对象、带信封的整段响应都认。
- * 只认出「有几行」，不逐行预检：号池后台先整批验完再动库，哪一行不过它会说。
- */
-export function parseImportText(text: string): ImportDraft {
-  const raw = text.trim();
-  if (!raw) return { items: null, problem: '' };
-  let value: unknown;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    return { items: null, problem: '不是合法的 JSON' };
-  }
-  const items = itemsOf(value);
-  if (!items) return { items: null, problem: '要一个数组，或者带 items 的对象' };
-  if (items.length === 0) return { items: null, problem: '里面一行都没有' };
-  return { items, problem: '' };
 }
 
 // ---------- 上游同步 ----------
@@ -452,47 +388,4 @@ export function applyItems(
       sourceRef: r.candidate.sourceRef,
       ...(r.candidate.capabilities ? { capabilities: r.candidate.capabilities } : {}),
     }));
-}
-
-// ---------- 转发状态 ----------
-
-export type StatusTone = 'success' | 'warning' | 'danger' | 'info';
-
-export interface StatusText {
-  tone: StatusTone;
-  text: string;
-  /** 悬停时的补充；没有是空串。 */
-  tip: string;
-}
-
-/**
- * 平台有没有收到这份表，说成一个词。`loadError` 是这次没读到状态时的报错。
- * 订阅出着错时哪怕手上还有上一份，也先说出错：各产品接下来收不到新改的价。
- */
-export function relaySummary(
-  relay: RatecardRelayStatus | null,
-  loadError: string | null,
-): StatusText {
-  if (!relay) {
-    return loadError
-      ? { tone: 'danger', text: '读不到', tip: loadError }
-      : { tone: 'info', text: '读取中', tip: '' };
-  }
-  if (!relay.configured) {
-    return { tone: 'info', text: '未配置', tip: '平台没有配置到 OneApi 的 NATS 连接' };
-  }
-  const have = relay.loaded ? `手上是 ${relay.documentCount} 家的那一份` : '';
-  if (relay.error) {
-    return {
-      tone: 'danger',
-      text: '订阅出错',
-      tip: [relay.error, have].filter(Boolean).join('；'),
-    };
-  }
-  if (!relay.loaded) return { tone: 'warning', text: '还没收到', tip: '' };
-  return {
-    tone: 'success',
-    text: `已收到 ${relay.documentCount} 家`,
-    tip: relay.fingerprint ? `指纹 ${relay.fingerprint}` : '',
-  };
 }

@@ -1,15 +1,15 @@
 /**
- * 模型价格的 mock：一张记在内存里的表，增删改、同步、导入、发布、接管都有副作用，
+ * 模型价格的 mock：一张记在内存里的表，增删改、同步、接管都有副作用，
  * 不连后端也能把这一页整套点一遍。刷新页面回到种子数据。种子和规矩借自号池管理台原来的那份 mock。
  *
  * 和号池后台一样的地方：带行号是改那一行（键不动、行号不存在是没找到），不带行号才按干净名录入；
- * 导入的键只做小写去空白；同步、导入先整批验完再动表；每个写操作带发布结果；
+ * 同步先整批验完再动表；每个写操作带发布结果；
  * 发布是拿表里的和「发布着的那一份」比，不一样的才写。
  * 简化的地方：厂家只按模型键猜，rate 只按那七种形状查。
  *
  * 想看平时碰不到的两种情况，把模型建在这两个厂家下面：
  * - `fail-demo`：这个厂家的发布总是失败（存了但没发布出去）；
- * - `owner-demo`：写进这个厂家以后，这份表登记的主人变成别的库，之后的发布一律不写，直到点「接管发布」。
+ * - `owner-demo`：写进这个厂家以后，这份表登记的主人变成别的库，之后的写操作一律发布不出去，直到点「接管发布」。
  */
 import {
   MAKER_OTHER,
@@ -28,19 +28,16 @@ import {
   ALL_MAKERS,
   OWNER_MISMATCH,
   type ApplyPriceItem,
-  type ImportPricesInput,
   type ModelPriceRow,
   type PriceApplyResult,
   type PriceCandidate,
   type PriceDeleteResult,
   type PriceFetchItem,
   type PriceFetchResult,
-  type PriceImportResult,
   type PriceMakerGroup,
   type PricePublishFailure,
   type PricePublishResult,
   type PriceWriteResult,
-  type RatecardRelayStatus,
   type RateJson,
   type UpsertPriceInput,
 } from '../../model/ratecard.types';
@@ -259,7 +256,6 @@ interface MockState {
   published: Map<string, string>;
   /** 这份表登记的主人是不是别的库。是的话发布一律不写，直到接管。 */
   ownedByOther: boolean;
-  relay: RatecardRelayStatus;
 }
 
 function makerDocument(rows: readonly ModelPriceRow[], maker: string): string | null {
@@ -273,20 +269,6 @@ function makerDocument(rows: readonly ModelPriceRow[], maker: string): string | 
       capabilities: r.capabilities,
     }));
   return items.length > 0 ? JSON.stringify(items) : null;
-}
-
-/** 平台收到的那一份的指纹：发布着的内容变了它就变，页面上能看出「是不是同一份」。 */
-function fingerprintOf(published: ReadonlyMap<string, string>): string {
-  let h = 0x811c9dc5;
-  const text = [...published.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([maker, doc]) => `${maker}=${doc}`)
-    .join('\n');
-  for (let i = 0; i < text.length; i += 1) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(16).padStart(8, '0');
 }
 
 function seedState(): MockState {
@@ -314,31 +296,7 @@ function seedState(): MockState {
   for (const maker of new Set(rows.map((r) => r.maker)))
     published.set(maker, makerDocument(rows, maker)!);
 
-  const receivedAt = startedAt - 3_600_000;
-  return {
-    rows,
-    nextId,
-    published,
-    ownedByOther: false,
-    relay: {
-      configured: true,
-      loaded: true,
-      fingerprint: fingerprintOf(published),
-      documentCount: published.size,
-      receivedAtUtc: receivedAt,
-      error: null,
-      subscribers: [
-        { service: 'yomi', notifiedAtUtc: receivedAt + 1000, ok: true, error: null },
-        // 种子里留一个没通知到的，页面上才看得到失败长什么样；改一次价、发布出去了就好
-        {
-          service: 'jastalk',
-          notifiedAtUtc: receivedAt + 1000,
-          ok: false,
-          error: 'mock：上一次没通知到，改一次价就好',
-        },
-      ],
-    },
-  };
+  return { rows, nextId, published, ownedByOther: false };
 }
 
 let state: MockState = seedState();
@@ -356,11 +314,6 @@ const rejected = (code: 'validation' | 'not_found', generic: string, said: strin
   fail({ code, message: generic, reason: VAULT_REJECTED, details: { upstream: [said] } });
 const invalid = (message: string): AppFail => rejected('validation', '提交的内容有误', message);
 const notFound = (message: string): AppFail => rejected('not_found', '没有找到', message);
-
-/** 导入用：只做小写去空白，那边库里是什么键这边就是什么键。 */
-function plainKey(raw: unknown): string {
-  return typeof raw === 'string' ? raw.trim().toLowerCase() : '';
-}
 
 /** 表里和这个键是同一个模型的那一行：键全等，或者去掉横线点号以后相等（claude-opus-4.8 对 claude-opus-4-8）。 */
 function findByKey(key: string): ModelPriceRow | undefined {
@@ -434,24 +387,6 @@ const OWNER_FAILURE: PricePublishFailure = {
   code: OWNER_MISMATCH,
 };
 
-/** 发布成了（哪怕只成了几家）以后，平台那边跟着收到、再通知各产品。 */
-function relayReceives(): void {
-  const now = Date.now();
-  state.relay = {
-    ...state.relay,
-    loaded: true,
-    fingerprint: fingerprintOf(state.published),
-    documentCount: state.published.size,
-    receivedAtUtc: now,
-    subscribers: state.relay.subscribers.map((s) => ({
-      ...s,
-      notifiedAtUtc: now,
-      ok: true,
-      error: null,
-    })),
-  };
-}
-
 /** 把这几个厂家和发布着的对一遍：不一样的写，表里一行都不剩的撤下，一样的不动。 */
 function publishMakers(makers: Iterable<string>): PricePublishResult {
   const result: PricePublishResult = {
@@ -481,12 +416,12 @@ function publishMakers(makers: Iterable<string>): PricePublishResult {
     }
   }
   result.ok = result.failures.length === 0;
-  if (result.written.length + result.deleted.length > 0) relayReceives();
   return result;
 }
 
-function publishAll(takeover: boolean): PricePublishResult {
-  if (takeover) state.ownedByOther = false;
+/** 接管：登记改回本库，再把整张表和发布着的对一遍（攒着没发出去的这时一起发）。 */
+function takeOver(): PricePublishResult {
+  state.ownedByOther = false;
   // 发布着的厂家也要算进来：表里已经没有行的厂家，只有从这边才看得见、才撤得掉
   return publishMakers([...state.rows.map((r) => r.maker), ...state.published.keys()]);
 }
@@ -653,68 +588,8 @@ export class OneApiRatecardMock implements OneApiRatecardPort {
     return ok({ added, updated, publish: publishMakers(touched) });
   }
 
-  async importPrices(input: ImportPricesInput): Promise<AppResult<PriceImportResult>> {
+  async takeover(): Promise<AppResult<PricePublishResult>> {
     await delay();
-    const inputs: WriteInput[] = [];
-    const seen = new Set<string>();
-    for (const [i, raw] of input.items.entries()) {
-      const item = (raw !== null && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-      const modelKey = plainKey(item.modelKey);
-      const label = modelKey || `items[${i}]`;
-      if (!modelKey) return invalid(`${label}：模型名不能为空`);
-      const billingType =
-        typeof item.billingType === 'string' && item.billingType.trim()
-          ? item.billingType.trim()
-          : 'per_token';
-      const problem = rateProblem(billingType, item.rate);
-      if (problem) return invalid(`${label}：${problem}`);
-      if (seen.has(modelKey)) return invalid(`${label}：这一批里重复了`);
-      seen.add(modelKey);
-      const caps = item.capabilities as Partial<ModelCapabilities> | null | undefined;
-      inputs.push({
-        modelKey,
-        maker: normalizeMaker(typeof item.maker === 'string' ? item.maker : null, modelKey),
-        billingType,
-        rate: item.rate as RateJson,
-        capabilities: caps
-          ? {
-              audio: caps.audio === true,
-              reasoning: caps.reasoning === true,
-              embedding: caps.embedding === true,
-            }
-          : null,
-        source: typeof item.source === 'string' ? item.source : null,
-        sourceRef: typeof item.sourceRef === 'string' ? item.sourceRef : null,
-        fetchedAtUtc: typeof item.fetchedAtUtc === 'number' ? item.fetchedAtUtc : null,
-        effectiveFromUtc: typeof item.effectiveFromUtc === 'number' ? item.effectiveFromUtc : null,
-      });
-    }
-
-    const touched = new Set<string>();
-    let added = 0;
-    let overwritten = 0;
-    let skipped = 0;
-    for (const item of inputs) {
-      // 导入只认键全等：不合并写法不同的行，也不改名
-      const target = state.rows.find((r) => r.modelKey === item.modelKey);
-      if (target && !input.overwrite) {
-        skipped += 1;
-        continue;
-      }
-      write(item, touched, target);
-      if (target) overwritten += 1;
-      else added += 1;
-    }
-    return ok({ added, overwritten, skipped, publish: publishMakers(touched) });
-  }
-
-  async publish(input?: { takeover?: boolean }): Promise<AppResult<PricePublishResult>> {
-    await delay();
-    return ok(publishAll(input?.takeover === true));
-  }
-
-  async relayStatus(): Promise<AppResult<RatecardRelayStatus>> {
-    await delay();
-    return ok(clone(state.relay));
+    return ok(takeOver());
   }
 }

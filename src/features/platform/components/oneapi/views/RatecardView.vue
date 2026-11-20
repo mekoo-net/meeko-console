@@ -3,14 +3,16 @@
  * 模型价格：模型的美元牌价，全站一份，各产品按它出价。左侧厂家、右侧这家的模型。
  *
  * 表的主人是 OneApi 的号池后台，这一页的请求由平台网关直接转给它（不经 Bff），改的就是它那张表。每个写操作号池后台都当场把受影响的厂家发布出去
- * （发到 NATS，各产品订阅），回包里带发布结果——「表里改成了」和「发布出去了」是两件事，这一页统一在这里报：
- * 没发布出去的留一块提示在页面顶上，直到整张表发布成功，不是弹一句「已保存」就过去了。
+ * （发到 NATS，平台收到再转给各产品），没发出去的它自己定时重发。所以这一页没有「发布」，发布成了也不提；
+ * 只有回包说没发出去的时候在页面顶上留一块提示——「表里改成了」和「发布出去了」是两件事，不能弹一句「已保存」就过去了。
+ *
+ * 牌价从上游目录同步进来（整张表「同步全部」，或者一家一家「上游同步」），不从别处搬表，所以也没有「导入」。
  *
  * 这里只有牌价，不算有效价：倍率和有效价是各产品自己的事。
  * 登记的只是厂家发布的模型——哪个渠道用什么别名叫它，是各产品去映射的事。
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Delete, Edit, MoreFilled, Plus, Promotion, Refresh, Search, Upload } from '@element-plus/icons-vue';
+import { Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
 import {
@@ -34,16 +36,13 @@ import WorkspaceDetailPanel from '@/shared/ui/workspace/WorkspaceDetailPanel.vue
 import WorkspaceLayout from '@/shared/ui/workspace/WorkspaceLayout.vue';
 import { useAuthStore } from '@/stores/auth';
 
-import PriceImportDialog from '../components/ratecard/PriceImportDialog.vue';
 import PriceModelCreateDialog, { type NewPriceModel } from '../components/ratecard/PriceModelCreateDialog.vue';
 import PricePublishAlert from '../components/ratecard/PricePublishAlert.vue';
 import PriceSyncDialog from '../components/ratecard/PriceSyncDialog.vue';
-import RatecardStatusStrip, { type LastPublish } from '../components/ratecard/RatecardStatusStrip.vue';
 import {
   EMBEDDING_CAPABILITIES,
-  describePublish,
   failureText,
-  failuresAfterFullPublish,
+  failuresAfterTakeover,
   failuresAfterWrite,
   formCapabilities,
   hasZeroPrice,
@@ -57,17 +56,15 @@ import {
 import type {
   ModelPriceRow,
   PriceApplyResult,
-  PriceImportResult,
   PriceMakerGroup,
   PricePublishFailure,
   PricePublishResult,
-  RatecardRelayStatus,
 } from '../model/ratecard.types';
 import { getOneApiRatecardPort } from '../services';
 
 const port = getOneApiRatecardPort();
 const auth = useAuthStore();
-/** 没有写权限的人只能看：新建、改、删、同步、导入、发布都不摆出来。 */
+/** 没有写权限的人只能看：新建、改、删、同步都不摆出来。 */
 const canWrite = computed(() => auth.hasPermission('platform.settings.write'));
 
 // ---- 列表 -----------------------------------------------------------------------
@@ -154,76 +151,25 @@ function hintTitle(price: ModelPriceRow): string | undefined {
   return lines.length > 0 ? lines.join('\n') : undefined;
 }
 
-// ---- 发布结果、转发状态 ----------------------------------------------------------
-
-/** 没发布出去的厂家和原因，摆在页面顶上。只有整张表发布成功（发布 / 接管）才整个清掉。 */
-const failures = ref<PricePublishFailure[]>([]);
-const lastPublish = ref<LastPublish | null>(null);
-
-const relay = ref<RatecardRelayStatus | null>(null);
-const relayError = ref<string | null>(null);
-const relayLoading = ref(false);
-let relayTimer: ReturnType<typeof setTimeout> | null = null;
-
-async function loadRelay(): Promise<void> {
-  relayLoading.value = true;
-  try {
-    const r = await port.relayStatus();
-    if (r.success) {
-      relay.value = r.data;
-      relayError.value = null;
-    } else {
-      // 不弹：这一条读不到不耽误改价，状态条上自己会写「读不到」
-      relayError.value = failureText(r.error);
-    }
-  } finally {
-    relayLoading.value = false;
-  }
-}
-
-/** 发布以后平台要等 NATS 推过来、再去通知各产品，不是当场就有：马上取一次，隔一会儿再取一次。 */
-function refreshRelaySoon(): void {
-  void loadRelay();
-  if (relayTimer !== null) clearTimeout(relayTimer);
-  relayTimer = setTimeout(() => {
-    relayTimer = null;
-    void loadRelay();
-  }, 3000);
-}
-
-/** 只碰几个厂家的写操作之后：说一句做成了什么、发布到了哪几家；没发布出去的记到页面顶上。 */
-function reportWrite(done: string, result: PricePublishResult, opts: { quiet?: boolean } = {}): void {
-  failures.value = failuresAfterWrite(failures.value, result);
-  lastPublish.value = { atUtc: Date.now(), result };
-  if (!result.ok) ElMessage.error(`${done}，但没有发布出去`);
-  else if (!opts.quiet) ElMessage.success(`${done}，${describePublish(result)}`);
-  refreshRelaySoon();
-}
-
-/** 整张表的发布（发布 / 接管）之后。 */
-function reportFullPublish(done: string, result: PricePublishResult): void {
-  failures.value = failuresAfterFullPublish(result);
-  lastPublish.value = { atUtc: Date.now(), result };
-  if (result.ok) ElMessage.success([done, describePublish(result)].filter(Boolean).join('，'));
-  else ElMessage.error('没有发布出去');
-  refreshRelaySoon();
-}
-
-const publishing = ref(false);
-
-async function onPublish(): Promise<void> {
-  publishing.value = true;
-  try {
-    const r = await port.publish();
-    if (r.success) reportFullPublish('', r.data);
-    else ElMessage.error(failureText(r.error));
-  } finally {
-    publishing.value = false;
-  }
-}
+// ---- 没发布出去的 -----------------------------------------------------------------
 
 /**
- * 这份表登记的主人只有一个库。登记的是别的库时平常的发布一律不写；接管就是把登记改过来、再全量发布一遍——
+ * 没发布出去的厂家和原因，摆在页面顶上。平时是空的：发布是号池后台在每个写操作之后自己做的，成了不提。
+ * 没成的它自己会定时重发，所以这里没有「发布」按钮；只有一种它补不上——这份表登记的主人是别的库，要人来接管。
+ */
+const failures = ref<PricePublishFailure[]>([]);
+
+/** 写操作之后：说一句做成了什么；没发布出去的记到页面顶上。 */
+function reportWrite(done: string, result: PricePublishResult): void {
+  failures.value = failuresAfterWrite(failures.value, result);
+  if (result.ok) ElMessage.success(done);
+  else ElMessage.error(`${done}，但还没有发布出去`);
+}
+
+const takingOver = ref(false);
+
+/**
+ * 这份表登记的主人只有一个库。登记的是别的库时号池后台的发布一律不写；接管就是把登记改过来、再全量发布一遍——
  * 现在发布着的那一份会被换掉，各产品收到就照着重算、按它扣钱，所以要人明确来点。
  */
 async function onTakeover(): Promise<void> {
@@ -234,13 +180,18 @@ async function onTakeover(): Promise<void> {
     confirmText: '接管并发布',
   });
   if (!okp) return;
-  publishing.value = true;
+  takingOver.value = true;
   try {
-    const r = await port.publish({ takeover: true });
-    if (r.success) reportFullPublish('已接管', r.data);
-    else ElMessage.error(failureText(r.error));
+    const r = await port.takeover();
+    if (!r.success) {
+      ElMessage.error(failureText(r.error));
+      return;
+    }
+    failures.value = failuresAfterTakeover(r.data);
+    if (r.data.ok) ElMessage.success('已接管');
+    else ElMessage.error('接管了，但还没有发布出去');
   } finally {
-    publishing.value = false;
+    takingOver.value = false;
   }
 }
 
@@ -396,11 +347,11 @@ async function onDelete(price: ModelPriceRow): Promise<void> {
   await reload();
 }
 
-// ---- 上游同步、导入 ---------------------------------------------------------------
+// ---- 上游同步 ---------------------------------------------------------------------
 
 const syncOpen = ref(false);
+/** 同步哪一家；null 是整张表（「同步全部」）。 */
 const syncMaker = ref<string | null>(null);
-const importOpen = ref(false);
 
 function openSync(maker: string | null): void {
   syncMaker.value = maker;
@@ -412,25 +363,9 @@ async function onApplied(result: PriceApplyResult): Promise<void> {
   await reload();
 }
 
-async function onImported(result: PriceImportResult): Promise<void> {
-  // 各多少行导入窗口里已经摆着了，成了就不再弹；没发布出去的照样记到页面顶上
-  reportWrite('已导入', result.publish, { quiet: true });
-  await reload();
-}
+onMounted(() => void load());
 
-function onMore(command: string): void {
-  if (command === 'sync-all') openSync(null);
-}
-
-onMounted(() => {
-  void load();
-  void loadRelay();
-});
-
-onBeforeUnmount(() => {
-  search.cancel();
-  if (relayTimer !== null) clearTimeout(relayTimer);
-});
+onBeforeUnmount(() => search.cancel());
 </script>
 
 <template>
@@ -442,67 +377,32 @@ onBeforeUnmount(() => {
           #actions
         >
           <el-button
-            :icon="Upload"
-            @click="importOpen = true"
+            :icon="Refresh"
+            @click="openSync(null)"
           >
-            导入
+            同步全部
           </el-button>
-          <el-button
-            :icon="Promotion"
-            :loading="publishing"
-            @click="onPublish"
-          >
-            发布
-          </el-button>
-          <el-dropdown
-            trigger="click"
-            @command="onMore"
-          >
-            <el-button
-              :icon="MoreFilled"
-              plain
-            />
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="sync-all">
-                  同步全部
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
         </template>
       </PageHeader>
 
-      <div class="page-notes">
-        <RatecardStatusStrip
-          :last-publish="lastPublish"
-          :relay="relay"
-          :relay-error="relayError"
-          :loading="relayLoading"
-          @refresh="loadRelay"
-        />
+      <div
+        v-if="failures.length > 0"
+        class="page-notes"
+      >
         <PricePublishAlert
-          v-if="failures.length > 0"
           :failures="failures"
+          :auto-retry="!needsTakeover(failures)"
         >
           <template #actions>
-            <!-- 主人是别的库时再点发布还是同一个结果，这时摆的是接管；别的失败（连不上、文档太大）才是重新发布 -->
+            <!-- 主人是别的库时号池后台自己重发多少次都是同一个结果，这时才摆接管；别的失败它自己会补，不摆按钮 -->
             <el-button
               v-if="canWrite && needsTakeover(failures)"
               size="small"
               type="primary"
-              :loading="publishing"
+              :loading="takingOver"
               @click="onTakeover"
             >
               接管发布
-            </el-button>
-            <el-button
-              v-else-if="canWrite"
-              size="small"
-              :loading="publishing"
-              @click="onPublish"
-            >
-              重新发布
             </el-button>
             <el-button
               size="small"
@@ -562,7 +462,7 @@ onBeforeUnmount(() => {
     </aside>
 
     <WorkspaceDetailPanel :show-placeholder="!activeGroup">
-      <!-- 没读到、搜不到、表是空的是三回事：重试、换个词、去建第一家 -->
+      <!-- 没读到、搜不到、表是空的是三回事：重试、换个词、从上游同步一份（或者手建第一家） -->
       <template #placeholder>
         <EmptyState
           v-if="loadError"
@@ -586,17 +486,17 @@ onBeforeUnmount(() => {
         >
           <template v-if="canWrite">
             <el-button
-              :icon="Plus"
+              :icon="Refresh"
               type="primary"
+              @click="openSync(null)"
+            >
+              同步全部
+            </el-button>
+            <el-button
+              :icon="Plus"
               @click="openCreateMaker"
             >
               新建厂家
-            </el-button>
-            <el-button
-              :icon="Upload"
-              @click="importOpen = true"
-            >
-              导入
             </el-button>
           </template>
         </EmptyState>
@@ -767,11 +667,6 @@ onBeforeUnmount(() => {
       :maker="syncMaker"
       @applied="onApplied"
     />
-
-    <PriceImportDialog
-      v-model="importOpen"
-      @imported="onImported"
-    />
   </WorkspaceLayout>
 </template>
 
@@ -780,7 +675,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  /* 状态条贴着页头：它说的是这一页整张表的事，不是下面某一家的 */
+  /* 提示贴着页头：它说的是这一页整张表的事，不是下面某一家的 */
   margin: -6px 0 12px;
 }
 

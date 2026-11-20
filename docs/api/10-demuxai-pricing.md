@@ -248,7 +248,7 @@ Console 页面：`/demux/pricing`（价格表 + 拉价 diff）、`/demux/rate`�
 | 项 | 值 |
 | --- | --- |
 | 路由 | `/components/oneapi/ratecard`（`/components`、`/components/oneapi`、旧的 `/yomi/pricing` 都跳到它） |
-| 权限 | 看：`platform.settings.read`；新建 / 改 / 删 / 同步 / 导入 / 发布：`platform.settings.write` |
+| 权限 | 看：`platform.settings.read`；新建 / 改 / 删 / 同步 / 接管：`platform.settings.write` |
 | 视图 | `src/features/platform/components/oneapi/views/RatecardView.vue` |
 | Port | `OneApiRatecardPort`（`src/features/platform/components/oneapi/services/ports`） |
 
@@ -258,24 +258,23 @@ Console 页面：`/demux/pricing`（价格表 + 拉价 diff）、`/demux/rate`�
 时间是 Unix 毫秒，值为 null 的字段不写出来。接口上 GET 不用登录（牌价是公开的），POST / PUT / DELETE 要 Staff 且有
 `platform.settings.write`——上表的「看」权限管的是这一页进不进得去。
 
-只有「转发状态」还在平台的 Bff 上（`GET /admin/components/oneapi/ratecard/relay`）：订阅 OneApi 的 NATS、收到新牌价再通知各产品的是 Bff，
-这份表到没到平台只有它知道。开发反代（`vite.config.ts`）因此多一条 `/oneapi` → 网关。
+开发反代（`vite.config.ts`）因此多一条 `/oneapi` → 网关。
 
-| 业务动作 | Port 方法 | HTTP | 端点（前缀 `/oneapi/vault/v1/ratecard`，转发状态除外） |
+页面上没有「发布」「导入」，也不显示发布和转发的状态：每个写操作号池后台当场发布，没发出去的它自己定时重发；
+牌价的来源是上游同步，不从别处搬表。平台的 Bff 上那个转发状态的接口（`GET /admin/components/oneapi/ratecard/relay`）页面不再用。
+
+| 业务动作 | Port 方法 | HTTP | 端点（前缀 `/oneapi/vault/v1/ratecard`） |
 | --- | --- | --- | --- |
 | 整张表，按厂家分组 / 搜索 | `listByMaker` | GET | `/catalog/by-maker?keyword` → `{ items: [{ maker, items }], total }` |
 | 新建前查重 | `find` | GET | `/catalog/{modelKey}`（没有回 404） |
 | 新建 / 改价 | `upsert` | PUT | `/catalog`：改价带 `id`（改的就是那一行，键不动），新建不带（键会收成干净名） |
 | 删除 | `remove` | DELETE | `/catalog/{id}` |
 | 上游同步 | `fetchCandidates` → `applyCandidates` | POST | `/sync/fetch`（只读）→ 勾选 → `/sync/apply` |
-| 导入 | `importPrices` | POST | `/import` `{ overwrite, items }` |
-| 发布 / 接管 | `publish` | POST | `/publish`、`/publish?takeover=true` |
-| 转发状态 | `relayStatus` | GET | `/admin/components/oneapi/ratecard/relay`（平台的 Bff 答，不是号池后台的接口） |
+| 接管发布 | `takeover` | POST | `/publish?takeover=true`（只在登记的主人是别的库时，由提示里的按钮来点） |
 
 每个写操作的回包都带 `publish: { ok, written, deleted, unchanged, failures: [{ maker, error }] }`。`ok = false` 时表里的改动是成了的，
-只是没发布出去：页面顶上留一块提示逐条列出厂家和原因（`maker` 是 `*` 的写成「整张表」），直到整张表发布成功或手动关掉。
-`relay` 回 `{ configured, loaded, fingerprint, documentCount, receivedAtUtc, error, subscribers: [{ service, notifiedAtUtc, ok, error }] }`，
-页头下面的状态条用它显示「转发」「通知」两段。
+只是没发布出去：页面顶上留一块提示逐条列出厂家和原因（`maker` 是 `*` 的写成「整张表」），
+那个厂家之后发布成了、或者手动关掉才消失；发布成了的时候页面上什么都不提。
 
 行是 `{ id, modelKey, maker, billingType, rate, currency, capabilities?, source, sourceRef?, fetchedAtUtc?, effectiveFromUtc }`。
 `rate` 原样留着：页面按 Yomi 那七种形状读来显示和填表单，读不出来的行照样列出来（能删、不能改）；
