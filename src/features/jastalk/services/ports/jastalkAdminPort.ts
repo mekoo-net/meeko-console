@@ -20,10 +20,10 @@ import type {
   PointRate,
   PointRateEdit,
   RateCompileResult,
-  UsageLog,
   UsageLogQuery,
   UserQuery,
 } from '../../model/jastalk.types';
+import type { UsageAction } from '../../model/usageActions';
 
 /**
  * Jastalk 管理面：用户、积分、渠道、模型目录、价格表、用量明细。
@@ -68,5 +68,9 @@ export interface JastalkAdminPort {
   deleteRate(id: number): Promise<AppResult<true>>;
 
   // 用量
-  usageLogs(query: UsageLogQuery, page: PageQuery): Promise<AppResult<Paged<UsageLog>>>;
+  /**
+   * 用量明细，一件事一行（聊了一句、角色主动发了一条……），带着它整条调用链上的每一次调用和当时的单价，新的在前。
+   * 筛「结果」看的是这一件事扣没扣（一点都没扣才算未扣）。
+   */
+  usageActions(query: UsageLogQuery, page: PageQuery): Promise<AppResult<Paged<UsageAction>>>;
 }

@@ -15,7 +15,9 @@ import {
   categoryPriceSlots,
   followBlock,
   followBlockText,
+  hasCacheTier,
   multiplierText,
+  priceSlotsFor,
   pricingLabels,
   type PriceSlot,
 } from '../../model/channelPricing';
@@ -49,8 +51,8 @@ const visible = computed({
 
 type Mode = 'compiled' | 'manual';
 const mode = ref<Mode>('compiled');
-/** 单独定价填的数。清空了是 null / undefined，保存时拦下。 */
-const prices = reactive<Record<PriceSlot['side'], number | null | undefined>>({ input: 0, output: 0 });
+/** 单独定价填的数。清空了是 null / undefined：输入、输出保存时拦下；缓存清空是按输入价算。 */
+const prices = reactive<Record<PriceSlot['side'], number | null | undefined>>({ input: 0, cachedInput: null, output: 0 });
 const saving = ref(false);
 
 const model = computed(() => props.target?.model ?? null);
@@ -72,7 +74,13 @@ const blockText = computed(() =>
 
 const followHint = computed(() => (block.value ? blockText.value : `牌价 ${multiplierText(props.channel?.multiplier ?? null)}`));
 
-const slots = computed(() => (model.value ? categoryPriceSlots[model.value.category] : []));
+/**
+ * 摆不摆缓存那一档让人填：对话模型才有，而且后端得分缓存价（它回的模型上带着 `cachedInputPrice` 这个字段）。
+ * 后端还不分的时候不摆——填了它不认，保存「成功」了价却没变。TODO(网关)：后端加上缓存价以后这一档自己就出来了。
+ */
+const cacheEditable = computed(() => !!model.value && hasCacheTier(model.value.category) && model.value.cachedInputPrice !== undefined);
+
+const slots = computed(() => (model.value ? priceSlotsFor(model.value.category, cacheEditable.value) : []));
 
 function reset(): void {
   const target = props.target;
@@ -85,6 +93,8 @@ function reset(): void {
   const fromList = manual ? null : target.listPrice;
   prices.input = fromList?.pointsInput ?? target.model.inputPrice;
   prices.output = fromList?.pointsOutput ?? target.model.outputPrice;
+  // 缓存价同样起步：牌价写了缓存价就用它折出来的，没写就是现在生效的那一个（null = 按输入价算）
+  prices.cachedInput = fromList?.pointsCachedInput ?? target.model.cachedInputPrice ?? null;
   // 这一类用不上的那个数（语音合成的输入价、听写的输出价）不摆出来填：人定过的原样留着，别的记 0，
   // 免得价格表里多出一个没人填过的数。
   if (!manual) {
@@ -95,7 +105,7 @@ function reset(): void {
 }
 
 async function saveManual(target: ChannelModel): Promise<boolean> {
-  if (slots.value.some((slot) => prices[slot.side] == null)) {
+  if (slots.value.some((slot) => !slot.optional && prices[slot.side] == null)) {
     ElMessage.error('填写价格');
     return false;
   }
@@ -105,6 +115,8 @@ async function saveManual(target: ChannelModel): Promise<boolean> {
     unit: target.model.unit,
     inputPrice: prices.input ?? 0,
     outputPrice: prices.output ?? 0,
+    // 没摆缓存那一档就不带这个字段：不是「清掉缓存价」
+    ...(cacheEditable.value ? { cachedInputPrice: prices.cachedInput ?? null } : {}),
   });
   if (!r.success) {
     ElMessage.error(r.error.message);
@@ -231,11 +243,14 @@ watch(
           class="mr-field"
         >
           <span class="mr-field__label">{{ slot.label }}</span>
+          <!-- 缓存可以空着：空着就是命中缓存的按输入价算，所以清空给 null，不回落成 0（0 是免费） -->
           <el-input-number
             v-model="prices[slot.side]"
             :min="0"
             :precision="model.unit === 'token' ? 2 : 4"
             :step="model.unit === 'token' ? 100 : model.unit === 'image' ? 1 : 0.01"
+            :value-on-clear="slot.optional ? null : undefined"
+            :placeholder="slot.optional ? '按输入价' : undefined"
             controls-position="right"
             class="mr-field__input"
           />

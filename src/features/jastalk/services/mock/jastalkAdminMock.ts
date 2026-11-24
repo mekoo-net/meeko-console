@@ -28,12 +28,14 @@ import type {
   PointTxn,
   RateCompileResult,
   RateUnit,
+  UsageBasis,
   UsageLine,
   UsageLog,
   UsageLogQuery,
   UserQuery,
 } from '../../model/jastalk.types';
 import { categoryUnits } from '../../model/jastalkFormat';
+import { groupUsageActions, type UsageAction } from '../../model/usageActions';
 import type { JastalkAdminPort } from '../ports/jastalkAdminPort';
 
 /**
@@ -62,20 +64,22 @@ interface ListPriceRow {
   rate: Record<string, unknown>;
 }
 
-const perToken = (modelKey: string, maker: string, input: number, output: number): ListPriceRow => ({
+/** `cachedRead`：命中缓存的输入价，牌价的 `input.cachedRead`；没写的模型命中缓存的按输入价算。 */
+const perToken = (modelKey: string, maker: string, input: number, output: number, cachedRead?: number): ListPriceRow => ({
   modelKey,
   maker,
   billingType: 'per_token',
-  rate: { input: { perMToken: input }, output: { perMToken: output } },
+  rate: { input: { perMToken: input, ...(cachedRead === undefined ? {} : { cachedRead }) }, output: { perMToken: output } },
 });
 
 const listPrices: ListPriceRow[] = [
-  perToken('claude-opus-5.5', 'anthropic', 5, 25),
-  perToken('claude-sonnet-5.5', 'anthropic', 3, 15),
-  perToken('claude-haiku-5-5', 'anthropic', 1, 5),
-  perToken('gemini-3.8-flash', 'google', 0.3, 2.5),
-  perToken('gemini-3.8-pro', 'google', 1.25, 10),
-  perToken('gpt-5.5', 'openai', 1.25, 10),
+  perToken('claude-opus-5.5', 'anthropic', 5, 25, 0.5),
+  perToken('claude-sonnet-5.5', 'anthropic', 3, 15, 0.3),
+  perToken('claude-haiku-5-5', 'anthropic', 1, 5, 0.1),
+  perToken('gemini-3.8-flash', 'google', 0.3, 2.5, 0.075),
+  perToken('gemini-3.8-pro', 'google', 1.25, 10, 0.3125),
+  perToken('gpt-5.5', 'openai', 1.25, 10, 0.125),
+  // 向量模型没有缓存这一说
   perToken('bge-m3', 'baai', 0.01, 0),
   {
     modelKey: 'kolors',
@@ -162,25 +166,33 @@ function numberAt(obj: unknown, ...path: string[]): number | null {
   return typeof el === 'number' && Number.isFinite(el) && el >= 0 ? el : null;
 }
 
+/** 折算时取的数（美元）。`cachedInput` 只有按 token 的牌价写了缓存价才有，别的都是 null（命中缓存的按输入价算）。 */
+interface UsdPrice {
+  input: number;
+  output: number;
+  cachedInput: number | null;
+}
+
 /**
- * 牌价里折算时取的那两个数（美元）。牌价的计价方式和这边的计量单位对不上回 null：
+ * 牌价里折算时取的那几个数（美元）。牌价的计价方式和这边的计量单位对不上回 null：
  * 硬换算出来的数没有依据（按字符的语音牌价换不成按秒的）。
  */
-function toUsd(price: ListPriceRow, unit: RateUnit): { input: number; output: number } | null {
+function toUsd(price: ListPriceRow, unit: RateUnit): UsdPrice | null {
   if (unit === 'token' && price.billingType === 'per_token') {
     const input = numberAt(price.rate, 'input', 'perMToken');
     const output = numberAt(price.rate, 'output', 'perMToken');
-    return input !== null && output !== null ? { input, output } : null;
+    const cachedInput = numberAt(price.rate, 'input', 'cachedRead');
+    return input !== null && output !== null ? { input, output, cachedInput } : null;
   }
   if (unit === 'image' && price.billingType === 'per_image') {
     // 牌价按尺寸分档，这边一张图只有一个价：取最贵的那一档
     const tiers: unknown[] = Array.isArray(price.rate.tiers) ? price.rate.tiers : [];
     const perImage = tiers.map((t) => numberAt(t, 'pricePerImage')).filter((p): p is number => p !== null);
-    return perImage.length > 0 ? { input: 0, output: Math.max(...perImage) } : null;
+    return perImage.length > 0 ? { input: 0, output: Math.max(...perImage), cachedInput: null } : null;
   }
   if (unit === 'audio_second' && price.billingType === 'per_audio_minute') {
     const perMinute = numberAt(price.rate, 'pricePerMinute');
-    return perMinute !== null ? { input: perMinute / 60, output: perMinute / 60 } : null;
+    return perMinute !== null ? { input: perMinute / 60, output: perMinute / 60, cachedInput: null } : null;
   }
   return null;
 }
@@ -189,11 +201,15 @@ function toUsd(price: ListPriceRow, unit: RateUnit): { input: number; output: nu
 const round6 = (n: number) => Math.round(n * 1e6) / 1e6;
 
 /** 牌价（美元）× 渠道倍率 = 人民币，再 × 100 折成积分。 */
-function toPoints(price: ListPriceRow, unit: RateUnit, multiplier: number): { input: number; output: number } | null {
+function toPoints(price: ListPriceRow, unit: RateUnit, multiplier: number): UsdPrice | null {
   const usd = toUsd(price, unit);
   if (!usd) return null;
   const factor = multiplier * 100;
-  return { input: round6(usd.input * factor), output: round6(usd.output * factor) };
+  return {
+    input: round6(usd.input * factor),
+    output: round6(usd.output * factor),
+    cachedInput: usd.cachedInput === null ? null : round6(usd.cachedInput * factor),
+  };
 }
 
 function listPriceOf(modelName: string, unit: RateUnit, multiplier: number | null): ListPrice | null {
@@ -208,22 +224,33 @@ function listPriceOf(modelName: string, unit: RateUnit, multiplier: number | nul
     rate: price.rate,
     usdInput: usd ? round6(usd.input) : null,
     usdOutput: usd ? round6(usd.output) : null,
+    usdCachedInput: usd?.cachedInput == null ? null : round6(usd.cachedInput),
     convertible: usd !== null,
     pointsInput: points?.input ?? null,
     pointsOutput: points?.output ?? null,
+    pointsCachedInput: points?.cachedInput ?? null,
   };
 }
 
 // ---------- 价格表、目录 ----------
 
 let rateSeq = 0;
-const manualRate = (vendorKey: string, modelName: string, unit: RateUnit, inputPrice: number, outputPrice: number, daysAgo: number): PointRate => ({
+const manualRate = (
+  vendorKey: string,
+  modelName: string,
+  unit: RateUnit,
+  inputPrice: number,
+  outputPrice: number,
+  daysAgo: number,
+  cachedInputPrice: number | null = null,
+): PointRate => ({
   id: ++rateSeq,
   vendorKey,
   modelName,
   unit,
   inputPrice,
   outputPrice,
+  cachedInputPrice,
   updatedAt: now - daysAgo * DAY,
   source: 'manual',
   sourceModelKey: null,
@@ -233,8 +260,8 @@ const manualRate = (vendorKey: string, modelName: string, unit: RateUnit, inputP
 /** 人定的那几行；跟渠道算出来的行由下面的 `compile()` 填进来。 */
 const rates: PointRate[] = [
   manualRate(ANY, ANY, 'token', 300, 1500, 9),
-  // 单独定价：这个模型不跟 claude 渠道的倍率走
-  manualRate('claude', 'claude-haiku-5-5', 'token', 600, 3000, 6),
+  // 单独定价：这个模型不跟 claude 渠道的倍率走，缓存价也是自己定的
+  manualRate('claude', 'claude-haiku-5-5', 'token', 600, 3000, 6, 60),
   // 牌价按字符算、折不成按秒：只能单独定价
   manualRate('media', 'FunAudioLLM/CosyVoice2-0.5B', 'audio_second', 0, 0.05, 4),
 ];
@@ -289,6 +316,8 @@ function withPrice(m: ModelRow): CatalogModel {
     unit,
     inputPrice: r?.inputPrice ?? 0,
     outputPrice: r?.outputPrice ?? 0,
+    // 带着这个字段就是「分缓存价」：页面上才摆缓存那一档、让人填
+    cachedInputPrice: r && unit === 'token' ? (r.cachedInputPrice ?? null) : null,
     ratedBy: r ? `${r.vendorKey}/${r.modelName}` : null,
   };
 }
@@ -339,7 +368,14 @@ function compile(vendorKey?: string, at = Date.now()): RateCompileResult {
       continue;
     }
 
-    const next = { unit, inputPrice: points.input, outputPrice: points.output, sourceModelKey: price.modelKey, multiplierApplied: multiplier };
+    const next = {
+      unit,
+      inputPrice: points.input,
+      outputPrice: points.output,
+      cachedInputPrice: points.cachedInput,
+      sourceModelKey: price.modelKey,
+      multiplierApplied: multiplier,
+    };
     if (!existing) {
       rates.push({ id: ++rateSeq, vendorKey: m.vendorKey, modelName: m.modelName, updatedAt: at, source: 'compiled', ...next });
       compiled++;
@@ -511,52 +547,178 @@ const adjusted = new Map<string, PointBalance>();
 
 let usageSeq = 80_000;
 
-function usage(u: UserRow, n: number): UsageLog[] {
-  const at = now - n * 7 * HOUR - (u.accountUid % 50) * 60_000;
+/** 一行价格的来历，结算时抄进用量（照后端将来要记的样子；TODO(网关)）。 */
+function basisOf(r: PointRate | undefined): UsageBasis | null {
+  if (!r) return null;
+  const none = { listModelKey: null, multiplier: null, usdInput: null, usdCachedInput: null, usdOutput: null };
+  if (r.vendorKey === ANY) return { source: 'default', ...none };
+  if (r.source === 'manual') return { source: 'manual', ...none };
+  const price = listPrices.find((p) => p.modelKey === r.sourceModelKey);
+  const usd = price ? toUsd(price, r.unit) : null;
+  return {
+    source: 'compiled',
+    listModelKey: r.sourceModelKey,
+    multiplier: r.multiplierApplied,
+    usdInput: usd ? round6(usd.input) : null,
+    usdCachedInput: usd?.cachedInput == null ? null : round6(usd.cachedInput),
+    usdOutput: usd ? round6(usd.output) : null,
+  };
+}
+
+/**
+ * 结果重排的价。重排模型这份 mock 的目录里没接（接了渠道页的数都要跟着变），用量历史里照样会有：
+ * 当时接着、后来移除的模型，账上还是那一次的单价。
+ */
+const rerankRate = manualRate('media', 'BAAI/bge-reranker-v2-m3', 'token', 73, 0, 30);
+
+/** 一件事是一条调用链，链上一步一次结算。 */
+interface ChainStep {
+  line: UsageLine;
+  /** 这一次上游成没成。 */
+  ok: boolean;
+  /** 离这件事开始过了多久（毫秒）：链上的先后。 */
+  offset: number;
+}
+
+/**
+ * 一个用户的第 n 件事。几种调用链轮着来，照用户在 Jastalk 里真会做的事：
+ * 聊一句（先翻记忆：向量、重排，再是对话模型；角色这一句带语音、配图的还有语音合成、生图）、
+ * 角色主动找上门（唤醒）、群聊里几个角色各回一句、发朋友圈、提炼记忆；
+ * 也有链上某一步出错的（语音合成失败、对话中途断开只算已经写出来的、对话一个字没回出来）。
+ */
+function usage(u: UserRow, n: number, i: number): UsageLog[] {
+  const at = now - n * 3 * HOUR - (u.accountUid % 50) * 60_000 - i * 11 * 60_000;
   const action = `a-${u.accountUid}-${n}`;
-  const chatModel = n % 3 === 0 ? ['claude', 'claude-haiku-5-5'] : ['kiro', 'claude-opus-5.5'];
-  const chatRate = findRate(chatModel[0]!, chatModel[1]!, 'token')!;
-  const input = 1800 + n * 420;
-  const output = n % 5 === 4 ? 0 : 160 + n * 35;
-  const line = (kind: string, vendorKey: string, modelName: string, r: PointRate | undefined, i: number, o: number, estimated = false): UsageLine => ({
-    kind,
-    vendorKey,
-    modelName,
-    unit: 'token',
-    inputTokens: i,
-    outputTokens: o,
-    quantity: 0,
-    estimated,
-    ratedBy: r ? `${r.vendorKey}/${r.modelName}` : '-',
-    inputPrice: r?.inputPrice ?? 0,
-    outputPrice: r?.outputPrice ?? 0,
-    points: r ? Math.round(((i * r.inputPrice + o * r.outputPrice) / 1_000_000) * 1e6) / 1e6 : 0,
-  });
-  const log = (lines: UsageLine[], ok: boolean, offset: number): UsageLog => {
-    const amount = round2(lines.reduce((s, l) => s + l.points, 0));
+
+  const rate = (vendorKey: string, modelName: string, unit: RateUnit = 'token') => findRate(vendorKey, modelName, unit);
+  const tokens = (
+    kind: string,
+    vendorKey: string,
+    modelName: string,
+    input: number,
+    output: number,
+    opts: { cached?: number; estimated?: boolean; r?: PointRate } = {},
+  ): UsageLine => {
+    const r = opts.r ?? rate(vendorKey, modelName);
+    const cached = opts.cached ?? 0;
+    const cachedPrice = r?.cachedInputPrice ?? null;
     return {
-      id: ++usageSeq,
-      accountUid: u.accountUid,
-      actionId: action,
-      purpose: n % 6 === 5 ? 'moment' : 'chat',
-      conversationId: n % 6 === 5 ? null : 'c:xiaoman',
-      traceId: null,
-      status: amount > 0 ? 'charged' : 'voided',
-      upstreamSuccess: ok,
-      lines,
-      amount,
-      createdAt: at + offset,
+      kind,
+      vendorKey,
+      modelName,
+      unit: 'token',
+      inputTokens: input,
+      cachedInputTokens: cached,
+      outputTokens: output,
+      quantity: 0,
+      estimated: opts.estimated ?? false,
+      ratedBy: r ? `${r.vendorKey}/${r.modelName}` : '-',
+      inputPrice: r?.inputPrice ?? 0,
+      outputPrice: r?.outputPrice ?? 0,
+      cachedInputPrice: cachedPrice,
+      basis: basisOf(r),
+      points: r ? round6((input * r.inputPrice + cached * (cachedPrice ?? r.inputPrice) + output * r.outputPrice) / 1_000_000) : 0,
     };
   };
-  const embedRate = findRate('media', 'BAAI/bge-m3', 'token');
-  const rows = [log([line('chat', chatModel[0]!, chatModel[1]!, chatRate, input, output, n % 7 === 6)], n % 5 !== 4, 3000)];
-  // 聊天的那几次先翻了记忆：向量是同一件事里的另一次结算
-  if (n % 2 === 0) rows.push(log([line('embedding', 'media', 'BAAI/bge-m3', embedRate, 320, 0)], true, 0));
-  return rows;
+  // 语音合成按秒、生图按张，只有一个价
+  const counted = (kind: string, vendorKey: string, modelName: string, unit: RateUnit, quantity: number): UsageLine => {
+    const r = rate(vendorKey, modelName, unit);
+    return {
+      kind,
+      vendorKey,
+      modelName,
+      unit,
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      quantity,
+      estimated: false,
+      ratedBy: r ? `${r.vendorKey}/${r.modelName}` : '-',
+      inputPrice: r?.inputPrice ?? 0,
+      outputPrice: r?.outputPrice ?? 0,
+      cachedInputPrice: null,
+      basis: basisOf(r),
+      points: r ? round6(quantity * (r.outputPrice || r.inputPrice)) : 0,
+    };
+  };
+
+  // 对话：第一轮之后人设和前面的对话都命中缓存，输入的大头是缓存
+  const [vendorKey, modelName] = ([
+    ['kiro', 'claude-opus-5.5'],
+    ['kiro', 'claude-sonnet-5.5'],
+    ['claude', 'claude-haiku-5-5'],
+    ['codex', 'gpt-5.5'],
+  ] as const)[(n + i) % 4]!;
+  const context = 6_000 + ((n * 1_370 + i * 610) % 14_000);
+  const reply = 180 + ((n * 97 + i * 53) % 520);
+  const chat = (output = reply, opts: { first?: boolean; estimated?: boolean; scale?: number } = {}) => {
+    const total = Math.round(context * (opts.scale ?? 1));
+    const cached = opts.first || opts.estimated ? 0 : Math.round(total * 0.85);
+    return tokens('chat', vendorKey, modelName, total - cached, output, { cached, estimated: opts.estimated });
+  };
+  const recall = () => tokens('embedding', 'media', 'BAAI/bge-m3', 120 + (n % 5) * 40, 0);
+  const rerank = () => tokens('rerank', 'media', 'BAAI/bge-reranker-v2-m3', 2_400 + (n % 4) * 600, 0, { r: rerankRate });
+  const speech = (seconds = 4 + ((n + i) % 9)) => counted('speech', 'media', 'FunAudioLLM/CosyVoice2-0.5B', 'audio_second', seconds);
+  const image = () => counted('image', 'media', 'Kwai-Kolors/Kolors', 'image', 1);
+  // 出错又什么都没产出的一步：上游没报用量，这一步没扣（照后端：扣不扣看有没有用量）
+  const step = (line: UsageLine, offset: number, ok = true): ChainStep => {
+    const produced = line.outputTokens > 0 || line.quantity > 0 || line.kind === 'embedding' || line.kind === 'rerank';
+    if (ok || produced) return { line, offset, ok };
+    return { line: { ...line, inputTokens: 0, cachedInputTokens: 0, points: 0 }, offset, ok };
+  };
+
+  const chains: { purpose: string; steps: ChainStep[] }[] = [
+    // 聊一句：翻记忆（向量 → 重排）→ 对话
+    { purpose: 'chat', steps: [step(recall(), 0), step(rerank(), 400), step(chat(), 1_200)] },
+    // 这一句带了语音
+    { purpose: 'chat', steps: [step(recall(), 0), step(rerank(), 380), step(chat(), 1_100), step(speech(), 6_800)] },
+    // 角色主动找上门（唤醒）：没有用户那一句，直接翻记忆、写一句、念出来
+    { purpose: 'proactive', steps: [step(recall(), 0), step(chat(reply, { scale: 0.6 }), 900), step(speech(), 5_200)] },
+    // 配了一张图
+    { purpose: 'chat', steps: [step(recall(), 0), step(chat(), 1_000), step(image(), 9_500)] },
+    // 对话里调了一次工具：对话模型来回两次，第二次几乎全命中缓存
+    { purpose: 'chat', steps: [step(recall(), 0), step(rerank(), 420), step(chat(60), 1_300), step(chat(), 4_600)] },
+    // 语音合成那一步出错：没念出来，这一步没扣；前面的照扣
+    { purpose: 'chat', steps: [step(recall(), 0), step(chat(), 1_000), step(speech(0), 7_000, false)] },
+    // 群聊：几个角色各回一句，各是一次对话
+    {
+      purpose: 'group',
+      steps: [step(recall(), 0), step(chat(reply, { scale: 1.3 }), 1_400), step(chat(Math.round(reply * 0.7), { scale: 1.3 }), 5_100), step(chat(Math.round(reply * 0.5), { scale: 1.3 }), 8_900)],
+    },
+    // 用户中途停了：上游没报用量，按写出来的字数估，只算已经写出来的
+    { purpose: 'chat', steps: [step(recall(), 0), step(rerank(), 360), step(chat(Math.round(reply * 0.4), { estimated: true }), 1_200, false)] },
+    // 发朋友圈：写一段、配一张图
+    { purpose: 'moment', steps: [step(chat(reply, { first: true, scale: 0.4 }), 0), step(image(), 8_200)] },
+    // 主动找上门，但对话模型一个字都没回出来：这一步没扣，整件事只扣了翻记忆那一点
+    { purpose: 'proactive', steps: [step(recall(), 0), step(chat(0, { scale: 0.6 }), 900, false)] },
+    // 提炼记忆：把一段对话总结一遍，再写成向量存起来
+    { purpose: 'memory', steps: [step(chat(reply, { first: true, scale: 1.6 }), 0), step(tokens('embedding', 'media', 'BAAI/bge-m3', 900, 0), 6_400)] },
+    // 对话模型连不上，什么都没产出：整件事一点没扣
+    { purpose: 'chat', steps: [step(chat(0, { first: true }), 0, false)] },
+  ];
+  const chain = chains[(n + i * 5) % chains.length]!;
+
+  return chain.steps.map((s) => {
+    const amount = round2(s.line.points);
+    const id = ++usageSeq;
+    return {
+      id,
+      accountUid: u.accountUid,
+      actionId: action,
+      purpose: chain.purpose,
+      conversationId: chain.purpose === 'moment' || chain.purpose === 'memory' ? null : `c:${['xiaoman', 'linjia', 'qiuyue'][(n + i) % 3]}`,
+      traceId: (id * 2654435761).toString(16).padStart(16, '0').slice(-16) + action.length.toString(16).padStart(16, '0'),
+      status: amount > 0 ? 'charged' : 'voided',
+      upstreamSuccess: s.ok,
+      lines: [s.line],
+      amount,
+      createdAt: at + s.offset,
+    };
+  });
 }
 
 const usageLogs: UsageLog[] = users
-  .flatMap((u, i) => Array.from({ length: 5 + (i % 4) }, (_, n) => usage(u, n)).flat())
+  .flatMap((u, i) => Array.from({ length: 9 + (i % 5) }, (_, n) => usage(u, n, i)).flat())
   .sort((a, b) => b.createdAt - a.createdAt);
 
 // ---------- 端口 ----------
@@ -755,21 +917,25 @@ export class JastalkAdminMock implements JastalkAdminPort {
     const modelName = input.modelName.trim();
     if (!vendorKey || !modelName) return fail({ code: 'unknown', message: '渠道和模型必填。' });
     if (modelName === ANY && vendorKey !== ANY) return fail({ code: 'unknown', message: '模型写 * 时渠道也得是 *（默认价）。' });
-    if (input.inputPrice < 0 || input.outputPrice < 0) return fail({ code: 'unknown', message: '单价不能为负。' });
+    if (input.inputPrice < 0 || input.outputPrice < 0 || (input.cachedInputPrice ?? 0) < 0)
+      return fail({ code: 'unknown', message: '单价不能为负。' });
     let row = rates.find((r) => r.vendorKey === vendorKey && r.modelName === modelName);
+    // 不带缓存价是没摆那一档：原来有的留着，不是清掉
+    const cachedInputPrice = input.cachedInputPrice === undefined ? (row?.cachedInputPrice ?? null) : input.cachedInputPrice;
     // 人改过的价从此是单独定的：算出来的行改了也一样，不再跟渠道倍率走
     if (row)
       Object.assign(row, {
         unit: input.unit,
         inputPrice: input.inputPrice,
         outputPrice: input.outputPrice,
+        cachedInputPrice,
         updatedAt: Date.now(),
         source: 'manual',
         sourceModelKey: null,
         multiplierApplied: null,
       } satisfies Partial<PointRate>);
     else {
-      row = manualRate(vendorKey, modelName, input.unit, input.inputPrice, input.outputPrice, 0);
+      row = manualRate(vendorKey, modelName, input.unit, input.inputPrice, input.outputPrice, 0, cachedInputPrice);
       rates.push(row);
     }
     version++;
@@ -787,14 +953,15 @@ export class JastalkAdminMock implements JastalkAdminPort {
     return ok(true);
   }
 
-  async usageLogs(query: UsageLogQuery, q: PageQuery): Promise<AppResult<Paged<UsageLog>>> {
+  async usageActions(query: UsageLogQuery, q: PageQuery): Promise<AppResult<Paged<UsageAction>>> {
     await delay();
-    const rows = usageLogs
+    const logs = usageLogs
       .filter((l) => query.accountUid === undefined || l.accountUid === query.accountUid)
       .filter((l) => !query.purpose || l.purpose === query.purpose)
-      .filter((l) => !query.status || l.status === query.status)
       .filter((l) => query.from === undefined || l.createdAt >= query.from)
       .filter((l) => query.to === undefined || l.createdAt < query.to);
+    // 「结果」看的是一件事整条链扣没扣，归并以后再筛
+    const rows = groupUsageActions(logs).filter((a) => !query.status || a.status === query.status);
     return ok(page(rows, q));
   }
 }

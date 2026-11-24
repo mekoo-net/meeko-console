@@ -25,9 +25,11 @@ const opus: ListPrice = {
   rate: { input: { perMToken: 5 }, output: { perMToken: 25 } },
   usdInput: 5,
   usdOutput: 25,
+  usdCachedInput: 0.5,
   convertible: true,
   pointsInput: 3500,
   pointsOutput: 17500,
+  pointsCachedInput: 350,
 };
 
 /** 牌价按字符算，语音在这边按秒计量：折不了。 */
@@ -38,9 +40,11 @@ const perCharacter: ListPrice = {
   rate: { pricePerKChar: 0.007 },
   usdInput: null,
   usdOutput: null,
+  usdCachedInput: null,
   convertible: false,
   pointsInput: null,
   pointsOutput: null,
+  pointsCachedInput: null,
 };
 
 describe('channel pricing wording', () => {
@@ -59,6 +63,11 @@ describe('channel pricing wording', () => {
 
   it('writes a model price with only the numbers its category uses', () => {
     expect(describeModelPrice('chat', 3500, 17500)).toBe('输入 3,500 · 输出 17,500 / 百万 token');
+    // 有缓存价的对话多一档，挨着输入；缓存价是 null（按输入价算）的不写
+    expect(describeModelPrice('chat', 3500, 17500, 350)).toBe('输入 3,500 · 缓存 350 · 输出 17,500 / 百万 token');
+    expect(describeModelPrice('chat', 3500, 17500, null)).toBe('输入 3,500 · 输出 17,500 / 百万 token');
+    // 向量、重排没有缓存这一说：给了也不写
+    expect(describeModelPrice('embed', 7.3, 0, 1)).toBe('输入 7.3 · 输出 0 / 百万 token');
     expect(describeModelPrice('image', 0, 8.76)).toBe('8.76 / 张');
     // 按秒的牌价折出来输入、输出是同一个数：合成只看输出价，听写只看输入价
     expect(describeModelPrice('tts', 0.073, 0.05)).toBe('0.05 / 秒');
@@ -67,7 +76,8 @@ describe('channel pricing wording', () => {
 
   it('writes a list price in dollars, or how it is billed when it cannot be converted', () => {
     expect(formatUsd(0.0001)).toBe('$0.0001');
-    expect(describeListPrice(opus, 'token')).toBe('输入 $5 · 输出 $25 / 百万 token');
+    expect(describeListPrice(opus, 'token')).toBe('输入 $5 · 缓存 $0.5 · 输出 $25 / 百万 token');
+    expect(describeListPrice({ ...opus, usdCachedInput: null }, 'token')).toBe('输入 $5 · 输出 $25 / 百万 token');
     expect(describeListPrice({ ...opus, usdInput: 0, usdOutput: 0.012 }, 'image')).toBe('$0.012 / 张');
     expect(describeListPrice(perCharacter, 'token')).toBe('按字符计价');
     // 这边不认识的计价方式原样显示
@@ -77,8 +87,12 @@ describe('channel pricing wording', () => {
   it('lists one formula row per number the category uses', () => {
     expect(formulaRows('chat', opus)).toEqual([
       { label: '输入', usd: 5, points: 3500 },
+      { label: '缓存', usd: 0.5, points: 350 },
       { label: '输出', usd: 25, points: 17500 },
     ]);
+    // 牌价没写缓存价：没有缓存那一行（命中缓存的按输入价算）
+    expect(formulaRows('chat', { ...opus, usdCachedInput: null, pointsCachedInput: null }).map((r) => r.label)).toEqual(['输入', '输出']);
+    expect(formulaRows('embed', opus).map((r) => r.label)).toEqual(['输入', '输出']);
     const perSecond = { ...opus, usdInput: 0.0001, usdOutput: 0.0001, pointsInput: 0.073, pointsOutput: 0.073 };
     expect(formulaRows('tts', perSecond)).toEqual([{ label: '合成', usd: 0.0001, points: 0.073 }]);
     expect(formulaRows('stt', perSecond)).toEqual([{ label: '听写', usd: 0.0001, points: 0.073 }]);
@@ -195,8 +209,11 @@ describe('jastalk channel mock follows the backend rules', () => {
     expect(opusRow).toMatchObject({ pricing: 'compiled', upstream: true });
     expect(opusRow.model).toMatchObject({ priced: true, inputPrice: 3500, outputPrice: 17500, ratedBy: 'kiro/claude-opus-5.5' });
     expect(opusRow.listPrice).toMatchObject({ modelKey: 'claude-opus-5.5', usdInput: 5, usdOutput: 25, convertible: true, pointsInput: 3500, pointsOutput: 17500 });
+    // 缓存价同样是 牌价的 cachedRead × 倍率 × 100：0.5 × 7 × 100
+    expect(opusRow.listPrice).toMatchObject({ usdCachedInput: 0.5, pointsCachedInput: 350 });
+    expect(opusRow.model.cachedInputPrice).toBe(350);
     const opusRate = await rateRow('kiro', 'claude-opus-5.5');
-    expect(opusRate).toMatchObject({ source: 'compiled', sourceModelKey: 'claude-opus-5.5', multiplierApplied: 7 });
+    expect(opusRate).toMatchObject({ source: 'compiled', sourceModelKey: 'claude-opus-5.5', multiplierApplied: 7, cachedInputPrice: 350 });
     // 模型自己那一行价格的编号：算出来的、单独定的都有
     expect(opusRow.rateId).toBe(opusRate?.id);
 

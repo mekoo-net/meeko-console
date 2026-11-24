@@ -1,17 +1,23 @@
 <script setup lang="ts">
 /**
- * Jastalk 渠道（照 Yomi 的供应商组页）：左边是渠道，右边是这个渠道接进来的模型。
+ * Jastalk 渠道：左边是渠道，右边是这个渠道的模型。接入和定价在同一页——接哪些模型、每个卖多少积分都在这里
+ * （版式照 Yomi 的渠道页；Yomi 是「供应商组」「模型定价」两页，这里试过照着分开，用户说「渠道和定价 可以合并」）。
  *
- * 渠道 = OneApi 上的一个 provider，清单是后端回的，不手敲。模型从渠道在 OneApi 发布的清单里勾选接入。
- * 这一页只管接入（接哪些、叫什么、归哪一类、开不开放）；卖多少积分在「模型定价」页，按渠道的倍率定。
- * 还没有价的模型用户选不了，这里标出来，去定价页定。
+ * 渠道 = OneApi 上的一个 provider，清单是后端回的，不手敲。价格按渠道定：渠道上只定一个倍率，
+ * 积分 = 全站共用的美元牌价 × 倍率 × 100，后端算好，这里只显示；右上角那个数就是这个渠道的倍率，点它改。
+ * 模型从渠道在 OneApi 发布的清单里勾选接入；个别模型可以单独定价，不跟倍率走。没有别名：模型就叫它在渠道里的名字。
+ * 没有价的模型用户选不了——价格那一格写着差的是什么（渠道没设倍率、牌价里没有它、折不成它的单位）。
+ *
+ * 没有「重算」：改倍率、接模型、牌价变了，后端自己会算。
+ *
+ * 不分渠道的默认价（渠道写 `*`）这里不摆、也不另挂提示：落在它上面的模型，来源那一格写着「默认价格」，看得出来。
  *
  * 读不到 OneApi 的渠道目录、手上没有牌价这两种情况，后端照样回一份（在线状态、可接入的模型、牌价是空的），
  * 页面顶上要明说，不能悄悄显示成「都不在线」「牌价里都没有」。
  */
 import { computed, onMounted, ref, watch } from 'vue';
 import { ElMessage, type TableInstance } from 'element-plus';
-import { Refresh, Search, Setting } from '@element-plus/icons-vue';
+import { Refresh, Search } from '@element-plus/icons-vue';
 
 import PageHeader from '@/shared/ui/PageHeader.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
@@ -22,7 +28,16 @@ import { confirmDanger } from '@/shared/composables/useConfirm';
 import ChannelEditDrawer from '../components/channel/ChannelEditDrawer.vue';
 import ChannelSidebar from '../components/channel/ChannelSidebar.vue';
 import ModelEditDialog from '../components/channel/ModelEditDialog.vue';
-import { describeListPrice, describeModelPrice } from '../model/channelPricing';
+import ModelRateDrawer from '../components/channel/ModelRateDrawer.vue';
+import {
+  describeListPrice,
+  describeModelPrice,
+  followBlock,
+  followBlockText,
+  multiplierText,
+  pricingLabels,
+  pricingTones,
+} from '../model/channelPricing';
 import { notifyCompile } from '../model/compileFeedback';
 import {
   modelCategories,
@@ -125,6 +140,24 @@ function editModel(row: ChannelModel): void {
   editOpen.value = true;
 }
 
+const rateOpen = ref(false);
+const rateTarget = ref<ChannelModel | null>(null);
+
+function priceModel(row: ChannelModel): void {
+  rateTarget.value = row;
+  rateOpen.value = true;
+}
+
+/** 这个模型为什么没有价。算得出来、只是还没算的（刚接进来、当时手上没有牌价）不说成缺什么。 */
+function unpricedReason(row: ChannelModel): string {
+  const block = followBlock({
+    multiplier: selected.value?.multiplier ?? null,
+    listPrice: row.listPrice,
+    listPricesLoaded: listPricesLoaded.value,
+  });
+  return block ? followBlockText(block, row.listPrice, row.model.unit) : '还没算出来';
+}
+
 async function removeModel(row: ChannelModel): Promise<void> {
   const okp = await confirmDanger({
     title: '移除模型',
@@ -167,7 +200,7 @@ const availableEmptyText = computed(() => {
 function previewPoints(row: UpstreamModel): string {
   const price = row.listPrice;
   if (!price || price.pointsInput === null || price.pointsOutput === null) return '—';
-  return describeModelPrice(previewCategory.value, price.pointsInput, price.pointsOutput);
+  return describeModelPrice(previewCategory.value, price.pointsInput, price.pointsOutput, price.pointsCachedInput);
 }
 
 async function importSelected(): Promise<void> {
@@ -187,7 +220,7 @@ async function importSelected(): Promise<void> {
     const skipped = r.data.skipped > 0 ? `，${r.data.skipped} 个这一类里已有` : '';
     notifyCompile(`已接入 ${r.data.added} 个${skipped}`, r.data.compile);
     availableTable.value?.clearSelection();
-    // 接进来的在「已接入」里：切过去，当场看得到哪些还没有价
+    // 接进来的在「已接入」里：切过去，当场看得到它们有没有价
     tab.value = 'models';
     await reload();
   } finally {
@@ -265,15 +298,21 @@ onMounted(loadBoard);
             {{ selected.vendorKey }}
           </p>
           <div class="provider-detail__stats">
-            <span>{{ selected.models }} 个模型</span>
+            <span>已定价 {{ selected.priced }}</span>
+            <span :class="{ 'stat-warn': selected.unpriced > 0 }">未定价 {{ selected.unpriced }}</span>
           </div>
         </div>
-        <el-button
-          :icon="Setting"
+        <button
+          type="button"
+          class="mult"
           @click="settingsOpen = true"
         >
-          渠道设置
-        </el-button>
+          <span
+            class="mult__v"
+            :class="{ 'mult__v--unset': selected.multiplier === null }"
+          >{{ multiplierText(selected.multiplier) }}</span>
+          <span class="mult__k">渠道倍率</span>
+        </button>
       </template>
 
       <template #toolbar>
@@ -331,7 +370,7 @@ onMounted(loadBoard);
         >
           <el-table-column
             label="模型"
-            min-width="200"
+            min-width="160"
           >
             <template #default="{ row }: { row: ChannelModel }">
               <div class="cell-stack">
@@ -345,15 +384,6 @@ onMounted(loadBoard);
                     effect="plain"
                   >
                     停用
-                  </el-tag>
-                  <!-- 没有价的用户选不了：在这儿标一下，价在「模型定价」页定 -->
-                  <el-tag
-                    v-if="!row.model.priced"
-                    size="small"
-                    type="danger"
-                    effect="plain"
-                  >
-                    未定价
                   </el-tag>
                   <el-tag
                     v-if="showDelisted && !row.upstream"
@@ -382,6 +412,36 @@ onMounted(loadBoard);
             </template>
           </el-table-column>
           <el-table-column
+            label="价格（积分）"
+            min-width="300"
+          >
+            <template #default="{ row }: { row: ChannelModel }">
+              <span
+                v-if="row.model.priced"
+                class="num"
+              >{{ describeModelPrice(row.model.category, row.model.inputPrice, row.model.outputPrice, row.model.cachedInputPrice ?? null) }}</span>
+              <!-- 没有价的不留一个横线：写出差的是什么，人才知道去设倍率、单独定价，还是牌价那边缺 -->
+              <span
+                v-else
+                class="unpriced-reason"
+              >{{ unpricedReason(row) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column
+            label="来源"
+            width="92"
+          >
+            <template #default="{ row }: { row: ChannelModel }">
+              <el-tag
+                size="small"
+                :type="pricingTones[row.pricing]"
+                effect="plain"
+              >
+                {{ pricingLabels[row.pricing] }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column
             label="排序"
             width="56"
             align="right"
@@ -392,7 +452,7 @@ onMounted(loadBoard);
           </el-table-column>
           <el-table-column
             label="操作"
-            width="108"
+            width="148"
             align="right"
             fixed="right"
           >
@@ -403,6 +463,13 @@ onMounted(loadBoard);
                 @click="editModel(row)"
               >
                 编辑
+              </el-button>
+              <el-button
+                link
+                type="primary"
+                @click="priceModel(row)"
+              >
+                定价
               </el-button>
               <el-button
                 link
@@ -522,7 +589,7 @@ onMounted(loadBoard);
             </el-table-column>
             <el-table-column
               label="折合积分"
-              min-width="250"
+              min-width="310"
             >
               <template #default="{ row }: { row: UpstreamModel }">
                 <span class="num">{{ previewPoints(row) }}</span>
@@ -559,6 +626,14 @@ onMounted(loadBoard);
       @saved="reload"
     />
 
+    <ModelRateDrawer
+      v-model="rateOpen"
+      :target="rateTarget"
+      :channel="selected"
+      :list-prices-loaded="listPricesLoaded"
+      @saved="reload"
+    />
+
     <ModelEditDialog
       v-model="editOpen"
       :target="editTarget"
@@ -579,6 +654,10 @@ onMounted(loadBoard);
   padding: 6px 12px;
 }
 
+.unpriced-reason {
+  color: var(--el-color-danger);
+}
+
 .detail-main {
   flex: 1;
   min-width: 0;
@@ -590,6 +669,49 @@ onMounted(loadBoard);
 
 .provider-detail__stats {
   align-items: center;
+}
+
+.stat-warn {
+  color: var(--el-color-danger);
+}
+
+/* 倍率：这一页最要紧的一个数，点它改（照 Yomi 定价页右上角那一个） */
+.mult {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.mult__v {
+  font-size: 22px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  color: var(--el-text-color-primary);
+}
+
+/* 「未设置」是字不是数：不用数字的字距，颜色提醒一下 */
+.mult__v--unset {
+  font-size: 18px;
+  letter-spacing: 0;
+  color: var(--el-color-warning);
+}
+
+.mult:hover .mult__v {
+  color: var(--el-color-primary);
+}
+
+.mult__k {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 .channel-tabs {

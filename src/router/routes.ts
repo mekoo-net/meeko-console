@@ -572,10 +572,9 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '渠道', requiresAuth: true, roles: ['Admin'] },
           },
           {
+            // 定价并进了「渠道」页（接入和定价在一页）；旧地址留着让书签还能用
             path: 'rates',
-            name: 'jastalk-rates',
-            component: () => import('@/features/jastalk/views/JastalkRatesView.vue'),
-            meta: { title: '模型定价', requiresAuth: true, roles: ['Admin'] },
+            redirect: { name: 'jastalk-channels' },
           },
           {
             path: 'usage',

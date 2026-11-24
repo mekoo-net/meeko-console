@@ -34,10 +34,10 @@ import {
   type PointRate,
   type PointRateEdit,
   type RateCompileResult,
-  type UsageLog,
   type UsageLogQuery,
   type UserQuery,
 } from '@/features/jastalk/model/jastalk.types';
+import { groupUsageActions, type UsageAction } from '@/features/jastalk/model/usageActions';
 import type { JastalkAdminPort } from '@/features/jastalk/services/ports/jastalkAdminPort';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 
@@ -134,7 +134,12 @@ export class JastalkAdminHttpAdapter implements JastalkAdminPort {
     return res.success ? ok(true) : res;
   }
 
-  async usageLogs(query: UsageLogQuery, page: PageQuery): Promise<AppResult<Paged<UsageLog>>> {
+  /**
+   * TODO(网关)：后端的用量明细还是一次结算一行、按结算分页（`/admin/usage-logs`）。这里把拿到的这一页按 actionId 归并成一件事一行：
+   * 一件事的几次结算正好跨在两页之间时，它在两页各出现一次、各只有一部分调用；总条数也还是结算的条数。
+   * 要后端照用户那边的使用日志（`UsageQueries.ActionsAsync`）按一件事分页，这里才准。「结果」的筛选现在也是按每一次结算筛的。
+   */
+  async usageActions(query: UsageLogQuery, page: PageQuery): Promise<AppResult<Paged<UsageAction>>> {
     const res = await requestJastalk<ItemsEnvelope<unknown>>(jastalkPaths.usageLogs, {
       query: {
         accountUid: query.accountUid,
@@ -145,6 +150,8 @@ export class JastalkAdminHttpAdapter implements JastalkAdminPort {
         ...pageQuery(page),
       },
     });
-    return res.success ? parsePage(usageLogSchema, res.data, '用量明细') : res;
+    if (!res.success) return res;
+    const parsed = parsePage(usageLogSchema, res.data, '用量明细');
+    return parsed.success ? ok({ items: groupUsageActions(parsed.data.items), total: parsed.data.total }) : parsed;
   }
 }

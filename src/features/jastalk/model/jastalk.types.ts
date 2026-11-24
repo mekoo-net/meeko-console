@@ -81,6 +81,18 @@ export const rateUnitSchema = z.enum(rateUnits);
 export type RateUnit = z.infer<typeof rateUnitSchema>;
 
 /**
+ * 命中缓存的输入每百万 token 多少积分（只有对话用得上：向量、重排没有缓存这一说）。
+ * - null：没有单独的缓存价，命中缓存的按输入价算；
+ * - 没有这个字段（undefined）：后端还不分缓存价——页面上不摆缓存那一档，也不让填，免得填了后端不认、悄悄丢掉。
+ *
+ * 角色扮演每一轮都把人设和前面的对话重发一遍，命中缓存的占输入的大头；上游对命中缓存的只收一成左右，
+ * 按输入价扣的话用户多花，也和渠道的成本对不上。
+ * TODO(网关)：价格表加缓存价（编译时取牌价的 `input.cachedRead` × 倍率 × 100）；网关上报用量时把命中缓存的 token 单列——
+ * 现在 Anthropic 那一路是把 `cache_read_input_tokens` 加进输入、按输入价扣的（Jastalk.Infrastructure/Llm/AnthropicMessages.cs）。
+ */
+const cachedInputPriceSchema = z.number().nullable().optional();
+
+/**
  * 目录里的一行：用户能选的一个模型。渠道和模型名原样发给 OneApi。
  * `priced`：价格表里找得到按 `unit` 算的价格；找不到的用户选不了（不能不冻积分就调）。
  */
@@ -97,6 +109,7 @@ export const catalogModelSchema = z.object({
   unit: rateUnitSchema,
   inputPrice: z.number(),
   outputPrice: z.number(),
+  cachedInputPrice: cachedInputPriceSchema,
   /** 照价格表里哪一行算的：「渠道/模型」，通配写 `*`；没有是 null。 */
   ratedBy: z.string().nullable(),
   updatedAt: epochMillisSchema,
@@ -172,11 +185,18 @@ export const listPriceSchema = z.object({
   rate: z.unknown(),
   usdInput: z.number().nullable(),
   usdOutput: z.number().nullable(),
+  /**
+   * 牌价里命中缓存的输入价（美元 / 百万 token，牌价的 `input.cachedRead`）。不是按 token 计价、牌价没写缓存价的是 null，
+   * 那样命中缓存的按输入价算。TODO(网关)：后端还没回这个字段，没有就当 null。
+   */
+  usdCachedInput: z.number().nullish().transform((v) => v ?? null),
   /** false = 牌价的计价方式折不成这个模型的计量单位，只能单独定价。 */
   convertible: z.boolean(),
   /** 按渠道现在的倍率折出来的积分；渠道没设倍率、或者折不了是 null。 */
   pointsInput: z.number().nullable(),
   pointsOutput: z.number().nullable(),
+  /** 缓存价按渠道现在的倍率折出来的积分；`usdCachedInput` 是 null、或者渠道没设倍率时是 null。 */
+  pointsCachedInput: z.number().nullish().transform((v) => v ?? null),
 });
 export type ListPrice = z.infer<typeof listPriceSchema>;
 
@@ -282,6 +302,7 @@ export const pointRateSchema = z.object({
   unit: rateUnitSchema,
   inputPrice: z.number(),
   outputPrice: z.number(),
+  cachedInputPrice: cachedInputPriceSchema,
   updatedAt: epochMillisSchema,
   source: rateSourceSchema,
   /** 算出来的行对上的是牌价里哪个键；单独定的没有。 */
@@ -297,6 +318,8 @@ export interface PointRateEdit {
   unit: RateUnit;
   inputPrice: number;
   outputPrice: number;
+  /** null = 命中缓存的按输入价算。不带这个字段是没摆缓存那一档（后端还不分缓存价），不是「清掉」。 */
+  cachedInputPrice?: number | null;
 }
 
 // ---------- 用量明细 ----------
@@ -304,13 +327,32 @@ export interface PointRateEdit {
 export const usageStatusSchema = z.enum(['charged', 'voided']);
 export type UsageStatus = z.infer<typeof usageStatusSchema>;
 
-/** 一条用量和它的报价：单价是结算当时的，改价不改历史。 */
+/**
+ * 一条用量的单价是怎么来的，结算当时的快照：后来改了倍率、牌价，这里不变，查账时看得出当时为什么是这个价。
+ * TODO(网关)：结算时还没记，没有是 null（页面上只写照价格表里哪一行算的）。
+ */
+export const usageBasisSchema = z.object({
+  /** compiled 牌价 × 渠道倍率算出来的；manual 单独定的；default 落在通配的默认价上。 */
+  source: z.enum(['compiled', 'manual', 'default']),
+  /** 算出来的：对上的牌价键、当时的渠道倍率、当时牌价里的三个数（美元 / 百万 token）。别的来源都是 null。 */
+  listModelKey: z.string().nullable(),
+  multiplier: z.number().nullable(),
+  usdInput: z.number().nullable(),
+  usdCachedInput: z.number().nullable(),
+  usdOutput: z.number().nullable(),
+});
+export type UsageBasis = z.infer<typeof usageBasisSchema>;
+
+/** 一条用量和它的报价：单价是结算当时的，改价不改历史。只有管理端看得到这些数，用户那边只给积分。 */
 export const usageLineSchema = z.object({
   kind: z.string(),
   vendorKey: z.string(),
   modelName: z.string(),
   unit: z.string(),
+  /** 没命中缓存的输入（含这一次新写进缓存的）。 */
   inputTokens: z.number().int(),
+  /** 命中缓存的输入。TODO(网关)：后端还没分出来，现在命中缓存的算在 `inputTokens` 里、按输入价扣；没有这个字段是 0。 */
+  cachedInputTokens: z.number().int().nullish().transform((v) => v ?? 0),
   outputTokens: z.number().int(),
   quantity: z.number(),
   /** 上游没报用量，是按字数估的。 */
@@ -319,6 +361,9 @@ export const usageLineSchema = z.object({
   ratedBy: z.string(),
   inputPrice: z.number(),
   outputPrice: z.number(),
+  /** 结算当时的缓存价；null = 没有单独的缓存价，命中缓存的按输入价算。 */
+  cachedInputPrice: z.number().nullish().transform((v) => v ?? null),
+  basis: usageBasisSchema.nullish().transform((v) => v ?? null),
   points: z.number(),
 });
 export type UsageLine = z.infer<typeof usageLineSchema>;

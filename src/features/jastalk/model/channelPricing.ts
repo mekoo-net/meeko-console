@@ -57,7 +57,9 @@ export function listBillingLabel(billingType: string): string {
 
 export interface PriceSlot {
   label: string;
-  side: 'input' | 'output';
+  side: 'input' | 'cachedInput' | 'output';
+  /** 可以不填：缓存价不填就是命中缓存的按输入价算。 */
+  optional?: boolean;
 }
 
 const tokenSlots: readonly PriceSlot[] = [
@@ -78,11 +80,39 @@ export const categoryPriceSlots: Readonly<Record<ModelCategory, readonly PriceSl
   stt: [{ label: '听写', side: 'input' }],
 };
 
-/** 一个模型的积分价写成一句话。知道类别，所以只写这一类用得上的数（`describePrice` 只知道单位，语音的两个都写）。 */
-export function describeModelPrice(category: ModelCategory, inputPrice: number, outputPrice: number): string {
+/** 命中缓存的输入那一档。只有对话有：向量、重排没有缓存这一说。和「输入」「输出」一样两个字。 */
+const cacheSlot: PriceSlot = { label: '缓存', side: 'cachedInput', optional: true };
+
+/** 摆得出缓存价的类别。 */
+export function hasCacheTier(category: ModelCategory): boolean {
+  return category === 'chat';
+}
+
+/**
+ * 这一类模型要摆哪几个价。`withCache`：要不要摆缓存那一档——有缓存价才摆（null 是按输入价算，不另写），
+ * 编辑时看后端分不分缓存价（不分的不让填）。
+ */
+export function priceSlotsFor(category: ModelCategory, withCache: boolean): readonly PriceSlot[] {
   const slots = categoryPriceSlots[category];
+  if (!withCache || !hasCacheTier(category)) return slots;
+  // 输入、缓存、输出：缓存是输入的一种，挨着输入
+  return [slots[0]!, cacheSlot, ...slots.slice(1)];
+}
+
+/**
+ * 一个模型的积分价写成一句话。知道类别，所以只写这一类用得上的数（`describePrice` 只知道单位，语音的两个都写）。
+ * 缓存价是 null（按输入价算）的不写缓存那一档。
+ */
+export function describeModelPrice(
+  category: ModelCategory,
+  inputPrice: number,
+  outputPrice: number,
+  cachedInputPrice: number | null = null,
+): string {
+  const slots = priceSlotsFor(category, cachedInputPrice !== null);
   const per = unitPer[categoryUnits[category]];
-  const of = (slot: PriceSlot) => formatPrice(slot.side === 'input' ? inputPrice : outputPrice);
+  const of = (slot: PriceSlot) =>
+    formatPrice(slot.side === 'input' ? inputPrice : slot.side === 'output' ? outputPrice : (cachedInputPrice ?? inputPrice));
   if (slots.length === 1) return `${of(slots[0]!)} ${per}`;
   return `${slots.map((slot) => `${slot.label} ${of(slot)}`).join(' · ')} ${per}`;
 }
@@ -91,7 +121,10 @@ export function describeModelPrice(category: ModelCategory, inputPrice: number, 
 export function describeListPrice(listPrice: ListPrice, unit: RateUnit): string {
   const { usdInput, usdOutput } = listPrice;
   if (!listPrice.convertible || usdInput === null || usdOutput === null) return listBillingLabel(listPrice.billingType);
-  if (unit === 'token') return `输入 ${formatUsd(usdInput)} · 输出 ${formatUsd(usdOutput)} ${unitPer.token}`;
+  if (unit === 'token') {
+    const cache = listPrice.usdCachedInput === null ? '' : ` · 缓存 ${formatUsd(listPrice.usdCachedInput)}`;
+    return `输入 ${formatUsd(usdInput)}${cache} · 输出 ${formatUsd(usdOutput)} ${unitPer.token}`;
+  }
   return `${formatUsd(usdOutput)} ${unitPer[unit]}`;
 }
 
@@ -103,12 +136,14 @@ export interface FormulaRow {
   points: number | null;
 }
 
-/** 「牌价 × 倍率 = 积分」要列的几行：这一类模型用得上的那几个价。 */
+/** 「牌价 × 倍率 = 积分」要列的几行：这一类模型用得上的那几个价；牌价写了缓存价的，对话多一行缓存。 */
 export function formulaRows(category: ModelCategory, listPrice: ListPrice): FormulaRow[] {
-  return categoryPriceSlots[category].map((slot) => ({
+  const pick = <T>(side: PriceSlot['side'], input: T, cached: T, output: T): T =>
+    side === 'input' ? input : side === 'output' ? output : cached;
+  return priceSlotsFor(category, listPrice.usdCachedInput !== null).map((slot) => ({
     label: slot.label,
-    usd: slot.side === 'input' ? listPrice.usdInput : listPrice.usdOutput,
-    points: slot.side === 'input' ? listPrice.pointsInput : listPrice.pointsOutput,
+    usd: pick(slot.side, listPrice.usdInput, listPrice.usdCachedInput, listPrice.usdOutput),
+    points: pick(slot.side, listPrice.pointsInput, listPrice.pointsCachedInput, listPrice.pointsOutput),
   }));
 }
 
