@@ -134,7 +134,7 @@ describe('model ratecard page', () => {
       'tts-1',
       'whisper-1',
     ]);
-    expect(wrapper.find('.maker-sidebar__foot').text()).toContain('18 个模型');
+    expect(wrapper.find('.maker-sidebar__foot').text()).toContain('19 个模型');
     expectSilentAboutPublishing();
     // 页头上只有一个动作：没有「发布」，也没有「导入」
     expect(

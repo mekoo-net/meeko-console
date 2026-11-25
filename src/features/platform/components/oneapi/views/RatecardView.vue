@@ -12,7 +12,7 @@
  * 登记的只是厂家发布的模型——哪个渠道用什么别名叫它，是各产品去映射的事。
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue';
+import { CollectionTag, Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
 import {
@@ -347,6 +347,43 @@ async function onDelete(price: ModelPriceRow): Promise<void> {
   await reload();
 }
 
+// ---- 别名 -------------------------------------------------------------------------
+
+/**
+ * 渠道里对这个模型的别的叫法（目录里是 gemini-3.1-pro-preview，有的渠道叫 gemini-3.1-pro）。
+ * 号池后台认别名才摆——行上带着 `aliases` 这个字段；不带的时候按钮和「也叫」都不出现。
+ */
+const aliasOpen = ref(false);
+const aliasTarget = ref<ModelPriceRow | null>(null);
+const aliasDraft = ref<string[]>([]);
+const aliasSaving = ref(false);
+/** 打开就能直接敲，不用先点一下框。 */
+const aliasInput = ref<{ focus: () => void } | null>(null);
+
+function openAliases(price: ModelPriceRow): void {
+  aliasTarget.value = price;
+  aliasDraft.value = [...(price.aliases ?? [])];
+  aliasOpen.value = true;
+}
+
+async function saveAliases(): Promise<void> {
+  const target = aliasTarget.value;
+  if (!target) return;
+  aliasSaving.value = true;
+  try {
+    const r = await port.setAliases(target.id, aliasDraft.value);
+    if (!r.success) {
+      ElMessage.error(failureText(r.error));
+      return;
+    }
+    aliasOpen.value = false;
+    reportWrite(`已保存 ${target.modelKey} 的别名`, r.data.publish);
+    await reload();
+  } finally {
+    aliasSaving.value = false;
+  }
+}
+
 // ---- 上游同步 ---------------------------------------------------------------------
 
 const syncOpen = ref(false);
@@ -562,6 +599,13 @@ onBeforeUnmount(() => search.cancel());
               {{ row.price.modelKey }}
             </div>
             <div
+              v-if="row.price.aliases?.length"
+              class="price-row__aliases"
+              :title="row.price.aliases.join('\n')"
+            >
+              也叫 {{ row.price.aliases.join('、') }}
+            </div>
+            <div
               v-if="row.hint"
               class="price-row__hint"
               :title="hintTitle(row.price)"
@@ -600,6 +644,13 @@ onBeforeUnmount(() => search.cancel());
               link
               title="编辑"
               @click="openEdit(row)"
+            />
+            <el-button
+              v-if="row.price.aliases !== undefined"
+              :icon="CollectionTag"
+              link
+              title="别名"
+              @click="openAliases(row.price)"
             />
             <el-button
               :icon="Delete"
@@ -658,6 +709,34 @@ onBeforeUnmount(() => search.cancel());
           @click="confirmNewMaker"
         >
           创建
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="aliasOpen"
+      :title="`别名 · ${aliasTarget?.modelKey ?? ''}`"
+      width="460px"
+      :close-on-click-modal="false"
+      @opened="aliasInput?.focus()"
+    >
+      <el-input-tag
+        ref="aliasInput"
+        v-model="aliasDraft"
+        placeholder="渠道里的叫法，输入后回车"
+        clearable
+        save-on-blur
+      />
+      <template #footer>
+        <el-button @click="aliasOpen = false">
+          取消
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="aliasSaving"
+          @click="saveAliases"
+        >
+          保存
         </el-button>
       </template>
     </el-dialog>
@@ -754,7 +833,7 @@ onBeforeUnmount(() => search.cancel());
    * 视频、图像分档的那几行比按 token 的宽，价格列按固定的下限来的话它们会溢出去、压在右边的操作按钮上。
    * 下限的 340px（放得下三组「icon + 数字」：入 / 写 5m、写 1h、出 / 读）在 .price-row__price 的 min-width 上。
    */
-  grid-template-columns: minmax(140px, 1fr) max-content minmax(max-content, 1.2fr) 64px;
+  grid-template-columns: minmax(140px, 1fr) max-content minmax(max-content, 1.2fr) 92px;
   column-gap: 16px;
   align-content: start;
   padding: 0 12px 8px;
@@ -813,6 +892,14 @@ onBeforeUnmount(() => search.cancel());
   font-size: 13.5px;
   font-weight: 600;
   letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.price-row__aliases {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

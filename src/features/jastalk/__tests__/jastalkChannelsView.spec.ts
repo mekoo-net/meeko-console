@@ -204,3 +204,51 @@ describe('jastalk channels page', () => {
     expect(buttons()).toContain('接入');
   });
 });
+
+/**
+ * 接入时开不开放跟着有没有牌价走（2026-11-25 用户：「模型默认就是打开，除非没有牌价」，选的是「还是手动接入」）；
+ * 牌价上设了别名的，渠道里叫别名的模型也对得上那一行牌价（「gemini-3.1-pro-preview 同时也是 gemini-3.1-pro」）。
+ */
+describe('jastalk channels page: connecting models', () => {
+  /** 「可接入」里名字是这几个的行，勾上。 */
+  async function tick(...names: string[]): Promise<void> {
+    for (const tr of shownTable().findAll('.el-table__body tbody tr')) {
+      if (!names.includes(clean(tr.find('.mono').text()))) continue;
+      await tr.find('.el-checkbox').trigger('click');
+    }
+    await settle(50);
+  }
+
+  const toasts = (): string => [...document.body.querySelectorAll('.el-message')].map((m) => clean(m.textContent ?? '')).join(' | ');
+
+  it('finds the list price of a model by an alias set on it', async () => {
+    await open();
+    await selectChannel('Antigravity');
+    await openTab('可接入');
+
+    const row = shownTable()
+      .findAll('.el-table__body tbody tr')
+      .find((tr) => clean(tr.find('.mono').text()) === 'gemini-3.1-pro')!;
+    // 牌价里只有 gemini-3.1-pro-preview；它的别名是 gemini-3.1-pro
+    expect(clean(row.findAll('td')[2]!.text())).toBe('输入 $2 · 缓存 $0.2 · 输出 $12 / 百万 token');
+  });
+
+  it('opens what has a list price and keeps closed what has none, with no switch to set', async () => {
+    await open();
+    await selectChannel('Antigravity');
+    await openTab('可接入');
+    // 不另摆「开放」让人勾
+    expect(wrapper.find('.available__actions .el-checkbox').exists()).toBe(false);
+
+    await tick('gemini-3.1-pro', 'imagen-5');
+    await wrapper.findAll('button').find((b) => b.text().trim() === '接入')!.trigger('click');
+    await settle(900);
+
+    expect(toasts()).toContain('已接入 2 个，1 个没有牌价，先不开放');
+    // 接完切回「已接入」：有牌价的开着，没牌价的停用
+    expect(rowOf('Gemini').length).toBeGreaterThan(0);
+    const of = (name: string) => rows().find((r) => r.includes(name)) ?? '';
+    expect(of('gemini-3.1-pro')).not.toContain('停用');
+    expect(of('imagen-5')).toContain('停用');
+  });
+});

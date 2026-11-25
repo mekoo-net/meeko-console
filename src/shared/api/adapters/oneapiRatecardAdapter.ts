@@ -73,6 +73,15 @@ export class OneApiRatecardHttpAdapter implements OneApiRatecardPort {
     return res.success ? parse(priceDeleteResultSchema, res.data, '删除牌价') : res;
   }
 
+  async setAliases(id: string, aliases: string[]): Promise<AppResult<PriceWriteResult>> {
+    // 整个换掉：给空数组是清掉。回的是改完的那一行和发布结果，和改价一样
+    const res = await request<unknown>(`${VAULT_RATECARD_BASE}/catalog/${encodeURIComponent(id)}/aliases`, {
+      method: 'PUT',
+      body: { aliases },
+    });
+    return res.success ? parse(priceWriteResultSchema, res.data, '保存别名') : res;
+  }
+
   async fetchCandidates(input: { maker: string | null }): Promise<AppResult<PriceFetchResult>> {
     const res = await request<unknown>(`${VAULT_RATECARD_BASE}/sync/fetch`, {
       method: 'POST',

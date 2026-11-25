@@ -62,6 +62,8 @@ interface ListPriceRow {
   maker: string;
   billingType: string;
   rate: Record<string, unknown>;
+  /** 牌价上设的别名：渠道里对这个模型的别的叫法（号池后台发布的文档里的 `aliases`，Bff 原样转来）。 */
+  aliases?: string[];
 }
 
 /** `cachedRead`：命中缓存的输入价，牌价的 `input.cachedRead`；没写的模型命中缓存的按输入价算。 */
@@ -78,6 +80,8 @@ const listPrices: ListPriceRow[] = [
   perToken('claude-haiku-5-5', 'anthropic', 1, 5, 0.1),
   perToken('gemini-3.8-flash', 'google', 0.3, 2.5, 0.075),
   perToken('gemini-3.8-pro', 'google', 1.25, 10, 0.3125),
+  // 目录里是带 -preview 的名字；渠道叫 gemini-3.1-pro，比键短，按前缀对不上，靠别名
+  { ...perToken('gemini-3.1-pro-preview', 'google', 2, 12, 0.2), aliases: ['gemini-3.1-pro'] },
   perToken('gpt-5.5', 'openai', 1.25, 10, 0.125),
   // 向量模型没有缓存这一说
   perToken('bge-m3', 'baai', 0.01, 0),
@@ -97,7 +101,8 @@ const listPrices: ListPriceRow[] = [
 const upstream: { providerId: string; models: string[] }[] = [
   { providerId: 'kiro', models: ['claude-opus-5.5', 'claude-sonnet-5.5', 'claude-haiku-5-5', 'claude-opus-5.5-thinking'] },
   { providerId: 'claude', models: ['claude-haiku-5-5', 'claude-sonnet-5.5', 'claude-opus-5.5'] },
-  { providerId: 'antigravity', models: ['gemini-3.8-flash', 'gemini-3.8-pro', 'imagen-5'] },
+  // gemini-3.1-pro：牌价里只有 gemini-3.1-pro-preview，靠那一行的别名对上
+  { providerId: 'antigravity', models: ['gemini-3.8-flash', 'gemini-3.8-pro', 'gemini-3.1-pro', 'imagen-5'] },
   {
     providerId: 'media',
     models: [
@@ -150,9 +155,16 @@ function findListPrice(modelName: string): ListPriceRow | undefined {
   if (outage.listPrices) return undefined;
   const name = modelName.trim().toLowerCase().split('/').pop() ?? '';
   let best: ListPriceRow | undefined;
+  let bestLength = -1;
   for (const row of listPrices) {
-    if (name !== row.modelKey && !name.startsWith(`${row.modelKey}-`)) continue;
-    if (!best || row.modelKey.length > best.modelKey.length) best = row;
+    // 别名和键一样用：渠道里的名字等于它、或者是它后面接 `-…`，都算对上；几个都对得上取最长的
+    for (const key of [row.modelKey, ...(row.aliases ?? [])]) {
+      if (name !== key && !name.startsWith(`${key}-`)) continue;
+      if (key.length > bestLength) {
+        best = row;
+        bestLength = key.length;
+      }
+    }
   }
   return best;
 }

@@ -41,6 +41,12 @@ export interface OneApiRatecardPort {
   /** 按行号删一行。这个厂家一行都不剩时，它发布出去的那一份一并撤下。 */
   remove(id: string): Promise<AppResult<PriceDeleteResult>>;
 
+  /**
+   * 整个换掉一行的别名（给空数组是清掉）。别名不能和别的行的键、别名撞；号池后台把它收成小写、去掉重复。
+   * 别名也发布出去（各产品对牌价时要认它），所以回包里带发布结果。
+   */
+  setAliases(id: string, aliases: string[]): Promise<AppResult<PriceWriteResult>>;
+
   /** 从外部目录（models.dev）拉候选价，和表里的对比。只读，不写库也不发布。`maker` 给了只拉这一家。 */
   fetchCandidates(input: { maker: string | null }): Promise<AppResult<PriceFetchResult>>;
 

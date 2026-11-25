@@ -46,6 +46,7 @@ import {
   type ChannelDetail,
   type ChannelModel,
   type ModelCategory,
+  type ModelImportResult,
   type UpstreamModel,
 } from '../model/jastalk.types';
 import { categoryLabels, categoryUnits } from '../model/jastalkFormat';
@@ -179,7 +180,6 @@ async function removeModel(row: ChannelModel): Promise<void> {
 const availableKeyword = ref('');
 const availableTable = ref<TableInstance>();
 const selection = ref<UpstreamModel[]>([]);
-const importEnabled = ref(true);
 const importing = ref(false);
 
 const shownAvailable = computed(() => {
@@ -203,22 +203,50 @@ function previewPoints(row: UpstreamModel): string {
   return describeModelPrice(previewCategory.value, price.pointsInput, price.pointsOutput, price.pointsCachedInput);
 }
 
+/**
+ * 牌价里有它、而且折得成要接成的这一类的单位。有的接进来直接开放；没有的接进来先不开放——用户选了也没有价可扣，
+ * 等牌价上给它设了别名、或者单独定了价，再在「编辑」里打开（2026-11-21 用户：「模型默认就是打开，除非没有牌价」）。
+ */
+function hasListPrice(m: UpstreamModel): boolean {
+  return m.listPrice !== null && m.listPrice.convertible;
+}
+
 async function importSelected(): Promise<void> {
   const channel = selected.value;
   if (!channel || selection.value.length === 0) return;
+  // 开不开放跟着有没有牌价走，不让人另勾：一次接的模型里两种都有就分两批接
+  const batches = [
+    { enabled: true, models: selection.value.filter(hasListPrice).map((m) => m.modelName) },
+    { enabled: false, models: selection.value.filter((m) => !hasListPrice(m)).map((m) => m.modelName) },
+  ].filter((b) => b.models.length > 0);
   importing.value = true;
   try {
-    const r = await port.importModels(channel.vendorKey, {
-      category: importCategory.value,
-      models: selection.value.map((m) => m.modelName),
-      enabled: importEnabled.value,
-    });
-    if (!r.success) {
-      ElMessage.error(r.error.message);
-      return;
+    let added = 0;
+    let closed = 0;
+    let skipped = 0;
+    let compile: ModelImportResult['compile'] | null = null;
+    for (const batch of batches) {
+      const r = await port.importModels(channel.vendorKey, {
+        category: importCategory.value,
+        models: batch.models,
+        enabled: batch.enabled,
+      });
+      if (!r.success) {
+        ElMessage.error(r.error.message);
+        // 前一批已经接进来了：照样刷新，摆出来的是真的
+        if (added > 0) await reload();
+        return;
+      }
+      added += r.data.added;
+      if (!batch.enabled) closed += r.data.added;
+      skipped += r.data.skipped;
+      // 每一批接完后端都把这个渠道整个重算一遍，最后一批的结果就是全的
+      compile = r.data.compile;
     }
-    const skipped = r.data.skipped > 0 ? `，${r.data.skipped} 个这一类里已有` : '';
-    notifyCompile(`已接入 ${r.data.added} 个${skipped}`, r.data.compile);
+    const parts = [`已接入 ${added} 个`];
+    if (closed > 0) parts.push(`${closed} 个没有牌价，先不开放`);
+    if (skipped > 0) parts.push(`${skipped} 个这一类里已有`);
+    if (compile) notifyCompile(parts.join('，'), compile);
     availableTable.value?.clearSelection();
     // 接进来的在「已接入」里：切过去，当场看得到它们有没有价
     tab.value = 'models';
@@ -524,9 +552,6 @@ onMounted(loadBoard);
                 :value="c"
               />
             </el-select>
-            <el-checkbox v-model="importEnabled">
-              开放
-            </el-checkbox>
             <el-button
               type="primary"
               :disabled="selection.length === 0"

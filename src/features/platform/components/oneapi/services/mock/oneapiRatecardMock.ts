@@ -63,6 +63,7 @@ interface Seed {
   modelKey: string;
   body: PriceBody;
   capabilities?: ModelCapabilities;
+  aliases?: string[];
   inTable?: boolean;
   upstream?: PriceBody | null;
 }
@@ -201,6 +202,14 @@ const SEEDS: readonly Seed[] = [
     body: perToken(1.25, 10, { cachedRead: 0.125 }),
     capabilities: LLM,
   },
+  // 目录里是带 -preview 的名字，有的渠道叫它不带的：设了别名才对得上
+  {
+    maker: 'google',
+    modelKey: 'gemini-3.1-pro-preview',
+    body: perToken(2, 12, { cachedRead: 0.2 }),
+    capabilities: LLM,
+    aliases: ['gemini-3.1-pro'],
+  },
   {
     maker: 'google',
     modelKey: 'gemini-2.5-flash',
@@ -267,6 +276,8 @@ function makerDocument(rows: readonly ModelPriceRow[], maker: string): string | 
       billingType: r.billingType,
       rate: r.rate,
       capabilities: r.capabilities,
+      // 别名也发布出去：各产品对牌价时要认它，改了别名发布出去的那一份就得变
+      aliases: r.aliases ?? [],
     }));
   return items.length > 0 ? JSON.stringify(items) : null;
 }
@@ -289,6 +300,7 @@ function seedState(): MockState {
       sourceRef: official ? `${s.maker}/${s.modelKey}` : null,
       fetchedAtUtc: official ? at : null,
       effectiveFromUtc: at,
+      aliases: [...(s.aliases ?? [])],
     };
   });
 
@@ -315,12 +327,18 @@ const rejected = (code: 'validation' | 'not_found', generic: string, said: strin
 const invalid = (message: string): AppFail => rejected('validation', '提交的内容有误', message);
 const notFound = (message: string): AppFail => rejected('not_found', '没有找到', message);
 
-/** 表里和这个键是同一个模型的那一行：键全等，或者去掉横线点号以后相等（claude-opus-4.8 对 claude-opus-4-8）。 */
+/** 一行的键和别名。 */
+const namesOf = (r: ModelPriceRow): string[] => [r.modelKey, ...(r.aliases ?? [])];
+
+/**
+ * 表里和这个名字是同一个模型的那一行：键或者别名全等，或者去掉横线点号以后相等（claude-opus-4.8 对 claude-opus-4-8）。
+ * 别名也算：新建一个名字正好是别人别名的模型，那是同一个模型，不该多出一行。
+ */
 function findByKey(key: string): ModelPriceRow | undefined {
-  const exact = state.rows.find((r) => r.modelKey === key);
+  const exact = state.rows.find((r) => namesOf(r).includes(key));
   if (exact) return exact;
   const compact = compactModelKey(key);
-  return compact ? state.rows.find((r) => compactModelKey(r.modelKey) === compact) : undefined;
+  return compact ? state.rows.find((r) => namesOf(r).some((n) => compactModelKey(n) === compact)) : undefined;
 }
 
 /** 照那七种形状查 rate；不过回一句话，过了回 null。 */
@@ -362,6 +380,8 @@ function write(
     currency: 'USD',
     // 改价不带能力时留着这一行原来的
     capabilities: input.capabilities ?? target?.capabilities ?? null,
+    // 改价、同步都不碰别名
+    aliases: [...(target?.aliases ?? [])],
     source: input.source?.trim().toLowerCase() || 'manual',
     sourceRef: input.sourceRef?.trim() || null,
     fetchedAtUtc: input.fetchedAtUtc ?? null,
@@ -436,7 +456,7 @@ export class OneApiRatecardMock implements OneApiRatecardPort {
     for (const row of state.rows) {
       if (
         keyword &&
-        !row.modelKey.includes(keyword) &&
+        !namesOf(row).some((n) => n.includes(keyword)) &&
         !row.sourceRef?.toLowerCase().includes(keyword)
       )
         continue;
@@ -492,6 +512,26 @@ export class OneApiRatecardMock implements OneApiRatecardPort {
       target,
     );
     return ok({ price: clone(row), publish: publishMakers(touched) });
+  }
+
+  async setAliases(id: string, aliases: string[]): Promise<AppResult<PriceWriteResult>> {
+    await delay();
+    const row = state.rows.find((r) => r.id === id);
+    if (!row) return notFound(`没有行号是 ${id} 的牌价`);
+
+    // 照号池后台将来的规矩：收成小写、去掉空的和重复的；不能带空白；不能是自己的键；不能和别的行的键、别名撞
+    const wanted = [...new Set(aliases.map((a) => a.trim().toLowerCase()).filter(Boolean))];
+    for (const alias of wanted) {
+      if (/\s/.test(alias)) return invalid(`别名「${alias}」里不能有空格`);
+      if (compactModelKey(alias) === compactModelKey(row.modelKey)) return invalid(`「${alias}」就是这个模型自己的名字`);
+      const other = state.rows.find(
+        (r) => r.id !== row.id && namesOf(r).some((n) => n === alias || compactModelKey(n) === compactModelKey(alias)),
+      );
+      if (other) return invalid(`「${alias}」已经是 ${other.modelKey} 的名字`);
+    }
+
+    row.aliases = wanted;
+    return ok({ price: clone(row), publish: publishMakers([row.maker]) });
   }
 
   async remove(id: string): Promise<AppResult<PriceDeleteResult>> {

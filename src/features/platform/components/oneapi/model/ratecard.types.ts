@@ -44,6 +44,15 @@ export const modelPriceRowSchema = z.object({
   sourceRef: nullable(z.string()),
   fetchedAtUtc: nullable(epochMillisSchema),
   effectiveFromUtc: epochMillisSchema,
+  /**
+   * 别名：渠道里对这个模型的别的叫法。牌价是照厂家目录录的，渠道不一定这么叫——目录里是 gemini-3.1-pro-preview，
+   * 有的渠道叫它 gemini-3.1-pro；名字比键长的（键后面接 `-…`）本来就对得上，比键短、或者干脆是另一个名字的对不上，就靠别名。
+   * 小写、不带渠道前缀。各产品对牌价时别名和键一样用：相等、键后面接 `-…`、去掉横线点号以后相等都算；几个都对得上取最长的。
+   *
+   * 号池后台每一行都回这个字段（没有别名是空数组），发布出去的文档也带（OneApi.Common 的 PublishedModelPrice），悠米和 Jastalk 对牌价时认它。
+   * 没有这个字段（undefined）= 连着的号池后台是加别名之前的版本：页面不摆、不让设，免得设了后台不认、保存「成功」了却没用。
+   */
+  aliases: z.array(z.string()).optional(),
 });
 export type ModelPriceRow = z.infer<typeof modelPriceRowSchema>;
 
