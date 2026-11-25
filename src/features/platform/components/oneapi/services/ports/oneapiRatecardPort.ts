@@ -7,8 +7,10 @@ import type {
   PriceDeleteResult,
   PriceFetchResult,
   PriceMakerGroup,
+  PriceMappingWriteResult,
   PricePublishResult,
   PriceWriteResult,
+  SaveMappingInput,
   UpsertPriceInput,
 } from '../../model/ratecard.types';
 
@@ -42,10 +44,13 @@ export interface OneApiRatecardPort {
   remove(id: string): Promise<AppResult<PriceDeleteResult>>;
 
   /**
-   * 整个换掉一行的别名（给空数组是清掉）。别名不能和别的行的键、别名撞；号池后台把它收成小写、去掉重复。
-   * 别名也发布出去（各产品对牌价时要认它），所以回包里带发布结果。
+   * 建一个映射（一个模型名按另一行出价），或者改它按哪一行出价。名字已经是一行牌价、或者已经映射到别处的，号池后台拒掉。
+   * 映射跟着它指的那一行发布出去（各产品对牌价时要认它），所以回包里带发布结果。
    */
-  setAliases(id: string, aliases: string[]): Promise<AppResult<PriceWriteResult>>;
+  saveMapping(input: SaveMappingInput): Promise<AppResult<PriceMappingWriteResult>>;
+
+  /** 删一个映射；它指的那一行不动。 */
+  removeMapping(id: string): Promise<AppResult<PriceDeleteResult>>;
 
   /** 从外部目录（models.dev）拉候选价，和表里的对比。只读，不写库也不发布。`maker` 给了只拉这一家。 */
   fetchCandidates(input: { maker: string | null }): Promise<AppResult<PriceFetchResult>>;

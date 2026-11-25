@@ -207,7 +207,7 @@ describe('jastalk channels page', () => {
 
 /**
  * 接入时开不开放跟着有没有牌价走（2026-11-25 用户：「模型默认就是打开，除非没有牌价」，选的是「还是手动接入」）；
- * 牌价上设了别名的，渠道里叫别名的模型也对得上那一行牌价（「gemini-3.1-pro-preview 同时也是 gemini-3.1-pro」）。
+ * 模型价格页上建了映射的，渠道里叫这个名字的模型也对得上那一行牌价（gemini-3.1-pro 映射到 gemini-3.1-pro-preview）。
  */
 describe('jastalk channels page: connecting models', () => {
   /** 「可接入」里名字是这几个的行，勾上。 */
@@ -229,7 +229,7 @@ describe('jastalk channels page: connecting models', () => {
     const row = shownTable()
       .findAll('.el-table__body tbody tr')
       .find((tr) => clean(tr.find('.mono').text()) === 'gemini-3.1-pro')!;
-    // 牌价里只有 gemini-3.1-pro-preview；它的别名是 gemini-3.1-pro
+    // 牌价里只有 gemini-3.1-pro-preview；gemini-3.1-pro 映射到它
     expect(clean(row.findAll('td')[2]!.text())).toBe('输入 $2 · 缓存 $0.2 · 输出 $12 / 百万 token');
   });
 

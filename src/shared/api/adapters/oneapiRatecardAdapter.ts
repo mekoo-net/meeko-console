@@ -6,6 +6,7 @@ import {
   priceDeleteResultSchema,
   priceFetchResultSchema,
   priceMakerGroupsSchema,
+  priceMappingWriteResultSchema,
   pricePublishResultSchema,
   priceWriteResultSchema,
   type ApplyPriceItem,
@@ -14,8 +15,10 @@ import {
   type PriceDeleteResult,
   type PriceFetchResult,
   type PriceMakerGroup,
+  type PriceMappingWriteResult,
   type PricePublishResult,
   type PriceWriteResult,
+  type SaveMappingInput,
   type UpsertPriceInput,
 } from '@/features/platform/components/oneapi/model/ratecard.types';
 import type { OneApiRatecardPort } from '@/features/platform/components/oneapi/services/ports/oneapiRatecardPort';
@@ -73,13 +76,16 @@ export class OneApiRatecardHttpAdapter implements OneApiRatecardPort {
     return res.success ? parse(priceDeleteResultSchema, res.data, '删除牌价') : res;
   }
 
-  async setAliases(id: string, aliases: string[]): Promise<AppResult<PriceWriteResult>> {
-    // 整个换掉：给空数组是清掉。回的是改完的那一行和发布结果，和改价一样
-    const res = await request<unknown>(`${VAULT_RATECARD_BASE}/catalog/${encodeURIComponent(id)}/aliases`, {
-      method: 'PUT',
-      body: { aliases },
+  async saveMapping(input: SaveMappingInput): Promise<AppResult<PriceMappingWriteResult>> {
+    const res = await request<unknown>(`${VAULT_RATECARD_BASE}/mappings`, { method: 'PUT', body: input });
+    return res.success ? parse(priceMappingWriteResultSchema, res.data, '保存映射') : res;
+  }
+
+  async removeMapping(id: string): Promise<AppResult<PriceDeleteResult>> {
+    const res = await request<unknown>(`${VAULT_RATECARD_BASE}/mappings/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
     });
-    return res.success ? parse(priceWriteResultSchema, res.data, '保存别名') : res;
+    return res.success ? parse(priceDeleteResultSchema, res.data, '删除映射') : res;
   }
 
   async fetchCandidates(input: { maker: string | null }): Promise<AppResult<PriceFetchResult>> {

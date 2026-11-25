@@ -9,10 +9,11 @@
  * 牌价从上游目录同步进来（整张表「同步全部」，或者一家一家「上游同步」），不从别处搬表，所以也没有「导入」。
  *
  * 这里只有牌价，不算有效价：倍率和有效价是各产品自己的事。
- * 登记的只是厂家发布的模型——哪个渠道用什么别名叫它，是各产品去映射的事。
+ * 渠道里的叫法和厂家目录对不上的（目录里是 gemini-3.1-pro-preview，渠道叫 gemini-3.1-pro），建成映射：
+ * 一个模型名按这一家里已有的一行出价，单独一行列在它指的那一行后面，价格照那一行显示。
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { CollectionTag, Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue';
+import { Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
 import {
@@ -57,6 +58,8 @@ import type {
   ModelPriceRow,
   PriceApplyResult,
   PriceMakerGroup,
+  PriceMapping,
+  PriceMappingWriteResult,
   PricePublishFailure,
   PricePublishResult,
 } from '../model/ratecard.types';
@@ -93,13 +96,38 @@ const visibleGroups = computed<PriceMakerGroup[]>(() => {
   return [...groups.value, ...extras].sort((a, b) => compareMakers(a.maker, b.maker));
 });
 
-const totalModels = computed(() => groups.value.reduce((n, g) => n + g.items.length, 0));
+/** 一家的模型数：有价的行加上映射（映射也是一个模型，只是按别的行出价）。 */
+const modelCount = (g: PriceMakerGroup): number => g.items.length + (g.mappings?.length ?? 0);
+
+const totalModels = computed(() => groups.value.reduce((n, g) => n + modelCount(g), 0));
 
 const activeGroup = computed(
   () => visibleGroups.value.find((g) => g.maker === selectedMaker.value) ?? null,
 );
 
-const rows = computed(() => (activeGroup.value?.items ?? []).map(priceRowView));
+/** 号池后台回了映射这一项才让建映射：没有的是有映射之前的版本，建了也存不下。 */
+const canMap = computed(() => groups.value.some((g) => g.mappings !== undefined));
+
+/** 整张表已有的映射：新建模型时拿来查重（搜索时只有搜到的那些，号池后台存的时候还会再拦一次）。 */
+const allMappings = computed(() => groups.value.flatMap((g) => g.mappings ?? []));
+
+type ListRow =
+  | { type: 'price'; key: string; view: PriceRowView }
+  | { type: 'mapping'; key: string; mapping: PriceMapping; view: PriceRowView };
+
+/** 每一行有价的后面跟着映射到它的那几个：映射的价格照它显示。 */
+const rows = computed<ListRow[]>(() => {
+  const group = activeGroup.value;
+  if (!group) return [];
+  return group.items.flatMap((price): ListRow[] => {
+    const view = priceRowView(price);
+    const mapped = (group.mappings ?? []).filter((m) => m.targetId === price.id);
+    return [
+      { type: 'price', key: `p:${price.id}`, view },
+      ...mapped.map((mapping): ListRow => ({ type: 'mapping', key: `m:${mapping.id}`, mapping, view })),
+    ];
+  });
+});
 
 /** 选中的厂家还在就不动；不在了（搜没了，或者这家的模型删光了）换到第一家。 */
 function ensureSelection(): void {
@@ -332,9 +360,12 @@ async function onSubmit(draft: RateDraft): Promise<void> {
 }
 
 async function onDelete(price: ModelPriceRow): Promise<void> {
+  const mapped = allMappings.value.filter((m) => m.targetId === price.id).map((m) => m.modelKey);
   const okp = await confirmDanger({
     title: '删除牌价',
-    message: `删除「${price.modelKey}」？删除后各产品取不到这个模型的牌价。`,
+    message:
+      `删除「${price.modelKey}」？删除后各产品取不到这个模型的牌价。` +
+      (mapped.length > 0 ? `映射到它的 ${mapped.join('、')} 一起删掉。` : ''),
     confirmText: '删除',
   });
   if (!okp) return;
@@ -347,41 +378,64 @@ async function onDelete(price: ModelPriceRow): Promise<void> {
   await reload();
 }
 
-// ---- 别名 -------------------------------------------------------------------------
+// ---- 映射 -------------------------------------------------------------------------
 
-/**
- * 渠道里对这个模型的别的叫法（目录里是 gemini-3.1-pro-preview，有的渠道叫 gemini-3.1-pro）。
- * 号池后台认别名才摆——行上带着 `aliases` 这个字段；不带的时候按钮和「也叫」都不出现。
- */
-const aliasOpen = ref(false);
-const aliasTarget = ref<ModelPriceRow | null>(null);
-const aliasDraft = ref<string[]>([]);
-const aliasSaving = ref(false);
-/** 打开就能直接敲，不用先点一下框。 */
-const aliasInput = ref<{ focus: () => void } | null>(null);
-
-function openAliases(price: ModelPriceRow): void {
-  aliasTarget.value = price;
-  aliasDraft.value = [...(price.aliases ?? [])];
-  aliasOpen.value = true;
+/** 新建模型时选了「映射模型」、建好了。 */
+async function onMapped(result: PriceMappingWriteResult): Promise<void> {
+  // 新建的映射不一定对得上正在搜的词：清掉搜索，不然建完看不见它
+  keyword.value = '';
+  reportWrite(`已映射 ${result.mapping.modelKey} → ${result.mapping.targetKey}`, result.publish);
+  await reload();
 }
 
-async function saveAliases(): Promise<void> {
-  const target = aliasTarget.value;
-  if (!target) return;
-  aliasSaving.value = true;
+/** 改一个映射按哪一行出价：只换指向，名字不动（名字要改就删了重建）。 */
+const mappingOpen = ref(false);
+const mappingEditing = ref<PriceMapping | null>(null);
+const mappingTarget = ref('');
+const mappingSaving = ref(false);
+
+const mappingTargets = computed(() =>
+  [...(activeGroup.value?.items ?? [])].sort((a, b) => a.modelKey.localeCompare(b.modelKey)),
+);
+
+function openMapping(mapping: PriceMapping): void {
+  mappingEditing.value = mapping;
+  mappingTarget.value = mapping.targetId;
+  mappingOpen.value = true;
+}
+
+async function saveMapping(): Promise<void> {
+  const editingMapping = mappingEditing.value;
+  if (!editingMapping) return;
+  mappingSaving.value = true;
   try {
-    const r = await port.setAliases(target.id, aliasDraft.value);
+    const r = await port.saveMapping({ id: editingMapping.id, targetId: mappingTarget.value });
     if (!r.success) {
       ElMessage.error(failureText(r.error));
       return;
     }
-    aliasOpen.value = false;
-    reportWrite(`已保存 ${target.modelKey} 的别名`, r.data.publish);
+    mappingOpen.value = false;
+    reportWrite(`已映射 ${r.data.mapping.modelKey} → ${r.data.mapping.targetKey}`, r.data.publish);
     await reload();
   } finally {
-    aliasSaving.value = false;
+    mappingSaving.value = false;
   }
+}
+
+async function onDeleteMapping(mapping: PriceMapping): Promise<void> {
+  const okp = await confirmDanger({
+    title: '删除映射',
+    message: `删除「${mapping.modelKey}」？删除后它不再按 ${mapping.targetKey} 的价出价。`,
+    confirmText: '删除',
+  });
+  if (!okp) return;
+  const r = await port.removeMapping(mapping.id);
+  if (!r.success) {
+    ElMessage.error(failureText(r.error));
+    return;
+  }
+  reportWrite(`已删除 ${mapping.modelKey}`, r.data.publish);
+  await reload();
 }
 
 // ---- 上游同步 ---------------------------------------------------------------------
@@ -475,7 +529,7 @@ onBeforeUnmount(() => search.cancel());
           <MakerMark :maker="g.maker" />
           <span class="maker-item__body">
             <span class="maker-item__name">{{ makerLabel(g.maker) }}</span>
-            <span class="maker-item__meta">{{ g.items.length }} 个模型</span>
+            <span class="maker-item__meta">{{ modelCount(g) }} 个模型</span>
           </span>
         </button>
         <p
@@ -547,7 +601,7 @@ onBeforeUnmount(() => search.cancel());
               {{ makerLabel(activeGroup!.maker) }}
             </h2>
             <p class="detail-sub">
-              {{ activeGroup!.items.length }} 个模型 · 美元牌价
+              {{ modelCount(activeGroup!) }} 个模型 · 美元牌价
             </p>
           </div>
         </div>
@@ -591,42 +645,42 @@ onBeforeUnmount(() => search.cancel());
         <!-- 行按行号认：同一个模型可能有两行（干净名的，和一行导入进来、带日期钉的旧键） -->
         <article
           v-for="row in rows"
-          :key="row.price.id"
+          :key="row.key"
           class="price-row"
+          :class="{ 'price-row--mapping': row.type === 'mapping' }"
         >
           <div class="price-row__id">
             <div class="price-row__name">
-              {{ row.price.modelKey }}
+              {{ row.type === 'mapping' ? row.mapping.modelKey : row.view.price.modelKey }}
             </div>
             <div
-              v-if="row.price.aliases?.length"
-              class="price-row__aliases"
-              :title="row.price.aliases.join('\n')"
-            >
-              也叫 {{ row.price.aliases.join('、') }}
-            </div>
-            <div
-              v-if="row.hint"
+              v-if="row.type === 'mapping'"
               class="price-row__hint"
-              :title="hintTitle(row.price)"
             >
-              {{ row.hint }}
+              映射到 {{ row.mapping.targetKey }}
+            </div>
+            <div
+              v-else-if="row.view.hint"
+              class="price-row__hint"
+              :title="hintTitle(row.view.price)"
+            >
+              {{ row.view.hint }}
             </div>
           </div>
           <div class="price-row__type">
             <ModelKindMark
-              v-if="row.kind"
-              :kind="row.kind"
+              v-if="row.view.kind"
+              :kind="row.view.kind"
             />
             <span
               v-else
               class="price-row__raw"
-            >{{ row.price.billingType }}</span>
+            >{{ row.view.price.billingType }}</span>
           </div>
           <div class="price-row__price">
             <PriceCells
-              v-if="row.cells"
-              :model="row.cells"
+              v-if="row.view.cells"
+              :model="row.view.cells"
             />
             <!-- 认不出的价照样列出来：要看得见、删得掉，只是这里改不了 -->
             <span
@@ -635,29 +689,40 @@ onBeforeUnmount(() => search.cancel());
             >这种价格这里还认不出</span>
           </div>
           <div
-            v-if="canWrite"
+            v-if="canWrite && row.type === 'mapping'"
             class="price-row__ops"
           >
             <el-button
-              v-if="row.body"
               :icon="Edit"
               link
               title="编辑"
-              @click="openEdit(row)"
-            />
-            <el-button
-              v-if="row.price.aliases !== undefined"
-              :icon="CollectionTag"
-              link
-              title="别名"
-              @click="openAliases(row.price)"
+              @click="openMapping(row.mapping)"
             />
             <el-button
               :icon="Delete"
               link
               type="danger"
               title="删除"
-              @click="onDelete(row.price)"
+              @click="onDeleteMapping(row.mapping)"
+            />
+          </div>
+          <div
+            v-else-if="canWrite"
+            class="price-row__ops"
+          >
+            <el-button
+              v-if="row.view.body"
+              :icon="Edit"
+              link
+              title="编辑"
+              @click="openEdit(row.view)"
+            />
+            <el-button
+              :icon="Delete"
+              link
+              type="danger"
+              title="删除"
+              @click="onDelete(row.view.price)"
             />
           </div>
         </article>
@@ -673,7 +738,11 @@ onBeforeUnmount(() => search.cancel());
     <PriceModelCreateDialog
       v-model="createOpen"
       :maker="selectedMaker ?? ''"
+      :models="activeGroup?.items ?? []"
+      :mappings="allMappings"
+      :can-map="canMap"
       @next="onNewModel"
+      @mapped="onMapped"
     />
 
     <RateEditDialog
@@ -714,27 +783,32 @@ onBeforeUnmount(() => search.cancel());
     </el-dialog>
 
     <el-dialog
-      v-model="aliasOpen"
-      :title="`别名 · ${aliasTarget?.modelKey ?? ''}`"
-      width="460px"
+      v-model="mappingOpen"
+      :title="`映射 · ${mappingEditing?.modelKey ?? ''}`"
+      width="420px"
       :close-on-click-modal="false"
-      @opened="aliasInput?.focus()"
     >
-      <el-input-tag
-        ref="aliasInput"
-        v-model="aliasDraft"
-        placeholder="渠道里的叫法，输入后回车"
-        clearable
-        save-on-blur
-      />
+      <el-select
+        v-model="mappingTarget"
+        class="mapping-target"
+        placeholder="映射到"
+        filterable
+      >
+        <el-option
+          v-for="m in mappingTargets"
+          :key="m.id"
+          :label="m.modelKey"
+          :value="m.id"
+        />
+      </el-select>
       <template #footer>
-        <el-button @click="aliasOpen = false">
+        <el-button @click="mappingOpen = false">
           取消
         </el-button>
         <el-button
           type="primary"
-          :loading="aliasSaving"
-          @click="saveAliases"
+          :loading="mappingSaving"
+          @click="saveMapping"
         >
           保存
         </el-button>
@@ -896,13 +970,13 @@ onBeforeUnmount(() => search.cancel());
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.price-row__aliases {
-  margin-top: 3px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* 映射的价格是它指的那一行的：淡一点，一眼看得出不是它自己定的 */
+.price-row--mapping .price-row__type,
+.price-row--mapping .price-row__price {
+  opacity: 0.6;
+}
+.mapping-target {
+  width: 100%;
 }
 .price-row__hint {
   margin-top: 3px;

@@ -134,7 +134,8 @@ describe('model ratecard page', () => {
       'tts-1',
       'whisper-1',
     ]);
-    expect(wrapper.find('.maker-sidebar__foot').text()).toContain('19 个模型');
+    // 19 行牌价加 1 个映射（映射也算一个模型）
+    expect(wrapper.find('.maker-sidebar__foot').text()).toContain('20 个模型');
     expectSilentAboutPublishing();
     // 页头上只有一个动作：没有「发布」，也没有「导入」
     expect(
@@ -235,7 +236,7 @@ describe('model ratecard page', () => {
     await settle();
 
     // 表里已经有的名字（哪怕换了一种写法）不让建
-    const name = dialog().querySelector<HTMLInputElement>('input')!;
+    const name = dialog().querySelector<HTMLInputElement>('.el-input input')!;
     name.value = 'anthropic/claude-sonnet-4.6';
     name.dispatchEvent(new Event('input'));
     dialogButton('下一步').click();

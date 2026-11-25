@@ -44,21 +44,32 @@ export const modelPriceRowSchema = z.object({
   sourceRef: nullable(z.string()),
   fetchedAtUtc: nullable(epochMillisSchema),
   effectiveFromUtc: epochMillisSchema,
-  /**
-   * 别名：渠道里对这个模型的别的叫法。牌价是照厂家目录录的，渠道不一定这么叫——目录里是 gemini-3.1-pro-preview，
-   * 有的渠道叫它 gemini-3.1-pro；名字比键长的（键后面接 `-…`）本来就对得上，比键短、或者干脆是另一个名字的对不上，就靠别名。
-   * 小写、不带渠道前缀。各产品对牌价时别名和键一样用：相等、键后面接 `-…`、去掉横线点号以后相等都算；几个都对得上取最长的。
-   *
-   * 号池后台每一行都回这个字段（没有别名是空数组），发布出去的文档也带（OneApi.Common 的 PublishedModelPrice），悠米和 Jastalk 对牌价时认它。
-   * 没有这个字段（undefined）= 连着的号池后台是加别名之前的版本：页面不摆、不让设，免得设了后台不认、保存「成功」了却没用。
-   */
-  aliases: z.array(z.string()).optional(),
 });
 export type ModelPriceRow = z.infer<typeof modelPriceRowSchema>;
+
+/**
+ * 映射：一个模型名按价格表里的另一行出价。牌价是照厂家目录录的，渠道不一定这么叫——目录里是 gemini-3.1-pro-preview，
+ * 有的渠道叫它 gemini-3.1-pro；名字比键长的（键后面接 `-…`）本来就对得上，比键短、或者干脆是另一个名字的对不上，就建一个映射。
+ * 映射自己没有价，跟着它指的那一行走；那一行删了它一起删。发布出去时它带在那一行上，悠米和 Jastalk 对牌价时认它。
+ */
+export const priceMappingSchema = z.object({
+  id: z.string().min(1),
+  /** 这个模型名（小写，渠道里的叫法原样，不剥前缀）。 */
+  modelKey: z.string().min(1),
+  /** 按哪一行出价（那一行的行号）。 */
+  targetId: z.string().min(1),
+  targetKey: z.string().min(1),
+});
+export type PriceMapping = z.infer<typeof priceMappingSchema>;
 
 export const priceMakerGroupSchema = z.object({
   maker: z.string().min(1),
   items: z.array(modelPriceRowSchema),
+  /**
+   * 映射到这一组各行的模型名（映射跟着它指的那一行归厂家）。
+   * 没有这个字段 = 连着的号池后台是有映射之前的版本：页面不让建映射，免得点了才发现后台没有这个接口。
+   */
+  mappings: z.array(priceMappingSchema).optional(),
 });
 export type PriceMakerGroup = z.infer<typeof priceMakerGroupSchema>;
 
@@ -115,6 +126,15 @@ export const priceDeleteResultSchema = z.object({
   publish: pricePublishResultSchema,
 });
 export type PriceDeleteResult = z.infer<typeof priceDeleteResultSchema>;
+
+export const priceMappingWriteResultSchema = z.object({
+  mapping: priceMappingSchema,
+  publish: pricePublishResultSchema,
+});
+export type PriceMappingWriteResult = z.infer<typeof priceMappingWriteResultSchema>;
+
+/** 建映射给名字；改映射给 `id`（名字不动，只换按哪一行出价）。 */
+export type SaveMappingInput = { id: string; targetId: string } | { modelKey: string; targetId: string };
 
 // ---------- 写一行 ----------
 

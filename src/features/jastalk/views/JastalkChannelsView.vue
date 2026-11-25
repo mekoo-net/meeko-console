@@ -205,7 +205,7 @@ function previewPoints(row: UpstreamModel): string {
 
 /**
  * 牌价里有它、而且折得成要接成的这一类的单位。有的接进来直接开放；没有的接进来先不开放——用户选了也没有价可扣，
- * 等牌价上给它设了别名、或者单独定了价，再在「编辑」里打开（2026-11-21 用户：「模型默认就是打开，除非没有牌价」）。
+ * 等模型价格页上把它映射到一行牌价、或者单独定了价，再在「编辑」里打开（2026-11-21 用户：「模型默认就是打开，除非没有牌价」）。
  */
 function hasListPrice(m: UpstreamModel): boolean {
   return m.listPrice !== null && m.listPrice.convertible;

@@ -3,7 +3,7 @@
  * 不连后端也能把这一页整套点一遍。刷新页面回到种子数据。种子和规矩借自号池管理台原来的那份 mock。
  *
  * 和号池后台一样的地方：带行号是改那一行（键不动、行号不存在是没找到），不带行号才按干净名录入；
- * 同步先整批验完再动表；每个写操作带发布结果；
+ * 同步先整批验完再动表；每个写操作带发布结果；映射（一个模型名按另一行出价）跟着它指的那一行发布、那一行删了一起删；
  * 发布是拿表里的和「发布着的那一份」比，不一样的才写。
  * 简化的地方：厂家只按模型键猜，rate 只按那七种形状查。
  *
@@ -35,10 +35,13 @@ import {
   type PriceFetchItem,
   type PriceFetchResult,
   type PriceMakerGroup,
+  type PriceMapping,
+  type PriceMappingWriteResult,
   type PricePublishFailure,
   type PricePublishResult,
   type PriceWriteResult,
   type RateJson,
+  type SaveMappingInput,
   type UpsertPriceInput,
 } from '../../model/ratecard.types';
 import { VAULT_REJECTED } from '../../model/ratecard';
@@ -63,7 +66,6 @@ interface Seed {
   modelKey: string;
   body: PriceBody;
   capabilities?: ModelCapabilities;
-  aliases?: string[];
   inTable?: boolean;
   upstream?: PriceBody | null;
 }
@@ -202,13 +204,12 @@ const SEEDS: readonly Seed[] = [
     body: perToken(1.25, 10, { cachedRead: 0.125 }),
     capabilities: LLM,
   },
-  // 目录里是带 -preview 的名字，有的渠道叫它不带的：设了别名才对得上
+  // 目录里是带 -preview 的名字，有的渠道叫它不带的：建了映射才对得上（见下面的 SEED_MAPPINGS）
   {
     maker: 'google',
     modelKey: 'gemini-3.1-pro-preview',
     body: perToken(2, 12, { cachedRead: 0.2 }),
     capabilities: LLM,
-    aliases: ['gemini-3.1-pro'],
   },
   {
     maker: 'google',
@@ -252,6 +253,11 @@ const SEEDS: readonly Seed[] = [
   },
 ];
 
+/** 种子里的映射：名字 → 按哪一行（的键）出价。 */
+const SEED_MAPPINGS: readonly { modelKey: string; target: string }[] = [
+  { modelKey: 'gemini-3.1-pro', target: 'gemini-3.1-pro-preview' },
+];
+
 // ---------- 内存里的那张表 ----------
 
 function clone<T>(v: T): T {
@@ -261,13 +267,22 @@ function clone<T>(v: T): T {
 interface MockState {
   rows: ModelPriceRow[];
   nextId: number;
+  mappings: PriceMapping[];
   /** 发布着的那一份：厂家 → 这一家的行（序列化以后的），发布就是拿表里的和它比。 */
   published: Map<string, string>;
   /** 这份表登记的主人是不是别的库。是的话发布一律不写，直到接管。 */
   ownedByOther: boolean;
 }
 
-function makerDocument(rows: readonly ModelPriceRow[], maker: string): string | null {
+/** 映射到这一行的模型名。 */
+function mappedNames(mappings: readonly PriceMapping[], rowId: string): string[] {
+  return mappings
+    .filter((m) => m.targetId === rowId)
+    .map((m) => m.modelKey)
+    .sort();
+}
+
+function makerDocument(rows: readonly ModelPriceRow[], mappings: readonly PriceMapping[], maker: string): string | null {
   const items = rows
     .filter((r) => r.maker === maker)
     .sort((a, b) => a.modelKey.localeCompare(b.modelKey))
@@ -276,8 +291,8 @@ function makerDocument(rows: readonly ModelPriceRow[], maker: string): string | 
       billingType: r.billingType,
       rate: r.rate,
       capabilities: r.capabilities,
-      // 别名也发布出去：各产品对牌价时要认它，改了别名发布出去的那一份就得变
-      aliases: r.aliases ?? [],
+      // 映射跟着它指的那一行发布出去：各产品对牌价时要认它，建、删、改映射发布出去的那一份就得变
+      aliases: mappedNames(mappings, r.id),
     }));
   return items.length > 0 ? JSON.stringify(items) : null;
 }
@@ -300,15 +315,19 @@ function seedState(): MockState {
       sourceRef: official ? `${s.maker}/${s.modelKey}` : null,
       fetchedAtUtc: official ? at : null,
       effectiveFromUtc: at,
-      aliases: [...(s.aliases ?? [])],
     };
+  });
+
+  const mappings = SEED_MAPPINGS.map((m): PriceMapping => {
+    const target = rows.find((r) => r.modelKey === m.target)!;
+    return { id: `m${nextId++}`, modelKey: m.modelKey, targetId: target.id, targetKey: target.modelKey };
   });
 
   const published = new Map<string, string>();
   for (const maker of new Set(rows.map((r) => r.maker)))
-    published.set(maker, makerDocument(rows, maker)!);
+    published.set(maker, makerDocument(rows, mappings, maker)!);
 
-  return { rows, nextId, published, ownedByOther: false };
+  return { rows, nextId, mappings, published, ownedByOther: false };
 }
 
 let state: MockState = seedState();
@@ -327,18 +346,20 @@ const rejected = (code: 'validation' | 'not_found', generic: string, said: strin
 const invalid = (message: string): AppFail => rejected('validation', '提交的内容有误', message);
 const notFound = (message: string): AppFail => rejected('not_found', '没有找到', message);
 
-/** 一行的键和别名。 */
-const namesOf = (r: ModelPriceRow): string[] => [r.modelKey, ...(r.aliases ?? [])];
+const sameName = (a: string, b: string): boolean => a === b || (compactModelKey(a) !== '' && compactModelKey(a) === compactModelKey(b));
 
-/**
- * 表里和这个名字是同一个模型的那一行：键或者别名全等，或者去掉横线点号以后相等（claude-opus-4.8 对 claude-opus-4-8）。
- * 别名也算：新建一个名字正好是别人别名的模型，那是同一个模型，不该多出一行。
- */
+/** 表里和这个名字是同一个模型的那一行：键全等，或者去掉横线点号以后相等（claude-opus-4.8 对 claude-opus-4-8）。 */
 function findByKey(key: string): ModelPriceRow | undefined {
-  const exact = state.rows.find((r) => namesOf(r).includes(key));
-  if (exact) return exact;
-  const compact = compactModelKey(key);
-  return compact ? state.rows.find((r) => namesOf(r).some((n) => compactModelKey(n) === compact)) : undefined;
+  return state.rows.find((r) => r.modelKey === key) ?? state.rows.find((r) => sameName(r.modelKey, key));
+}
+
+/** 这个名字（或它换一种写法）是哪个映射的名字。 */
+const findMapping = (name: string): PriceMapping | undefined => state.mappings.find((m) => sameName(m.modelKey, name));
+
+/** 要新加一行牌价的名字已经映射到别处：拒掉，照号池后台。 */
+function mappedProblem(modelKey: string): AppFail | null {
+  const m = findMapping(modelKey);
+  return m ? invalid(`${modelKey}: is mapped to ${m.targetKey}; delete the mapping first.`) : null;
 }
 
 /** 照那七种形状查 rate；不过回一句话，过了回 null。 */
@@ -380,8 +401,6 @@ function write(
     currency: 'USD',
     // 改价不带能力时留着这一行原来的
     capabilities: input.capabilities ?? target?.capabilities ?? null,
-    // 改价、同步都不碰别名
-    aliases: [...(target?.aliases ?? [])],
     source: input.source?.trim().toLowerCase() || 'manual',
     sourceRef: input.sourceRef?.trim() || null,
     fetchedAtUtc: input.fetchedAtUtc ?? null,
@@ -425,7 +444,7 @@ function publishMakers(makers: Iterable<string>): PricePublishResult {
       result.failures.push({ maker, error: 'mock：模拟这个厂家发布失败。' });
       continue;
     }
-    const doc = makerDocument(state.rows, maker);
+    const doc = makerDocument(state.rows, state.mappings, maker);
     if (doc === null) {
       if (state.published.delete(maker)) result.deleted.push(maker);
     } else if (state.published.get(maker) === doc) {
@@ -454,10 +473,12 @@ export class OneApiRatecardMock implements OneApiRatecardPort {
     const keyword = input.keyword.trim().toLowerCase();
     const byMaker = new Map<string, ModelPriceRow[]>();
     for (const row of state.rows) {
+      // 搜映射的名字时，它指的那一行也列出来：映射的价格照那一行显示
       if (
         keyword &&
-        !namesOf(row).some((n) => n.includes(keyword)) &&
-        !row.sourceRef?.toLowerCase().includes(keyword)
+        !row.modelKey.includes(keyword) &&
+        !row.sourceRef?.toLowerCase().includes(keyword) &&
+        !mappedNames(state.mappings, row.id).some((n) => n.includes(keyword))
       )
         continue;
       const list = byMaker.get(row.maker) ?? [];
@@ -467,10 +488,17 @@ export class OneApiRatecardMock implements OneApiRatecardPort {
     return ok(
       [...byMaker.entries()]
         .sort(([a], [b]) => compareMakers(a, b))
-        .map(([maker, items]) => ({
-          maker,
-          items: items.sort((a, b) => a.modelKey.localeCompare(b.modelKey)),
-        })),
+        .map(([maker, items]) => {
+          const ids = new Set(items.map((r) => r.id));
+          return {
+            maker,
+            items: items.sort((a, b) => a.modelKey.localeCompare(b.modelKey)),
+            mappings: state.mappings
+              .filter((m) => ids.has(m.targetId))
+              .map((m) => ({ ...m }))
+              .sort((a, b) => a.modelKey.localeCompare(b.modelKey)),
+          };
+        }),
     );
   }
 
@@ -495,6 +523,10 @@ export class OneApiRatecardMock implements OneApiRatecardPort {
       modelKey = canonicalizeModelKey(input.modelKey);
       if (!modelKey) return invalid('模型名不能为空');
       target = findByKey(modelKey);
+      if (!target) {
+        const mapped = mappedProblem(modelKey);
+        if (mapped) return mapped;
+      }
     }
     const problem = rateProblem(input.billingType, input.rate);
     if (problem) return invalid(problem);
@@ -514,32 +546,52 @@ export class OneApiRatecardMock implements OneApiRatecardPort {
     return ok({ price: clone(row), publish: publishMakers(touched) });
   }
 
-  async setAliases(id: string, aliases: string[]): Promise<AppResult<PriceWriteResult>> {
-    await delay();
-    const row = state.rows.find((r) => r.id === id);
-    if (!row) return notFound(`没有行号是 ${id} 的牌价`);
-
-    // 照号池后台将来的规矩：收成小写、去掉空的和重复的；不能带空白；不能是自己的键；不能和别的行的键、别名撞
-    const wanted = [...new Set(aliases.map((a) => a.trim().toLowerCase()).filter(Boolean))];
-    for (const alias of wanted) {
-      if (/\s/.test(alias)) return invalid(`别名「${alias}」里不能有空格`);
-      if (compactModelKey(alias) === compactModelKey(row.modelKey)) return invalid(`「${alias}」就是这个模型自己的名字`);
-      const other = state.rows.find(
-        (r) => r.id !== row.id && namesOf(r).some((n) => n === alias || compactModelKey(n) === compactModelKey(alias)),
-      );
-      if (other) return invalid(`「${alias}」已经是 ${other.modelKey} 的名字`);
-    }
-
-    row.aliases = wanted;
-    return ok({ price: clone(row), publish: publishMakers([row.maker]) });
-  }
-
   async remove(id: string): Promise<AppResult<PriceDeleteResult>> {
     await delay();
     const row = state.rows.find((r) => r.id === id);
     if (!row) return notFound(`没有行号是 ${id} 的牌价`);
     state.rows = state.rows.filter((r) => r !== row);
+    // 映射到它的一起删：映射自己没有价
+    state.mappings = state.mappings.filter((m) => m.targetId !== id);
     return ok({ id, publish: publishMakers([row.maker]) });
+  }
+
+  async saveMapping(input: SaveMappingInput): Promise<AppResult<PriceMappingWriteResult>> {
+    await delay();
+    const target = state.rows.find((r) => r.id === input.targetId);
+    if (!target) return notFound(`没有行号是 ${input.targetId} 的牌价`);
+    const touched = new Set([target.maker]);
+
+    let mapping: PriceMapping;
+    if ('id' in input) {
+      const found = state.mappings.find((m) => m.id === input.id);
+      if (!found) return notFound(`没有这个映射：${input.id}`);
+      const old = state.rows.find((r) => r.id === found.targetId);
+      if (old) touched.add(old.maker);
+      mapping = { ...found, targetId: target.id, targetKey: target.modelKey };
+      state.mappings = state.mappings.map((m) => (m.id === found.id ? mapping : m));
+    } else {
+      // 照号池后台：小写、去首尾空白；不能带空白；已经是一行牌价、或者已经映射到别处的拒掉
+      const name = input.modelKey.trim().toLowerCase();
+      if (!name) return invalid('model_key is required.');
+      if (/\s/.test(name)) return invalid(`'${name}' must not contain spaces.`);
+      const priced = findByKey(name);
+      if (priced) return invalid(`'${name}' is already in the ratecard as ${priced.modelKey}.`);
+      const taken = findMapping(name);
+      if (taken) return invalid(`'${name}' is already mapped to ${taken.targetKey}.`);
+      mapping = { id: `m${state.nextId++}`, modelKey: name, targetId: target.id, targetKey: target.modelKey };
+      state.mappings = [...state.mappings, mapping];
+    }
+    return ok({ mapping: { ...mapping }, publish: publishMakers(touched) });
+  }
+
+  async removeMapping(id: string): Promise<AppResult<PriceDeleteResult>> {
+    await delay();
+    const mapping = state.mappings.find((m) => m.id === id);
+    if (!mapping) return notFound(`没有这个映射：${id}`);
+    state.mappings = state.mappings.filter((m) => m !== mapping);
+    const target = state.rows.find((r) => r.id === mapping.targetId);
+    return ok({ id, publish: publishMakers(target ? [target.maker] : []) });
   }
 
   async fetchCandidates(input: { maker: string | null }): Promise<AppResult<PriceFetchResult>> {
@@ -604,6 +656,8 @@ export class OneApiRatecardMock implements OneApiRatecardPort {
       if (problem) return invalid(`${modelKey}：${problem}`);
       if (seen.has(modelKey)) return invalid(`${modelKey}：这一批里重复了`);
       seen.add(modelKey);
+      const mapped = findByKey(modelKey) ? null : mappedProblem(modelKey);
+      if (mapped) return mapped;
       inputs.push({
         modelKey,
         maker: normalizeMaker(item.maker, modelKey),
