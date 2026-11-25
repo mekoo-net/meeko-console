@@ -100,10 +100,11 @@ export class OneApiRatecardHttpAdapter implements OneApiRatecardPort {
     return res.success ? parse(priceFetchResultSchema, res.data, '上游同步') : res;
   }
 
-  async applyCandidates(items: ApplyPriceItem[]): Promise<AppResult<PriceApplyResult>> {
+  async applyCandidates(items: ApplyPriceItem[], removeIds: string[] = []): Promise<AppResult<PriceApplyResult>> {
     const res = await request<unknown>(`${VAULT_RATECARD_BASE}/sync/apply`, {
       method: 'POST',
-      body: { items, reason: '管理端上游同步' },
+      // 删上游已经不列的行：只给行号，号池后台自己再查一遍是不是手动的、有没有映射
+      body: { items, ...(removeIds.length > 0 ? { removeIds } : {}), reason: '管理端上游同步' },
     });
     return res.success ? parse(priceApplyResultSchema, res.data, '套用牌价') : res;
   }

@@ -134,9 +134,12 @@ const SOURCE_LABEL: Readonly<Record<string, string>> = {
   newapi: 'NewAPI',
 };
 
-/** 只标外部目录来的；手工录的价没有「来源」可说，回空串。 */
+/**
+ * 价格从哪来：外部目录同步的写目录名，人录的（和拉下来以后人改过的，号池后台改过就记成 manual）写「手动」。
+ * 同步删上游已经不列的模型时只删前一种，所以每一行都得看得出是哪种。
+ */
 export function priceSourceLabel(source: string): string {
-  return SOURCE_LABEL[source] ?? '';
+  return source === 'manual' ? '手动' : (SOURCE_LABEL[source] ?? source);
 }
 
 export interface PriceRowView {
@@ -145,8 +148,12 @@ export interface PriceRowView {
   body: RateBody | null;
   kind: PriceModelKind | null;
   cells: Pick<PriceDisplay, 'kind' | 'columns' | 'compact'> | null;
-  /** 模型名下面那一行小字：时长约束、价格列里没有的档、来源。 */
+  /** 模型名下面那一行小字：时长约束、价格列里没有的档。 */
   hint: string;
+  /** 来源（{@link priceSourceLabel}），和小字分开摆成一个标。 */
+  source: string;
+  /** 人录的、人改过的：同步不会删它。 */
+  manual: boolean;
 }
 
 export function priceRowView(price: ModelPriceRow): PriceRowView {
@@ -154,10 +161,16 @@ export function priceRowView(price: ModelPriceRow): PriceRowView {
   const display = body
     ? rateBodyDisplay(body, isEmbeddingRow(price), MODEL_PRICE_CURRENCY, true)
     : null;
-  const hint = [display?.note, ...extraPriceParts(price), priceSourceLabel(price.source)]
-    .filter(Boolean)
-    .join(' · ');
-  return { price, body, kind: display?.kind ?? null, cells: display, hint };
+  const hint = [display?.note, ...extraPriceParts(price)].filter(Boolean).join(' · ');
+  return {
+    price,
+    body,
+    kind: display?.kind ?? null,
+    cells: display,
+    hint,
+    source: priceSourceLabel(price.source),
+    manual: price.source === 'manual',
+  };
 }
 
 const KIND_UNIT: Readonly<Record<PriceModelKind, string>> = {

@@ -195,10 +195,22 @@ export const priceFetchItemSchema = z.object({
 });
 export type PriceFetchItem = z.infer<typeof priceFetchItemSchema>;
 
+/**
+ * 上游已经不列的一行：来源是那个目录、这次那个目录拉成了却没有它。手动的行不会出现在这里。
+ * `mappedBy` 不空的（有映射指向它）号池后台不删，只列出来让人知道。
+ */
+export const priceGoneItemSchema = z.object({
+  current: modelPriceRowSchema,
+  mappedBy: z.array(z.string()),
+});
+export type PriceGoneItem = z.infer<typeof priceGoneItemSchema>;
+
 /** `POST sync/fetch`：只读，拉候选、和表里的对比，不写库也不发布。 */
 export const priceFetchResultSchema = z.object({
   sources: z.array(priceSourceStatusSchema),
   items: z.array(priceFetchItemSchema),
+  /** 没有这一项 = 号池后台是能删上游已删的模型之前的版本。 */
+  gone: z.array(priceGoneItemSchema).optional(),
   fetchedAtUtc: epochMillisSchema,
 });
 export type PriceFetchResult = z.infer<typeof priceFetchResultSchema>;
@@ -218,6 +230,8 @@ export interface ApplyPriceItem {
 export const priceApplyResultSchema = z.object({
   added: z.number().int(),
   updated: z.number().int(),
+  /** 删了几行上游已经不列的；号池后台旧版本不回，当 0。 */
+  removed: z.number().int().optional(),
   publish: pricePublishResultSchema,
 });
 export type PriceApplyResult = z.infer<typeof priceApplyResultSchema>;

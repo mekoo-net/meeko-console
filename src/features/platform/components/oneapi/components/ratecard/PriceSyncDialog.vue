@@ -3,6 +3,9 @@
  * 上游同步：打开就拉 models.dev 的候选价（只读），和表里现有的列成一张对比表；勾上的行才写进表里。
  * 牌价进账单之前必须有人看过，所以没有「拉下来直接盖」这条路。
  * 一个模型有多条候选时用号池后台排在最前的那条。
+ *
+ * 上游已经不列的模型也在这张表里（「上游已删」），勾上套用就删掉。只会出现从那个目录同步来的行：
+ * 手动的（人录的、拉下来以后人改过的）上游有没有它都不删；有映射指向的列出来但不能勾——映射是人建的。
  */
 import { computed, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
@@ -10,8 +13,8 @@ import { Loading, Refresh } from '@element-plus/icons-vue';
 
 import { makerLabel } from '@yomi/common';
 
-import { applyItems, defaultPicked, failureText, syncRows, type SyncRow } from '../../model/ratecard';
-import type { PriceApplyResult, PriceFetchResult } from '../../model/ratecard.types';
+import { applyItems, defaultPicked, failureText, priceSummary, syncRows, type SyncRow } from '../../model/ratecard';
+import type { PriceApplyResult, PriceFetchResult, PriceGoneItem } from '../../model/ratecard.types';
 import { getOneApiRatecardPort } from '../../services';
 
 const props = withDefaults(
@@ -40,7 +43,7 @@ const title = computed(() => `上游同步 · ${props.maker ? makerLabel(props.m
 const fetching = ref(false);
 const fetchError = ref<string | null>(null);
 const result = ref<PriceFetchResult | null>(null);
-/** 勾上 = 用上游的价写这一行。 */
+/** 勾上 = 用上游的价写这一行（键是模型键），或者删掉上游已删的这一行（键是 `gone:行号`）。 */
 const picked = ref<Set<string>>(new Set());
 const filterMode = ref<'changed' | 'all'>('changed');
 const applying = ref(false);
@@ -53,32 +56,69 @@ const changedRows = computed(() => rows.value.filter((r) => r.status !== 'same')
 const visibleRows = computed(() => (filterMode.value === 'all' ? rows.value : changedRows.value));
 const visibleChanged = computed(() => visibleRows.value.filter((r) => r.status !== 'same'));
 
+interface GoneRow {
+  key: string;
+  gone: PriceGoneItem;
+  /** 有映射指向的不删。 */
+  removable: boolean;
+}
+
+/** 上游已删的行：也是差异，两种筛选下都列。 */
+const goneRows = computed<GoneRow[]>(() =>
+  (result.value?.gone ?? []).map((gone) => ({
+    key: `gone:${gone.current.id}`,
+    gone,
+    removable: gone.mappedBy.length === 0,
+  })),
+);
+
+/** 能勾的键：有差异的候选，和能删的上游已删。 */
+const pickableKeys = computed(() => [
+  ...visibleChanged.value.map((r) => r.item.modelKey),
+  ...goneRows.value.filter((g) => g.removable).map((g) => g.key),
+]);
+
 const failedSources = computed(() => (result.value?.sources ?? []).filter((s) => !s.ok));
 
 const pickedCount = computed(() => picked.value.size);
 
 const allVisiblePicked = computed(
-  () => visibleChanged.value.length > 0 && visibleChanged.value.every((r) => picked.value.has(r.item.modelKey)),
+  () => pickableKeys.value.length > 0 && pickableKeys.value.every((k) => picked.value.has(k)),
 );
 const someVisiblePicked = computed(
-  () => !allVisiblePicked.value && visibleChanged.value.some((r) => picked.value.has(r.item.modelKey)),
+  () => !allVisiblePicked.value && pickableKeys.value.some((k) => picked.value.has(k)),
 );
 
-function togglePick(row: SyncRow): void {
-  if (row.status === 'same' || applying.value) return;
+function toggleKey(key: string): void {
+  if (applying.value) return;
   const next = new Set(picked.value);
-  if (next.has(row.item.modelKey)) next.delete(row.item.modelKey);
-  else next.add(row.item.modelKey);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
   picked.value = next;
+}
+
+function togglePick(row: SyncRow): void {
+  if (row.status !== 'same') toggleKey(row.item.modelKey);
+}
+
+function toggleGone(row: GoneRow): void {
+  if (row.removable) toggleKey(row.key);
 }
 
 function toggleAllVisible(on: boolean): void {
   const next = new Set(picked.value);
-  for (const row of visibleChanged.value) {
-    if (on) next.add(row.item.modelKey);
-    else next.delete(row.item.modelKey);
+  for (const key of pickableKeys.value) {
+    if (on) next.add(key);
+    else next.delete(key);
   }
   picked.value = next;
+}
+
+/** 打开时默认勾上：有差异的、能删的上游已删都勾，不要的自己去掉。 */
+function initialPicks(data: PriceFetchResult): Set<string> {
+  const keys = defaultPicked(syncRows(data));
+  for (const gone of data.gone ?? []) if (gone.mappedBy.length === 0) keys.add(`gone:${gone.current.id}`);
+  return keys;
 }
 
 async function doFetch(): Promise<void> {
@@ -90,7 +130,7 @@ async function doFetch(): Promise<void> {
     if (mine !== fetchSeq) return;
     if (r.success) {
       result.value = r.data;
-      picked.value = defaultPicked(syncRows(r.data));
+      picked.value = initialPicks(r.data);
     } else {
       result.value = null;
       fetchError.value = failureText(r.error);
@@ -102,10 +142,11 @@ async function doFetch(): Promise<void> {
 
 async function doApply(): Promise<void> {
   const items = applyItems(rows.value, picked.value);
-  if (items.length === 0) return;
+  const removeIds = goneRows.value.filter((g) => g.removable && picked.value.has(g.key)).map((g) => g.gone.current.id);
+  if (items.length === 0 && removeIds.length === 0) return;
   applying.value = true;
   try {
-    const r = await port.applyCandidates(items);
+    const r = await port.applyCandidates(items, removeIds);
     if (!r.success) {
       ElMessage.error(failureText(r.error));
       return;
@@ -175,10 +216,10 @@ watch(
           size="small"
         >
           <el-radio-button value="changed">
-            有差异 {{ changedRows.length }}
+            有差异 {{ changedRows.length + goneRows.length }}
           </el-radio-button>
           <el-radio-button value="all">
-            全部 {{ rows.length }}
+            全部 {{ rows.length + goneRows.length }}
           </el-radio-button>
         </el-radio-group>
         <el-button
@@ -209,7 +250,7 @@ watch(
 
       <div class="diff-scroller">
         <table
-          v-if="visibleRows.length > 0"
+          v-if="visibleRows.length + goneRows.length > 0"
           class="diff-table"
         >
           <thead>
@@ -218,7 +259,7 @@ watch(
                 <el-checkbox
                   :model-value="allVisiblePicked"
                   :indeterminate="someVisiblePicked"
-                  :disabled="visibleChanged.length === 0 || applying"
+                  :disabled="pickableKeys.length === 0 || applying"
                   @change="toggleAllVisible($event as boolean)"
                 />
               </th>
@@ -281,6 +322,49 @@ watch(
               </td>
               <td class="col-price col-upstream">
                 {{ row.candidateText }}
+              </td>
+            </tr>
+            <tr
+              v-for="row in goneRows"
+              :key="row.key"
+              class="diff-row diff-row--gone"
+              :class="{
+                'diff-row--picked': picked.has(row.key),
+                'diff-row--same': !row.removable,
+              }"
+              @click="toggleGone(row)"
+            >
+              <td
+                class="col-check"
+                @click.stop
+              >
+                <el-checkbox
+                  :model-value="picked.has(row.key)"
+                  :disabled="!row.removable || applying"
+                  @change="toggleGone(row)"
+                />
+              </td>
+              <td
+                v-if="!maker"
+                class="col-maker"
+              >
+                {{ makerLabel(row.gone.current.maker) }}
+              </td>
+              <td class="col-key">
+                {{ row.gone.current.modelKey }}
+                <el-tag
+                  size="small"
+                  type="danger"
+                  effect="plain"
+                >
+                  上游已删
+                </el-tag>
+              </td>
+              <td class="col-price">
+                {{ priceSummary(row.gone.current) }}
+              </td>
+              <td class="col-note">
+                {{ row.removable ? '上游没有了，套用时删掉' : `有映射指向它（${row.gone.mappedBy.join('、')}），不删` }}
               </td>
             </tr>
           </tbody>
@@ -419,6 +503,13 @@ watch(
 }
 .diff-row--same .col-upstream {
   color: var(--el-text-color-secondary);
+}
+.col-note {
+  font-size: 12.5px;
+  color: var(--el-text-color-secondary);
+}
+.diff-row--gone.diff-row--picked .col-note {
+  color: var(--el-color-danger);
 }
 .diff-empty {
   padding: 24px;

@@ -161,15 +161,21 @@ describe('ratecard mappings: the page', () => {
 
   afterEach(() => wrapper?.unmount());
 
-  it('lists a mapping as its own row right after the model it maps to, with that price', async () => {
+  const target = (key: string) => rowOf(key).find('.price-row__follow code').text();
+
+  it('hangs a mapping under the model it maps to, marked 手动, without repeating the price', async () => {
     await openGoogle();
     const at = names().indexOf('gemini-3.1-pro-preview');
     expect(names()[at + 1]).toBe('gemini-3.1-pro');
     const mapping = rowOf('gemini-3.1-pro');
-    expect(mapping.find('.price-row__hint').text()).toBe('映射到 gemini-3.1-pro-preview');
-    expect(mapping.find('.price-row__price').text()).toBe(rowOf('gemini-3.1-pro-preview').find('.price-row__price').text());
+    expect(mapping.classes()).toContain('price-row--mapping');
+    expect(mapping.find('.price-row__follow').text()).toContain('映射到');
+    expect(target('gemini-3.1-pro')).toBe('gemini-3.1-pro-preview');
+    expect(mapping.find('.src-badge').text()).toBe('手动');
+    // 价格看它上面那一行，不再摆一遍
+    expect(mapping.find('.price-row__price').exists()).toBe(false);
     // 映射也算一个模型
-    expect(wrapper.find('.detail-sub').text()).toContain('5 个模型');
+    expect(wrapper.find('.detail-sub').text()).toContain('6 个模型');
   });
 
   it('creates a mapping from 新建模型, and changes what it maps to', async () => {
@@ -188,7 +194,7 @@ describe('ratecard mappings: the page', () => {
 
     const at = names().indexOf('gemini-2.5-pro');
     expect(names()[at + 1]).toBe('gemini-pro-x');
-    expect(rowOf('gemini-pro-x').find('.price-row__hint').text()).toBe('映射到 gemini-2.5-pro');
+    expect(target('gemini-pro-x')).toBe('gemini-2.5-pro');
 
     await rowOf('gemini-pro-x').find('.price-row__ops button[title="编辑"]').trigger('click');
     await settle();
@@ -196,7 +202,7 @@ describe('ratecard mappings: the page', () => {
     await pick('gemini-2.5-flash');
     dialogButton('保存').click();
     await settle();
-    expect(rowOf('gemini-pro-x').find('.price-row__hint').text()).toBe('映射到 gemini-2.5-flash');
+    expect(target('gemini-pro-x')).toBe('gemini-2.5-flash');
 
     await rowOf('gemini-pro-x').find('.price-row__ops button[title="删除"]').trigger('click');
     await settle();
@@ -219,7 +225,7 @@ describe('ratecard mappings: the page', () => {
   it('a reader sees mappings but cannot touch them', async () => {
     granted.delete('platform.settings.write');
     await openGoogle();
-    expect(rowOf('gemini-3.1-pro').find('.price-row__hint').text()).toBe('映射到 gemini-3.1-pro-preview');
+    expect(target('gemini-3.1-pro')).toBe('gemini-3.1-pro-preview');
     expect(rowOf('gemini-3.1-pro').find('.price-row__ops').exists()).toBe(false);
   });
 

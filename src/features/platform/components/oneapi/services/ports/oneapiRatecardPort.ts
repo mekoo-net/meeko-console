@@ -56,7 +56,7 @@ export interface OneApiRatecardPort {
   fetchCandidates(input: { maker: string | null }): Promise<AppResult<PriceFetchResult>>;
 
   /** 把勾选的候选写进表里。任何一行校验不过，整批都不写。 */
-  applyCandidates(items: ApplyPriceItem[]): Promise<AppResult<PriceApplyResult>>;
+  applyCandidates(items: ApplyPriceItem[], removeIds?: string[]): Promise<AppResult<PriceApplyResult>>;
 
   /**
    * 由号池后台现在连的这个库接管这份表，再把整张表发布一遍——发布着的、别的库的牌价会被换掉，各产品收到就照着重算。

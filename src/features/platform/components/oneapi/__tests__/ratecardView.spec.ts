@@ -134,8 +134,8 @@ describe('model ratecard page', () => {
       'tts-1',
       'whisper-1',
     ]);
-    // 19 行牌价加 1 个映射（映射也算一个模型）
-    expect(wrapper.find('.maker-sidebar__foot').text()).toContain('20 个模型');
+    // 20 行牌价加 1 个映射（映射也算一个模型）
+    expect(wrapper.find('.maker-sidebar__foot').text()).toContain('21 个模型');
     expectSilentAboutPublishing();
     // 页头上只有一个动作：没有「发布」，也没有「导入」
     expect(
@@ -154,8 +154,9 @@ describe('model ratecard page', () => {
 
     await selectMaker('Google');
     expect((await rowOf('gemini-2.5-flash-image')).find('.price-row__hint').text()).toMatch(
-      /^图像出 .*30\.00 · models\.dev$/,
+      /^图像出 .*30\.00$/,
     );
+    expect((await rowOf('gemini-2.5-flash-image')).find('.src-badge').text()).toBe('models.dev');
   });
 
   it('a reader sees the table and nothing to change it with', async () => {

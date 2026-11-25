@@ -10,10 +10,12 @@
  *
  * 这里只有牌价，不算有效价：倍率和有效价是各产品自己的事。
  * 渠道里的叫法和厂家目录对不上的（目录里是 gemini-3.1-pro-preview，渠道叫 gemini-3.1-pro），建成映射：
- * 一个模型名按这一家里已有的一行出价，单独一行列在它指的那一行后面，价格照那一行显示。
+ * 一个模型名按这一家里已有的一行出价，缩进一格挂在它指的那一行下面。
+ *
+ * 每一行标着价格从哪来：同步来的写目录名，人录的、人改过的写「手动」。上游同步删上游已经不列的模型时只删前一种。
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue';
+import { Delete, Edit, Link, Plus, Refresh, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
 import {
@@ -112,10 +114,10 @@ const canMap = computed(() => groups.value.some((g) => g.mappings !== undefined)
 const allMappings = computed(() => groups.value.flatMap((g) => g.mappings ?? []));
 
 type ListRow =
-  | { type: 'price'; key: string; view: PriceRowView }
-  | { type: 'mapping'; key: string; mapping: PriceMapping; view: PriceRowView };
+  | { type: 'price'; key: string; view: PriceRowView; parent: boolean }
+  | { type: 'mapping'; key: string; mapping: PriceMapping; view: PriceRowView; last: boolean };
 
-/** 每一行有价的后面跟着映射到它的那几个：映射的价格照它显示。 */
+/** 每一行有价的下面挂着映射到它的那几个。 */
 const rows = computed<ListRow[]>(() => {
   const group = activeGroup.value;
   if (!group) return [];
@@ -123,8 +125,10 @@ const rows = computed<ListRow[]>(() => {
     const view = priceRowView(price);
     const mapped = (group.mappings ?? []).filter((m) => m.targetId === price.id);
     return [
-      { type: 'price', key: `p:${price.id}`, view },
-      ...mapped.map((mapping): ListRow => ({ type: 'mapping', key: `m:${mapping.id}`, mapping, view })),
+      { type: 'price', key: `p:${price.id}`, view, parent: mapped.length > 0 },
+      ...mapped.map(
+        (mapping, i): ListRow => ({ type: 'mapping', key: `m:${mapping.id}`, mapping, view, last: i === mapped.length - 1 }),
+      ),
     ];
   });
 });
@@ -450,7 +454,8 @@ function openSync(maker: string | null): void {
 }
 
 async function onApplied(result: PriceApplyResult): Promise<void> {
-  reportWrite(`已套用：新增 ${result.added} 条，更新 ${result.updated} 条`, result.publish);
+  const removed = result.removed ? `，删除 ${result.removed} 条` : '';
+  reportWrite(`已套用：新增 ${result.added} 条，更新 ${result.updated} 条${removed}`, result.publish);
   await reload();
 }
 
@@ -643,89 +648,114 @@ onBeforeUnmount(() => search.cancel());
         </div>
 
         <!-- 行按行号认：同一个模型可能有两行（干净名的，和一行导入进来、带日期钉的旧键） -->
-        <article
+        <template
           v-for="row in rows"
           :key="row.key"
-          class="price-row"
-          :class="{ 'price-row--mapping': row.type === 'mapping' }"
         >
-          <div class="price-row__id">
-            <div class="price-row__name">
-              {{ row.type === 'mapping' ? row.mapping.modelKey : row.view.price.modelKey }}
+          <!-- 映射：缩进挂在它指的那一行下面，价格不重复摆，写一句按谁的价 -->
+          <article
+            v-if="row.type === 'mapping'"
+            class="price-row price-row--mapping"
+            :class="{ 'price-row--last-child': row.last }"
+          >
+            <div class="price-row__id price-row__id--child">
+              <div class="price-row__name">
+                {{ row.mapping.modelKey }}
+              </div>
+              <div class="price-row__meta">
+                <span class="src-badge src-badge--manual">手动</span>
+              </div>
+            </div>
+            <div class="price-row__follow">
+              <el-icon><Link /></el-icon>
+              <span>映射到</span>
+              <code>{{ row.mapping.targetKey }}</code>
             </div>
             <div
-              v-if="row.type === 'mapping'"
-              class="price-row__hint"
+              v-if="canWrite"
+              class="price-row__ops"
             >
-              映射到 {{ row.mapping.targetKey }}
+              <el-button
+                :icon="Edit"
+                link
+                title="编辑"
+                @click="openMapping(row.mapping)"
+              />
+              <el-button
+                :icon="Delete"
+                link
+                type="danger"
+                title="删除"
+                @click="onDeleteMapping(row.mapping)"
+              />
+            </div>
+          </article>
+
+          <!-- 行按行号认：同一个模型可能有两行（干净名的，和一行导入进来、带日期钉的旧键） -->
+          <article
+            v-else
+            class="price-row"
+            :class="{ 'price-row--parent': row.parent }"
+          >
+            <div class="price-row__id">
+              <div class="price-row__name">
+                {{ row.view.price.modelKey }}
+              </div>
+              <div class="price-row__meta">
+                <span
+                  class="src-badge"
+                  :class="{ 'src-badge--manual': row.view.manual }"
+                  :title="hintTitle(row.view.price)"
+                >{{ row.view.source }}</span>
+                <span
+                  v-if="row.view.hint"
+                  class="price-row__hint"
+                  :title="row.view.hint"
+                >{{ row.view.hint }}</span>
+              </div>
+            </div>
+            <div class="price-row__type">
+              <ModelKindMark
+                v-if="row.view.kind"
+                :kind="row.view.kind"
+              />
+              <span
+                v-else
+                class="price-row__raw"
+              >{{ row.view.price.billingType }}</span>
+            </div>
+            <div class="price-row__price">
+              <PriceCells
+                v-if="row.view.cells"
+                :model="row.view.cells"
+              />
+              <!-- 认不出的价照样列出来：要看得见、删得掉，只是这里改不了 -->
+              <span
+                v-else
+                class="price-row__unknown"
+              >这种价格这里还认不出</span>
             </div>
             <div
-              v-else-if="row.view.hint"
-              class="price-row__hint"
-              :title="hintTitle(row.view.price)"
+              v-if="canWrite"
+              class="price-row__ops"
             >
-              {{ row.view.hint }}
+              <el-button
+                v-if="row.view.body"
+                :icon="Edit"
+                link
+                title="编辑"
+                @click="openEdit(row.view)"
+              />
+              <el-button
+                :icon="Delete"
+                link
+                type="danger"
+                title="删除"
+                @click="onDelete(row.view.price)"
+              />
             </div>
-          </div>
-          <div class="price-row__type">
-            <ModelKindMark
-              v-if="row.view.kind"
-              :kind="row.view.kind"
-            />
-            <span
-              v-else
-              class="price-row__raw"
-            >{{ row.view.price.billingType }}</span>
-          </div>
-          <div class="price-row__price">
-            <PriceCells
-              v-if="row.view.cells"
-              :model="row.view.cells"
-            />
-            <!-- 认不出的价照样列出来：要看得见、删得掉，只是这里改不了 -->
-            <span
-              v-else
-              class="price-row__unknown"
-            >这种价格这里还认不出</span>
-          </div>
-          <div
-            v-if="canWrite && row.type === 'mapping'"
-            class="price-row__ops"
-          >
-            <el-button
-              :icon="Edit"
-              link
-              title="编辑"
-              @click="openMapping(row.mapping)"
-            />
-            <el-button
-              :icon="Delete"
-              link
-              type="danger"
-              title="删除"
-              @click="onDeleteMapping(row.mapping)"
-            />
-          </div>
-          <div
-            v-else-if="canWrite"
-            class="price-row__ops"
-          >
-            <el-button
-              v-if="row.view.body"
-              :icon="Edit"
-              link
-              title="编辑"
-              @click="openEdit(row.view)"
-            />
-            <el-button
-              :icon="Delete"
-              link
-              type="danger"
-              title="删除"
-              @click="onDelete(row.view.price)"
-            />
-          </div>
-        </article>
+          </article>
+        </template>
 
         <EmptyState
           v-if="rows.length === 0"
@@ -970,18 +1000,86 @@ onBeforeUnmount(() => search.cancel());
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 映射的价格是它指的那一行的：淡一点，一眼看得出不是它自己定的 */
-.price-row--mapping .price-row__type,
-.price-row--mapping .price-row__price {
-  opacity: 0.6;
+/* 映射挂在它指的那一行下面：中间不画分隔线，左边一条拐角线连上去 */
+.price-row--parent,
+.price-row--mapping:not(.price-row--last-child) {
+  border-bottom-color: transparent;
+}
+.price-row--mapping {
+  padding: 2px 0 11px;
+}
+.price-row__id--child {
+  position: relative;
+  padding-left: 26px;
+}
+.price-row__id--child::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: -14px;
+  width: 11px;
+  height: 26px;
+  border-left: 1.5px solid var(--el-border-color);
+  border-bottom: 1.5px solid var(--el-border-color);
+  border-bottom-left-radius: 6px;
+}
+.price-row--mapping .price-row__name {
+  font-weight: 500;
+}
+.price-row__follow {
+  grid-column: 2 / 4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--el-text-color-secondary);
+}
+.price-row__follow code {
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-regular);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.price-row__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 4px;
+}
+/* 来源：同步来的是目录名（带主色），人录的、人改过的是「手动」（灰） */
+.src-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+}
+.src-badge--manual {
+  color: var(--el-text-color-regular);
+  background: var(--el-fill-color);
 }
 .mapping-target {
   width: 100%;
 }
 .price-row__hint {
-  margin-top: 3px;
+  min-width: 0;
   font-size: 12px;
   color: var(--el-text-color-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .price-row__raw {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;

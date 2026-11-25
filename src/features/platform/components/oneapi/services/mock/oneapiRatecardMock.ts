@@ -34,6 +34,7 @@ import {
   type PriceDeleteResult,
   type PriceFetchItem,
   type PriceFetchResult,
+  type PriceGoneItem,
   type PriceMakerGroup,
   type PriceMapping,
   type PriceMappingWriteResult,
@@ -68,6 +69,8 @@ interface Seed {
   capabilities?: ModelCapabilities;
   inTable?: boolean;
   upstream?: PriceBody | null;
+  /** 从上游同步来的、上游现在已经不列了：同步时列成「上游已删」。 */
+  dropped?: boolean;
 }
 
 const LLM: ModelCapabilities = { audio: false, reasoning: true, embedding: false };
@@ -216,6 +219,14 @@ const SEEDS: readonly Seed[] = [
     modelKey: 'gemini-2.5-flash',
     body: perToken(0.3, 2.5, { cachedRead: 0.03 }),
     capabilities: LLM,
+  },
+  // 以前从 models.dev 同步来的，上游现在不列了
+  {
+    maker: 'google',
+    modelKey: 'gemini-2.0-flash',
+    body: perToken(0.1, 0.4, { cachedRead: 0.025 }),
+    capabilities: LLM,
+    dropped: true,
   },
   // 带着改价表单里没有的档（图像出价）：改它别的价，这一档不能丢
   {
@@ -599,7 +610,7 @@ export class OneApiRatecardMock implements OneApiRatecardPort {
     const only = input.maker?.trim().toLowerCase() || null;
     const items: PriceFetchItem[] = [];
     for (const seed of SEEDS) {
-      if (seed.upstream === null) continue;
+      if (seed.upstream === null || seed.dropped) continue;
       if (only && seed.maker !== only) continue;
       const offered = seed.upstream ?? seed.body;
       const current = findByKey(seed.modelKey) ?? null;
@@ -628,6 +639,15 @@ export class OneApiRatecardMock implements OneApiRatecardPort {
       });
     }
     items.sort((a, b) => compareMakers(a.maker, b.maker) || a.modelKey.localeCompare(b.modelKey));
+
+    // 照号池后台：来源是 models.dev、而 models.dev 已经不列的行；手动的不管
+    const listed = new Set(SEEDS.filter((s) => s.upstream !== null && !s.dropped).map((s) => compactModelKey(s.modelKey)));
+    const gone: PriceGoneItem[] = state.rows
+      .filter((r) => r.source === 'models_dev' && !listed.has(compactModelKey(r.modelKey)))
+      .filter((r) => !only || r.maker === only)
+      .sort((a, b) => compareMakers(a.maker, b.maker) || a.modelKey.localeCompare(b.modelKey))
+      .map((r) => ({ current: clone(r), mappedBy: mappedNames(state.mappings, r.id) }));
+
     return ok({
       sources: [
         {
@@ -640,13 +660,23 @@ export class OneApiRatecardMock implements OneApiRatecardPort {
         },
       ],
       items,
+      gone,
       fetchedAtUtc: Date.now(),
     });
   }
 
-  async applyCandidates(items: ApplyPriceItem[]): Promise<AppResult<PriceApplyResult>> {
+  async applyCandidates(items: ApplyPriceItem[], removeIds: string[] = []): Promise<AppResult<PriceApplyResult>> {
     await delay();
-    // 先整批验完再动表：任何一行不过整批都不写
+    // 先整批验完再动表：任何一行不过整批都不写。同步只删从目录来的行：手动的、有映射指向的拒掉
+    const removing: ModelPriceRow[] = [];
+    for (const id of new Set(removeIds)) {
+      const row = state.rows.find((r) => r.id === id);
+      if (!row) return invalid(`removeIds: no ratecard row ${id}.`);
+      if (row.source === 'manual') return invalid(`${row.modelKey}: a manual price is not removed by sync.`);
+      const mapped = mappedNames(state.mappings, row.id);
+      if (mapped.length > 0) return invalid(`${row.modelKey}: ${mapped.join(', ')} map to it; not removed by sync.`);
+      removing.push(row);
+    }
     const inputs: WriteInput[] = [];
     const seen = new Set<string>();
     for (const item of items) {
@@ -679,7 +709,11 @@ export class OneApiRatecardMock implements OneApiRatecardPort {
       if (target) updated += 1;
       else added += 1;
     }
-    return ok({ added, updated, publish: publishMakers(touched) });
+    for (const row of removing) {
+      state.rows = state.rows.filter((r) => r !== row);
+      touched.add(row.maker);
+    }
+    return ok({ added, updated, removed: removing.length, publish: publishMakers(touched) });
   }
 
   async takeover(): Promise<AppResult<PricePublishResult>> {

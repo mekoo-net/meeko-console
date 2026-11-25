@@ -18,6 +18,7 @@ import {
   needsTakeover,
   newModelFormCapabilities,
   priceRowView,
+  priceSourceLabel,
   priceSummary,
   readRateBody,
   syncRows,
@@ -348,7 +349,16 @@ describe('oneapi ratecard rows', () => {
     expect(texts.input).toMatch(/0\.075$/);
     expect(texts.cacheRead).toMatch(/0\.01875$/);
     expect(texts.output).toMatch(/0\.30$/);
-    expect(view.hint).toBe('models.dev');
+    expect(view.hint).toBe('');
+    expect((({ source, manual }) => ({ source, manual }))(view)).toEqual({ source: 'models.dev', manual: false });
+  });
+
+  it('says where every price came from: a catalogue by name, anything entered or edited by hand as 手动', () => {
+    expect(priceSourceLabel('models_dev')).toBe('models.dev');
+    expect(priceSourceLabel('manual')).toBe('手动');
+    // 认不出的来源原样写出来，不吞掉
+    expect(priceSourceLabel('somewhere')).toBe('somewhere');
+    expect(priceRowView(priceRow({ source: 'manual' })).manual).toBe(true);
   });
 
   it('lists a row it cannot read without offering to edit it', () => {
@@ -393,7 +403,8 @@ describe('oneapi ratecard rows', () => {
       }),
     );
     expect(view.kind).toBe('per_video');
-    expect(view.hint).toBe('时长 4–12 秒 · OpenRouter');
+    expect(view.hint).toBe('时长 4–12 秒');
+    expect(view.source).toBe('OpenRouter');
   });
 
   it('an embedding model is one the catalogue says so, or one named so that charges nothing for output', () => {
