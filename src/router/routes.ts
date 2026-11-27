@@ -741,6 +741,12 @@ export const routes: RouteRecordRaw[] = [
             component: () => import('@/features/platform/components/oneapi/views/RatecardView.vue'),
             meta: { title: '模型价格', requiresAuth: true, permissions: ['platform.settings.read'] },
           },
+          {
+            path: 'oneapi/classifier',
+            name: 'components-oneapi-classifier',
+            component: () => import('@/features/platform/components/oneapi/views/ClassifierView.vue'),
+            meta: { title: '请求分类', requiresAuth: true, permissions: ['platform.settings.read'] },
+          },
         ],
       },
       {

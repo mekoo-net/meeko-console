@@ -9,6 +9,9 @@ import { routes } from '@/router/routes';
 vi.mock('@/features/platform/components/oneapi/views/RatecardView.vue', () => ({
   default: { name: 'RatecardViewStub', render: () => null },
 }));
+vi.mock('@/features/platform/components/oneapi/views/ClassifierView.vue', () => ({
+  default: { name: 'ClassifierViewStub', render: () => null },
+}));
 import {
   collectLeaves,
   filterTree,
@@ -36,6 +39,7 @@ describe('components settings: nav and routes', () => {
     expect(view.menu.map((n) => [n.type, n.title])).toEqual([['group', 'OneApi']]);
     expect(collectLeaves(view.menu).map((l) => [l.index, l.title])).toEqual([
       ['/components/oneapi/ratecard', '模型价格'],
+      ['/components/oneapi/classifier', '请求分类'],
     ]);
     // 没有空的占位页：每个入口都点得进去
     expect(collectLeaves(view.menu).some((l) => l.disabled)).toBe(false);
@@ -68,6 +72,19 @@ describe('components settings: nav and routes', () => {
         permissions: ['platform.settings.read'],
       });
     }
+  });
+
+  it('the classifier page has its own address under OneApi', async () => {
+    const router = createRouter({ history: createMemoryHistory(), routes });
+    await router.push('/components/oneapi/classifier');
+    const route = router.currentRoute.value;
+    expect(route.name).toBe('components-oneapi-classifier');
+    expect(route.meta).toMatchObject({
+      title: '请求分类',
+      requiresAuth: true,
+      permissions: ['platform.settings.read'],
+    });
+    expect(matchView('/components/oneapi/classifier')?.id).toBe('components');
   });
 
   it('the Yomi menu no longer carries a price table', () => {
