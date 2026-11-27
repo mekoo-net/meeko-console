@@ -80,7 +80,8 @@ describe('conditions', () => {
       { classifier: ['chat.app', 'chat.tavern'] },
       { not: { classifier: 'agent.claude' } },
       { field: 'header.user-agent', op: 'prefix', value: 'claude-cli/' },
-      { field: 'header.user-agent', op: 'prefix', value: ['Kelivo', 'Tavo'], ignoreCase: true },
+      { field: 'header.user-agent', op: 'prefix', value: ['Kelivo', 'Tavo'] },
+      { field: 'header.user-agent', op: 'prefix', value: 'Kelivo', ignoreCase: false },
       { not: { field: 'header.user-agent', op: 'exists' } },
       { field: 'tools.count', op: 'gte', value: 3 },
       { field: 'tools.name', op: 'contains_all', value: ['Bash', 'Read'] },
@@ -118,6 +119,17 @@ describe('conditions', () => {
     }
   });
 
+  it('ignores case unless the condition says otherwise; an old ignoreCase: true is just the default now', () => {
+    const old = { field: 'header.user-agent', op: 'prefix', value: 'Kelivo', ignoreCase: true };
+    const tree = conditionTree(old)!;
+    expect(tree.children[0]).toMatchObject({ kind: 'field', matchCase: false });
+    expect(buildCondition(tree)).toEqual({ field: 'header.user-agent', op: 'prefix', value: 'Kelivo' });
+    // 数字和 exists 没有大小写可言，勾了也不写
+    const count = conditionTree({ field: 'tools.count', op: 'gte', value: 3 })!;
+    (count.children[0] as { matchCase: boolean }).matchCase = true;
+    expect(buildCondition(count)).toEqual({ field: 'tools.count', op: 'gte', value: 3 });
+  });
+
   it('leaves shapes it does not know to the JSON editor', () => {
     expect(conditionTree({ all: [{ any: [] }] })).toBeNull();
     expect(conditionTree({ all: [] })).toBeNull();
@@ -139,7 +151,7 @@ describe('conditions', () => {
       op: 'eq',
       values: ['x'],
       numeric: false,
-      ignoreCase: false,
+      matchCase: false,
       ...patch,
     });
     const group = (...children: ConditionNode[]): ConditionGroup => ({ kind: 'group', negate: false, mode: 'all', children });
@@ -169,8 +181,11 @@ describe('conditions', () => {
     expect(describeCondition({ classifier: 'chat.app' })).toBe('分类器是 chat.app');
     expect(describeCondition({ classifier: ['chat.app', 'chat.tavern'] })).toBe('分类器是 chat.app 或 chat.tavern');
     expect(describeCondition({ not: { classifier: ['chat.app', 'chat.tavern'] } })).toBe('分类器不是 chat.app 也不是 chat.tavern');
-    expect(describeCondition({ field: 'header.user-agent', op: 'prefix', value: ['Kelivo', 'Tavo'], ignoreCase: true })).toBe(
-      'user-agent 开头是 "Kelivo" 或 "Tavo"（不分大小写）',
+    expect(describeCondition({ field: 'header.user-agent', op: 'prefix', value: ['Kelivo', 'Tavo'] })).toBe(
+      'user-agent 开头是 "Kelivo" 或 "Tavo"',
+    );
+    expect(describeCondition({ field: 'header.user-agent', op: 'prefix', value: ['Kelivo', 'Tavo'], ignoreCase: false })).toBe(
+      'user-agent 开头是 "Kelivo" 或 "Tavo"（区分大小写）',
     );
     expect(describeCondition({ not: { field: 'header.user-agent', op: 'exists' } })).toBe('user-agent 没有值');
     expect(

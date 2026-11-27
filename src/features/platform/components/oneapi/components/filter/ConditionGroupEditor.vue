@@ -276,14 +276,14 @@ const asText = (v: string | number | boolean | undefined): string => (v === unde
           />
           <el-tooltip
             v-if="!child.numeric"
-            content="不分大小写（英文字母）"
+            content="区分大小写（英文字母）；不勾就不分"
             :show-after="300"
           >
             <el-checkbox
-              :model-value="child.ignoreCase"
+              :model-value="child.matchCase"
               :disabled="!opNeedsValue(child.op)"
               class="cond-row__case"
-              @update:model-value="(v: boolean | string | number) => ctx.patch(child, { ignoreCase: v === true })"
+              @update:model-value="(v: boolean | string | number) => ctx.patch(child, { matchCase: v === true })"
             >
               Aa
             </el-checkbox>

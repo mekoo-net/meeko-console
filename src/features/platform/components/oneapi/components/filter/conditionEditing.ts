@@ -75,7 +75,7 @@ function make(scope: Scope): EditorContext {
     op: defaultOp(field),
     values: [],
     numeric: kindOf(field) === 'number',
-    ignoreCase: false,
+    matchCase: false,
   });
 
   const rowFor = (source: string, negate = false): ConditionRow =>

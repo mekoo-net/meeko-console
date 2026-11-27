@@ -214,9 +214,9 @@ const hiddenValues = (row: FieldRow): number => (props.compact ? Math.max(0, row
               class="chip__op"
             >+{{ hiddenValues(token.row) }}</span>
             <span
-              v-if="token.row.ignoreCase"
+              v-if="token.row.matchCase"
               class="chip__flag"
-              title="不分大小写"
+              title="区分大小写"
             >Aa</span>
           </span>
         </template>

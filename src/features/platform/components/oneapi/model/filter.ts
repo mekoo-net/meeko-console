@@ -131,7 +131,8 @@ export type ConditionRow =
       values: string[];
       /** 值是数字（工具数量）。 */
       numeric: boolean;
-      ignoreCase: boolean;
+      /** 区分大小写（只管英文字母）。网关默认不分，写了 `ignoreCase: false` 才分。 */
+      matchCase: boolean;
     };
 
 /** 一组条件：全部成立或者任一成立，可以整组取反，组里还能再套组（层级）。 */
@@ -191,7 +192,7 @@ function readLeaf(node: Record<string, unknown>): ConditionRow | null {
     op: node.op,
     values,
     numeric,
-    ignoreCase: node.ignoreCase === true,
+    matchCase: node.ignoreCase === false,
   };
 }
 
@@ -270,7 +271,8 @@ function writeNode(node: ConditionNode): Record<string, unknown> {
           ? node.values[0]
           : [...node.values];
     }
-    if (node.ignoreCase && opNeedsValue(node.op) && !node.numeric) out.ignoreCase = true;
+    // 不写就是不分大小写；以前写的 `ignoreCase: true` 读进来再写回去就省掉了，意思不变
+    if (node.matchCase && opNeedsValue(node.op) && !node.numeric) out.ignoreCase = false;
   }
   return node.negate ? { not: out } : out;
 }
@@ -405,7 +407,7 @@ function describeRow(row: ConditionRow): string {
 
   const joiner = row.op === 'contains_all' ? ' 和 ' : ' 或 ';
   const values = row.numeric ? row.values.join('') : row.values.map((v) => `"${v}"`).join(joiner);
-  const text = `${field} ${opLabel(row.op)} ${values}${row.ignoreCase ? '（不分大小写）' : ''}`;
+  const text = `${field} ${opLabel(row.op)} ${values}${row.matchCase ? '（区分大小写）' : ''}`;
   return row.negate ? `不满足：${text}` : text;
 }
 
