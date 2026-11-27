@@ -1,6 +1,6 @@
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 
-import { LABEL_PATTERN, rulesOf } from '../../model/classifier';
+import { LABEL_PATTERN, isValidMatch, rulesOf } from '../../model/classifier';
 import type {
   ClassifierDoc,
   ClassifierProblem,
@@ -12,7 +12,7 @@ import type { OneApiClassifierPort } from '../ports/oneapiClassifierPort';
 
 /**
  * 请求分类规则的内存版，照着号池后台的规矩做：整份读写、带版本号、存之前校验、有一处不过就不存。
- * 校验只做了号池后台里最常撞上的那几条（标签格式、字段和比法认不认识、适用 vendor 不能是空数组）——
+ * 校验只做了号池后台里最常撞上的那几条（标签格式、字段和比法认不认识、适用 vendor 不能是空数组、渠道规则的动作和匹配写法）——
  * 真的那一份是网关的编译器，这里不求全，只求页面上「存不进去时说出是哪一条」这条线走得通。
  */
 
@@ -32,13 +32,8 @@ const HEADERS = [
 ];
 
 export const MOCK_CLASSIFIER_SCHEMA: ClassifierSchema = {
-  fields: [
-    ...HEADERS.map((h) => ({ name: `header.${h}`, kind: 'text' })),
-    ...['caller.account', 'caller.key', 'caller.account_type', 'model', 'format'].map((name) => ({
-      name,
-      kind: 'text',
-    })),
-  ],
+  // 规则能看的只有请求本身带的东西，现在就是这些请求头
+  fields: HEADERS.map((h) => ({ name: `header.${h}`, kind: 'text' })),
   operators: { text: ['eq', 'in', 'prefix', 'contains', 'regex', 'exists'] },
   vendors: [
     { key: 'agentspace', displayName: 'Agentspace' },
@@ -146,6 +141,19 @@ function check(candidate: ClassifierDoc): ClassifierProblem[] {
     else reason = conditionProblem(rule.when);
     if (reason) problems.push({ subject, reason });
   });
+
+  for (const [vendor, channel] of Object.entries(candidate.channels ?? {})) {
+    let reason: string | null = null;
+    if (channel.default !== undefined && channel.default !== 'allow' && channel.default !== 'deny')
+      reason = `Unknown default '${channel.default}'.`;
+    for (const entry of channel.rules ?? []) {
+      if (reason) break;
+      if (entry.action !== 'allow' && entry.action !== 'deny') reason = `Unknown action '${entry.action}'.`;
+      else if (!isValidMatch(entry.match))
+        reason = `Match '${entry.match}' is not a label, a prefix ending in '*', or 'unlabeled'.`;
+    }
+    if (reason) problems.push({ subject: `channel '${vendor}'`, reason });
+  }
   return problems;
 }
 

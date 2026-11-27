@@ -1,4 +1,6 @@
 import type {
+  ClassifierChannel,
+  ClassifierChannelEntry,
   ClassifierDoc,
   ClassifierProblem,
   ClassifierRule,
@@ -6,7 +8,9 @@ import type {
 } from './classifier.types';
 
 /**
- * 请求分类规则的纯逻辑：按 vendor 看规则、改文档、读写条件树、把条件说成人话。页面只管摆。
+ * 请求分类器的纯逻辑。页面只管摆。分两层：
+ * - 分类规则：按 vendor 看规则、改文档、读写条件树、把条件说成人话；
+ * - 渠道规则：一个 vendor 上带某个标签的请求放行还是拒绝（文件后半）。
  *
  * 两条规矩贯穿这里：
  * - **顺序是规则的一部分**。网关从上往下看，第一条命中的说了算，所以每一行都带着它在整份文档里的位置，
@@ -231,18 +235,12 @@ export function flatConditionError(flat: FlatCondition): string | null {
 
 const HEADER_PREFIX = 'header.';
 
-const FIELD_LABELS: Record<string, string> = {
-  'caller.account': '账号 UID',
-  'caller.key': 'API Key UID',
-  'caller.account_type': '账号类型',
-  model: '模型',
-  format: '调用协议',
-};
-
-/** 字段在页面上叫什么。请求头就是「请求头 xxx」；这一页不认识的原样显示。 */
+/**
+ * 字段在页面上叫什么。现在规则能看的只有请求头（「请求头 xxx」）；网关以后多报一种字段，这里还不认识的原样显示。
+ */
 export function fieldLabel(name: string): string {
   if (name.startsWith(HEADER_PREFIX)) return `请求头 ${name.slice(HEADER_PREFIX.length)}`;
-  return FIELD_LABELS[name] ?? name;
+  return name;
 }
 
 const OP_LABELS: Record<string, string> = {
@@ -281,4 +279,170 @@ export function problemsOfRule(problems: ClassifierProblem[], id: string, index:
   return problems
     .filter((p) => p.subject === `rule '${id}'` || p.subject === `rule #${index}`)
     .map((p) => p.reason);
+}
+
+// ---------- 渠道规则 ----------
+
+/**
+ * 渠道规则是另一层：分类规则只回答「这个请求是什么」，渠道规则回答「这个 Vendor 收不收它」。
+ * 一个 Vendor 一份：按顺序匹配的条目（标签 → 放行 / 拒绝），加一个都没匹配上时的默认动作。
+ * 没有渠道规则的 Vendor 什么都收。
+ */
+
+export type ChannelAction = 'allow' | 'deny';
+
+/** 匹配所有被认出来的请求（有标签的）。认不出来的不算在内。 */
+export const MATCH_ANY_LABEL = '*';
+
+/** 匹配没被任何分类规则认出来的请求。 */
+export const MATCH_UNLABELLED = 'unlabeled';
+
+const PREFIX_MATCH = /^[a-z0-9_.]+\*$/;
+
+/** 匹配的写法：一个完整的标签、以 `*` 结尾的前缀（`agent.*`）、`*`、或者 `unlabeled`。和网关的校验是同一条。 */
+export function isValidMatch(match: string): boolean {
+  return match === MATCH_ANY_LABEL || match === MATCH_UNLABELLED || PREFIX_MATCH.test(match) || LABEL_PATTERN.test(match);
+}
+
+/** 这一条在页面上怎么说。 */
+export function describeMatch(match: string): string {
+  if (match === MATCH_UNLABELLED) return '没被认出来的请求';
+  if (match === MATCH_ANY_LABEL) return '所有被认出来的请求';
+  if (match.endsWith('.*')) return `${match.slice(0, -2)} 这一类`;
+  if (match.endsWith('*')) return `标签以 ${match.slice(0, -1)} 开头的`;
+  return match;
+}
+
+/** 一条匹配管不管这个标签（null = 没被认出来）。和网关的判断是同一套。 */
+export function matchCovers(match: string, label: string | null): boolean {
+  if (match === MATCH_UNLABELLED) return label === null;
+  if (label === null) return false;
+  if (match === MATCH_ANY_LABEL) return true;
+  if (match.endsWith('*')) return label.startsWith(match.slice(0, -1));
+  return match === label;
+}
+
+/** 文档里这个 Vendor 的那个键（键不分大小写，文档里写成什么样就认什么样）。 */
+function channelKeyOf(doc: ClassifierDoc, vendor: string): string | undefined {
+  return Object.keys(doc.channels ?? {}).find((k) => sameVendor(k, vendor));
+}
+
+export interface ChannelView {
+  vendor: string;
+  /** 文档里有没有这个 Vendor 的渠道规则。没有 = 什么都收。 */
+  exists: boolean;
+  defaultAction: ChannelAction;
+  /** true = 判了拒绝的请求真的被拒；false = 只标记。文档里不写算 true。 */
+  enforce: boolean;
+  entries: ClassifierChannelEntry[];
+}
+
+/** 一个 Vendor 的渠道规则，缺的按网关的缺省补上（默认放行；不写 enforce 算执行）。 */
+export function channelOf(doc: ClassifierDoc, vendor: string): ChannelView {
+  const key = channelKeyOf(doc, vendor);
+  const channel = key === undefined ? undefined : doc.channels![key];
+  return {
+    vendor,
+    exists: channel !== undefined,
+    defaultAction: channel?.default === 'deny' ? 'deny' : 'allow',
+    enforce: channel === undefined ? false : channel.enforce !== false,
+    entries: channel?.rules ?? [],
+  };
+}
+
+/** 这个 Vendor 上，带这个标签的请求最后是放行还是拒绝（第一条匹配上的说了算，都没匹配上走默认）。 */
+export function channelVerdict(view: ChannelView, label: string | null): ChannelAction {
+  const hit = view.entries.find((e) => matchCovers(e.match, label));
+  if (hit) return hit.action === 'deny' ? 'deny' : 'allow';
+  return view.defaultAction;
+}
+
+/**
+ * 改一个 Vendor 的渠道规则。还没有的话先建一份：默认放行、**只标记**——
+ * 新建的规则先看它会拦掉什么，确认了再由人打开执行，不能一加上就开始拒请求。
+ * 这一页不认识的键照留。
+ */
+function writeChannel(
+  doc: ClassifierDoc,
+  vendor: string,
+  change: (channel: ClassifierChannel) => ClassifierChannel,
+): ClassifierDoc {
+  const key = channelKeyOf(doc, vendor) ?? vendor;
+  const current: ClassifierChannel = doc.channels?.[key] ?? { default: 'allow', enforce: false, rules: [] };
+  return { ...doc, channels: { ...(doc.channels ?? {}), [key]: change(current) } };
+}
+
+export function setChannelDefault(doc: ClassifierDoc, vendor: string, action: ChannelAction): ClassifierDoc {
+  return writeChannel(doc, vendor, (c) => ({ ...c, default: action }));
+}
+
+export function setChannelEnforce(doc: ClassifierDoc, vendor: string, enforce: boolean): ClassifierDoc {
+  return writeChannel(doc, vendor, (c) => ({ ...c, enforce }));
+}
+
+export function addChannelEntry(doc: ClassifierDoc, vendor: string, entry: ClassifierChannelEntry): ClassifierDoc {
+  return writeChannel(doc, vendor, (c) => ({ ...c, rules: [...(c.rules ?? []), entry] }));
+}
+
+export function setChannelEntryAction(
+  doc: ClassifierDoc,
+  vendor: string,
+  index: number,
+  action: ChannelAction,
+): ClassifierDoc {
+  return writeChannel(doc, vendor, (c) => ({
+    ...c,
+    rules: (c.rules ?? []).map((e, i) => (i === index ? { ...e, action } : e)),
+  }));
+}
+
+export function removeChannelEntry(doc: ClassifierDoc, vendor: string, index: number): ClassifierDoc {
+  return writeChannel(doc, vendor, (c) => ({ ...c, rules: (c.rules ?? []).filter((_, i) => i !== index) }));
+}
+
+/** 上移或下移一格；已经在头上（或尾上）时原样返回。 */
+export function moveChannelEntry(doc: ClassifierDoc, vendor: string, index: number, direction: -1 | 1): ClassifierDoc {
+  const entries = channelOf(doc, vendor).entries;
+  const target = index + direction;
+  if (index < 0 || index >= entries.length || target < 0 || target >= entries.length) return doc;
+  return writeChannel(doc, vendor, (c) => {
+    const rules = [...(c.rules ?? [])];
+    [rules[index], rules[target]] = [rules[target]!, rules[index]!];
+    return { ...c, rules };
+  });
+}
+
+/** 整个去掉这个 Vendor 的渠道规则：它回到什么都收。 */
+export function removeChannel(doc: ClassifierDoc, vendor: string): ClassifierDoc {
+  const key = channelKeyOf(doc, vendor);
+  if (key === undefined) return doc;
+  const channels = Object.fromEntries(Object.entries(doc.channels ?? {}).filter(([k]) => k !== key));
+  return { ...doc, channels };
+}
+
+/**
+ * 加条目时能选的匹配：分类规则里出现过的类别（`agent.*`）和标签，加上「所有被认出来的」和「没被认出来的」。
+ * 也可以手写一个还没有规则的标签——先定渠道怎么办，再补分类规则，顺序不强求。
+ */
+export function matchOptions(doc: ClassifierDoc): string[] {
+  const labels = [...new Set(rulesOf(doc).map((r) => r.label))].filter((l) => LABEL_PATTERN.test(l)).sort();
+  const categories = [...new Set(labels.map((l) => `${l.slice(0, l.indexOf('.'))}.*`))];
+  return [...categories, ...labels, MATCH_ANY_LABEL, MATCH_UNLABELLED];
+}
+
+/** 左边 Vendor 列表里那一行小字。 */
+export function channelSummary(view: ChannelView): string {
+  if (!view.exists) return '没有规则，什么都收';
+  const denies = view.entries.filter((e) => e.action === 'deny').length;
+  const what = view.defaultAction === 'deny' ? '默认拒绝' : denies > 0 ? `拒绝 ${denies} 类` : '没有拒绝的';
+  return `${what} · ${view.enforce ? '执行中' : '只标记'}`;
+}
+
+/** 左边的 Vendor 列表：号池后台报的那些，加上只在渠道规则里出现过的。 */
+export function channelVendors(doc: ClassifierDoc, vendors: ClassifierVendor[]): VendorScope[] {
+  const scopes: VendorScope[] = vendors.map((v) => ({ ...v, own: 0, unknown: false }));
+  for (const key of Object.keys(doc.channels ?? {})) {
+    if (!scopes.some((s) => sameVendor(s.key, key))) scopes.push({ key, displayName: key, own: 0, unknown: true });
+  }
+  return scopes;
 }

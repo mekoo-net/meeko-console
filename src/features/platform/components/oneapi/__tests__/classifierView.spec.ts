@@ -2,6 +2,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import ElementPlus from 'element-plus';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import ClassifierChannelPanel from '../components/classifier/ClassifierChannelPanel.vue';
 import ClassifierRuleDialog from '../components/classifier/ClassifierRuleDialog.vue';
 import type { ClassifierRule } from '../model/classifier.types';
 import {
@@ -94,7 +95,7 @@ describe('classifier page', () => {
 
   it('a vendor shows the rules its requests go through: its own plus the common ones', async () => {
     await open();
-    expect(scopeNames()).toEqual(['全部规则', 'Agentspace', 'Claude', 'Factory', 'Kiro']);
+    expect(scopeNames()).toEqual(['全部分类规则', 'Agentspace', 'Claude', 'Factory', 'Kiro']);
 
     await chooseScope('Factory');
     expect(ruleIds()).toEqual(['ua-claude-code', 'ua-tauritavern', 'ua-chat-apps', 'no-ua']);
@@ -210,15 +211,14 @@ describe('classifier page', () => {
     expect(_currentOneApiClassifierDoc()!.rules!.find((r) => r.id === 'ua-tauritavern')!.enabled).toBe(false);
   });
 
-  it('keeps the parts of the document this page does not edit', async () => {
+  it('editing classifier rules leaves the channel rules as they are', async () => {
     _resetOneApiClassifierMock({
-      rules: [{ id: 'r', label: 'tavern.x', when: { field: 'model', op: 'exists' } }],
+      rules: [{ id: 'r', label: 'tavern.x', when: { field: 'header.user-agent', op: 'exists' } }],
       channels: { factory: { enforce: false, rules: [{ match: 'agent.*', action: 'deny' }] } },
     });
     await open();
-    // 提一句：这份文档里还有这一页不管的设置
-    expect(wrapper.find('.page-note').exists()).toBe(true);
 
+    // 改的是分类规则，渠道规则一个字不动
     await row('r').find('.el-switch').trigger('click');
     await settle();
 
@@ -238,13 +238,153 @@ describe('classifier page', () => {
     expect(row('ua-tauritavern').find('.el-switch').classes()).toContain('is-disabled');
   });
 
+  // ── 渠道规则 ──
+
+  /** 切到「渠道规则」，选中一个 Vendor。 */
+  async function openChannels(vendor: string): Promise<void> {
+    await open();
+    await wrapper.find('[data-test="tab-channels"]').trigger('click');
+    await settle();
+    await wrapper.find(`.channel-item[data-vendor="${vendor}"]`).trigger('click');
+    await settle();
+  }
+  const panel = () => wrapper.findComponent(ClassifierChannelPanel);
+  const savedChannel = (vendor: string) => _currentOneApiClassifierDoc()?.channels?.[vendor];
+  const channelMeta = (vendor: string): string =>
+    wrapper.find(`.channel-item[data-vendor="${vendor}"] .scope-item__meta`).text();
+
+  it('a vendor without channel rules takes everything, and says so', async () => {
+    await openChannels('factory');
+
+    expect(channelMeta('factory')).toBe('没有规则，什么都收');
+    expect(panel().props('view')).toMatchObject({ exists: false, defaultAction: 'allow', entries: [] });
+    expect(wrapper.text()).toContain('这个 Vendor 没有渠道规则');
+  });
+
+  it('the classes on offer come from the classifier rules', async () => {
+    await openChannels('factory');
+
+    expect(panel().props('options')).toEqual([
+      'agent.*',
+      'chat.*',
+      'tavern.*',
+      'unknown.*',
+      'agent.claude_code',
+      'agent.claude_own',
+      'chat.app',
+      'tavern.sillytavern',
+      'unknown.no_user_agent',
+      '*',
+      'unlabeled',
+    ]);
+  });
+
+  it('adding "this class -> reject" saves a channel rule that only marks at first', async () => {
+    await openChannels('factory');
+
+    panel().vm.$emit('add', { match: 'chat.app', action: 'deny' });
+    await settle();
+
+    // 新建的渠道规则先只标记：一加上就开始拒请求的话，没人来得及看它会拦掉什么
+    expect(savedChannel('factory')).toEqual({
+      default: 'allow',
+      enforce: false,
+      rules: [{ match: 'chat.app', action: 'deny' }],
+    });
+    expect(wrapper.find('.chan-row[data-match="chat.app"]').exists()).toBe(true);
+    expect(channelMeta('factory')).toBe('拒绝 1 类 · 只标记');
+    // 分类规则没被碰
+    expect(savedIds()).toEqual(['ua-claude-code', 'ua-tauritavern', 'ua-chat-apps', 'claude-own-agent', 'no-ua']);
+  });
+
+  it('entries can be flipped, reordered and removed', async () => {
+    _resetOneApiClassifierMock({
+      rules: [{ id: 'r', label: 'agent.claude_code', when: { field: 'header.user-agent', op: 'exists' } }],
+      channels: {
+        claude: {
+          default: 'allow',
+          enforce: false,
+          rules: [
+            { match: 'agent.claude_code', action: 'allow' },
+            { match: 'agent.*', action: 'deny' },
+          ],
+        },
+      },
+    });
+    await openChannels('claude');
+    expect(wrapper.findAll('.chan-row').map((r) => r.attributes('data-match'))).toEqual(['agent.claude_code', 'agent.*']);
+
+    panel().vm.$emit('action', 0, 'deny');
+    await settle();
+    expect(savedChannel('claude')!.rules![0]).toEqual({ match: 'agent.claude_code', action: 'deny' });
+
+    panel().vm.$emit('move', 1, -1);
+    await settle();
+    expect(savedChannel('claude')!.rules!.map((e) => e.match)).toEqual(['agent.*', 'agent.claude_code']);
+
+    panel().vm.$emit('remove', 0);
+    await settle();
+    expect(savedChannel('claude')!.rules!.map((e) => e.match)).toEqual(['agent.claude_code']);
+  });
+
+  it('turning enforcement on asks first; the default action saves at once', async () => {
+    await openChannels('factory');
+    panel().vm.$emit('add', { match: 'agent.*', action: 'deny' });
+    await settle();
+
+    const { confirmDanger } = await import('@/shared/composables/useConfirm');
+    vi.mocked(confirmDanger).mockClear();
+
+    panel().vm.$emit('enforce', true);
+    await settle();
+    expect(confirmDanger).toHaveBeenCalledTimes(1);
+    expect(savedChannel('factory')!.enforce).toBe(true);
+    expect(channelMeta('factory')).toBe('拒绝 1 类 · 执行中');
+
+    // 退回只标记不用问
+    panel().vm.$emit('enforce', false);
+    await settle();
+    expect(confirmDanger).toHaveBeenCalledTimes(1);
+    expect(savedChannel('factory')!.enforce).toBe(false);
+
+    panel().vm.$emit('default', 'deny');
+    await settle();
+    expect(savedChannel('factory')!.default).toBe('deny');
+    expect(channelMeta('factory')).toBe('默认拒绝 · 只标记');
+  });
+
+  it('clearing a vendor puts it back to taking everything', async () => {
+    await openChannels('factory');
+    panel().vm.$emit('add', { match: 'agent.*', action: 'deny' });
+    await settle();
+
+    panel().vm.$emit('clear');
+    await settle();
+
+    expect(savedChannel('factory')).toBeUndefined();
+    expect(channelMeta('factory')).toBe('没有规则，什么都收');
+  });
+
+  it('a channel rule written by hand without "enforce" is shown as enforcing, which is what the gateway does', async () => {
+    _resetOneApiClassifierMock({
+      rules: [],
+      channels: { kiro: { rules: [{ match: 'agent.*', action: 'deny' }] }, retired: { default: 'deny' } },
+    });
+    await openChannels('kiro');
+
+    expect(panel().props('view')).toMatchObject({ exists: true, enforce: true, defaultAction: 'allow' });
+    expect(channelMeta('kiro')).toBe('拒绝 1 类 · 执行中');
+    // 号池后台不认识的 Vendor 也列出来，不然它的规则没处看、没处删
+    expect(wrapper.find('.channel-item[data-vendor="retired"]').exists()).toBe(true);
+  });
+
   it('with no document yet, the first rule creates it', async () => {
     _resetOneApiClassifierMock(null);
     await open();
     expect(ruleIds()).toEqual([]);
     expect(wrapper.text()).toContain('还没有分类规则');
 
-    await submitFromDialog({ id: 'first', label: 'tavern.sillytavern', when: { field: 'model', op: 'exists' } });
+    await submitFromDialog({ id: 'first', label: 'tavern.sillytavern', when: { field: 'header.user-agent', op: 'exists' } });
 
     expect(savedIds()).toEqual(['first']);
     expect(ruleIds()).toEqual(['first']);

@@ -1,7 +1,9 @@
 import { z } from 'zod';
 
 /**
- * OneApi 的请求分类器：按规则认出每个请求是什么（酒馆、小手机、Claude Code……），给它打一个标签。
+ * OneApi 的请求分类器，两层：
+ * - **分类规则**（全站一份）：什么样的请求算 `chat.app`、什么样的算 `tavern.sillytavern`，认出来就打上这个标签；
+ * - **渠道规则**（一个 Vendor 一份）：这个 Vendor 上，带某个标签的请求放行还是拒绝。
  *
  * 规则是一份 JSON 文档，存在 Consul KV 上，OneApi 网关跟着它。这一页经平台网关直接找 OneApi 的号池后台读写它
  * （`/oneapi/vault/v1/classifier`，不经 Bff），回包不包信封，字段照号池后台的 `ClassifierDtos.cs`。
@@ -23,8 +25,28 @@ export const classifierRuleSchema = z.looseObject({
 });
 export type ClassifierRule = z.infer<typeof classifierRuleSchema>;
 
+/** 渠道规则的一条：标签匹配上了就按这个动作办。`match` 的写法见 `classifier.ts` 的 `isValidMatch`。 */
+export const classifierChannelEntrySchema = z.looseObject({
+  match: z.string(),
+  /** `allow` 或 `deny`。 */
+  action: z.string(),
+});
+export type ClassifierChannelEntry = z.infer<typeof classifierChannelEntrySchema>;
+
+/** 一个 Vendor 的渠道规则：按顺序匹配的条目，加一个都没匹配上时的默认动作。 */
+export const classifierChannelSchema = z.looseObject({
+  /** 条目都没匹配上时：`allow`（不写也是它）或 `deny`。 */
+  default: z.string().optional(),
+  /** false = 只标记：判了拒绝的请求照常放行，只在遥测里记一笔。**不写算 true**（网关的规矩）。 */
+  enforce: z.boolean().optional(),
+  rules: z.array(classifierChannelEntrySchema).optional(),
+});
+export type ClassifierChannel = z.infer<typeof classifierChannelSchema>;
+
 export const classifierDocSchema = z.looseObject({
   rules: z.array(classifierRuleSchema).optional(),
+  /** 键是 vendorKey（不分大小写）。 */
+  channels: z.record(z.string(), classifierChannelSchema).optional(),
 });
 export type ClassifierDoc = z.infer<typeof classifierDocSchema>;
 
