@@ -376,6 +376,18 @@ describe('condition editor', () => {
     expect(classifier.find('.cond-row').attributes('data-source')).toBe('header');
   });
 
+  it('a filter rule can pick a whole category (agent.*) as well as single classifiers, and keeps it as written', () => {
+    const w = editor({ classifier: 'agent.*' });
+
+    expect(labels(selectIn(w, 'cond-classifiers'))).toEqual([
+      'Chat 全部（chat.*）',
+      'Agent 全部（agent.*）',
+      'chat.app（Chat）',
+      'agent.claude',
+    ]);
+    expect(read(w)).toEqual({ ok: true, when: { classifier: 'agent.*' } });
+  });
+
   it('a row picks a source, then a level', () => {
     expect(labels(selectIn(editor(undefined, null), 'cond-source'))).toEqual(['请求头', '提示词', '工具']);
     expect(labels(selectIn(editor(undefined), 'cond-source'))).toEqual(['分类器', '请求头', '提示词', '工具']);
