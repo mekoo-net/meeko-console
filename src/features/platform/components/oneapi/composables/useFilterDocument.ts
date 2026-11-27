@@ -21,7 +21,7 @@ export function useFilterDocument() {
   const version = ref<string | null>(null);
   const schema = shallowRef<FilterSchema>({ fields: [], operators: {}, vendors: [] });
   /**
-   * 现在这份文档里网关读不懂的地方。存得进去的文档一定读得懂，所以只有读回来的那一份（有人直接改了 Consul）会有；
+   * 现在这份文档里网关读不懂的地方。存得进去的文档一定读得懂，所以只有读回来的那一份（有人直接改了 NATS 上那一份）会有；
    * 有的话那几处在网关那边不生效，并且改好以前整份存不进去。
    */
   const problems = shallowRef<FilterProblem[]>([]);

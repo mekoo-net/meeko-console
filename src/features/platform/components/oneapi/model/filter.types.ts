@@ -7,11 +7,11 @@ import { z } from 'zod';
  * - **过滤器**（一个 Vendor 一张规则表）：每条规则一个条件、一个动作（放行 / 拒绝）。条件可以引用分类器，
  *   也可以直接写请求头条件。从上往下，第一条成立的说了算，都不成立走默认动作。
  *
- * 文档存在 Consul KV 上，OneApi 网关跟着它。这一页经平台网关直接找 OneApi 的号池后台读写它
+ * 文档存在 NATS 上 OneApi 的库里（KV 桶 `oneapi` 的 `filter.policy`），OneApi 网关 watch 它。这一页经平台网关直接找 OneApi 的号池后台读写它
  * （`/oneapi/vault/v1/filter`，不经 Bff），回包不包信封，字段照号池后台的 `FilterDtos.cs`。
  * 文档的形状和网关怎么读它，见 OneApi 仓库的 `src/OneApi.Gateway/request-filter.md`。
  *
- * 文档原样留着、不按形状收紧：网关以后多认一种写法，或者有人直接在 Consul 里加了这一页不认识的键，
+ * 文档原样留着、不按形状收紧：网关以后多认一种写法，或者有人直接在 NATS 上那一份里加了这一页不认识的键，
  * 存回去的时候都得还在。所以每一层都是「认识的字段有类型，其余的照搬」。
  */
 

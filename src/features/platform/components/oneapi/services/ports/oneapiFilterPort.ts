@@ -6,7 +6,7 @@ import type { FilterDoc, FilterProblem, FilterSchema, FilterSnapshot } from '../
  * OneApi 网关的过滤器（分类器 + 各 Vendor 的过滤规则）—— 对应号池后台的 `/v1/filter/**`，
  * 对外是 `/oneapi/vault/v1/filter/**`。
  *
- * 是一整份文档，存在 Consul KV 上，OneApi 网关跟着它：这里存进去，网关那边一个来回之内就换上新的。
+ * 是一整份文档，存在 NATS 上 OneApi 的库里，OneApi 网关 watch 它：这里存进去，网关那边马上换上新的。
  * 所以没有「发布」，存成了就是生效了。
  *
  * 整份读、整份存，存的时候带着读到的版本号：别人先存过，这次就被拒掉（`conflict`），重新读了再改。
