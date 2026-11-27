@@ -1,25 +1,23 @@
-import { OneApiClassifierHttpAdapter } from '@/shared/api/adapters/oneapiClassifierAdapter';
+import { OneApiFilterHttpAdapter } from '@/shared/api/adapters/oneapiFilterAdapter';
 import { OneApiRatecardHttpAdapter } from '@/shared/api/adapters/oneapiRatecardAdapter';
 import { isMockMode } from '@/shared/runtime';
 
-import { OneApiClassifierMock } from './mock/oneapiClassifierMock';
+import { OneApiFilterMock } from './mock/oneapiFilterMock';
 import { OneApiRatecardMock } from './mock/oneapiRatecardMock';
-import type { OneApiClassifierPort } from './ports/oneapiClassifierPort';
+import type { OneApiFilterPort } from './ports/oneapiFilterPort';
 import type { OneApiRatecardPort } from './ports/oneapiRatecardPort';
 
-/** OneApi 这个组件的设置端口，一页一个：模型价格、请求分类。以后网关的别的设置各加一个端口。 */
+/** OneApi 这个组件的设置端口，一页一个：模型价格、过滤器。以后网关的别的设置各加一个端口。 */
 const ratecard: OneApiRatecardPort = isMockMode
   ? new OneApiRatecardMock()
   : new OneApiRatecardHttpAdapter();
 
-const classifier: OneApiClassifierPort = isMockMode
-  ? new OneApiClassifierMock()
-  : new OneApiClassifierHttpAdapter();
+const filter: OneApiFilterPort = isMockMode ? new OneApiFilterMock() : new OneApiFilterHttpAdapter();
 
 export function getOneApiRatecardPort(): OneApiRatecardPort {
   return ratecard;
 }
 
-export function getOneApiClassifierPort(): OneApiClassifierPort {
-  return classifier;
+export function getOneApiFilterPort(): OneApiFilterPort {
+  return filter;
 }

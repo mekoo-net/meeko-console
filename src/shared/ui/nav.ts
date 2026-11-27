@@ -3,6 +3,7 @@ import {
   ChatDotRound,
   ChatLineRound,
   Connection,
+  CollectionTag,
   CreditCard,
   Coin,
   DataAnalysis,
@@ -292,7 +293,8 @@ export const navViews: readonly NavView[] = [
     title: '组件设置',
     icon: SetUp,
     perm: 'platform.settings.read',
-    // 平台依赖的组件各占一组，组里是这个组件自己的设置页。现在只有 OneApi；它的别的设置以后加在同一组里。
+    // 平台依赖的组件各占一组，组里是这个组件自己的设置页。OneApi 网关的安全策略（分类器、过滤器）自成一组：
+    // 它们是一套东西，和价格那类组件设置分开看。
     menu: [
       {
         type: 'group',
@@ -307,10 +309,25 @@ export const navViews: readonly NavView[] = [
             icon: PriceTag,
             perm: 'platform.settings.read',
           },
+        ],
+      },
+      {
+        type: 'group',
+        index: '/components/security',
+        title: '安全策略',
+        icon: Lock,
+        children: [
           {
             type: 'leaf',
-            index: '/components/oneapi/classifier',
-            title: '请求分类',
+            index: '/components/security/classifier',
+            title: '分类器',
+            icon: CollectionTag,
+            perm: 'platform.settings.read',
+          },
+          {
+            type: 'leaf',
+            index: '/components/security/filter',
+            title: '过滤器',
             icon: Filter,
             perm: 'platform.settings.read',
           },

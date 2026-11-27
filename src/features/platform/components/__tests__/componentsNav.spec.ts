@@ -9,6 +9,9 @@ import { routes } from '@/router/routes';
 vi.mock('@/features/platform/components/oneapi/views/RatecardView.vue', () => ({
   default: { name: 'RatecardViewStub', render: () => null },
 }));
+vi.mock('@/features/platform/components/oneapi/views/FilterView.vue', () => ({
+  default: { name: 'FilterViewStub', render: () => null },
+}));
 vi.mock('@/features/platform/components/oneapi/views/ClassifierView.vue', () => ({
   default: { name: 'ClassifierViewStub', render: () => null },
 }));
@@ -22,7 +25,8 @@ import {
 } from '@/shared/ui/nav';
 
 /**
- * 「组件设置」怎么挂进侧栏和路由：和系统设置并列的一组，进去按组件分，现在只有 OneApi → 模型价格。
+ * 「组件设置」怎么挂进侧栏和路由：和系统设置并列的一组，进去按组件分：OneApi → 模型价格；
+ * 安全策略 → 分类器、过滤器。
  * 价格表原来在 Yomi 分组下面，旧地址要还能打开。
  */
 describe('components settings: nav and routes', () => {
@@ -36,10 +40,14 @@ describe('components settings: nav and routes', () => {
     const ids = navViews.map((v) => v.id);
     expect(ids.indexOf('components')).toBe(ids.indexOf('settings') + 1);
     expect(view.title).toBe('组件设置');
-    expect(view.menu.map((n) => [n.type, n.title])).toEqual([['group', 'OneApi']]);
+    expect(view.menu.map((n) => [n.type, n.title])).toEqual([
+      ['group', 'OneApi'],
+      ['group', '安全策略'],
+    ]);
     expect(collectLeaves(view.menu).map((l) => [l.index, l.title])).toEqual([
       ['/components/oneapi/ratecard', '模型价格'],
-      ['/components/oneapi/classifier', '请求分类'],
+      ['/components/security/classifier', '分类器'],
+      ['/components/security/filter', '过滤器'],
     ]);
     // 没有空的占位页：每个入口都点得进去
     expect(collectLeaves(view.menu).some((l) => l.disabled)).toBe(false);
@@ -74,17 +82,24 @@ describe('components settings: nav and routes', () => {
     }
   });
 
-  it('the classifier page has its own address under OneApi', async () => {
-    const router = createRouter({ history: createMemoryHistory(), routes });
-    await router.push('/components/oneapi/classifier');
-    const route = router.currentRoute.value;
-    expect(route.name).toBe('components-oneapi-classifier');
-    expect(route.meta).toMatchObject({
-      title: '请求分类',
-      requiresAuth: true,
-      permissions: ['platform.settings.read'],
-    });
-    expect(matchView('/components/oneapi/classifier')?.id).toBe('components');
+  it('classifiers and filters are two pages under the security policy group', async () => {
+    for (const [path, name, title] of [
+      ['/components/security/classifier', 'components-security-classifier', '分类器'],
+      ['/components/security/filter', 'components-security-filter', '过滤器'],
+      ['/components/security', 'components-security-classifier', '分类器'],
+    ] as const) {
+      const router = createRouter({ history: createMemoryHistory(), routes });
+      await router.push(path);
+      const route = router.currentRoute.value;
+      expect(route.name, path).toBe(name);
+      expect(route.meta, path).toMatchObject({
+        title,
+        requiresAuth: true,
+        permissions: ['platform.settings.read'],
+      });
+      // 侧栏按落地以后的地址找它属于哪个视图
+      expect(matchView(route.path)?.id, path).toBe('components');
+    }
   });
 
   it('the Yomi menu no longer carries a price table', () => {

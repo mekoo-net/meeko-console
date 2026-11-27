@@ -1,22 +1,17 @@
 <script setup lang="ts">
 /**
- * 请求分类，两层，各占一个标签页：
+ * 分类器（安全策略 → 分类器）：什么样的请求算哪一类——`chat.app`、`chat.tavern`、`agent.claude`……
  *
- * 1. **分类规则**（全站一份）：什么样的请求算哪一类——`chat.app`、`tavern.sillytavern`、`agent.claude_code`……
- *    认出来就给请求打上这个标签。网关从上往下看，第一条命中的说了算。
- * 2. **渠道规则**（一个 Vendor 一份）：这个 Vendor 上，带某个标签的请求放行还是拒绝。比如 Factory 上「agent 这一类 → 拒绝」。
- *    没有渠道规则的 Vendor 什么都收。
+ * 规则下发给 OneApi 网关，网关编译好以后拿它匹配每个请求，认出是哪一类。分类器本身没有任何动作，
+ * 不放行也不拒绝：拦不拦是「过滤器」那一页的事，过滤规则引用分类器做条件。遥测里一个请求「是哪一类」，
+ * 看从上往下第一个成立的分类器，所以这一页的顺序有意义；过滤规则引用分类器时只看它自己成不成立，不看顺序。
  *
- * 两层分开，是因为它们回答的是两个问题：一个请求是什么，和哪个 Vendor 收不收它。新认一种客户端只加一条分类规则，
- * 各个 Vendor 的渠道规则不用动；某个 Vendor 改主意了只改它自己的渠道规则。
+ * 条件现在能看的是请求头。能看哪些字段是网关的编译器自己报的（号池后台的 schema 接口），网关以后多认内容里的字段，
+ * 这一页的下拉框跟着就有，不用改这里。
  *
- * 规则是 OneApi 网关读的一整份文档；这一页经平台网关直接找 OneApi 的号池后台读写它（不经 Bff）。存进去网关马上换上新的，
- * 所以没有「发布」：每个动作都是当场存，存成了就是生效了。认出来的结果和渠道规则判的结果在遥测里看。
- *
- * 分类规则可以只管一部分 Vendor（规则上的「适用 Vendor」）。左边选一个 Vendor 看到的是它的请求会依次经过的全部规则——
- * 专门给它的加上通用的——因为只列专门给它的，会看漏排在前面的通用规则先把请求认走了。
+ * 分类器和过滤规则在网关那边是一整份文档，这一页只改分类器那一块，存的是整份（见 useFilterDocument）。
  */
-import { computed, onMounted, ref, shallowRef } from 'vue';
+import { computed, ref } from 'vue';
 import { Bottom, Delete, Edit, Plus, Refresh, Top } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
@@ -27,245 +22,111 @@ import WorkspaceDetailPanel from '@/shared/ui/workspace/WorkspaceDetailPanel.vue
 import WorkspaceLayout from '@/shared/ui/workspace/WorkspaceLayout.vue';
 import { useAuthStore } from '@/stores/auth';
 
-import ClassifierChannelPanel from '../components/classifier/ClassifierChannelPanel.vue';
-import ClassifierRuleDialog from '../components/classifier/ClassifierRuleDialog.vue';
+import ClassifierDialog from '../components/filter/ClassifierDialog.vue';
+import ConditionChips from '../components/filter/ConditionChips.vue';
+import FilterProblemsAlert from '../components/filter/FilterProblemsAlert.vue';
+import { categoryLook, categoryOf, lookOfCategory } from '../components/filter/classifierCategory';
+import { useFilterDocument } from '../composables/useFilterDocument';
 import {
-  SCOPE_ALL,
-  addChannelEntry,
-  channelOf,
-  channelSummary,
-  channelVendors,
-  describeCondition,
-  isCommon,
-  isEnabled,
-  matchOptions,
-  moveChannelEntry,
-  moveRule,
-  problemsOfRule,
-  removeChannel,
-  removeChannelEntry,
-  removeRule,
-  rowsInScope,
-  rulesOf,
-  setChannelDefault,
-  setChannelEnforce,
-  setChannelEntryAction,
-  setEnabled,
-  upsertRule,
-  vendorScopes,
-  type ChannelAction,
-  type RuleRow,
-} from '../model/classifier';
-import type {
-  ClassifierChannelEntry,
-  ClassifierDoc,
-  ClassifierRule,
-  ClassifierSchema,
-} from '../model/classifier.types';
-import { failureText } from '../model/ratecard';
-import { getOneApiClassifierPort } from '../services';
+  classifierUses,
+  classifiersOf,
+  moveClassifier,
+  problemsOfClassifier,
+  removeClassifier,
+  upsertClassifier,
+  vendorList,
+} from '../model/filter';
+import type { FilterClassifier } from '../model/filter.types';
 
-const port = getOneApiClassifierPort();
 const auth = useAuthStore();
 /** 没有写权限的人只能看。 */
 const canWrite = computed(() => auth.hasPermission('platform.settings.write'));
 
-/** 看哪一层。 */
-const tab = ref<'rules' | 'channels'>('rules');
+const { doc, schema, problems, loading, loaded, loadError, saving, load, commit, checkThenCommit } =
+  useFilterDocument();
 
-// ---- 文档 -----------------------------------------------------------------------
+const classifiers = computed(() => classifiersOf(doc.value));
+const usesOf = (c: FilterClassifier) => classifierUses(doc.value, c.id);
+const usedCount = computed(() => classifiers.value.filter((c) => usesOf(c).length > 0).length);
+const vendorName = (key: string): string =>
+  vendorList(doc.value, schema.value.vendors).find((v) => v.key.toLowerCase() === key.toLowerCase())?.displayName ??
+  key;
+const rowProblems = (c: FilterClassifier, index: number): string[] => problemsOfClassifier(problems.value, c.id, index);
 
-/** 文档每次都是整份换（读回来的、存完回来的），不在原地改，所以不用深层响应。 */
-const doc = shallowRef<ClassifierDoc>({});
-/** 存的时候带回去的版本号；还没有文档时是 null。 */
-const version = ref<string | null>(null);
-const schema = shallowRef<ClassifierSchema>({ fields: [], operators: {}, vendors: [] });
-const loading = ref(false);
-const loaded = ref(false);
-const loadError = ref<string | null>(null);
-/** 正在存。一次只存一个动作：两个动作叠着发，后一个带的是旧版本号，会被自己前一个挤掉。 */
-const saving = ref(false);
+// ---- 按类别看 ----------------------------------------------------------------------
 
-async function load(): Promise<void> {
-  loading.value = true;
-  loadError.value = null;
-  const [snapshot, options] = await Promise.all([port.load(), port.schema()]);
-  loading.value = false;
-  loaded.value = true;
-
-  if (!snapshot.success) {
-    loadError.value = failureText(snapshot.error);
-    return;
-  }
-  doc.value = snapshot.data.doc;
-  version.value = snapshot.data.version;
-  // 选项没取到不挡着看规则：下拉框是空的，规则照样列得出来
-  if (options.success) schema.value = options.data;
-  else ElMessage.warning(`没取到字段和 Vendor 的选项：${failureText(options.error)}`);
-
-  if (scope.value !== SCOPE_ALL && !scopes.value.some((s) => s.key === scope.value)) scope.value = SCOPE_ALL;
-  if (!channelList.value.some((v) => v.key === channelVendor.value)) channelVendor.value = channelList.value[0]?.key ?? '';
-}
-
-onMounted(load);
-
-/**
- * 把改好的整份文档存下去。成了换上号池后台回来的那一份（连同新版本号）；
- * 别人先存过就重新读一遍，这次的改动不算——让人看着最新的再改，不替他合并。
- */
-async function commit(next: ClassifierDoc): Promise<boolean> {
-  if (saving.value) return false;
-  saving.value = true;
-  const res = await port.save(next, version.value);
-  saving.value = false;
-
-  if (res.success) {
-    doc.value = res.data.doc;
-    version.value = res.data.version;
-    return true;
-  }
-  if (res.error.code === 'conflict') {
-    ElMessage.warning('别人刚改过这份规则，已经换成最新的，请看一下再改');
-    await load();
-    return false;
-  }
-  ElMessage.error(failureText(res.error));
-  return false;
-}
-
-// ---- 分类规则 -------------------------------------------------------------------
-
-const scope = ref<string>(SCOPE_ALL);
-const scopes = computed(() => vendorScopes(doc.value, schema.value.vendors));
-const activeScope = computed(() => scopes.value.find((s) => s.key === scope.value) ?? null);
-const rows = computed<RuleRow[]>(() => rowsInScope(doc.value, scope.value));
-const total = computed(() => rulesOf(doc.value).length);
-
-const scopeTitle = computed(() => (scope.value === SCOPE_ALL ? '全部分类规则' : (activeScope.value?.displayName ?? scope.value)));
-const scopeSub = computed(() =>
-  scope.value === SCOPE_ALL
-    ? `${total.value} 条规则 · 网关从上往下看，第一条命中的说了算`
-    : `这个 Vendor 的请求依次过这 ${rows.value.length} 条规则（专门给它的 ${activeScope.value?.own ?? 0} 条，其余是通用的）`,
+const ALL = '';
+const category = ref(ALL);
+const categories = computed(() => {
+  const counts = new Map<string, number>();
+  for (const c of classifiers.value) counts.set(categoryOf(c.id), (counts.get(categoryOf(c.id)) ?? 0) + 1);
+  return [...counts].map(([key, count]) => ({ key, count, look: lookOfCategory(key) }));
+});
+/** 每一行带着它在整份里的位置：顺序那一格显示的是它，筛过以后不重新编号。 */
+const rows = computed(() =>
+  classifiers.value
+    .map((c, index) => ({ c, index }))
+    .filter(({ c }) => category.value === ALL || categoryOf(c.id) === category.value),
 );
+/** 顺序是整份的，筛着的时候上移下移会跨过看不见的那些，所以不让调。 */
+const canReorder = computed(() => category.value === ALL);
 
-const vendorNames = (rule: ClassifierRule): string[] => rule.vendors ?? [];
-
-async function onToggle(rule: ClassifierRule, value: boolean | string | number): Promise<void> {
-  await commit(setEnabled(doc.value, rule.id, value === true));
-}
-
-async function onMove(rule: ClassifierRule, direction: -1 | 1): Promise<void> {
-  const next = moveRule(doc.value, scope.value, rule.id, direction);
+async function onMove(c: FilterClassifier, direction: -1 | 1): Promise<void> {
+  const next = moveClassifier(doc.value, c.id, direction);
   if (next !== doc.value) await commit(next);
 }
 
-async function onRemove(rule: ClassifierRule): Promise<void> {
+/** 还有过滤规则引用它就不让删：删了那几个 Vendor 的过滤器网关读不懂，会整个不生效。 */
+async function onRemove(c: FilterClassifier): Promise<void> {
+  const uses = usesOf(c);
+  if (uses.length > 0) {
+    const where = uses.map((u) => `${vendorName(u.vendor)} 的「${u.ruleId}」`).join('、');
+    ElMessage.warning(`先到过滤器里改掉引用它的规则：${where}`);
+    return;
+  }
   const sure = await confirmDanger({
-    title: '删除分类规则',
-    message: `删除规则「${rule.id}」？它认出来的请求以后不再打「${rule.label}」这个标签。`,
+    title: '删除分类器',
+    message: `删除分类器「${c.id}」？它认的请求以后不再算这一类。`,
     confirmText: '删除',
   });
   if (!sure) return;
-  if (await commit(removeRule(doc.value, rule.id))) ElMessage.success('已删除');
+  if (await commit(removeClassifier(doc.value, c.id))) ElMessage.success('已删除');
 }
+
+// ---- 新建和编辑 -------------------------------------------------------------------
 
 const dialogOpen = ref(false);
-const editingRule = ref<ClassifierRule | null>(null);
+const editing = ref<FilterClassifier | null>(null);
 const dialogProblems = ref<string[]>([]);
 const submitting = ref(false);
-
-const takenIds = computed(() => rulesOf(doc.value).map((r) => r.id));
-const knownLabels = computed(() => rulesOf(doc.value).map((r) => r.label));
-/** 在某个 Vendor 下面点新建，先替他勾上这个 Vendor。 */
-const defaultVendors = computed(() => (scope.value === SCOPE_ALL ? [] : [scope.value]));
+const takenIds = computed(() => classifiers.value.map((c) => c.id));
 
 function openCreate(): void {
-  editingRule.value = null;
+  editing.value = null;
   dialogProblems.value = [];
   dialogOpen.value = true;
 }
 
-function openEdit(rule: ClassifierRule): void {
-  editingRule.value = rule;
+function openEdit(c: FilterClassifier): void {
+  editing.value = c;
   dialogProblems.value = [];
   dialogOpen.value = true;
 }
 
-/**
- * 弹窗交出一条规则：先让号池后台只查不存，把网关读不懂的地方落到这条规则上（存的那个接口不过时只回一句话，
- * 分不出是哪一条）；这条没问题再存。
- */
-async function onSubmit(rule: ClassifierRule, originalId: string | undefined): Promise<void> {
+async function onSubmit(c: FilterClassifier, originalId: string | undefined): Promise<void> {
   if (submitting.value) return;
-  const next = upsertRule(doc.value, rule, originalId);
-  const index = rulesOf(next).findIndex((r) => r.id === rule.id);
+  const next = upsertClassifier(doc.value, c, originalId);
+  const index = classifiersOf(next).findIndex((x) => x.id === c.id);
 
   submitting.value = true;
-  const checked = await port.validate(next);
-  if (checked.success) {
-    dialogProblems.value = problemsOfRule(checked.data, rule.id, index);
-    if (dialogProblems.value.length > 0) {
-      submitting.value = false;
-      return;
-    }
-  }
-  // 校验接口没通不挡着存：存的时候号池后台还会再查一遍
-  const saved = await commit(next);
+  const left = await checkThenCommit(next, (found) => problemsOfClassifier(found, c.id, index));
   submitting.value = false;
-  if (!saved) return;
-
+  if (left !== null) {
+    dialogProblems.value = left;
+    return;
+  }
   dialogOpen.value = false;
   ElMessage.success(originalId === undefined ? '已新建，网关已经在用了' : '已保存，网关已经在用了');
-}
-
-// ---- 渠道规则 -------------------------------------------------------------------
-
-const channelList = computed(() => channelVendors(doc.value, schema.value.vendors));
-const channelVendor = ref('');
-const channelView = computed(() => channelOf(doc.value, channelVendor.value));
-const channelName = computed(
-  () => channelList.value.find((v) => v.key === channelVendor.value)?.displayName ?? channelVendor.value,
-);
-const channelMatchOptions = computed(() => matchOptions(doc.value));
-
-const onChannelDefault = (action: ChannelAction): Promise<boolean> =>
-  commit(setChannelDefault(doc.value, channelVendor.value, action));
-
-/** 打开「执行」以后请求会真的被拒，先问一句；关掉（退回只标记）不用问。 */
-async function onChannelEnforce(value: boolean): Promise<void> {
-  if (value) {
-    const sure = await confirmDanger({
-      title: '执行渠道规则',
-      message: `打开以后，${channelName.value} 上被判拒绝的请求会真的被拒掉（403）。先在遥测里确认过「本该拒绝」的都是该拒的了吗？`,
-      confirmText: '打开执行',
-    });
-    if (!sure) return;
-  }
-  await commit(setChannelEnforce(doc.value, channelVendor.value, value));
-}
-
-const onChannelAdd = (entry: ClassifierChannelEntry): Promise<boolean> =>
-  commit(addChannelEntry(doc.value, channelVendor.value, entry));
-
-const onChannelAction = (index: number, action: ChannelAction): Promise<boolean> =>
-  commit(setChannelEntryAction(doc.value, channelVendor.value, index, action));
-
-async function onChannelMove(index: number, direction: -1 | 1): Promise<void> {
-  const next = moveChannelEntry(doc.value, channelVendor.value, index, direction);
-  if (next !== doc.value) await commit(next);
-}
-
-const onChannelRemove = (index: number): Promise<boolean> =>
-  commit(removeChannelEntry(doc.value, channelVendor.value, index));
-
-async function onChannelClear(): Promise<void> {
-  const sure = await confirmDanger({
-    title: '清空渠道规则',
-    message: `清空 ${channelName.value} 的渠道规则？清空以后它什么请求都收。`,
-    confirmText: '清空',
-  });
-  if (!sure) return;
-  if (await commit(removeChannel(doc.value, channelVendor.value))) ElMessage.success('已清空');
 }
 </script>
 
@@ -273,8 +134,8 @@ async function onChannelClear(): Promise<void> {
   <WorkspaceLayout :loading="loading && !loaded">
     <template #header>
       <PageHeader
-        title="请求分类"
-        description="先定分类规则：什么样的请求算哪一类。再定渠道规则：每个 Vendor 上哪一类放行、哪一类拒绝。结果在遥测里看。"
+        title="分类器"
+        description="网关按这里的规则认出一个请求是哪一类，本身不放行也不拒绝。要拦请求，到「过滤器」里引用它。"
       >
         <template #actions>
           <el-button
@@ -285,321 +146,224 @@ async function onChannelClear(): Promise<void> {
             刷新
           </el-button>
           <el-button
-            v-if="canWrite && tab === 'rules'"
+            v-if="canWrite && !loadError"
             :icon="Plus"
             type="primary"
-            data-test="rule-create"
+            data-test="classifier-create"
             @click="openCreate"
           >
-            新建分类规则
+            新建分类器
           </el-button>
         </template>
       </PageHeader>
-
-      <el-radio-group
-        v-model="tab"
-        class="page-tabs"
-      >
-        <el-radio-button
-          value="rules"
-          data-test="tab-rules"
-        >
-          分类规则
-        </el-radio-button>
-        <el-radio-button
-          value="channels"
-          data-test="tab-channels"
-        >
-          渠道规则
-        </el-radio-button>
-      </el-radio-group>
+      <FilterProblemsAlert :problems="problems" />
     </template>
 
-    <!-- ── 分类规则 ── -->
-    <template v-if="tab === 'rules'">
-      <aside class="provider-sidebar">
-        <div class="provider-sidebar__list">
-          <button
-            type="button"
-            class="provider-sidebar__item scope-item"
-            :class="{ 'provider-sidebar__item--active': scope === SCOPE_ALL }"
-            @click="scope = SCOPE_ALL"
-          >
-            <span class="scope-item__name">全部分类规则</span>
-            <span class="scope-item__meta">{{ total }} 条</span>
-          </button>
-          <button
-            v-for="s in scopes"
-            :key="s.key"
-            type="button"
-            class="provider-sidebar__item scope-item"
-            :class="{ 'provider-sidebar__item--active': scope === s.key }"
-            @click="scope = s.key"
-          >
-            <span class="scope-item__name">
-              {{ s.displayName }}
-              <el-tag
-                v-if="s.unknown"
-                size="small"
-                type="warning"
-                effect="plain"
-              >
-                未登记
-              </el-tag>
-            </span>
-            <span class="scope-item__meta">{{ s.own > 0 ? `专属 ${s.own} 条` : '只有通用规则' }}</span>
-          </button>
-        </div>
-      </aside>
-
-      <WorkspaceDetailPanel :show-placeholder="loadError !== null || (loaded && total === 0)">
-        <template #placeholder>
-          <EmptyState
-            v-if="loadError"
-            title="没读到分类规则"
-            :description="loadError"
-          >
-            <el-button
-              :icon="Refresh"
-              @click="load"
-            >
-              重试
-            </el-button>
-          </EmptyState>
-          <EmptyState
-            v-else
-            title="还没有分类规则"
-            description="没有规则时网关认不出任何请求，渠道规则也就没有东西可以匹配。"
-          >
-            <el-button
-              v-if="canWrite"
-              :icon="Plus"
-              type="primary"
-              @click="openCreate"
-            >
-              新建分类规则
-            </el-button>
-          </EmptyState>
-        </template>
-
-        <template #header>
-          <div class="detail-ident">
-            <h2 class="provider-detail__title">
-              {{ scopeTitle }}
-            </h2>
-            <p class="detail-sub">
-              {{ scopeSub }}
-            </p>
-          </div>
-        </template>
-
-        <table
-          v-if="rows.length > 0"
-          v-loading="saving"
-          class="rule-table"
+    <WorkspaceDetailPanel :show-placeholder="loadError !== null || (loaded && classifiers.length === 0)">
+      <template #placeholder>
+        <EmptyState
+          v-if="loadError"
+          title="没读到分类器"
+          :description="loadError"
         >
-          <thead>
-            <tr>
-              <th class="rule-table__order">
-                顺序
-              </th>
-              <th class="rule-table__on">
-                启用
-              </th>
-              <th>分类和条件</th>
-              <th class="rule-table__vendor">
-                适用 Vendor
-              </th>
-              <th
-                v-if="canWrite"
-                class="rule-table__ops"
-              >
-                操作
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="(row, i) in rows"
-              :key="row.rule.id"
-              class="rule-row"
-              :class="{ 'rule-row--off': !isEnabled(row.rule) }"
-              :data-rule="row.rule.id"
-            >
-              <td class="rule-table__order">
-                {{ row.index + 1 }}
-              </td>
-              <td class="rule-table__on">
-                <el-switch
-                  :model-value="isEnabled(row.rule)"
-                  :disabled="!canWrite || saving"
-                  size="small"
-                  @change="(v: boolean | string | number) => onToggle(row.rule, v)"
-                />
-              </td>
-              <td>
-                <div class="rule-row__head">
-                  <span class="rule-row__label">{{ row.rule.label }}</span>
-                  <span class="rule-row__id">{{ row.rule.id }}</span>
-                </div>
-                <div class="rule-row__when">
-                  {{ describeCondition(row.rule.when) }}
-                </div>
-              </td>
-              <td>
-                <span
-                  v-if="isCommon(row.rule)"
-                  class="rule-row__common"
-                >通用</span>
-                <template v-else>
-                  <el-tag
-                    v-for="v in vendorNames(row.rule)"
-                    :key="v"
-                    size="small"
-                    effect="plain"
-                    class="rule-row__vendor"
-                  >
-                    {{ v }}
-                  </el-tag>
-                </template>
-              </td>
-              <td
-                v-if="canWrite"
-                class="rule-table__ops"
-              >
-                <el-button
-                  :icon="Top"
-                  link
-                  :disabled="i === 0 || saving"
-                  aria-label="上移"
-                  data-test="rule-up"
-                  @click="onMove(row.rule, -1)"
-                />
-                <el-button
-                  :icon="Bottom"
-                  link
-                  :disabled="i === rows.length - 1 || saving"
-                  aria-label="下移"
-                  data-test="rule-down"
-                  @click="onMove(row.rule, 1)"
-                />
-                <el-button
-                  :icon="Edit"
-                  link
-                  aria-label="编辑"
-                  data-test="rule-edit"
-                  @click="openEdit(row.rule)"
-                />
-                <el-button
-                  :icon="Delete"
-                  link
-                  type="danger"
-                  :disabled="saving"
-                  aria-label="删除"
-                  data-test="rule-delete"
-                  @click="onRemove(row.rule)"
-                />
-              </td>
-            </tr>
-          </tbody>
-        </table>
+          <el-button
+            :icon="Refresh"
+            @click="load"
+          >
+            重试
+          </el-button>
+        </EmptyState>
         <EmptyState
           v-else
-          title="这个 Vendor 上没有分类规则"
-          description="专门给它的和通用的都没有，它的请求都认不出来。"
-        />
-      </WorkspaceDetailPanel>
-    </template>
-
-    <!-- ── 渠道规则 ── -->
-    <template v-else>
-      <aside class="provider-sidebar">
-        <div class="provider-sidebar__list">
-          <button
-            v-for="v in channelList"
-            :key="v.key"
-            type="button"
-            class="provider-sidebar__item scope-item channel-item"
-            :class="{ 'provider-sidebar__item--active': channelVendor === v.key }"
-            :data-vendor="v.key"
-            @click="channelVendor = v.key"
+          title="还没有分类器"
+          description="分类器说一个请求是哪一类，过滤器引用它来决定拦不拦。"
+        >
+          <el-button
+            v-if="canWrite"
+            :icon="Plus"
+            type="primary"
+            @click="openCreate"
           >
-            <span class="scope-item__name">
-              {{ v.displayName }}
-              <el-tag
-                v-if="v.unknown"
-                size="small"
-                type="warning"
-                effect="plain"
-              >
-                未登记
-              </el-tag>
-            </span>
-            <span class="scope-item__meta">{{ channelSummary(channelOf(doc, v.key)) }}</span>
-          </button>
-          <p
-            v-if="channelList.length === 0 && !loading"
-            class="provider-sidebar__empty"
-          >
-            没有 Vendor
-          </p>
-        </div>
-      </aside>
+            新建分类器
+          </el-button>
+        </EmptyState>
+      </template>
 
-      <WorkspaceDetailPanel :show-placeholder="loadError !== null || channelVendor === ''">
-        <template #placeholder>
-          <EmptyState
-            v-if="loadError"
-            title="没读到渠道规则"
-            :description="loadError"
-          >
-            <el-button
-              :icon="Refresh"
-              @click="load"
-            >
-              重试
-            </el-button>
-          </EmptyState>
-          <EmptyState
-            v-else
-            title="请选择左侧的 Vendor"
-          />
-        </template>
-
-        <template #header>
-          <div class="detail-ident">
+      <template #header>
+        <div class="cls-head">
+          <div class="cls-head__text">
             <h2 class="provider-detail__title">
-              {{ channelName }}
+              全部分类器
             </h2>
-            <p class="detail-sub">
-              带某个分类标签的请求，这个 Vendor 放行还是拒绝。从上往下匹配，第一条匹配上的说了算。
+            <p class="cls-head__sub">
+              一个请求是哪一类，看从上往下第一个成立的分类器；过滤器引用分类器时只看它自己成不成立。
             </p>
           </div>
-        </template>
+          <div class="cls-stats">
+            <div class="cls-stat">
+              <span class="cls-stat__value">{{ classifiers.length }}</span>
+              <span class="cls-stat__label">分类器</span>
+            </div>
+            <div class="cls-stat">
+              <span class="cls-stat__value">{{ usedCount }}</span>
+              <span class="cls-stat__label">被过滤器引用</span>
+            </div>
+          </div>
+        </div>
+      </template>
 
-        <ClassifierChannelPanel
-          :view="channelView"
-          :options="channelMatchOptions"
-          :can-write="canWrite"
-          :saving="saving"
-          @default="onChannelDefault"
-          @enforce="onChannelEnforce"
-          @add="onChannelAdd"
-          @action="onChannelAction"
-          @move="onChannelMove"
-          @remove="onChannelRemove"
-          @clear="onChannelClear"
-        />
-      </WorkspaceDetailPanel>
-    </template>
+      <template #toolbar>
+        <div
+          class="cat-bar"
+          role="tablist"
+        >
+          <button
+            type="button"
+            class="cat-chip"
+            :class="{ 'cat-chip--active': category === ALL }"
+            data-test="category-all"
+            @click="category = ALL"
+          >
+            全部
+            <span class="cat-chip__count">{{ classifiers.length }}</span>
+          </button>
+          <button
+            v-for="cat in categories"
+            :key="cat.key"
+            type="button"
+            class="cat-chip"
+            :class="{ 'cat-chip--active': category === cat.key }"
+            :style="{ '--cat-color': cat.look.color }"
+            :data-category="cat.key"
+            @click="category = cat.key"
+          >
+            <el-icon :size="13">
+              <component :is="cat.look.icon" />
+            </el-icon>
+            {{ cat.look.label }}
+            <span class="cat-chip__count">{{ cat.count }}</span>
+          </button>
+        </div>
+      </template>
 
-    <ClassifierRuleDialog
+      <ol
+        v-loading="saving"
+        class="cls-list"
+      >
+        <li
+          v-for="{ c, index } in rows"
+          :key="c.id"
+          class="cls-card"
+          :style="{ '--cat-color': categoryLook(c.id).color }"
+          :data-classifier="c.id"
+        >
+          <span class="cls-card__order">{{ index + 1 }}</span>
+          <span class="cls-card__mark">
+            <el-icon :size="17"><component :is="categoryLook(c.id).icon" /></el-icon>
+          </span>
+
+          <div class="cls-card__main">
+            <div class="cls-card__title">
+              <span class="cls-card__name">{{ c.name || c.id }}</span>
+              <code
+                v-if="c.name"
+                class="cls-card__id"
+              >{{ c.id }}</code>
+              <el-tag
+                v-if="rowProblems(c, index).length > 0"
+                size="small"
+                type="danger"
+                effect="light"
+                round
+              >
+                网关读不懂
+              </el-tag>
+            </div>
+            <ConditionChips :when="c.when" />
+          </div>
+
+          <div class="cls-card__uses">
+            <span class="cls-card__uses-label">被引用</span>
+            <div
+              v-if="usesOf(c).length > 0"
+              class="cls-card__use-list"
+            >
+              <span
+                v-for="u in usesOf(c)"
+                :key="`${u.vendor}/${u.ruleId}`"
+                class="cls-card__use"
+              >{{ vendorName(u.vendor) }} · {{ u.ruleId }}</span>
+            </div>
+            <span
+              v-else
+              class="cls-card__unused"
+            >没有过滤器引用</span>
+          </div>
+
+          <div
+            v-if="canWrite"
+            class="cls-card__ops"
+          >
+            <el-tooltip
+              :content="canReorder ? '上移' : '按类别筛选时不能调顺序'"
+              :show-after="400"
+            >
+              <el-button
+                :icon="Top"
+                text
+                circle
+                size="small"
+                :disabled="!canReorder || index === 0 || saving"
+                aria-label="上移"
+                data-test="classifier-up"
+                @click="onMove(c, -1)"
+              />
+            </el-tooltip>
+            <el-tooltip
+              :content="canReorder ? '下移' : '按类别筛选时不能调顺序'"
+              :show-after="400"
+            >
+              <el-button
+                :icon="Bottom"
+                text
+                circle
+                size="small"
+                :disabled="!canReorder || index === classifiers.length - 1 || saving"
+                aria-label="下移"
+                data-test="classifier-down"
+                @click="onMove(c, 1)"
+              />
+            </el-tooltip>
+            <el-button
+              :icon="Edit"
+              text
+              circle
+              size="small"
+              aria-label="编辑"
+              data-test="classifier-edit"
+              @click="openEdit(c)"
+            />
+            <el-button
+              :icon="Delete"
+              text
+              circle
+              size="small"
+              type="danger"
+              :disabled="saving"
+              aria-label="删除"
+              data-test="classifier-delete"
+              @click="onRemove(c)"
+            />
+          </div>
+        </li>
+      </ol>
+    </WorkspaceDetailPanel>
+
+    <ClassifierDialog
       v-model="dialogOpen"
-      :rule="editingRule"
+      :classifier="editing"
       :schema="schema"
       :taken-ids="takenIds"
-      :known-labels="knownLabels"
-      :default-vendors="defaultVendors"
       :submitting="submitting"
       :problems="dialogProblems"
       @submit="onSubmit"
@@ -608,107 +372,203 @@ async function onChannelClear(): Promise<void> {
 </template>
 
 <style scoped>
-.page-tabs {
-  margin: -4px 0 12px;
-}
-
-.scope-item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 10px 14px;
-}
-.scope-item__name {
+.cls-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13.5px;
-  font-weight: 600;
-  line-height: 1.3;
-}
-.scope-item__meta {
-  font-size: 12px;
-  line-height: 1.3;
-  color: var(--el-text-color-secondary);
-}
-
-.detail-ident {
+  gap: 24px;
+  width: 100%;
   min-width: 0;
 }
-.detail-sub {
+.cls-head__text {
+  flex: 1;
+  min-width: 0;
+}
+.cls-head__sub {
   margin: 4px 0 0;
   font-size: 13px;
   color: var(--el-text-color-secondary);
 }
-
-.rule-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-.rule-table th {
-  padding: 8px 12px;
-  text-align: left;
-  font-weight: 500;
-  color: var(--el-text-color-secondary);
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  white-space: nowrap;
-}
-.rule-table td {
-  padding: 10px 12px;
-  vertical-align: top;
-  border-bottom: 1px solid var(--el-border-color-extra-light);
-}
-.rule-table__order {
-  width: 48px;
-  color: var(--el-text-color-secondary);
-  font-variant-numeric: tabular-nums;
-}
-.rule-table__on {
-  width: 56px;
-}
-/* 剩下的宽度都给中间那一列：标签、规则 id 和条件那句话都在里面 */
-.rule-table__vendor {
-  width: 150px;
-}
-.rule-table__ops {
-  width: 132px;
-  white-space: nowrap;
-  text-align: right;
-}
-
-.rule-row--off .rule-row__label,
-.rule-row--off .rule-row__id,
-.rule-row--off .rule-row__when {
-  color: var(--el-text-color-placeholder);
-}
-.rule-row__head {
+.cls-stats {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 12px;
+  gap: 10px;
 }
-.rule-row__label {
-  font-family: var(--el-font-family-monospace, ui-monospace, monospace);
-  font-weight: 600;
+.cls-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 84px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--el-fill-color-light);
+}
+.cls-stat__value {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
   color: var(--el-text-color-primary);
 }
-.rule-row__id {
-  font-family: var(--el-font-family-monospace, ui-monospace, monospace);
+.cls-stat__label {
   font-size: 12px;
   color: var(--el-text-color-secondary);
 }
-.rule-row__when {
-  margin-top: 4px;
-  color: var(--el-text-color-secondary);
-  line-height: 1.5;
-  word-break: break-word;
+
+.cat-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
-.rule-row__common {
+.cat-chip {
+  --cat-color: var(--el-color-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 15px;
+  border: 1px solid var(--el-border-color-lighter);
+  background: var(--el-bg-color);
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+.cat-chip:hover {
+  border-color: color-mix(in srgb, var(--cat-color) 40%, transparent);
+  color: var(--cat-color);
+}
+.cat-chip--active {
+  color: var(--cat-color);
+  border-color: color-mix(in srgb, var(--cat-color) 45%, transparent);
+  background: color-mix(in srgb, var(--cat-color) 9%, transparent);
+  font-weight: 600;
+}
+.cat-chip__count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 11.5px;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  background: var(--el-fill-color);
   color: var(--el-text-color-secondary);
 }
-.rule-row__vendor {
-  margin-right: 4px;
+
+.cls-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cls-card {
+  display: grid;
+  grid-template-columns: 24px 38px minmax(0, 1fr) minmax(160px, 240px) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 12px;
+  background: var(--el-bg-color);
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.cls-card:hover {
+  border-color: color-mix(in srgb, var(--cat-color) 35%, var(--el-border-color-lighter));
+  box-shadow: 0 6px 18px rgb(15 23 42 / 6%);
+}
+.cls-card__order {
+  justify-self: center;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--el-text-color-placeholder);
+}
+.cls-card__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  color: var(--cat-color);
+  background: color-mix(in srgb, var(--cat-color) 12%, transparent);
+}
+.cls-card__main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.cls-card__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+.cls-card__name {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+.cls-card__id {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.cls-card__uses {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.cls-card__uses-label {
+  font-size: 11.5px;
+  color: var(--el-text-color-placeholder);
+}
+.cls-card__use-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.cls-card__use {
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+  background: var(--el-fill-color-light);
+  white-space: nowrap;
+}
+.cls-card__unused {
+  font-size: 12.5px;
+  color: var(--el-text-color-placeholder);
+}
+.cls-card__ops {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+.cls-card:hover .cls-card__ops,
+.cls-card__ops:focus-within {
+  opacity: 1;
+}
+.cls-card__ops .el-button + .el-button {
+  margin-left: 0;
+}
+
+@media (max-width: 1100px) {
+  .cls-card {
+    grid-template-columns: 24px 38px minmax(0, 1fr) auto;
+  }
+  .cls-card__uses {
+    grid-column: 3 / 4;
+  }
 }
 </style>

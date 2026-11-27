@@ -725,7 +725,8 @@ export const routes: RouteRecordRaw[] = [
         ],
       },
       {
-        // 组件设置：平台依赖的各个组件自己的设置，地址按组件分（/components/<组件>/<页面>）。现在只有 OneApi。
+        // 组件设置：平台依赖的各个组件自己的设置，地址按组件分（/components/<组件>/<页面>）。现在是 OneApi，
+        // 加上 OneApi 网关的安全策略（分类器、过滤器）单独一组。
         path: 'components',
         component: () => import('@/features/platform/components/views/ComponentsLayout.vue'),
         redirect: { name: 'components-oneapi-ratecard' },
@@ -742,10 +743,20 @@ export const routes: RouteRecordRaw[] = [
             meta: { title: '模型价格', requiresAuth: true, permissions: ['platform.settings.read'] },
           },
           {
-            path: 'oneapi/classifier',
-            name: 'components-oneapi-classifier',
+            path: 'security',
+            redirect: { name: 'components-security-classifier' },
+          },
+          {
+            path: 'security/classifier',
+            name: 'components-security-classifier',
             component: () => import('@/features/platform/components/oneapi/views/ClassifierView.vue'),
-            meta: { title: '请求分类', requiresAuth: true, permissions: ['platform.settings.read'] },
+            meta: { title: '分类器', requiresAuth: true, permissions: ['platform.settings.read'] },
+          },
+          {
+            path: 'security/filter',
+            name: 'components-security-filter',
+            component: () => import('@/features/platform/components/oneapi/views/FilterView.vue'),
+            meta: { title: '过滤器', requiresAuth: true, permissions: ['platform.settings.read'] },
           },
         ],
       },

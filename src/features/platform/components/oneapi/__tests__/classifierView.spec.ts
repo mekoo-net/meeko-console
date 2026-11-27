@@ -2,28 +2,23 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import ElementPlus from 'element-plus';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import ClassifierChannelPanel from '../components/classifier/ClassifierChannelPanel.vue';
-import ClassifierRuleDialog from '../components/classifier/ClassifierRuleDialog.vue';
-import type { ClassifierRule } from '../model/classifier.types';
-import {
-  _currentOneApiClassifierDoc,
-  _resetOneApiClassifierMock,
-  _someoneElseSavedClassifier,
-} from '../services/mock/oneapiClassifierMock';
+import ClassifierDialog from '../components/filter/ClassifierDialog.vue';
+import ConditionEditor from '../components/filter/ConditionEditor.vue';
+import { MOCK_FILTER_SCHEMA, _currentOneApiFilterDoc, _resetOneApiFilterMock } from '../services/mock/oneapiFilterMock';
+import type { FilterClassifier } from '../model/filter.types';
 import ClassifierView from '../views/ClassifierView.vue';
 
 /**
- * 请求分类页整页挂起来点一遍：按 Vendor 看规则、开关、调顺序、删、新建和编辑、别人先改过时怎么办。
- * 数据用这一页自己的 mock；规则的纯逻辑在 classifierModel.spec.ts 里钉着，这里只看页面把它用对了没有。
+ * 分类器页整页挂起来点一遍：按顺序列出、谁在引用、调顺序、新建和编辑、被引用的不让删、网关读不懂时怎么说。
+ * 后半是两个弹窗共用的条件编辑器：表单读得成的条件交回去不变，读不成的走 JSON。
  */
 
 const granted = vi.hoisted(() => new Set<string>());
 
-// 不管 .env 里配的是什么，这里都只用内存里的 mock
 vi.mock('../services', async () => {
-  const { OneApiClassifierMock: Mock } = await import('../services/mock/oneapiClassifierMock');
+  const { OneApiFilterMock: Mock } = await import('../services/mock/oneapiFilterMock');
   const port = new Mock();
-  return { getOneApiClassifierPort: () => port };
+  return { getOneApiFilterPort: () => port };
 });
 
 vi.mock('@/stores/auth', () => ({
@@ -32,7 +27,6 @@ vi.mock('@/stores/auth', () => ({
   }),
 }));
 
-// 二次确认一律点「确认」
 vi.mock('@/shared/composables/useConfirm', () => ({ confirmDanger: vi.fn(async () => true) }));
 
 let wrapper: VueWrapper;
@@ -43,34 +37,23 @@ async function settle(): Promise<void> {
 }
 
 async function open(): Promise<void> {
-  wrapper = mount(ClassifierView, {
-    global: { plugins: [ElementPlus] },
-    attachTo: document.body,
-  });
+  wrapper = mount(ClassifierView, { global: { plugins: [ElementPlus] }, attachTo: document.body });
   await settle();
 }
 
-const ruleIds = (): string[] => wrapper.findAll('.rule-row').map((r) => r.attributes('data-rule') ?? '');
-const row = (id: string) => wrapper.find(`.rule-row[data-rule="${id}"]`);
-const scopeNames = (): string[] => wrapper.findAll('.scope-item__name').map((n) => n.text().replace(/\s+/g, ' '));
-const savedIds = (): string[] => (_currentOneApiClassifierDoc()?.rules ?? []).map((r) => r.id);
-const toasts = (): string[] =>
-  [...document.body.querySelectorAll('.el-message')].map((m) => m.textContent?.trim() ?? '');
+const ids = (): string[] => wrapper.findAll('.cls-card').map((r) => r.attributes('data-classifier') ?? '');
+const row = (id: string) => wrapper.find(`.cls-card[data-classifier="${id}"]`);
+const savedIds = (): string[] => (_currentOneApiFilterDoc()?.classifiers ?? []).map((c) => c.id);
+const toasts = (): string[] => [...document.body.querySelectorAll('.el-message')].map((m) => m.textContent?.trim() ?? '');
+const dialog = () => wrapper.findComponent(ClassifierDialog);
 
-async function chooseScope(name: string): Promise<void> {
-  const item = wrapper.findAll('.scope-item').find((b) => b.find('.scope-item__name').text().startsWith(name));
-  await item!.trigger('click');
-  await settle();
-}
-
-/** 弹窗交出一条规则（表单本身怎么拼规则由弹窗自己的逻辑管，这里从它交出来的那一刻接着走）。 */
-async function submitFromDialog(rule: ClassifierRule, originalId?: string): Promise<void> {
-  wrapper.findComponent(ClassifierRuleDialog).vm.$emit('submit', rule, originalId);
+async function submitFromDialog(c: FilterClassifier, originalId?: string): Promise<void> {
+  dialog().vm.$emit('submit', c, originalId);
   await settle();
 }
 
 beforeEach(() => {
-  _resetOneApiClassifierMock();
+  _resetOneApiFilterMock();
   granted.clear();
   granted.add('platform.settings.write');
 });
@@ -81,312 +64,194 @@ afterEach(() => {
 });
 
 describe('classifier page', () => {
-  it('lists every rule in the order the gateway evaluates them', async () => {
+  it('lists the classifiers in order, with who refers to them', async () => {
     await open();
 
-    expect(ruleIds()).toEqual(['ua-claude-code', 'ua-tauritavern', 'ua-chat-apps', 'claude-own-agent', 'no-ua']);
-    expect(row('ua-claude-code').find('.rule-row__label').text()).toBe('agent.claude_code');
-    expect(row('ua-claude-code').find('.rule-row__when').text()).toBe('请求头 user-agent 开头是 "claude-cli/"');
-    expect(row('ua-claude-code').find('.rule-row__vendor').text()).toBe('factory');
-    expect(row('ua-tauritavern').find('.rule-row__common').exists()).toBe(true);
-    // 关着的规则灰掉，但还在它的位置上
-    expect(row('no-ua').classes()).toContain('rule-row--off');
+    expect(ids()).toEqual(['agent.claude', 'chat.tavern', 'chat.app', 'chat.webview']);
+    expect(row('agent.claude').find('.cls-card__name').text()).toBe('Claude');
+    expect(row('agent.claude').find('.cls-card__id').text()).toBe('agent.claude');
+    expect(row('agent.claude').find('.chips').attributes('aria-label')).toBe(
+      'user-agent 开头是 "claude-cli/" 或 系统提示词 包含 "You are Claude Code"',
+    );
+    expect(row('agent.claude').findAll('.cls-card__use').map((t) => t.text())).toEqual([
+      'Factory · no-agents',
+      'Claude · own-client',
+    ]);
+    expect(row('chat.webview').findAll('.cls-card__use').map((t) => t.text())).toEqual(['Claude · tavern']);
   });
 
-  it('a vendor shows the rules its requests go through: its own plus the common ones', async () => {
-    await open();
-    expect(scopeNames()).toEqual(['全部分类规则', 'Agentspace', 'Claude', 'Factory', 'Kiro']);
-
-    await chooseScope('Factory');
-    expect(ruleIds()).toEqual(['ua-claude-code', 'ua-tauritavern', 'ua-chat-apps', 'no-ua']);
-    // 顺序那一格是它在整份文档里的位置，筛过以后不重新编号
-    expect(wrapper.findAll('.rule-row td.rule-table__order').map((c) => c.text())).toEqual(['1', '2', '3', '5']);
-
-    await chooseScope('Claude');
-    expect(ruleIds()).toEqual(['ua-tauritavern', 'ua-chat-apps', 'claude-own-agent', 'no-ua']);
-
-    await chooseScope('Kiro');
-    expect(ruleIds()).toEqual(['ua-tauritavern', 'ua-chat-apps', 'no-ua']);
-  });
-
-  it('switching a rule off is saved at once', async () => {
-    await open();
-
-    await row('ua-tauritavern').find('.el-switch').trigger('click');
-    await settle();
-
-    expect(_currentOneApiClassifierDoc()!.rules!.find((r) => r.id === 'ua-tauritavern')!.enabled).toBe(false);
-    expect(row('ua-tauritavern').classes()).toContain('rule-row--off');
-  });
-
-  it('moving a rule swaps it with its neighbour in the list on screen', async () => {
-    await open();
-    await chooseScope('Factory');
-
-    // Factory 上看到的是 ua-claude-code、ua-tauritavern、ua-chat-apps、no-ua；把第一条下移
-    await row('ua-claude-code').find('[data-test="rule-down"]').trigger('click');
-    await settle();
-
-    expect(savedIds()).toEqual(['ua-tauritavern', 'ua-claude-code', 'ua-chat-apps', 'claude-own-agent', 'no-ua']);
-    expect(ruleIds()).toEqual(['ua-tauritavern', 'ua-claude-code', 'ua-chat-apps', 'no-ua']);
-  });
-
-  it('deleting asks first, then saves', async () => {
-    await open();
-
-    await row('ua-chat-apps').find('[data-test="rule-delete"]').trigger('click');
-    await settle();
-
-    expect(savedIds()).not.toContain('ua-chat-apps');
-    expect(ruleIds()).not.toContain('ua-chat-apps');
-  });
-
-  it('a new rule from the dialog is checked, saved, and shows up last', async () => {
-    await open();
-    await wrapper.find('[data-test="rule-create"]').trigger('click');
-
-    await submitFromDialog({
-      id: 'codex',
-      label: 'agent.codex',
-      vendors: ['factory'],
-      when: { field: 'header.originator', op: 'eq', value: 'codex_cli_rs' },
+  it('a classifier no filter refers to can be moved and deleted', async () => {
+    _resetOneApiFilterMock({
+      classifiers: [
+        { id: 'a.one', when: { field: 'header.origin', op: 'exists' } },
+        { id: 'b.two', when: { field: 'header.referer', op: 'exists' } },
+      ],
     });
+    await open();
+    expect(row('a.one').find('.cls-card__unused').text()).toBe('没有过滤器引用');
 
-    expect(savedIds().at(-1)).toBe('codex');
-    expect(ruleIds().at(-1)).toBe('codex');
+    await row('b.two').find('[data-test="classifier-up"]').trigger('click');
+    await settle();
+    expect(savedIds()).toEqual(['b.two', 'a.one']);
+
+    await row('a.one').find('[data-test="classifier-delete"]').trigger('click');
+    await settle();
+    expect(savedIds()).toEqual(['b.two']);
+  });
+
+  it('filters by category; the order column keeps the place in the whole list and reordering waits', async () => {
+    await open();
+    expect(wrapper.findAll('.cat-chip').map((c) => c.text().replace(/\s+/g, ' '))).toEqual([
+      '全部 4',
+      'Agent 1',
+      '聊天 3',
+    ]);
+
+    await wrapper.find('[data-category="chat"]').trigger('click');
+    expect(ids()).toEqual(['chat.tavern', 'chat.app', 'chat.webview']);
+    expect(row('chat.tavern').find('.cls-card__order').text()).toBe('2');
+    // 顺序是整份的：筛着的时候上移会跨过看不见的那些
+    expect(row('chat.app').find('[data-test="classifier-up"]').attributes('disabled')).toBeDefined();
+
+    await wrapper.find('[data-test="category-all"]').trigger('click');
+    expect(ids()).toHaveLength(4);
+  });
+
+  it('a classifier a filter still refers to cannot be deleted, and says which rules to change first', async () => {
+    await open();
+
+    await row('chat.app').find('[data-test="classifier-delete"]').trigger('click');
+    await settle();
+
+    expect(savedIds()).toContain('chat.app');
+    expect(toasts().join('|')).toContain('Claude 的「tavern」');
+  });
+
+  it('a new classifier is checked, saved, and shows up last', async () => {
+    await open();
+    await wrapper.find('[data-test="classifier-create"]').trigger('click');
+
+    await submitFromDialog({ id: 'agent.codex', when: { field: 'header.originator', op: 'eq', value: 'codex_cli_rs' } });
+
+    expect(savedIds().at(-1)).toBe('agent.codex');
+    expect(ids().at(-1)).toBe('agent.codex');
     expect(toasts().join('|')).toContain('已新建');
+    // 过滤器没被碰
+    expect(_currentOneApiFilterDoc()!.filters!.factory!.rules!.map((r) => r.id)).toEqual(['no-agents']);
   });
 
-  it('creating under a vendor starts with that vendor ticked', async () => {
+  it('editing keeps the classifier where it is', async () => {
     await open();
-    await chooseScope('Claude');
-    await wrapper.find('[data-test="rule-create"]').trigger('click');
-
-    expect(wrapper.findComponent(ClassifierRuleDialog).props('defaultVendors')).toEqual(['claude']);
-  });
-
-  it('editing keeps the rule where it is', async () => {
-    await open();
-    await row('ua-tauritavern').find('[data-test="rule-edit"]').trigger('click');
-    expect(wrapper.findComponent(ClassifierRuleDialog).props('rule')).toMatchObject({ id: 'ua-tauritavern' });
+    await row('chat.tavern').find('[data-test="classifier-edit"]').trigger('click');
+    expect(dialog().props('classifier')).toMatchObject({ id: 'chat.tavern' });
 
     await submitFromDialog(
-      { id: 'ua-tauritavern', label: 'tavern.tauri', when: { field: 'header.user-agent', op: 'prefix', value: 'TauriTavern/' } },
-      'ua-tauritavern',
+      { id: 'chat.tavern', name: '酒馆', when: { field: 'header.user-agent', op: 'contains', value: 'Tavern' } },
+      'chat.tavern',
     );
 
-    expect(savedIds()).toEqual(['ua-claude-code', 'ua-tauritavern', 'ua-chat-apps', 'claude-own-agent', 'no-ua']);
-    expect(row('ua-tauritavern').find('.rule-row__label').text()).toBe('tavern.tauri');
+    expect(savedIds()).toEqual(['agent.claude', 'chat.tavern', 'chat.app', 'chat.webview']);
+    expect(row('chat.tavern').find('.cls-card__name').text()).toBe('酒馆');
   });
 
-  it('a rule the gateway cannot read is not saved, and the dialog is told why', async () => {
+  it('a classifier the gateway cannot read is not saved, and the dialog is told why', async () => {
     await open();
-    await wrapper.find('[data-test="rule-create"]').trigger('click');
+    await wrapper.find('[data-test="classifier-create"]').trigger('click');
 
-    await submitFromDialog({
-      id: 'body-rule',
-      label: 'agent.by_prompt',
-      when: { field: 'system.head', op: 'contains', value: 'You are Claude Code' },
-    });
+    await submitFromDialog({ id: 'agent.nested', when: { classifier: 'chat.app' } });
 
-    expect(savedIds()).not.toContain('body-rule');
-    expect(wrapper.findComponent(ClassifierRuleDialog).props('problems')).toEqual(["Unknown field 'system.head'."]);
-    expect(wrapper.findComponent(ClassifierRuleDialog).props('modelValue')).toBe(true);
-  });
-
-  it('when someone else saved first, this change is dropped and the latest is shown', async () => {
-    await open();
-    _someoneElseSavedClassifier();
-
-    await row('ua-tauritavern').find('.el-switch').trigger('click');
-    await settle();
-
-    // 没有悄悄盖掉别人的：库里那条还开着
-    expect(_currentOneApiClassifierDoc()!.rules!.find((r) => r.id === 'ua-tauritavern')!.enabled).toBeUndefined();
-    expect(toasts().join('|')).toContain('别人刚改过');
-
-    // 重新读过以后手上是新版本号，再改就存得进去
-    await row('ua-tauritavern').find('.el-switch').trigger('click');
-    await settle();
-    expect(_currentOneApiClassifierDoc()!.rules!.find((r) => r.id === 'ua-tauritavern')!.enabled).toBe(false);
-  });
-
-  it('editing classifier rules leaves the channel rules as they are', async () => {
-    _resetOneApiClassifierMock({
-      rules: [{ id: 'r', label: 'tavern.x', when: { field: 'header.user-agent', op: 'exists' } }],
-      channels: { factory: { enforce: false, rules: [{ match: 'agent.*', action: 'deny' }] } },
-    });
-    await open();
-
-    // 改的是分类规则，渠道规则一个字不动
-    await row('r').find('.el-switch').trigger('click');
-    await settle();
-
-    expect(_currentOneApiClassifierDoc()!.channels).toEqual({
-      factory: { enforce: false, rules: [{ match: 'agent.*', action: 'deny' }] },
-    });
+    expect(savedIds()).not.toContain('agent.nested');
+    expect(dialog().props('problems')).toEqual(['A classifier cannot refer to another classifier.']);
+    expect(dialog().props('modelValue')).toBe(true);
   });
 
   it('without the write permission the page only shows', async () => {
     granted.clear();
     await open();
 
-    expect(ruleIds()).toHaveLength(5);
-    expect(wrapper.find('[data-test="rule-create"]').exists()).toBe(false);
-    expect(wrapper.find('[data-test="rule-edit"]').exists()).toBe(false);
-    expect(wrapper.find('[data-test="rule-delete"]').exists()).toBe(false);
-    expect(row('ua-tauritavern').find('.el-switch').classes()).toContain('is-disabled');
+    expect(ids()).toHaveLength(4);
+    expect(wrapper.find('[data-test="classifier-create"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="classifier-edit"]').exists()).toBe(false);
   });
 
-  // ── 渠道规则 ──
-
-  /** 切到「渠道规则」，选中一个 Vendor。 */
-  async function openChannels(vendor: string): Promise<void> {
+  it('with no document yet, the first classifier creates it', async () => {
+    _resetOneApiFilterMock(null);
     await open();
-    await wrapper.find('[data-test="tab-channels"]').trigger('click');
-    await settle();
-    await wrapper.find(`.channel-item[data-vendor="${vendor}"]`).trigger('click');
-    await settle();
+    expect(wrapper.text()).toContain('还没有分类器');
+
+    await submitFromDialog({ id: 'chat.app', when: { field: 'header.user-agent', op: 'exists' } });
+
+    expect(savedIds()).toEqual(['chat.app']);
+    expect(ids()).toEqual(['chat.app']);
+  });
+});
+
+describe('condition editor', () => {
+  const classifiers = [{ id: 'chat.app', name: '聊天 App' }, { id: 'agent.claude' }];
+
+  function editor(initial: unknown, refs: typeof classifiers | null = classifiers) {
+    return mount(ConditionEditor, {
+      props: { initial, schema: MOCK_FILTER_SCHEMA, classifiers: refs },
+      global: { plugins: [ElementPlus] },
+    });
   }
-  const panel = () => wrapper.findComponent(ClassifierChannelPanel);
-  const savedChannel = (vendor: string) => _currentOneApiClassifierDoc()?.channels?.[vendor];
-  const channelMeta = (vendor: string): string =>
-    wrapper.find(`.channel-item[data-vendor="${vendor}"] .scope-item__meta`).text();
 
-  it('a vendor without channel rules takes everything, and says so', async () => {
-    await openChannels('factory');
+  /** 每一行开头那个「从哪儿取值」的下拉框。 */
+  const sourceSelect = (w: ReturnType<typeof editor>) =>
+    w.findAllComponents({ name: 'ElSelect' }).find((c) => c.attributes('data-test') === 'cond-source')!;
 
-    expect(channelMeta('factory')).toBe('没有规则，什么都收');
-    expect(panel().props('view')).toMatchObject({ exists: false, defaultAction: 'allow', entries: [] });
-    expect(wrapper.text()).toContain('这个 Vendor 没有渠道规则');
+  it('hands back a condition the form can edit unchanged', () => {
+    for (const when of [
+      { classifier: ['chat.app', 'agent.claude'] },
+      { any: [{ not: { classifier: 'chat.app' } }, { field: 'header.origin', op: 'exists' }] },
+    ]) {
+      const w = editor(when);
+      expect(w.find('[data-test="cond-json"]').exists()).toBe(false);
+      expect(w.vm.read()).toEqual({ ok: true, when });
+      w.unmount();
+    }
   });
 
-  it('the classes on offer come from the classifier rules', async () => {
-    await openChannels('factory');
+  it('a condition the form cannot edit opens as JSON and comes back as written', () => {
+    const when = { all: [{ any: [{ classifier: 'chat.app' }, { field: 'header.origin', op: 'exists' }] }] };
+    const w = editor(when);
 
-    expect(panel().props('options')).toEqual([
-      'agent.*',
-      'chat.*',
-      'tavern.*',
-      'unknown.*',
-      'agent.claude_code',
-      'agent.claude_own',
-      'chat.app',
-      'tavern.sillytavern',
-      'unknown.no_user_agent',
-      '*',
-      'unlabeled',
-    ]);
+    expect(w.find('[data-test="cond-json"]').exists()).toBe(true);
+    expect(w.vm.read()).toEqual({ ok: true, when });
   });
 
-  it('adding "this class -> reject" saves a channel rule that only marks at first', async () => {
-    await openChannels('factory');
+  it('a new filter rule starts with a classifier row; a new classifier starts with a header row', () => {
+    const rule = editor(undefined);
+    expect(rule.find('.cond-row').attributes('data-kind')).toBe('classifier');
+    // 什么都没选时说哪里没填
+    expect(rule.vm.read()).toEqual({ ok: false, error: '条件没选分类器' });
 
-    panel().vm.$emit('add', { match: 'chat.app', action: 'deny' });
-    await settle();
-
-    // 新建的渠道规则先只标记：一加上就开始拒请求的话，没人来得及看它会拦掉什么
-    expect(savedChannel('factory')).toEqual({
-      default: 'allow',
-      enforce: false,
-      rules: [{ match: 'chat.app', action: 'deny' }],
-    });
-    expect(wrapper.find('.chan-row[data-match="chat.app"]').exists()).toBe(true);
-    expect(channelMeta('factory')).toBe('拒绝 1 类 · 只标记');
-    // 分类规则没被碰
-    expect(savedIds()).toEqual(['ua-claude-code', 'ua-tauritavern', 'ua-chat-apps', 'claude-own-agent', 'no-ua']);
+    const classifier = editor(undefined, null);
+    expect(classifier.find('.cond-row').attributes('data-kind')).toBe('field');
+    expect(classifier.find('.cond-row').attributes('data-source')).toBe('header');
   });
 
-  it('entries can be flipped, reordered and removed', async () => {
-    _resetOneApiClassifierMock({
-      rules: [{ id: 'r', label: 'agent.claude_code', when: { field: 'header.user-agent', op: 'exists' } }],
-      channels: {
-        claude: {
-          default: 'allow',
-          enforce: false,
-          rules: [
-            { match: 'agent.claude_code', action: 'allow' },
-            { match: 'agent.*', action: 'deny' },
-          ],
-        },
-      },
-    });
-    await openChannels('claude');
-    expect(wrapper.findAll('.chan-row').map((r) => r.attributes('data-match'))).toEqual(['agent.claude_code', 'agent.*']);
+  it('a classifier reads from a header or the system prompt; a filter rule can also pick a classifier', () => {
+    const sourcesOf = (w: ReturnType<typeof editor>) =>
+      sourceSelect(w).findAllComponents({ name: 'ElOption' }).map((o) => o.props('label'));
 
-    panel().vm.$emit('action', 0, 'deny');
-    await settle();
-    expect(savedChannel('claude')!.rules![0]).toEqual({ match: 'agent.claude_code', action: 'deny' });
-
-    panel().vm.$emit('move', 1, -1);
-    await settle();
-    expect(savedChannel('claude')!.rules!.map((e) => e.match)).toEqual(['agent.*', 'agent.claude_code']);
-
-    panel().vm.$emit('remove', 0);
-    await settle();
-    expect(savedChannel('claude')!.rules!.map((e) => e.match)).toEqual(['agent.claude_code']);
+    expect(sourcesOf(editor(undefined, null))).toEqual(['请求头', '系统提示词']);
+    expect(sourcesOf(editor(undefined))).toEqual(['分类器', '请求头', '系统提示词']);
   });
 
-  it('turning enforcement on asks first; the default action saves at once', async () => {
-    await openChannels('factory');
-    panel().vm.$emit('add', { match: 'agent.*', action: 'deny' });
-    await settle();
+  it('switching a row to the system prompt drops the header picker and matches by contains', async () => {
+    const w = editor(undefined, null);
+    sourceSelect(w).vm.$emit('change', 'system');
+    await flushPromises();
 
-    const { confirmDanger } = await import('@/shared/composables/useConfirm');
-    vi.mocked(confirmDanger).mockClear();
+    expect(w.find('.cond-row').attributes('data-source')).toBe('system');
+    expect(w.find('.cond-row__field').exists()).toBe(false);
+    expect(w.vm.read()).toEqual({ ok: false, error: '条件没填值' });
 
-    panel().vm.$emit('enforce', true);
-    await settle();
-    expect(confirmDanger).toHaveBeenCalledTimes(1);
-    expect(savedChannel('factory')!.enforce).toBe(true);
-    expect(channelMeta('factory')).toBe('拒绝 1 类 · 执行中');
-
-    // 退回只标记不用问
-    panel().vm.$emit('enforce', false);
-    await settle();
-    expect(confirmDanger).toHaveBeenCalledTimes(1);
-    expect(savedChannel('factory')!.enforce).toBe(false);
-
-    panel().vm.$emit('default', 'deny');
-    await settle();
-    expect(savedChannel('factory')!.default).toBe('deny');
-    expect(channelMeta('factory')).toBe('默认拒绝 · 只标记');
-  });
-
-  it('clearing a vendor puts it back to taking everything', async () => {
-    await openChannels('factory');
-    panel().vm.$emit('add', { match: 'agent.*', action: 'deny' });
-    await settle();
-
-    panel().vm.$emit('clear');
-    await settle();
-
-    expect(savedChannel('factory')).toBeUndefined();
-    expect(channelMeta('factory')).toBe('没有规则，什么都收');
-  });
-
-  it('a channel rule written by hand without "enforce" is shown as enforcing, which is what the gateway does', async () => {
-    _resetOneApiClassifierMock({
-      rules: [],
-      channels: { kiro: { rules: [{ match: 'agent.*', action: 'deny' }] }, retired: { default: 'deny' } },
-    });
-    await openChannels('kiro');
-
-    expect(panel().props('view')).toMatchObject({ exists: true, enforce: true, defaultAction: 'allow' });
-    expect(channelMeta('kiro')).toBe('拒绝 1 类 · 执行中');
-    // 号池后台不认识的 Vendor 也列出来，不然它的规则没处看、没处删
-    expect(wrapper.find('.channel-item[data-vendor="retired"]').exists()).toBe(true);
-  });
-
-  it('with no document yet, the first rule creates it', async () => {
-    _resetOneApiClassifierMock(null);
-    await open();
-    expect(ruleIds()).toEqual([]);
-    expect(wrapper.text()).toContain('还没有分类规则');
-
-    await submitFromDialog({ id: 'first', label: 'tavern.sillytavern', when: { field: 'header.user-agent', op: 'exists' } });
-
-    expect(savedIds()).toEqual(['first']);
-    expect(ruleIds()).toEqual(['first']);
+    // 一个系统提示词条件原样读进来、原样交回去
+    const when = { field: 'system', op: 'contains', value: 'You are Claude Code' };
+    const loaded = editor(when, null);
+    expect(loaded.find('.cond-row').attributes('data-source')).toBe('system');
+    expect(loaded.vm.read()).toEqual({ ok: true, when });
   });
 });

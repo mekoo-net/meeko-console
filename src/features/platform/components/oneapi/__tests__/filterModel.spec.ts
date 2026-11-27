@@ -1,0 +1,288 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  CLASSIFIER_ID_PATTERN,
+  conditionSources,
+  fieldLabel,
+  sourceOf,
+  RULE_ID_PATTERN,
+  buildCondition,
+  channelOf,
+  channelSummary,
+  classifierUses,
+  describeCondition,
+  flatConditionError,
+  flattenCondition,
+  moveClassifier,
+  moveFilterRule,
+  problemsOfChannel,
+  problemsOfClassifier,
+  problemsOfRule,
+  referencedClassifiers,
+  removeChannel,
+  removeClassifier,
+  removeFilterRule,
+  setChannelDefault,
+  setChannelEnforce,
+  setFilterRuleEnabled,
+  upsertClassifier,
+  upsertFilterRule,
+  vendorList,
+} from '../model/filter';
+import type { FilterDoc } from '../model/filter.types';
+
+/**
+ * 过滤器的纯逻辑：分类器和各 Vendor 过滤规则的增删改排、条件在表单和文档写法之间来回、说成人话、
+ * 把号池后台的问题落到哪一项上。页面怎么用它们在 filterView.spec.ts 里看。
+ */
+
+const doc = (): FilterDoc => ({
+  classifiers: [
+    { id: 'agent.claude', when: { field: 'header.user-agent', op: 'prefix', value: 'claude-cli/' } },
+    { id: 'chat.app', name: '聊天 App', when: { field: 'header.user-agent', op: 'prefix', value: ['Kelivo', 'RikkaHub-'] } },
+  ],
+  filters: {
+    Factory: {
+      enforce: false,
+      rules: [
+        { id: 'no-agents', action: 'deny', when: { classifier: 'agent.claude' } },
+        { id: 'no-chat', action: 'deny', when: { not: { classifier: ['chat.app'] } }, note: 'keep me' },
+      ],
+    },
+  },
+  future: { anything: true },
+});
+
+describe('ids', () => {
+  it('classifier ids are <category>.<name>, rule ids are anything that fits in an error code', () => {
+    expect(CLASSIFIER_ID_PATTERN.test('chat.app')).toBe(true);
+    expect(CLASSIFIER_ID_PATTERN.test('tavern.silly_tavern.v2')).toBe(true);
+    expect(CLASSIFIER_ID_PATTERN.test('chat')).toBe(false);
+    expect(CLASSIFIER_ID_PATTERN.test('Chat.App')).toBe(false);
+
+    expect(RULE_ID_PATTERN.test('no-agents')).toBe(true);
+    expect(RULE_ID_PATTERN.test('v1.block_all')).toBe(true);
+    expect(RULE_ID_PATTERN.test('-x')).toBe(false);
+    expect(RULE_ID_PATTERN.test('No Agents')).toBe(false);
+  });
+});
+
+describe('conditions', () => {
+  it('reads the shapes the form can edit and writes them back unchanged', () => {
+    const cases: unknown[] = [
+      { classifier: 'chat.app' },
+      { classifier: ['chat.app', 'chat.tavern'] },
+      { not: { classifier: 'agent.claude' } },
+      { field: 'header.user-agent', op: 'prefix', value: 'claude-cli/' },
+      { field: 'header.user-agent', op: 'prefix', value: ['Kelivo', 'Tavo'], ignoreCase: true },
+      { not: { field: 'header.user-agent', op: 'exists' } },
+      {
+        any: [
+          { classifier: 'chat.app' },
+          { field: 'header.x-requested-with', op: 'exists' },
+        ],
+      },
+    ];
+    for (const when of cases) {
+      const flat = flattenCondition(when);
+      expect(flat, JSON.stringify(when)).not.toBeNull();
+      expect(buildCondition(flat!)).toEqual(when);
+    }
+  });
+
+  it('leaves nested or unknown shapes to the JSON editor', () => {
+    expect(flattenCondition({ all: [{ any: [{ classifier: 'a.b' }] }] })).toBeNull();
+    expect(flattenCondition({ all: [] })).toBeNull();
+    expect(flattenCondition({ classifier: [] })).toBeNull();
+    expect(flattenCondition({ classifier: 'a.b', field: 'x' })).toBeNull();
+    expect(flattenCondition({ field: 'header.x', op: 'eq', value: 1 })).toBeNull();
+    expect(flattenCondition('nope')).toBeNull();
+    expect(flattenCondition(undefined)).toBeNull();
+  });
+
+  it('says what is missing before it goes to the gateway', () => {
+    expect(flatConditionError({ mode: 'all', rows: [] })).toBe('至少要有一个条件');
+    expect(flatConditionError({ mode: 'all', rows: [{ kind: 'classifier', negate: false, classifiers: [] }] })).toBe(
+      '条件没选分类器',
+    );
+    expect(
+      flatConditionError({
+        mode: 'any',
+        rows: [
+          { kind: 'classifier', negate: false, classifiers: ['chat.app'] },
+          { kind: 'field', negate: false, field: 'header.origin', op: 'eq', values: [''], ignoreCase: false },
+        ],
+      }),
+    ).toBe('第 2 个条件没填值');
+    expect(
+      flatConditionError({
+        mode: 'all',
+        rows: [{ kind: 'field', negate: true, field: 'header.origin', op: 'exists', values: [], ignoreCase: false }],
+      }),
+    ).toBeNull();
+  });
+
+  it('finds every classifier a condition refers to, however deep', () => {
+    expect(
+      referencedClassifiers({
+        all: [{ classifier: 'a.b' }, { not: { any: [{ classifier: ['c.d', 'a.b'] }, { field: 'header.x', op: 'exists' }] } }],
+      }).sort(),
+    ).toEqual(['a.b', 'c.d']);
+    expect(referencedClassifiers({ field: 'header.x', op: 'exists' })).toEqual([]);
+  });
+
+  it('describes conditions in plain words', () => {
+    expect(describeCondition({ classifier: 'chat.app' })).toBe('分类器是 chat.app');
+    expect(describeCondition({ classifier: ['chat.app', 'chat.tavern'] })).toBe('分类器是 chat.app 或 chat.tavern');
+    expect(describeCondition({ not: { classifier: ['chat.app', 'chat.tavern'] } })).toBe('分类器不是 chat.app 也不是 chat.tavern');
+    expect(describeCondition({ field: 'header.user-agent', op: 'prefix', value: ['Kelivo', 'Tavo'], ignoreCase: true })).toBe(
+      'user-agent 开头是 "Kelivo" 或 "Tavo"（不分大小写）',
+    );
+    expect(describeCondition({ not: { field: 'header.user-agent', op: 'exists' } })).toBe('user-agent 没有值');
+    expect(
+      describeCondition({ all: [{ classifier: 'agent.claude' }, { field: 'header.x-app', op: 'eq', value: 'cli' }] }),
+    ).toBe('分类器是 agent.claude 且 x-app 等于 "cli"');
+    expect(describeCondition({ all: [{ any: [] }] })).toBe('自定义条件（JSON）');
+  });
+});
+
+describe('where a condition reads from', () => {
+  it('names fields the way people say them: the header name itself, and 系统提示词', () => {
+    expect(fieldLabel('header.user-agent')).toBe('user-agent');
+    expect(fieldLabel('system')).toBe('系统提示词');
+    expect(fieldLabel('tools.names')).toBe('tools.names');
+  });
+
+  it('groups every header into one source, every other field is a source of its own', () => {
+    expect(sourceOf('header.origin')).toBe('header');
+    expect(sourceOf('system')).toBe('system');
+    expect(
+      conditionSources([{ name: 'header.user-agent' }, { name: 'header.origin' }, { name: 'system' }, { name: 'tools.names' }]),
+    ).toEqual([
+      { key: 'header', label: '请求头' },
+      { key: 'system', label: '系统提示词' },
+      { key: 'tools.names', label: 'tools.names' },
+    ]);
+  });
+
+  it('describes a system prompt condition', () => {
+    expect(describeCondition({ field: 'system', op: 'contains', value: 'You are Claude Code' })).toBe(
+      '系统提示词 包含 "You are Claude Code"',
+    );
+  });
+});
+
+describe('classifiers', () => {
+  it('adds at the end, edits in place keeping keys the form does not manage, moves and removes', () => {
+    let d = upsertClassifier(doc(), { id: 'chat.tavern', when: { field: 'header.origin', op: 'exists' } });
+    expect(d.classifiers!.map((c) => c.id)).toEqual(['agent.claude', 'chat.app', 'chat.tavern']);
+
+    d = { ...d, classifiers: d.classifiers!.map((c) => (c.id === 'chat.app' ? { ...c, extra: 1 } : c)) };
+    d = upsertClassifier(d, { id: 'chat.app', when: { field: 'header.origin', op: 'exists' } }, 'chat.app');
+    expect(d.classifiers![1]).toEqual({ id: 'chat.app', when: { field: 'header.origin', op: 'exists' }, extra: 1 });
+
+    d = moveClassifier(d, 'chat.tavern', -1);
+    expect(d.classifiers!.map((c) => c.id)).toEqual(['agent.claude', 'chat.tavern', 'chat.app']);
+    expect(moveClassifier(d, 'agent.claude', -1)).toBe(d);
+
+    d = removeClassifier(d, 'chat.tavern');
+    expect(d.classifiers!.map((c) => c.id)).toEqual(['agent.claude', 'chat.app']);
+    // 文档里别的东西不动
+    expect(d.filters).toEqual(doc().filters);
+    expect(d.future).toEqual({ anything: true });
+  });
+
+  it('knows which filter rules use a classifier', () => {
+    expect(classifierUses(doc(), 'agent.claude')).toEqual([{ vendor: 'Factory', ruleId: 'no-agents' }]);
+    expect(classifierUses(doc(), 'chat.app')).toEqual([{ vendor: 'Factory', ruleId: 'no-chat' }]);
+    expect(classifierUses(doc(), 'chat.tavern')).toEqual([]);
+  });
+});
+
+describe('filters', () => {
+  it('fills in what the gateway assumes: no filter takes everything, a filter without enforce enforces', () => {
+    expect(channelOf(doc(), 'kiro')).toEqual({
+      vendor: 'kiro',
+      key: 'kiro',
+      exists: false,
+      defaultAction: 'allow',
+      enforce: false,
+      rules: [],
+    });
+    // vendor 不分大小写，文档里写成什么就认什么
+    const factory = channelOf(doc(), 'factory');
+    expect(factory).toMatchObject({ key: 'Factory', exists: true, enforce: false, defaultAction: 'allow' });
+    expect(factory.rules.map((r) => r.id)).toEqual(['no-agents', 'no-chat']);
+
+    expect(channelOf({ filters: { kiro: { default: 'deny' } } }, 'kiro')).toMatchObject({ enforce: true, defaultAction: 'deny' });
+  });
+
+  it('a new filter starts as mark-only and allowing', () => {
+    const d = upsertFilterRule({}, 'kiro', { id: 'r', action: 'deny', when: { classifier: 'chat.app' } });
+    expect(d.filters).toEqual({
+      kiro: { default: 'allow', enforce: false, rules: [{ id: 'r', action: 'deny', when: { classifier: 'chat.app' } }] },
+    });
+  });
+
+  it('edits the key as written in the document and keeps keys the form does not manage', () => {
+    let d = upsertFilterRule(doc(), 'factory', { id: 'no-chat', action: 'allow', when: { classifier: 'chat.app' } }, 'no-chat');
+    expect(d.filters!.Factory!.rules![1]).toEqual({ id: 'no-chat', action: 'allow', when: { classifier: 'chat.app' }, note: 'keep me' });
+    expect(Object.keys(d.filters!)).toEqual(['Factory']);
+
+    d = setFilterRuleEnabled(d, 'factory', 'no-agents', false);
+    expect(d.filters!.Factory!.rules![0]!.enabled).toBe(false);
+
+    d = moveFilterRule(d, 'factory', 'no-chat', -1);
+    expect(d.filters!.Factory!.rules!.map((r) => r.id)).toEqual(['no-chat', 'no-agents']);
+    expect(moveFilterRule(d, 'factory', 'no-agents', 1)).toBe(d);
+
+    d = removeFilterRule(d, 'factory', 'no-chat');
+    expect(d.filters!.Factory!.rules!.map((r) => r.id)).toEqual(['no-agents']);
+
+    d = setChannelDefault(setChannelEnforce(d, 'factory', true), 'factory', 'deny');
+    expect(d.filters!.Factory).toMatchObject({ default: 'deny', enforce: true });
+
+    d = removeChannel(d, 'factory');
+    expect(d.filters).toEqual({});
+    expect(d.classifiers).toEqual(doc().classifiers);
+  });
+
+  it('summarises a vendor in one line', () => {
+    expect(channelSummary(channelOf(doc(), 'kiro'))).toBe('没有规则，什么都收');
+    expect(channelSummary(channelOf(doc(), 'factory'))).toBe('2 条规则 · 默认放行 · 只标记');
+    expect(channelSummary(channelOf({ filters: { kiro: { default: 'deny' } } }, 'kiro'))).toBe('没有规则 · 默认拒绝 · 执行中');
+  });
+
+  it('lists the registered vendors plus any only the filters know about', () => {
+    const vendors = [
+      { key: 'factory', displayName: 'Factory' },
+      { key: 'kiro', displayName: 'Kiro' },
+    ];
+    expect(vendorList({ filters: { FACTORY: {}, retired: {} } }, vendors)).toEqual([
+      { key: 'factory', displayName: 'Factory', unknown: false },
+      { key: 'kiro', displayName: 'Kiro', unknown: false },
+      { key: 'retired', displayName: 'retired', unknown: true },
+    ]);
+  });
+});
+
+describe('problems from the vault', () => {
+  const problems = [
+    { subject: "classifier 'chat.app'", reason: 'a' },
+    { subject: 'classifier #2', reason: 'b' },
+    { subject: "filter 'Factory'", reason: 'c' },
+    { subject: "filter 'Factory' rule 'no-chat'", reason: 'd' },
+    { subject: "filter 'Factory' rule #3", reason: 'e' },
+    { subject: "filter 'Factory2' rule 'no-chat'", reason: 'f' },
+    { subject: 'document', reason: 'g' },
+  ];
+
+  it('lands each on the classifier, rule or filter it is about', () => {
+    expect(problemsOfClassifier(problems, 'chat.app', 1)).toEqual(['a']);
+    expect(problemsOfClassifier(problems, '', 2)).toEqual(['b']);
+    expect(problemsOfRule(problems, 'Factory', 'no-chat', 1)).toEqual(['d']);
+    expect(problemsOfRule(problems, 'Factory', '', 3)).toEqual(['e']);
+    expect(problemsOfChannel(problems, 'Factory').map((p) => p.reason)).toEqual(['c', 'd', 'e']);
+    expect(problemsOfChannel(problems, 'kiro')).toEqual([]);
+  });
+});
