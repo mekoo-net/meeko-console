@@ -1,6 +1,6 @@
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 
-import { CLASSIFIER_ID_PATTERN, RESERVED_RULE_ID, RULE_ID_PATTERN } from '../../model/filter';
+import { CLASSIFIER_ID_PATTERN, RESERVED_RULE_ID, RULE_ID_PATTERN, isCategoryRef, refMatches } from '../../model/filter';
 import type { FilterDoc, FilterProblem, FilterSchema, FilterSnapshot } from '../../model/filter.types';
 import { VAULT_REJECTED } from '../../model/ratecard';
 import type { OneApiFilterPort } from '../ports/oneapiFilterPort';
@@ -160,8 +160,15 @@ function conditionProblem(node: unknown, classifiers: Set<string> | null, inTool
     if ('classifier' in o) {
       if (classifiers === null) return 'A classifier cannot refer to another classifier.';
       const names = Array.isArray(o.classifier) ? o.classifier : [o.classifier];
-      const unknown = names.find((n) => typeof n !== 'string' || !classifiers.has(n));
-      return unknown === undefined ? null : `Unknown classifier '${String(unknown)}'.`;
+      for (const n of names) {
+        if (typeof n !== 'string') return `Unknown classifier '${String(n)}'.`;
+        // 一整类（agent.*）照网关的规矩：* 只能是最后一整段，至少对上一个
+        if (n.includes('*')) {
+          if (!isCategoryRef(n)) return `'${n}': '*' can only stand for the whole last part, as in 'agent.*'.`;
+          if (![...classifiers].some((c) => refMatches(n, c))) return `No classifier matches '${n}'.`;
+        } else if (!classifiers.has(n)) return `Unknown classifier '${n}'.`;
+      }
+      return null;
     }
   }
   if (typeof o.field !== 'string') {

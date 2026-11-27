@@ -13,12 +13,14 @@ import {
   conditionTree,
   describeCondition,
   fieldLabel,
+  isCategoryRef,
   opLabel,
+  refMatches,
   type ConditionNode,
   type ConditionRow,
 } from '../../model/filter';
 import type { FilterClassifier } from '../../model/filter.types';
-import { categoryLook } from './classifierCategory';
+import { categoryLook, categoryOf, lookOfCategory } from './classifierCategory';
 
 const props = defineProps<{
   when: unknown;
@@ -105,8 +107,13 @@ const sentence = computed(() => describeCondition(props.when));
 const json = computed(() => JSON.stringify(props.when ?? null, null, 2));
 
 const known = computed(() => new Map((props.classifiers ?? []).map((c) => [c.id, c])));
-const missing = (id: string): boolean => props.classifiers !== undefined && !known.value.has(id);
-const nameOf = (id: string): string => known.value.get(id)?.name ?? id;
+/** `agent.*` 这种一整类：一个都对不上才算缺（网关会报读不懂）。 */
+const missing = (id: string): boolean =>
+  props.classifiers !== undefined &&
+  (isCategoryRef(id) ? !props.classifiers.some((c) => refMatches(id, c.id)) : !known.value.has(id));
+const nameOf = (id: string): string =>
+  isCategoryRef(id) ? `${lookOfCategory(categoryOf(id)).label} 全部` : (known.value.get(id)?.name ?? id);
+const missingText = (id: string): string => (isCategoryRef(id) ? '这一类还没有分类器' : '没有这个分类器');
 
 const opText = (row: FieldRow): string => (row.op === 'exists' ? (row.negate ? '没有值' : '有值') : opLabel(row.op));
 const valueJoin = (row: FieldRow): string => (row.op === 'contains_all' ? '和' : '或');
@@ -168,7 +175,7 @@ const hiddenValues = (row: FieldRow): number => (props.compact ? Math.max(0, row
               >或</span>
               <el-tooltip
                 :disabled="compact"
-                :content="missing(id) ? '没有这个分类器' : nameOf(id)"
+                :content="missing(id) ? missingText(id) : nameOf(id)"
                 placement="top"
                 :show-after="300"
               >

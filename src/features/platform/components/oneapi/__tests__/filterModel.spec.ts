@@ -6,6 +6,7 @@ import {
   fieldLabel,
   sourceOf,
   RULE_ID_PATTERN,
+  blockingUses,
   buildCondition,
   channelOf,
   channelSummary,
@@ -13,12 +14,14 @@ import {
   conditionError,
   conditionTree,
   describeCondition,
+  isCategoryRef,
   moveClassifier,
   moveFilterRule,
   problemsOfChannel,
   problemsOfClassifier,
   problemsOfRule,
   referencedClassifiers,
+  refMatches,
   removeChannel,
   removeClassifier,
   removeFilterRule,
@@ -277,6 +280,43 @@ describe('classifiers', () => {
     expect(classifierUses(doc(), 'agent.claude')).toEqual([{ vendor: 'Factory', ruleId: 'no-agents' }]);
     expect(classifierUses(doc(), 'chat.app')).toEqual([{ vendor: 'Factory', ruleId: 'no-chat' }]);
     expect(classifierUses(doc(), 'chat.tavern')).toEqual([]);
+  });
+
+  /** factory 不收任何 agent：一条规则写 agent.*，三个 agent 分类器都算被它引用。 */
+  const agentsDoc = (): FilterDoc => ({
+    classifiers: [
+      { id: 'agent.claude', when: { field: 'header.user-agent', op: 'prefix', value: 'claude-cli/' } },
+      { id: 'agent.codex', when: { field: 'header.originator', op: 'prefix', value: 'codex_' } },
+      { id: 'chat.app', when: { field: 'header.user-agent', op: 'prefix', value: 'Kelivo' } },
+    ],
+    filters: { factory: { enforce: true, rules: [{ id: 'no-agents', action: 'deny', when: { classifier: 'agent.*' } }] } },
+  });
+
+  it('a whole-category reference (agent.*) counts as using every classifier in it, and only those', () => {
+    expect(isCategoryRef('agent.*')).toBe(true);
+    expect(isCategoryRef('agent')).toBe(false);
+    expect(isCategoryRef('*')).toBe(false);
+    expect(isCategoryRef('agent*')).toBe(false);
+    expect(refMatches('agent.*', 'agent.codex')).toBe(true);
+    expect(refMatches('agent.*', 'agents.x')).toBe(false);
+
+    expect(classifierUses(agentsDoc(), 'agent.codex')).toEqual([{ vendor: 'factory', ruleId: 'no-agents', via: 'agent.*' }]);
+    expect(classifierUses(agentsDoc(), 'chat.app')).toEqual([]);
+  });
+
+  it('deleting one of a category a rule refers to as a whole is fine, the last one is not', () => {
+    // 规则还认得 agent.claude，删 agent.codex 不拦
+    expect(blockingUses(agentsDoc(), 'agent.codex')).toEqual([]);
+    // 只剩 agent.claude 一个时，删它会让 agent.* 一个都对不上
+    const lastOne = removeClassifier(agentsDoc(), 'agent.codex');
+    expect(blockingUses(lastOne, 'agent.claude')).toEqual([{ vendor: 'factory', ruleId: 'no-agents', via: 'agent.*' }]);
+    // 点名引用的照样拦
+    expect(blockingUses(doc(), 'agent.claude')).toEqual([{ vendor: 'Factory', ruleId: 'no-agents' }]);
+  });
+
+  it('says a whole-category reference in words', () => {
+    expect(describeCondition({ classifier: 'agent.*' })).toBe('分类器是 agent 类任一');
+    expect(describeCondition({ classifier: ['agent.*', 'chat.app'] })).toBe('分类器是 agent 类任一 或 chat.app');
   });
 });
 

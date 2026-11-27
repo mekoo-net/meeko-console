@@ -67,20 +67,47 @@ export function moveClassifier(doc: FilterDoc, id: string, direction: -1 | 1): F
   return next ? { ...doc, classifiers: next } : doc;
 }
 
+/**
+ * 过滤规则引用一整类分类器的写法：`agent.*` = id 以 `agent.` 开头的全部，任一成立。网关在编译时展开，
+ * 以后新加的 `agent.xxx` 自己就算进去。`*` 只能是最后一整段（和网关 FilterPolicy 的规矩一样）。
+ */
+export const CATEGORY_REF_PATTERN = /^[a-z0-9_]+(\.[a-z0-9_]+)*\.\*$/;
+export const isCategoryRef = (ref: string): boolean => CATEGORY_REF_PATTERN.test(ref);
+export const categoryRef = (category: string): string => `${category}.*`;
+
+/** 引用里写的（一个 id，或者 `agent.*`）对不对得上这个分类器。 */
+export const refMatches = (ref: string, id: string): boolean =>
+  isCategoryRef(ref) ? id.startsWith(ref.slice(0, -1)) : ref === id;
+
 export interface ClassifierUse {
   vendor: string;
   ruleId: string;
+  /** 经一整类引用到的：那一类的写法（`agent.*`）。直接点名的没有这一项。 */
+  via?: string;
 }
 
-/** 哪些过滤规则引用了这个分类器。删它之前得先改掉这些规则，否则那几个 Vendor 的过滤器网关读不懂。 */
+/** 哪些过滤规则引用了这个分类器：直接点名的，和经 `agent.*` 这种一整类引用到的。 */
 export function classifierUses(doc: FilterDoc, id: string): ClassifierUse[] {
   const uses: ClassifierUse[] = [];
   for (const [vendor, channel] of Object.entries(doc.filters ?? {})) {
     for (const rule of channel.rules ?? []) {
-      if (referencedClassifiers(rule.when).includes(id)) uses.push({ vendor, ruleId: rule.id });
+      const refs = referencedClassifiers(rule.when).filter((ref) => refMatches(ref, id));
+      if (refs.length === 0) continue;
+      // 同一条规则既点了名又写了一整类：按点名算，删它时要拦。
+      const via = refs.includes(id) ? undefined : refs[0];
+      uses.push(via === undefined ? { vendor, ruleId: rule.id } : { vendor, ruleId: rule.id, via });
     }
   }
   return uses;
+}
+
+/**
+ * 删这个分类器会让哪些过滤规则读不懂：直接点名它的；经一整类引用、而这一类只剩它一个的（网关对一个都对不上的
+ * `agent.*` 报读不懂，那个 Vendor 的过滤器整个不生效）。一整类里还有别的就不拦：规则照样认得这一类其余的。
+ */
+export function blockingUses(doc: FilterDoc, id: string): ClassifierUse[] {
+  const others = classifiersOf(doc).filter((c) => c.id !== id);
+  return classifierUses(doc, id).filter((u) => u.via === undefined || !others.some((c) => refMatches(u.via!, c.id)));
 }
 
 // ---------- 条件 ----------
@@ -369,7 +396,8 @@ export const opLabel = (op: string): string => OP_LABELS[op] ?? op;
 
 function describeRow(row: ConditionRow): string {
   if (row.kind === 'classifier') {
-    return row.negate ? `分类器不是 ${row.classifiers.join(' 也不是 ')}` : `分类器是 ${row.classifiers.join(' 或 ')}`;
+    const names = row.classifiers.map((c) => (isCategoryRef(c) ? `${c.slice(0, -2)} 类任一` : c));
+    return row.negate ? `分类器不是 ${names.join(' 也不是 ')}` : `分类器是 ${names.join(' 或 ')}`;
   }
   const field = fieldLabel(row.field);
   if (row.op === 'exists') return row.negate ? `${field} 没有值` : `${field} 有值`;

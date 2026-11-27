@@ -3,10 +3,20 @@
  * 条件里的一组：全部满足 / 任一满足，可以整组取反；组里是一行行条件，也可以再套一组（层级）。
  * 自己套自己画出整棵树。改动都交给 `ctx`，这里只管画。
  */
+import { computed } from 'vue';
 import { Delete, FolderAdd, Plus, Tools } from '@element-plus/icons-vue';
 
-import { fieldLabel, opLabel, opNeedsValue, opTakesMany, type ConditionGroup, type ConditionRow } from '../../model/filter';
+import {
+  categoryRef,
+  fieldLabel,
+  opLabel,
+  opNeedsValue,
+  opTakesMany,
+  type ConditionGroup,
+  type ConditionRow,
+} from '../../model/filter';
 import type { FilterClassifier } from '../../model/filter.types';
+import { categoryOf, lookOfCategory } from './classifierCategory';
 import { MAX_DEPTH, type EditorContext } from './conditionEditing';
 
 defineOptions({ name: 'ConditionGroupEditor' });
@@ -29,6 +39,14 @@ const MODES = [
 function classifierLabel(c: FilterClassifier): string {
   return c.name ? `${c.id}（${c.name}）` : c.id;
 }
+
+/** 「这一类全部」：现在有的每个类别一个，写成 `agent.*`，网关展开，以后新加的也算。 */
+const categoryOptions = computed(() =>
+  [...new Set(props.ctx.classifiers.map((c) => categoryOf(c.id)))].map((cat) => ({
+    value: categoryRef(cat),
+    label: `${lookOfCategory(cat).label} 全部（${categoryRef(cat)}）`,
+  })),
+);
 
 function onSource(index: number, row: ConditionRow, source: string): void {
   if (props.ctx.sourceOfRow(row) === source) return;
@@ -169,12 +187,25 @@ const asText = (v: string | number | boolean | undefined): string => (v === unde
           data-test="cond-classifiers"
           @update:model-value="(v: string[]) => ctx.patch(child, { classifiers: v })"
         >
-          <el-option
-            v-for="c in ctx.classifiers"
-            :key="c.id"
-            :label="classifierLabel(c)"
-            :value="c.id"
-          />
+          <el-option-group
+            v-if="categoryOptions.length > 0"
+            label="一整类（以后新加的也算）"
+          >
+            <el-option
+              v-for="o in categoryOptions"
+              :key="o.value"
+              :label="o.label"
+              :value="o.value"
+            />
+          </el-option-group>
+          <el-option-group label="单个分类器">
+            <el-option
+              v-for="c in ctx.classifiers"
+              :key="c.id"
+              :label="classifierLabel(c)"
+              :value="c.id"
+            />
+          </el-option-group>
         </el-select>
 
         <template v-else>

@@ -126,6 +126,33 @@ describe('classifier page', () => {
     expect(toasts().join('|')).toContain('Claude 的「tavern」');
   });
 
+  it('a rule on a whole category (agent.*) shows on each of them, and only the last of the category is kept from deletion', async () => {
+    _resetOneApiFilterMock({
+      classifiers: [
+        { id: 'agent.claude', when: { field: 'header.user-agent', op: 'prefix', value: 'claude-cli/' } },
+        { id: 'agent.codex', when: { field: 'header.originator', op: 'prefix', value: 'codex_' } },
+        { id: 'chat.app', when: { field: 'header.user-agent', op: 'prefix', value: 'Kelivo' } },
+      ],
+      filters: { factory: { enforce: true, rules: [{ id: 'no-agents', action: 'deny', when: { classifier: 'agent.*' } }] } },
+    });
+    await open();
+
+    expect(row('agent.claude').findAll('.cls-row__use').map((t) => t.text())).toEqual(['Factory · no-agents']);
+    expect(row('agent.codex').findAll('.cls-row__use').map((t) => t.text())).toEqual(['Factory · no-agents']);
+    expect(row('chat.app').find('.cls-row__unused').exists()).toBe(true);
+
+    // 规则还认得 agent.claude：删 agent.codex 照删
+    await row('agent.codex').find('[data-test="classifier-delete"]').trigger('click');
+    await settle();
+    expect(savedIds()).toEqual(['agent.claude', 'chat.app']);
+
+    // agent.claude 是这一类最后一个：删了 agent.* 一个都对不上，factory 的过滤器整个不生效
+    await row('agent.claude').find('[data-test="classifier-delete"]').trigger('click');
+    await settle();
+    expect(savedIds()).toContain('agent.claude');
+    expect(toasts().join('|')).toContain('Factory 的「no-agents」');
+  });
+
   it('a new classifier is checked, saved, and shows up last', async () => {
     await open();
     await wrapper.find('[data-test="classifier-create"]').trigger('click');

@@ -28,6 +28,7 @@ import FilterProblemsAlert from '../components/filter/FilterProblemsAlert.vue';
 import { categoryLook, categoryOf, lookOfCategory } from '../components/filter/classifierCategory';
 import { useFilterDocument } from '../composables/useFilterDocument';
 import {
+  blockingUses,
   classifierUses,
   classifiersOf,
   moveClassifier,
@@ -94,9 +95,12 @@ async function onMove(c: FilterClassifier, direction: -1 | 1): Promise<void> {
   if (next !== doc.value) await commit(next);
 }
 
-/** 还有过滤规则引用它就不让删：删了那几个 Vendor 的过滤器网关读不懂，会整个不生效。 */
+/**
+ * 还有过滤规则点名引用它就不让删：删了那几个 Vendor 的过滤器网关读不懂，会整个不生效。
+ * 经 `agent.*` 这种一整类引用的不拦，除非它是这一类的最后一个（见 blockingUses）。
+ */
 async function onRemove(c: FilterClassifier): Promise<void> {
-  const uses = usesOf(c);
+  const uses = blockingUses(doc.value, c.id);
   if (uses.length > 0) {
     const where = uses.map((u) => `${vendorName(u.vendor)} 的「${u.ruleId}」`).join('、');
     ElMessage.warning(`先到过滤器里改掉引用它的规则：${where}`);
@@ -330,6 +334,7 @@ async function onSubmit(c: FilterClassifier, originalId: string | undefined): Pr
                 v-for="u in usesOf(c)"
                 :key="`${u.vendor}/${u.ruleId}`"
                 class="cls-row__use"
+                :title="u.via ? `经 ${u.via} 引用` : undefined"
               >{{ vendorName(u.vendor) }} · {{ u.ruleId }}</span>
               <span
                 v-if="usesOf(c).length === 0"
