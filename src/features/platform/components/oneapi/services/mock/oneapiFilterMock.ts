@@ -35,8 +35,13 @@ export const MOCK_FILTER_SCHEMA: FilterSchema = {
     { name: 'prompt.user', kind: 'text' },
     { name: 'prompt.assistant', kind: 'text' },
     { name: 'tools.name', kind: 'set' },
-    { name: 'tools.description', kind: 'text' },
     { name: 'tools.count', kind: 'number' },
+  ],
+  // 按对象匹配工具时里面能写的：一个工具自己的名称、描述、参数名
+  toolFields: [
+    { name: 'name', kind: 'text' },
+    { name: 'description', kind: 'text' },
+    { name: 'params', kind: 'set' },
   ],
   operators: {
     text: ['eq', 'in', 'prefix', 'contains', 'regex', 'exists'],
@@ -63,7 +68,14 @@ const seed = (): FilterDoc => ({
           {
             all: [
               { field: 'prompt.system', op: 'contains', value: 'You are Claude Code' },
-              { field: 'tools.name', op: 'contains_all', value: ['Bash', 'Read', 'Edit'] },
+              {
+                tool: {
+                  all: [
+                    { field: 'name', op: 'eq', value: 'Bash' },
+                    { field: 'description', op: 'contains', value: 'Executes a given bash command' },
+                  ],
+                },
+              },
             ],
           },
         ],
@@ -133,28 +145,43 @@ export function _currentOneApiFilterDoc(): FilterDoc | null {
 }
 
 const FIELD_KINDS = new Map(MOCK_FILTER_SCHEMA.fields.map((f) => [f.name, f.kind]));
+const TOOL_FIELD_KINDS = new Map((MOCK_FILTER_SCHEMA.toolFields ?? []).map((f) => [f.name, f.kind]));
 
-/** `classifiers` 为 null 时是分类器自己的条件：不能再引用分类器。 */
-function conditionProblem(node: unknown, classifiers: Set<string> | null): string | null {
-  if (typeof node !== 'object' || node === null || Array.isArray(node)) return 'Condition is not an object.';
+/**
+ * `classifiers` 为 null 时是分类器自己的条件：不能再引用分类器。`inTool` 是工具对象里面那一层：
+ * 字段只有这个工具自己的，不能引用分类器，也不能再套工具对象。
+ */
+function conditionProblem(node: unknown, classifiers: Set<string> | null, inTool = false): string | null {
+  const what = inTool ? 'Tool condition' : 'Condition';
+  if (typeof node !== 'object' || node === null || Array.isArray(node)) return `${what} is not an object.`;
   const o = node as Record<string, unknown>;
   for (const key of ['all', 'any'] as const) {
     if (!(key in o)) continue;
     const list = o[key];
     if (!Array.isArray(list)) return `'${key}' is not an array.`;
     if (list.length === 0) return `'${key}' is empty.`;
-    return list.map((n) => conditionProblem(n, classifiers)).find((p) => p !== null) ?? null;
+    return list.map((n) => conditionProblem(n, classifiers, inTool)).find((p) => p !== null) ?? null;
   }
-  if ('not' in o) return conditionProblem(o.not, classifiers);
-  if ('classifier' in o) {
-    if (classifiers === null) return 'A classifier cannot refer to another classifier.';
-    const names = Array.isArray(o.classifier) ? o.classifier : [o.classifier];
-    const unknown = names.find((n) => typeof n !== 'string' || !classifiers.has(n));
-    return unknown === undefined ? null : `Unknown classifier '${String(unknown)}'.`;
+  if ('not' in o) return conditionProblem(o.not, classifiers, inTool);
+  if (inTool) {
+    const stray = ['classifier', 'tool'].find((k) => k in o);
+    if (stray) return `Unknown tool condition property '${stray}'.`;
+  } else {
+    if ('tool' in o) return conditionProblem(o.tool, null, true);
+    if ('classifier' in o) {
+      if (classifiers === null) return 'A classifier cannot refer to another classifier.';
+      const names = Array.isArray(o.classifier) ? o.classifier : [o.classifier];
+      const unknown = names.find((n) => typeof n !== 'string' || !classifiers.has(n));
+      return unknown === undefined ? null : `Unknown classifier '${String(unknown)}'.`;
+    }
   }
-  if (typeof o.field !== 'string') return "Condition needs exactly one of 'all', 'any', 'not', 'classifier', 'field'.";
-  const kind = FIELD_KINDS.get(o.field);
-  if (!kind) return `Unknown field '${o.field}'.`;
+  if (typeof o.field !== 'string') {
+    return inTool
+      ? "Tool condition needs exactly one of 'all', 'any', 'not', 'field'."
+      : "Condition needs exactly one of 'all', 'any', 'not', 'classifier', 'tool', 'field'.";
+  }
+  const kind = (inTool ? TOOL_FIELD_KINDS : FIELD_KINDS).get(o.field);
+  if (!kind) return inTool ? `Unknown tool field '${o.field}'.` : `Unknown field '${o.field}'.`;
   if (typeof o.op !== 'string' || !MOCK_FILTER_SCHEMA.operators[kind]?.includes(o.op))
     return `Unknown operator '${String(o.op)}' for a ${kind} field.`;
   if (kind === 'number') {

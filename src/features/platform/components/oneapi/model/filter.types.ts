@@ -80,9 +80,14 @@ export const filterValidationResponseSchema = z.object({
   problems: z.array(filterProblemSchema),
 });
 
-/** 条件里能写什么：字段、每种字段能用的运算符、有哪些 Vendor。字段和运算符是网关的编译器自己报的。 */
+/**
+ * 条件里能写什么：字段、按对象匹配工具时里面能写的字段、每种字段能用的运算符、有哪些 Vendor。
+ * 字段和运算符是网关的编译器自己报的。
+ */
 export const filterSchemaResponseSchema = z.object({
   fields: z.array(z.object({ name: z.string(), kind: z.string() })),
+  /** 工具对象上的字段（名称、描述、参数）。老的号池后台不报，那时页面上就没有「工具对象」。 */
+  toolFields: z.array(z.object({ name: z.string(), kind: z.string() })).optional(),
   operators: z.record(z.string(), z.array(z.string())),
   vendors: z.array(z.object({ key: z.string(), displayName: z.string() })),
 });

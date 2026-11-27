@@ -95,6 +95,18 @@ describe('conditions', () => {
         ],
       },
       { not: { any: [{ classifier: 'chat.app' }, { classifier: 'chat.tavern' }] } },
+      // 工具对象：同一个工具的名称、描述、参数
+      {
+        tool: {
+          all: [
+            { field: 'name', op: 'eq', value: 'Bash' },
+            { field: 'description', op: 'contains', value: 'Executes a given bash command' },
+            { field: 'params', op: 'contains_all', value: ['command', 'timeout'] },
+          ],
+        },
+      },
+      { not: { tool: { field: 'name', op: 'prefix', value: 'mcp__' } } },
+      { all: [{ classifier: 'chat.app' }, { tool: { field: 'description', op: 'contains', value: 'x' } }] },
     ];
     for (const when of cases) {
       const tree = conditionTree(when);
@@ -109,6 +121,9 @@ describe('conditions', () => {
     expect(conditionTree({ classifier: [] })).toBeNull();
     expect(conditionTree({ classifier: 'a.b', field: 'x' })).toBeNull();
     expect(conditionTree({ field: 'header.x', op: 'eq', value: 1.5 })).toBeNull();
+    // 工具对象里面只比这个工具自己的字段：不能引用分类器，不能再套工具对象
+    expect(conditionTree({ tool: { classifier: 'chat.app' } })).toBeNull();
+    expect(conditionTree({ tool: { tool: { field: 'name', op: 'exists' } } })).toBeNull();
     expect(conditionTree('nope')).toBeNull();
     expect(conditionTree(undefined)).toBeNull();
   });
@@ -133,6 +148,9 @@ describe('conditions', () => {
       '数量要填整数',
     );
     expect(conditionError(group(field({ op: 'exists', values: [], negate: true })))).toBeNull();
+    expect(conditionError(group({ kind: 'tool', negate: false, group: group(field({ field: 'name', values: [] })) }))).toBe(
+      '有条件没填值',
+    );
   });
 
   it('finds every classifier a condition refers to, however deep', () => {
@@ -171,6 +189,14 @@ describe('conditions', () => {
     expect(describeCondition({ field: 'tools.count', op: 'gte', value: 3 })).toBe('工具·数量 至少 3');
     expect(describeCondition({ not: { any: [{ classifier: 'chat.app' }, { classifier: 'chat.tavern' }] } })).toBe(
       '不满足（分类器是 chat.app 或 分类器是 chat.tavern）',
+    );
+    expect(
+      describeCondition({
+        tool: { all: [{ field: 'name', op: 'eq', value: 'Bash' }, { field: 'description', op: 'contains', value: 'bash command' }] },
+      }),
+    ).toBe('有工具（名称 等于 "Bash" 且 描述 包含 "bash command"）');
+    expect(describeCondition({ not: { tool: { field: 'params', op: 'contains_all', value: ['command', 'timeout'] } } })).toBe(
+      '没有工具（参数 全部包含 "command" 和 "timeout"）',
     );
     expect(describeCondition({ all: [{ any: [] }] })).toBe('自定义条件（JSON）');
   });

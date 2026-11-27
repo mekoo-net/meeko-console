@@ -114,7 +114,18 @@ export interface ConditionGroup {
   children: ConditionNode[];
 }
 
-export type ConditionNode = ConditionRow | ConditionGroup;
+/**
+ * 按对象匹配工具：请求里有一个工具，它自己的名称、描述、参数同时满足里面那组条件。
+ * 重名的工具太多，只比名字会误伤；同一个工具的描述或参数也对得上才算。取反 = 没有这样的工具。
+ */
+export interface ConditionTool {
+  kind: 'tool';
+  negate: boolean;
+  /** 里面的字段只有这个工具对象上的：`name` / `description` / `params`。不能引用分类器，不能再套工具对象。 */
+  group: ConditionGroup;
+}
+
+export type ConditionNode = ConditionRow | ConditionGroup | ConditionTool;
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -174,8 +185,17 @@ function readNode(node: unknown): ConditionNode | null {
       : null;
   }
 
+  if (keys === 'tool') {
+    const group = conditionTree(node.tool);
+    // 工具对象里面只比这个工具自己的字段
+    return group && onlyFields(group) ? { kind: 'tool', negate: false, group } : null;
+  }
+
   return readLeaf(node);
 }
+
+const onlyFields = (group: ConditionGroup): boolean =>
+  group.children.every((c) => (c.kind === 'group' ? onlyFields(c) : c.kind === 'field'));
 
 /**
  * 把条件读成表单编得出来的样子：最外面总是一组（全部成立 / 任一成立），里面是行和套着的组。
@@ -209,6 +229,8 @@ function writeNode(node: ConditionNode): Record<string, unknown> {
   let out: Record<string, unknown>;
   if (node.kind === 'group') {
     out = { [node.mode]: node.children.map(writeNode) };
+  } else if (node.kind === 'tool') {
+    out = { tool: buildCondition(node.group) };
   } else if (node.kind === 'classifier') {
     out = { classifier: node.classifiers.length === 1 ? node.classifiers[0] : [...node.classifiers] };
   } else {
@@ -242,6 +264,7 @@ export function conditionError(tree: ConditionGroup): string | null {
       }
       return null;
     }
+    if (node.kind === 'tool') return check(node.group);
     if (node.kind === 'classifier') return node.classifiers.length === 0 ? '有条件没选分类器' : null;
     if (!node.field) return '有条件没选字段';
     if (!node.op) return '有条件没选比法';
@@ -274,10 +297,18 @@ export function referencedClassifiers(when: unknown): string[] {
  * 字段名是 `来源.层级`（网关的叫法）：请求头的层级是头名；提示词分系统、用户、助手；工具分名称、描述、数量。
  * 网关以后多报的来源或层级这里还不认识的，原样显示。
  */
-const SOURCE_LABELS: Record<string, string> = { header: '请求头', prompt: '提示词', tools: '工具' };
+const SOURCE_LABELS: Record<string, string> = {
+  header: '请求头',
+  prompt: '提示词',
+  tools: '工具',
+  // 工具对象里面的三样（字段名没有层级）
+  name: '名称',
+  description: '描述',
+  params: '参数',
+};
 const LEVEL_LABELS: Record<string, Record<string, string>> = {
   prompt: { system: '系统', user: '用户', assistant: '助手' },
-  tools: { name: '名称', description: '描述', count: '数量' },
+  tools: { name: '名称', count: '数量' },
 };
 
 export const sourceOf = (field: string): string => field.split('.')[0] ?? field;
@@ -350,6 +381,7 @@ function describeRow(row: ConditionRow): string {
 }
 
 function describeNode(node: ConditionNode, nested: boolean): string {
+  if (node.kind === 'tool') return `${node.negate ? '没有工具' : '有工具'}（${describeNode(node.group, false)}）`;
   if (node.kind !== 'group') return describeRow(node);
   const inner = node.children.map((c) => describeNode(c, true)).join(node.mode === 'all' ? ' 且 ' : ' 或 ');
   if (node.negate) return `不满足（${inner}）`;

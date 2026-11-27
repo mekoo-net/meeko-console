@@ -7,6 +7,7 @@ import {
   type ConditionNode,
   type ConditionRow,
   type ConditionSource,
+  type ConditionTool,
 } from '../../model/filter';
 import type { FilterClassifier, FilterSchema } from '../../model/filter.types';
 
@@ -21,7 +22,7 @@ export const MAX_DEPTH = 2;
  * 改树都走这里（而不是在递归的组件里直接改 props），组件只管画。
  */
 export interface EditorContext {
-  /** 来源下拉框：分类器（过滤规则才有）、请求头、提示词、工具……。 */
+  /** 来源下拉框：分类器（过滤规则才有）、请求头、提示词、工具……；在工具对象里面是名称、描述、参数。 */
   sources: { key: string; label: string }[];
   levelsOf(source: string): ConditionSource['levels'];
   classifiers: readonly FilterClassifier[];
@@ -30,6 +31,10 @@ export interface EditorContext {
   sourceOfRow(row: ConditionRow): string;
   newRow(): ConditionRow;
   newGroup(): ConditionGroup;
+  /** 新的工具对象；这一层不能加（已经在工具对象里面，或者号池后台不报工具对象的字段）时是 null。 */
+  newTool: (() => ConditionTool) | null;
+  /** 工具对象里面那一层用的上下文。 */
+  toolContext: EditorContext | null;
   rowFor(source: string, negate?: boolean): ConditionRow;
   rowForField(field: string, negate?: boolean): ConditionRow;
   patch(node: ConditionNode, change: Record<string, unknown>): void;
@@ -39,22 +44,26 @@ export interface EditorContext {
   removeAt(group: ConditionGroup, index: number): void;
 }
 
-export function createEditorContext(
-  schema: FilterSchema,
-  classifiers: readonly FilterClassifier[] | null,
-): EditorContext {
-  const fieldSources = conditionSources(schema.fields);
-  const canReference = classifiers !== null;
+interface Scope {
+  fields: FilterSchema['fields'];
+  operators: FilterSchema['operators'];
+  /** null = 这一层不能引用分类器。 */
+  classifiers: readonly FilterClassifier[] | null;
+  toolContext: EditorContext | null;
+  /** 新的一行默认用哪个比法。 */
+  preferredOp(field: string, kind: string): string;
+}
 
-  const kindOf = (field: string): string => schema.fields.find((f) => f.name === field)?.kind ?? 'text';
-  const operatorsOf = (field: string): string[] => schema.operators[kindOf(field)] ?? [];
+function make(scope: Scope): EditorContext {
+  const fieldSources = conditionSources(scope.fields);
+  const canReference = scope.classifiers !== null;
+
+  const kindOf = (field: string): string => scope.fields.find((f) => f.name === field)?.kind ?? 'text';
+  const operatorsOf = (field: string): string[] => scope.operators[kindOf(field)] ?? [];
   const levelsOf = (source: string) => fieldSources.find((s) => s.key === source)?.levels ?? [];
 
-  /** 请求头多半按开头认（UA），提示词按包含认，工具名按「包含任一」，数量按「至少」。 */
   function defaultOp(field: string): string {
-    const kind = kindOf(field);
-    const preferred =
-      kind === 'number' ? 'gte' : kind === 'set' ? 'contains_any' : sourceOf(field) === 'header' ? 'prefix' : 'contains';
+    const preferred = scope.preferredOp(field, kindOf(field));
     const ops = operatorsOf(field);
     return ops.includes(preferred) ? preferred : (ops[0] ?? '');
   }
@@ -78,18 +87,34 @@ export function createEditorContext(
     // 过滤规则多半是「是不是某一类」，先给分类器
     canReference ? rowFor(CLASSIFIER_SOURCE) : rowFor(fieldSources[0]?.key ?? 'header');
 
+  const toolContext = scope.toolContext;
+
   return {
     sources: [
       ...(canReference ? [{ key: CLASSIFIER_SOURCE, label: '分类器' }] : []),
       ...fieldSources.map((s) => ({ key: s.key, label: s.label })),
     ],
     levelsOf,
-    classifiers: classifiers ?? [],
+    classifiers: scope.classifiers ?? [],
     kindOf,
     operatorsOf,
     sourceOfRow: (row) => (row.kind === 'classifier' ? CLASSIFIER_SOURCE : sourceOf(row.field)),
     newRow,
     newGroup: () => ({ kind: 'group', negate: false, mode: 'any', children: [newRow()] }),
+    newTool: toolContext
+      ? () => ({
+          kind: 'tool',
+          negate: false,
+          // 一上来就是「名称 + 描述」两行：只比名字正是要避免的
+          group: {
+            kind: 'group',
+            negate: false,
+            mode: 'all',
+            children: toolContext.sources.slice(0, 2).map((s) => toolContext.rowFor(s.key)),
+          },
+        })
+      : null,
+    toolContext,
     rowFor,
     rowForField,
     patch: (node, change) => Object.assign(node, change),
@@ -104,4 +129,31 @@ export function createEditorContext(
     add: (group, node) => void group.children.push(node),
     removeAt: (group, index) => void group.children.splice(index, 1),
   };
+}
+
+export function createEditorContext(
+  schema: FilterSchema,
+  classifiers: readonly FilterClassifier[] | null,
+): EditorContext {
+  // 工具对象里面：名字按「等于」认，描述按「包含」，参数按「全部包含」
+  const toolContext =
+    schema.toolFields && schema.toolFields.length > 0
+      ? make({
+          fields: schema.toolFields,
+          operators: schema.operators,
+          classifiers: null,
+          toolContext: null,
+          preferredOp: (field, kind) => (kind === 'set' ? 'contains_all' : field === 'name' ? 'eq' : 'contains'),
+        })
+      : null;
+
+  return make({
+    fields: schema.fields,
+    operators: schema.operators,
+    classifiers,
+    toolContext,
+    // 请求头多半按开头认（UA），提示词按包含认，工具名按「包含任一」，数量按「至少」
+    preferredOp: (field, kind) =>
+      kind === 'number' ? 'gte' : kind === 'set' ? 'contains_any' : sourceOf(field) === 'header' ? 'prefix' : 'contains',
+  });
 }

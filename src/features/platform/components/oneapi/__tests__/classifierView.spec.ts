@@ -71,7 +71,7 @@ describe('classifier page', () => {
     expect(row('agent.claude').find('.cls-card__name').text()).toBe('Claude');
     expect(row('agent.claude').find('.cls-card__id').text()).toBe('agent.claude');
     expect(row('agent.claude').find('.chips').attributes('aria-label')).toBe(
-      'user-agent 开头是 "claude-cli/" 或 （提示词·系统 包含 "You are Claude Code" 且 工具·名称 全部包含 "Bash" 和 "Read" 和 "Edit"）',
+      'user-agent 开头是 "claude-cli/" 或 （提示词·系统 包含 "You are Claude Code" 且 有工具（名称 等于 "Bash" 且 描述 包含 "Executes a given bash command"））',
     );
     expect(row('agent.claude').findAll('.cls-card__use').map((t) => t.text())).toEqual([
       'Factory · no-agents',
@@ -252,7 +252,7 @@ describe('condition editor', () => {
     const prompt = editor({ field: 'prompt.user', op: 'contains', value: 'x' }, null);
     expect(labels(selectIn(prompt, 'cond-level'))).toEqual(['系统', '用户', '助手']);
     const tools = editor({ field: 'tools.name', op: 'exists' }, null);
-    expect(labels(selectIn(tools, 'cond-level'))).toEqual(['名称', '描述', '数量']);
+    expect(labels(selectIn(tools, 'cond-level'))).toEqual(['名称', '数量']);
     expect(labels(selectIn(tools, 'cond-op'))).toEqual(['包含任一', '全部包含', '开头是', '有值']);
   });
 
@@ -277,6 +277,42 @@ describe('condition editor', () => {
     input.vm.$emit('update:modelValue', 4);
     await flushPromises();
     expect(read(w)).toEqual({ ok: true, when: { field: 'tools.count', op: 'gte', value: 4 } });
+  });
+
+  it('a tool object holds conditions about one tool: name, description, params', async () => {
+    const when = {
+      tool: {
+        all: [
+          { field: 'name', op: 'eq', value: 'Bash' },
+          { field: 'description', op: 'contains', value: 'Executes a given bash command' },
+          { field: 'params', op: 'contains_all', value: ['command', 'timeout'] },
+        ],
+      },
+    };
+    const w = editor(when, null);
+
+    expect(w.findAll('[data-test="tool-object"]')).toHaveLength(1);
+    expect(w.findAll('[data-test="tool-object"] .cond-row').map((r) => r.attributes('data-source'))).toEqual([
+      'name',
+      'description',
+      'params',
+    ]);
+    // 里面那一层的来源是这个工具自己的三样，没有分类器、没有再套一层的工具对象
+    expect(labels(selectIn(w, 'cond-source'))).toEqual(['名称', '描述', '参数']);
+    expect(w.find('[data-test="tool-object"] [data-test="add-tool"]').exists()).toBe(false);
+    expect(read(w)).toEqual({ ok: true, when });
+  });
+
+  it('adding a tool object starts with a name and a description row', async () => {
+    const w = editor({ field: 'header.user-agent', op: 'exists' }, null);
+    await w.find('[data-test="add-tool"]').trigger('click');
+
+    expect(w.findAll('[data-test="tool-object"] .cond-row').map((r) => r.attributes('data-source'))).toEqual([
+      'name',
+      'description',
+    ]);
+    // 名字和描述都还没填
+    expect(read(w)).toEqual({ ok: false, error: '有条件没填值' });
   });
 
   it('adding a group nests it under the current one and it can be removed again', async () => {

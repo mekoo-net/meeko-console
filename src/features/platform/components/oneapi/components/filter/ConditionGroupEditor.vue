@@ -3,7 +3,7 @@
  * 条件里的一组：全部满足 / 任一满足，可以整组取反；组里是一行行条件，也可以再套一组（层级）。
  * 自己套自己画出整棵树。改动都交给 `ctx`，这里只管画。
  */
-import { Delete, FolderAdd, Plus } from '@element-plus/icons-vue';
+import { Delete, FolderAdd, Plus, Tools } from '@element-plus/icons-vue';
 
 import { fieldLabel, opLabel, opNeedsValue, opTakesMany, type ConditionGroup, type ConditionRow } from '../../model/filter';
 import type { FilterClassifier } from '../../model/filter.types';
@@ -15,6 +15,8 @@ const props = defineProps<{
   group: ConditionGroup;
   depth: number;
   ctx: EditorContext;
+  /** 这是工具对象里面那一组：不单独画框，也不能整组取反、删掉（外面那个框管）。 */
+  inTool?: boolean;
 }>();
 
 const emit = defineEmits<{ (e: 'remove'): void }>();
@@ -51,7 +53,7 @@ const asText = (v: string | number | boolean | undefined): string => (v === unde
 <template>
   <div
     class="cgroup"
-    :class="{ 'cgroup--nested': depth > 0 }"
+    :class="{ 'cgroup--nested': depth > 0 && !inTool }"
     :data-depth="depth"
   >
     <div class="cgroup__bar">
@@ -63,7 +65,7 @@ const asText = (v: string | number | boolean | undefined): string => (v === unde
         @change="(v: string) => ctx.patch(group, { mode: v })"
       />
       <el-checkbox
-        v-if="depth > 0"
+        v-if="depth > 0 && !inTool"
         :model-value="group.negate"
         size="small"
         @update:model-value="(v: boolean | string | number) => ctx.patch(group, { negate: v === true })"
@@ -72,7 +74,7 @@ const asText = (v: string | number | boolean | undefined): string => (v === unde
       </el-checkbox>
       <span class="cgroup__spacer" />
       <el-button
-        v-if="depth > 0"
+        v-if="depth > 0 && !inTool"
         :icon="Delete"
         text
         circle
@@ -93,6 +95,42 @@ const asText = (v: string | number | boolean | undefined): string => (v === unde
         :ctx="ctx"
         @remove="ctx.removeAt(group, index)"
       />
+      <!-- 工具对象：请求里有一个工具，它自己的名称、描述、参数同时满足里面的条件 -->
+      <div
+        v-else-if="child.kind === 'tool'"
+        class="ctool"
+        data-test="tool-object"
+      >
+        <div class="ctool__bar">
+          <el-icon :size="14">
+            <Tools />
+          </el-icon>
+          <span class="ctool__title">{{ child.negate ? '没有这样的工具' : '有一个工具' }}</span>
+          <el-checkbox
+            :model-value="child.negate"
+            size="small"
+            @update:model-value="(v: boolean | string | number) => ctx.patch(child, { negate: v === true })"
+          >
+            取反
+          </el-checkbox>
+          <span class="cgroup__spacer" />
+          <el-button
+            :icon="Delete"
+            text
+            circle
+            size="small"
+            aria-label="删掉这个工具对象"
+            @click="ctx.removeAt(group, index)"
+          />
+        </div>
+        <ConditionGroupEditor
+          v-if="ctx.toolContext"
+          :group="child.group"
+          :depth="MAX_DEPTH"
+          :ctx="ctx.toolContext"
+          in-tool
+        />
+      </div>
       <div
         v-else
         class="cond-row"
@@ -226,7 +264,7 @@ const asText = (v: string | number | boolean | undefined): string => (v === unde
           text
           circle
           size="small"
-          :disabled="depth === 0 && group.children.length === 1"
+          :disabled="(depth === 0 || inTool) && group.children.length === 1"
           aria-label="删掉这个条件"
           @click="ctx.removeAt(group, index)"
         />
@@ -253,6 +291,16 @@ const asText = (v: string | number | boolean | undefined): string => (v === unde
       >
         加一组
       </el-button>
+      <el-button
+        v-if="ctx.newTool"
+        :icon="Tools"
+        link
+        type="primary"
+        data-test="add-tool"
+        @click="ctx.add(group, ctx.newTool())"
+      >
+        加工具对象
+      </el-button>
     </div>
   </div>
 </template>
@@ -275,6 +323,27 @@ const asText = (v: string | number | boolean | undefined): string => (v === unde
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.ctool {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, #7c3aed 22%, transparent);
+  border-left: 3px solid #7c3aed;
+  border-radius: 10px;
+  background: color-mix(in srgb, #7c3aed 4%, var(--el-bg-color));
+}
+.ctool__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #7c3aed;
+}
+.ctool__title {
+  font-size: 13px;
+  font-weight: 600;
 }
 .cgroup__spacer {
   flex: 1;

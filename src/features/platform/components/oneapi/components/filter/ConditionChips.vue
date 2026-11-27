@@ -30,11 +30,19 @@ type Token =
   | { t: 'open' }
   | { t: 'close' }
   | { t: 'not'; text: string }
+  | { t: 'tool'; text: string }
   | { t: 'classifier'; row: ClassifierRow }
   | { t: 'field'; row: FieldRow };
 
 /** 树摊成一串记号按顺序画：组前后加括号（最外面那组和只有一项的组不加），组与组、行与行之间是「且 / 或」。 */
 function tokensOf(node: ConditionNode, nested: boolean, out: Token[]): Token[] {
+  if (node.kind === 'tool') {
+    // 工具对象：括号里的条件说的是同一个工具
+    out.push({ t: 'tool', text: node.negate ? '没有工具' : '有工具' }, { t: 'open' });
+    tokensOf(node.group, false, out);
+    out.push({ t: 'close' });
+    return out;
+  }
   if (node.kind === 'group') {
     const paren = node.negate || (nested && node.children.length > 1);
     if (node.negate) out.push({ t: 'not', text: '不满足' });
@@ -92,6 +100,10 @@ const valueJoin = (row: FieldRow): string => (row.op === 'contains_all' ? '和' 
         <span
           v-else-if="token.t === 'not'"
           class="chips__not"
+        >{{ token.text }}</span>
+        <span
+          v-else-if="token.t === 'tool'"
+          class="chips__tool"
         >{{ token.text }}</span>
 
         <template v-else-if="token.t === 'classifier'">
@@ -182,6 +194,11 @@ const valueJoin = (row: FieldRow): string => (row.op === 'contains_all' ? '和' 
   font-weight: 300;
   line-height: 1;
   color: var(--el-text-color-placeholder);
+}
+.chips__tool {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7c3aed;
 }
 .chips__or {
   font-size: 12px;
