@@ -17,8 +17,10 @@ export const vendorRouteSchema = z.object({
   isPublished: z.boolean(),
   /** 有效价来路；旧后端不下发时按 compiled。 */
   pricingMode: z.enum(routePricingModeValues).default('compiled'),
-  /** 路由级倍率覆盖；null = 只用渠道倍率。 */
+  /** 独立倍率：有值就按牌价 × 它出价，顶掉家族分组的定价（不叠乘）；null = 继承家族分组定价。 */
   priceMultiplier: z.number().nonnegative().nullable().optional(),
+  /** 是否下发到网页聊天；旧后端不下发时按开。 */
+  chatVisible: z.boolean().default(true),
   notes: z.string().nullable().optional(),
   createdAtUtc: epochMillisSchema,
   updatedAtUtc: epochMillisSchema,

@@ -191,16 +191,18 @@ function slugDisplay(vendorSlug?: string | null): string {
     />
     <div v-else class="provider-sidebar__no-match">无匹配供应商组</div>
 
+    <!-- 条数单独一行放在翻页按钮上面：侧栏窄，和按钮挤在一行时按钮一多就把条数挤到换行、位置忽左忽右。 -->
     <div
       v-if="groups.length > 0"
-      class="provider-pagination provider-pagination--compact"
+      class="provider-pagination provider-pagination--compact provider-sidebar__pager"
     >
+      <span class="provider-sidebar__total">共 {{ pagination.state.total }} 条</span>
       <el-pagination
         v-model:current-page="pagination.state.page"
         v-model:page-size="pagination.state.pageSize"
         :total="pagination.state.total"
         :page-sizes="pagination.pageSizes"
-        layout="total, prev, pager, next"
+        layout="prev, pager, next"
         size="small"
         background
       />

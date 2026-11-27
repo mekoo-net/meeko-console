@@ -1,14 +1,16 @@
 import {
   canonicalizeModelKey,
+  familyPricingModeValues,
   modelPriceSchema,
   normalizeMaker,
+  type FamilyPricingMode,
   type ModelPrice,
   type PriceCompileResult,
   type RoutePricingMode,
+  type VendorFamilyPricing,
 } from '@yomi/common';
 import type { YomiPricingPort } from '@/features/yomi/services/ports/yomiPricingPort';
-import type { VendorPricingMode } from '@/features/yomi/model/catalog.types';
-import { requestYomi } from '@/features/yomi/api/http';
+import { requestYomi, type ItemsEnvelope } from '@/features/yomi/api/http';
 import { yomiPlatformPaths } from '@/features/yomi/api/routes';
 import { fail, ok, type AppResult } from '@/shared/api/httpTypes';
 
@@ -27,6 +29,14 @@ interface ModelPriceWire {
   /** 只有分页的目录视图填；单条查询不填。 */
   routeCount?: number;
   updatedAtUtc: number;
+}
+
+interface FamilyPricingWire {
+  family?: string;
+  mode?: string;
+  value?: number;
+  routeCount?: number;
+  inheritingRouteCount?: number;
 }
 
 interface CompileResultWire {
@@ -87,14 +97,39 @@ export class YomiPricingHttpAdapter implements YomiPricingPort {
     return parseModelPrice(res.data);
   }
 
-  async setVendorPricing(input: {
+  async listVendorFamilies(vendorId: string): Promise<AppResult<VendorFamilyPricing[]>> {
+    const res = await requestYomi<ItemsEnvelope<FamilyPricingWire>>(
+      `${BASE}/vendors/${encodeURIComponent(vendorId)}/families`,
+    );
+    if (!res.success) return res;
+    const rows: VendorFamilyPricing[] = [];
+    for (const row of res.data.items ?? []) {
+      const family = row.family?.trim().toLowerCase();
+      const mode = familyPricingModeValues.find((m) => m === row.mode);
+      // 方式、值缺了或不认识，不能猜一个往下传：这两样会被拿去预览出价，猜成倍率 1 就是把按次价当原价显示。
+      if (!family || !mode || typeof row.value !== 'number' || !Number.isFinite(row.value)) {
+        return fail({ code: 'validation', message: '模型家族分组格式错误' });
+      }
+      rows.push({
+        family,
+        mode,
+        value: row.value,
+        routeCount: row.routeCount ?? 0,
+        inheritingRouteCount: row.inheritingRouteCount ?? 0,
+      });
+    }
+    return ok(rows);
+  }
+
+  async setFamilyPricing(input: {
     vendorId: string;
-    mode: VendorPricingMode;
+    family: string;
+    mode: FamilyPricingMode;
     value: number;
     reason?: string | null;
   }): Promise<AppResult<PriceCompileResult>> {
     const res = await requestYomi<CompileResultWire>(
-      `${BASE}/vendors/${encodeURIComponent(input.vendorId)}/pricing`,
+      `${BASE}/vendors/${encodeURIComponent(input.vendorId)}/families/${encodeURIComponent(input.family)}`,
       {
         method: 'PATCH',
         body: { mode: input.mode, value: input.value, reason: input.reason ?? null },
@@ -117,23 +152,6 @@ export class YomiPricingHttpAdapter implements YomiPricingPort {
         body: { mode: input.mode, multiplier: input.multiplier, reason: input.reason ?? null },
       },
     );
-    if (!res.success) return res;
-    return ok(toCompileResult(res.data));
-  }
-
-  async compile(input?: {
-    modelKeys?: string[];
-    vendorKeys?: string[];
-    reason?: string | null;
-  }): Promise<AppResult<PriceCompileResult>> {
-    const res = await requestYomi<CompileResultWire>(`${BASE}/compile`, {
-      method: 'POST',
-      body: {
-        modelKeys: input?.modelKeys ?? null,
-        vendorKeys: input?.vendorKeys ?? null,
-        reason: input?.reason ?? null,
-      },
-    });
     if (!res.success) return res;
     return ok(toCompileResult(res.data));
   }

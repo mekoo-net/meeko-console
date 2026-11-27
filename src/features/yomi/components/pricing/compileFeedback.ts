@@ -9,7 +9,7 @@ function listKeys(keys: readonly string[], limit = 5): string {
 }
 
 /**
- * 把一次编译结果压成一句话。改渠道定价 / 路由定价、手动重算之后后端都会返回它，
+ * 把一次编译结果压成一句话。改分组定价 / 路由定价、手动重算之后后端都会返回它，
  * 管理员最关心的是「有几条有效价真的变了」以及「有没有模型还没定价」。
  *
  * 价格表是号池管理台发布的，这边读它来算，所以多两种要明说的情况：
@@ -19,7 +19,7 @@ function listKeys(keys: readonly string[], limit = 5): string {
 export function describeCompile(r: PriceCompileResult): string {
   const parts: string[] = [];
   if (r.compiled > 0) parts.push(`已重算 ${r.compiled} 条有效价`);
-  // 积分渠道不看价格表，没有牌价时照样能编出几条；按牌价出价的那些这一遍没碰
+  // 继承按次 / 积分分组的不看价格表，没有牌价时照样能编出几条；按牌价出价的那些这一遍没碰
   if (r.priceTableEmpty) parts.push(r.compiled > 0 ? '手上没有牌价，按牌价出价的没有重算' : '手上没有牌价，没有重算');
   else if (r.compiled === 0) parts.push('有效价无变化');
   if (r.unchanged > 0) parts.push(`${r.unchanged} 条数值相同未动`);

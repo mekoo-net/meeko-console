@@ -129,8 +129,6 @@ export class YomiCatalogMock implements YomiCatalogPort {
         queueGroup,
         vendorSlug,
         status: 'active',
-        pricingMode: 'multiplier',
-        pricingValue: 1,
         upstreamModelCount: 0,
         notes: input.notes?.trim() || null,
         createdAtUtc: t,

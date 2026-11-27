@@ -6,6 +6,7 @@ import {
   PRICE_CURRENCY,
   billingTypeValues,
   inferMaker,
+  modelFamilyLabel,
   modelPriceSchema,
   rateBodySchema,
   rateSchema,
@@ -15,10 +16,17 @@ import { describeCompile } from '../components/pricing/compileFeedback';
 import { _resetYomiStore, getYomiStore } from '../services/mock/data';
 import { allowedManualBillingTypes, priceDisplay, rateBodyDisplay, resolvePriceModelKind } from '../model/priceTable';
 import { scaleRateBody } from '../model/rateScale';
-import { providerGroupSchema, type VendorPricingMode } from '../model/catalog.types';
-import { formatVendorPricing, inheritOptionLabel, routeCreditPricing } from '../model/vendorPricing';
+import { providerGroupSchema } from '../model/catalog.types';
+import {
+  familyPricingOf,
+  familyReadsPriceTable,
+  formatFamilyPricing,
+  formatFamilyPricingValue,
+  routePricingChoice,
+} from '../model/familyPricing';
 import { OFFICIAL_USD_PRICES } from '../services/mock/officialUsdPrices';
 import { YomiPricingMock } from '../services/mock/yomiPricingMock';
+import { YomiRateMock } from '../services/mock/yomiRateMock';
 
 /**
  * 价格表契约：这些用例是给后端看的验收标准，而不是前端的自娱自乐。
@@ -26,7 +34,9 @@ import { YomiPricingMock } from '../services/mock/yomiPricingMock';
  * - 价格表是美元，没有汇率设置项；
  * - 价格表是 OneApi 的（在「组件设置 → OneApi → 模型价格」里维护），悠米只按键查一行：
  *   端口上没有写基准价、删基准价、拉官方价、套用候选这四样，也没有整张表的列表；
- * - 有效价(CNY) = 基准价(USD) × 渠道倍率，审计列只有 `sourceModelKey`（价格表的键，没有行号）/ `multiplierApplied`；
+ * - 有效价(CNY) = 基准价(USD) × 倍率，审计列只有 `sourceModelKey`（价格表的键，没有行号）/ `multiplierApplied`；
+ * - 价格不在渠道上：渠道里每个模型家族一份分组定价（倍率 / 按次价 / 积分单价），
+ *   别名可以设独立倍率顶掉它（二选一，不叠乘）；渠道行上没有任何定价字段；
  * - 重算结果带 `priceTableEmpty` / `invalidPriceKeys`：没有牌价、牌价有坏行都要明说，不能说成「无变化」；
  * - 不再另乘 7；`PriceCompileResult` 没有 `skipped`。
  */
@@ -298,7 +308,7 @@ describe('pricing contract', () => {
     expect(!missing.success && missing.error.code).toBe('not_found');
   });
 
-  it('compile = USD catalog × vendor multiplier → CNY', async () => {
+  it('compile = USD catalog × family multiplier → CNY; a route multiplier replaces it instead of stacking', async () => {
     const store = getYomiStore();
     const port = new YomiPricingMock();
 
@@ -313,45 +323,198 @@ describe('pricing contract', () => {
     const price = store.modelPrices.find((p) => p.modelKey === route.vendorModel.trim().toLowerCase())!;
 
     const group = store.providerGroups.find((g) => g.queueGroup === route.vendorKey)!;
-    const setV = await port.setVendorPricing({ vendorId: group.id, mode: 'multiplier', value: 1.5 });
-    expect(setV.success).toBe(true);
+    const family = inferMaker(route.vendorModel);
+    const rateOf = () => store.rate.find((x) => x.modelId === route.routeKey)!;
+
+    const setF = await port.setFamilyPricing({ vendorId: group.id, family, mode: 'multiplier', value: 1.5 });
+    expect(setF.success).toBe(true);
+    expect(setF.success && 'skipped' in setF.data).toBe(false);
+    expect(rateOf().currency).toBe(PRICE_CURRENCY);
+    expect(rateOf().sourceModelKey).toBe(price.modelKey);
+    expect(rateOf().multiplierApplied).toBe(1.5);
+    expect('fxApplied' in rateOf()).toBe(false);
+
+    // 独立倍率顶掉分组倍率：×2，不是 1.5 × 2。
     const setR = await port.setRoutePricing({ routeId: route.uid, mode: 'compiled', multiplier: 2 });
     expect(setR.success).toBe(true);
-    expect(setR.success && 'skipped' in setR.data).toBe(false);
-
-    const rate = store.rate.find((x) => x.modelId === route.routeKey)!;
-    expect(rate.currency).toBe(PRICE_CURRENCY);
-    expect(rate.sourceModelKey).toBe(price.modelKey);
-    expect(rate.multiplierApplied).toBe(3);
-    expect('fxApplied' in rate).toBe(false);
-    if (price.billingType === 'per_token' && rate.billingType === 'per_token') {
-      expect(rate.rate.input.perMToken).toBeCloseTo(price.rate.input.perMToken * 3, 6);
+    const own = rateOf();
+    expect(own.multiplierApplied).toBe(2);
+    if (price.billingType === 'per_token' && own.billingType === 'per_token') {
+      expect(own.rate.input.perMToken).toBeCloseTo(price.rate.input.perMToken * 2, 6);
     }
+
+    // 分组倍率再改，这条不跟着动；清掉独立倍率才回去继承分组。
+    await port.setFamilyPricing({ vendorId: group.id, family, mode: 'multiplier', value: 4 });
+    expect(rateOf().multiplierApplied).toBe(2);
+    await port.setRoutePricing({ routeId: route.uid, mode: 'compiled', multiplier: null });
+    expect(rateOf().multiplierApplied).toBe(4);
+  });
+
+  it('a vendor carrying two makers lists one family per maker, each with its own multiplier', async () => {
+    const store = getYomiStore();
+    const port = new YomiPricingMock();
+    const group = store.providerGroups.find((g) => g.queueGroup === 'antigravity')!;
+
+    const listed = await port.listVendorFamilies(group.id);
+    expect(listed.success).toBe(true);
+    if (!listed.success) return;
+    // 按家族顺序；Gemini 组没设过倍率，照 1 出价但标着没设过。
+    expect(listed.data).toEqual([
+      { family: 'anthropic', mode: 'multiplier', value: 1.3, routeCount: 2, inheritingRouteCount: 2 },
+      { family: 'google', mode: 'multiplier', value: 1, routeCount: 1, inheritingRouteCount: 1 },
+    ]);
+    expect(listed.data.map((f) => modelFamilyLabel(f.family))).toEqual(['Claude', 'Gemini']);
+
+    const rateOf = (routeKey: string) => store.rate.find((x) => x.modelId === routeKey)!;
+    expect(rateOf('ag-claude-sonnet').multiplierApplied).toBe(1.3);
+    expect(rateOf('ag-gemini-pro').multiplierApplied).toBe(1);
+
+    // 改 Gemini 组只动 gemini 的别名；认产品名（gemini 就是 google 这一组）。
+    const set = await port.setFamilyPricing({ vendorId: group.id, family: 'Gemini', mode: 'multiplier', value: 0.9 });
+    expect(set.success).toBe(true);
+    expect(set.success && set.data.compiled).toBe(1);
+    expect(rateOf('ag-gemini-pro').multiplierApplied).toBe(0.9);
+    expect(rateOf('ag-claude-sonnet').multiplierApplied).toBe(1.3);
+
+    const after = await port.listVendorFamilies(group.id);
+    expect(after.success && after.data.find((f) => f.family === 'google')).toMatchObject({
+      mode: 'multiplier',
+      value: 0.9,
+    });
+
+    // 设了独立倍率的别名不再算继承分组的。
+    const sonnet = store.vendorRoutes.find((v) => v.routeKey === 'ag-claude-sonnet')!;
+    await port.setRoutePricing({ routeId: sonnet.uid, mode: 'compiled', multiplier: 1.1 });
+    const counted = await port.listVendorFamilies(group.id);
+    expect(counted.success && counted.data[0]).toMatchObject({ routeCount: 2, inheritingRouteCount: 1 });
+
+    // 定价列表每一行带着家族，页面照它归组。
+    const rows = await new YomiRateMock().listVendorModelGroups({
+      page: 1,
+      pageSize: 50,
+      filter: { vendorKey: 'antigravity', keyword: '', billingType: 'all' },
+    });
+    expect(rows.success).toBe(true);
+    if (!rows.success) return;
+    expect(
+      rows.data.groups.flatMap((g) => g.routeKeys.map((e) => [e.routeKey, e.family, e.priceMultiplier, e.chatVisible])),
+    ).toEqual([
+      ['ag-claude-opus', 'anthropic', null, true],
+      ['ag-claude-sonnet', 'anthropic', 1.1, true],
+      ['ag-gemini-pro', 'google', null, true],
+    ]);
+  });
+
+  it('family pricing rejects unknown families and out-of-range values', async () => {
+    const store = getYomiStore();
+    const port = new YomiPricingMock();
+    const group = store.providerGroups[0]!;
+    const before = JSON.stringify(store.familyPricings);
+
+    const set = (family: string, mode: 'multiplier' | 'per_call' | 'credit', value: number) =>
+      port.setFamilyPricing({ vendorId: group.id, family, mode, value });
+    expect((await set('not-a-family', 'multiplier', 1)).success).toBe(false);
+    expect((await set('anthropic', 'multiplier', -1)).success).toBe(false);
+    expect((await set('anthropic', 'multiplier', 1000.5)).success).toBe(false);
+    expect((await set('anthropic', 'credit', -0.01)).success).toBe(false);
+    expect((await set('anthropic', 'per_call', 10000.5)).success).toBe(false);
+    expect(JSON.stringify(store.familyPricings)).toBe(before);
+  });
+
+  it('a family can charge per call or per credit instead of a multiplier; an own multiplier still overrides it', async () => {
+    const store = getYomiStore();
+    const port = new YomiPricingMock();
+    const group = store.providerGroups.find((g) => g.queueGroup === 'antigravity')!;
+    const rateOf = (routeKey: string) => store.rate.find((x) => x.modelId === routeKey)!;
+
+    // Claude 组改成按次：继承它的两条别名每次调用一个价，没有基准价行、也没有倍率。
+    const perCall = await port.setFamilyPricing({ vendorId: group.id, family: 'anthropic', mode: 'per_call', value: 0.35 });
+    expect(perCall.success && perCall.data.compiled).toBe(2);
+    for (const key of ['ag-claude-opus', 'ag-claude-sonnet']) {
+      const r = rateOf(key);
+      expect(r.billingType === 'per_call' && r.rate.pricePerCall).toBe(0.35);
+      expect(r.sourceModelKey).toBeNull();
+      expect(r.multiplierApplied).toBeNull();
+    }
+    // 别的家族不受影响。
+    expect(rateOf('ag-gemini-pro').billingType).toBe('per_token');
+
+    // 组里设了独立倍率的那条：顶掉的是分组的整个定价方式，回到牌价 × 自己的倍率。
+    const opus = store.vendorRoutes.find((v) => v.routeKey === 'ag-claude-opus')!;
+    await port.setRoutePricing({ routeId: opus.uid, mode: 'compiled', multiplier: 1.1 });
+    expect(rateOf('ag-claude-opus').billingType).toBe('per_token');
+    expect(rateOf('ag-claude-opus').multiplierApplied).toBe(1.1);
+    expect(rateOf('ag-claude-sonnet').billingType).toBe('per_call');
+
+    // 再改成按积分：还是只动继承分组的那一条。
+    const credit = await port.setFamilyPricing({ vendorId: group.id, family: 'anthropic', mode: 'credit', value: 0.028 });
+    expect(credit.success && credit.data.compiled).toBe(1);
+    const sonnet = rateOf('ag-claude-sonnet');
+    expect(sonnet.billingType === 'per_credit' && sonnet.rate.pricePerCredit).toBe(0.028);
+    expect(rateOf('ag-claude-opus').multiplierApplied).toBe(1.1);
+
+    const listed = await port.listVendorFamilies(group.id);
+    expect(listed.success && listed.data[0]).toEqual({
+      family: 'anthropic', mode: 'credit', value: 0.028, routeCount: 2, inheritingRouteCount: 1,
+    });
+
+    // 换回倍率：分组只存一个值，倍率要重新给。
+    await port.setFamilyPricing({ vendorId: group.id, family: 'anthropic', mode: 'multiplier', value: 1.3 });
+    expect(rateOf('ag-claude-sonnet').billingType).toBe('per_token');
+    expect(rateOf('ag-claude-sonnet').multiplierApplied).toBe(1.3);
   });
 
   it('with no price table at hand, list-priced routes are left alone and the result says so', async () => {
     const store = getYomiStore();
     const port = new YomiPricingMock();
-    const multiplierGroup = store.providerGroups.find(
-      (g) => g.pricingMode === 'multiplier' && store.vendorRoutes.some((v) => v.vendorKey === g.queueGroup && v.pricingMode === 'compiled'),
-    )!;
+    // 两个家族的渠道：Claude 两条别名、Gemini 一条，都按牌价 × 倍率出价。
+    const group = store.providerGroups.find((g) => g.queueGroup === 'antigravity')!;
     const before = JSON.stringify(store.rate);
 
     // 号池管理台还没发布 / 这次没读到：表是空的
     store.modelPrices.splice(0);
-    const r = await port.setVendorPricing({ vendorId: multiplierGroup.id, mode: 'multiplier', value: 9 });
+    const r = await port.setFamilyPricing({ vendorId: group.id, family: 'anthropic', mode: 'multiplier', value: 9 });
     expect(r.success).toBe(true);
     if (!r.success) return;
     // 不重算、不报「无基准价」（空表说明不了哪个模型缺价），现有的有效价一个字不动
     expect(r.data).toMatchObject({ compiled: 0, unmatchedModelKeys: [], newVersion: null, priceTableEmpty: true, invalidPriceKeys: [] });
     expect(JSON.stringify(store.rate)).toBe(before);
 
-    // 积分渠道不看价格表：没有牌价照样编得出来，也不算「没有牌价」
-    const credit = await port.setVendorPricing({ vendorId: multiplierGroup.id, mode: 'credit', value: 0.03 });
+    // 按积分的分组不看价格表：没有牌价，Claude 那两条照样编得出来，也不算「没有牌价」。
+    // 同渠道的 Gemini 组还是倍率、眼下没法算，但这次改的是 Claude 组，它不在重算范围里，不拿来说事。
+    const credit = await port.setFamilyPricing({ vendorId: group.id, family: 'anthropic', mode: 'credit', value: 0.03 });
     expect(credit.success).toBe(true);
     if (!credit.success) return;
-    expect(credit.data.compiled).toBeGreaterThan(0);
+    expect(credit.data.compiled).toBe(2);
     expect(credit.data.priceTableEmpty).toBe(false);
+  });
+
+  it('changing one family recomputes only that family; changing one alias only that alias', async () => {
+    const store = getYomiStore();
+    const port = new YomiPricingMock();
+    const group = store.providerGroups.find((g) => g.queueGroup === 'antigravity')!;
+    const rateOf = (routeKey: string) => store.rate.find((x) => x.modelId === routeKey)!;
+
+    // Gemini 的牌价变了，但还没人重算它：这时它的有效价是「过时」的。
+    const gemini = store.modelPrices.find((p) => p.modelKey === 'gemini-2.5-pro')!;
+    if (gemini.billingType === 'per_token') gemini.rate.input.perMToken *= 10;
+    const geminiBefore = JSON.stringify(rateOf('ag-gemini-pro'));
+
+    // 改 Claude 组：只算 Claude 的两条，Gemini 那条不在范围里——既不重算，也不计入「相同未动」。
+    const set = await port.setFamilyPricing({ vendorId: group.id, family: 'anthropic', mode: 'multiplier', value: 2 });
+    expect(set.success && set.data).toMatchObject({ compiled: 2, unchanged: 0 });
+    expect(JSON.stringify(rateOf('ag-gemini-pro'))).toBe(geminiBefore);
+
+    // 改一条别名：只算这一条，同组的另一条不动。
+    const opus = store.vendorRoutes.find((v) => v.routeKey === 'ag-claude-opus')!;
+    const sonnetBefore = JSON.stringify(rateOf('ag-claude-sonnet'));
+    const own = await port.setRoutePricing({ routeId: opus.uid, mode: 'compiled', multiplier: 1.1 });
+    expect(own.success && own.data).toMatchObject({ compiled: 1, unchanged: 0 });
+    expect(JSON.stringify(rateOf('ag-claude-sonnet'))).toBe(sonnetBefore);
+    expect(JSON.stringify(rateOf('ag-gemini-pro'))).toBe(geminiBefore);
+
+    // 端口上没有「手动重算」这个口。
+    expect('compile' in port).toBe(false);
   });
 
   it('the compile summary says "no list prices" instead of "nothing changed", and names the unusable price keys', () => {
@@ -436,52 +599,7 @@ describe('pricing contract', () => {
     expect(scaled).toEqual({ billingType: 'per_credit', rate: { pricePerCredit: 0.003 } });
   });
 
-  it('credit vendor: inheriting routes take its credit price, ignoring the catalog and multipliers', async () => {
-    const store = getYomiStore();
-    const port = new YomiPricingMock();
-
-    // 挑价格表里有牌价的：换回倍率时要能编回价格表。没牌价的编不出新价，按编译器的规矩保留旧价、报未匹配。
-    const route = store.vendorRoutes.find(
-      (v) =>
-        v.pricingMode === 'compiled' &&
-        store.providerGroups.some((g) => g.queueGroup === v.vendorKey) &&
-        store.modelPrices.some((p) => p.modelKey === v.vendorModel.trim().toLowerCase()),
-    );
-    expect(route).toBeDefined();
-    if (!route) return;
-    const group = store.providerGroups.find((g) => g.queueGroup === route.vendorKey)!;
-
-    const set = await port.setVendorPricing({ vendorId: group.id, mode: 'credit', value: 0.028 });
-    expect(set.success).toBe(true);
-    expect(group.pricingMode).toBe('credit');
-    expect(group.pricingValue).toBe(0.028);
-
-    const rate = store.rate.find((x) => x.modelId === route.routeKey)!;
-    expect(rate.billingType).toBe('per_credit');
-    expect(rate.billingType === 'per_credit' && rate.rate.pricePerCredit).toBe(0.028);
-    expect(rate.sourceModelKey).toBeNull();
-    expect(rate.multiplierApplied).toBeNull();
-
-    // 换回倍率：只存一个值，倍率要重新给；回到价格表 × 倍率。
-    const back = await port.setVendorPricing({ vendorId: group.id, mode: 'multiplier', value: 1 });
-    expect(back.success).toBe(true);
-    expect(store.rate.find((x) => x.modelId === route.routeKey)!.billingType).not.toBe('per_credit');
-  });
-
-  it('vendor pricing rejects negative values', async () => {
-    const store = getYomiStore();
-    const port = new YomiPricingMock();
-    const group = store.providerGroups[0]!;
-
-    expect((await port.setVendorPricing({ vendorId: group.id, mode: 'credit', value: -0.01 })).success).toBe(false);
-    expect(group.pricingMode).toBe('multiplier');
-  });
-});
-
-describe('vendor pricing display', () => {
-  const group = (pricingMode: VendorPricingMode, pricingValue: number) => ({ pricingMode, pricingValue });
-
-  it('reads mode and value off the wire, defaulting old rows to multiplier ×1', () => {
+  it('a vendor row carries no pricing: old pricing fields on the wire are dropped, not read', () => {
     const base = {
       id: 1,
       queueGroup: 'kiro',
@@ -490,37 +608,61 @@ describe('vendor pricing display', () => {
       createdAtUtc: 0,
       updatedAtUtc: 0,
     };
-    const credit = providerGroupSchema.parse({ ...base, pricingMode: 'credit', pricingValue: 0.028 });
-    expect(credit.pricingMode).toBe('credit');
-    expect(credit.pricingValue).toBe(0.028);
+    // 还没升级的后端会带着 pricingMode / pricingValue：照样读得进来，但读出来的渠道上没有这两样。
+    const parsed = providerGroupSchema.parse({ ...base, pricingMode: 'credit', pricingValue: 0.028 });
+    expect('pricingMode' in parsed).toBe(false);
+    expect('pricingValue' in parsed).toBe(false);
+    expect(providerGroupSchema.safeParse(base).success).toBe(true);
+    // 端口上也没有给渠道定价的入口。
+    expect('setVendorPricing' in new YomiPricingMock()).toBe(false);
+  });
+});
 
-    const legacy = providerGroupSchema.parse(base);
-    expect(legacy.pricingMode).toBe('multiplier');
-    expect(legacy.pricingValue).toBe(1);
-
-    expect(providerGroupSchema.safeParse({ ...base, pricingMode: 'credit', pricingValue: -1 }).success).toBe(false);
-    expect(providerGroupSchema.safeParse({ ...base, pricingMode: 'per_token', pricingValue: 1 }).success).toBe(false);
+describe('family pricing display', () => {
+  it('formats the value with its unit, by mode', () => {
+    expect(formatFamilyPricing({ mode: 'multiplier', value: 1.2 })).toBe('×1.2');
+    expect(formatFamilyPricing({ mode: 'per_call', value: 0.35 })).toBe('¥0.35 / 次');
+    expect(formatFamilyPricing({ mode: 'credit', value: 0.028 })).toBe('¥0.028 / 积分');
+    // 积分单价常见这种量级，不能四舍五入成 ¥0.0001。
+    expect(formatFamilyPricing({ mode: 'credit', value: 0.000125 })).toBe('¥0.000125 / 积分');
+    // 前面已经写了方式的地方用短写法，不带单位。
+    expect(formatFamilyPricingValue({ mode: 'multiplier', value: 1.2 })).toBe('×1.2');
+    expect(formatFamilyPricingValue({ mode: 'per_call', value: 0.35 })).toBe('¥0.35');
+    expect(formatFamilyPricingValue({ mode: 'credit', value: 0.028 })).toBe('¥0.028');
   });
 
-  it('formats the value with its unit', () => {
-    expect(formatVendorPricing(group('multiplier', 1.2))).toBe('×1.2');
-    expect(formatVendorPricing(group('credit', 0.028))).toBe('¥0.028 / 积分');
-    expect(formatVendorPricing(group('credit', 0.000125))).toBe('¥0.000125 / 积分');
+  it('only a multiplier-priced family needs a list price for the routes that inherit it', () => {
+    expect(familyReadsPriceTable({ mode: 'multiplier', value: 1.2 })).toBe(true);
+    expect(familyReadsPriceTable({ mode: 'per_call', value: 0.35 })).toBe(false);
+    expect(familyReadsPriceTable({ mode: 'credit', value: 0.028 })).toBe(false);
   });
 
-  it('a route inherits only when its vendor is credit-priced and the route follows the vendor', () => {
-    expect(routeCreditPricing('compiled', group('multiplier', 1.2))).toEqual({ kind: 'none' });
-    expect(routeCreditPricing('manual', group('multiplier', 1.2))).toEqual({ kind: 'none' });
-    expect(routeCreditPricing('compiled', null)).toEqual({ kind: 'none' });
-    expect(routeCreditPricing('compiled', group('credit', 0.028))).toEqual({ kind: 'inherit', creditPrice: 0.028 });
-    expect(routeCreditPricing('manual', group('credit', 0.028))).toEqual({ kind: 'independent', creditPrice: 0.028 });
-    // 0 是免费，不是「没设」：积分渠道照样继承。
-    expect(routeCreditPricing('compiled', group('credit', 0))).toEqual({ kind: 'inherit', creditPrice: 0 });
+  it('a route follows its family unless it carries its own multiplier or a custom price', () => {
+    expect(routePricingChoice('compiled', null)).toBe('family');
+    expect(routePricingChoice('compiled', undefined)).toBe('family');
+    expect(routePricingChoice('compiled', 0.9)).toBe('own');
+    // 0 是免费，不是「没设」。
+    expect(routePricingChoice('compiled', 0)).toBe('own');
+    // 自定义了有效价，路由上留着的倍率就没人读了。
+    expect(routePricingChoice('manual', 0.9)).toBe('manual');
   });
 
-  it('names the inherit option by where the route stands now', () => {
-    expect(inheritOptionLabel({ kind: 'none' })).toBe('渠道定价');
-    expect(inheritOptionLabel({ kind: 'inherit', creditPrice: 1 })).toBe('继承渠道');
-    expect(inheritOptionLabel({ kind: 'independent', creditPrice: 1 })).toBe('恢复继承渠道');
+  it('a family nobody changed is priced at multiplier ×1, same as any other price', () => {
+    const families = [
+      { family: 'anthropic', mode: 'per_call' as const, value: 0.35, routeCount: 2, inheritingRouteCount: 2 },
+      { family: 'google', mode: 'multiplier' as const, value: 1, routeCount: 1, inheritingRouteCount: 1 },
+    ];
+    expect(familyPricingOf(families, 'anthropic')).toMatchObject({ mode: 'per_call', value: 0.35 });
+    // 列表里没有的家族（还没加载出来）按默认的倍率 1 算。
+    expect(familyPricingOf(families, 'openai')).toEqual({ mode: 'multiplier', value: 1 });
+    // 倍率 1 就是一个价，没有「未设置」这种说法。
+    expect(formatFamilyPricing(families[1]!)).toBe('×1');
+  });
+
+  it('families are called by their product line where one is the usual name', () => {
+    expect(modelFamilyLabel('anthropic')).toBe('Claude');
+    expect(modelFamilyLabel('google')).toBe('Gemini');
+    expect(modelFamilyLabel('openai')).toBe('OpenAI');
+    expect(modelFamilyLabel('other')).toBe('其他');
   });
 });

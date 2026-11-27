@@ -15,7 +15,15 @@ import type {
 import type { ProviderGroup, ProviderUpstreamModel } from '../../model/catalog.types';
 import type { VendorRoute } from '../../model/vendorRoute.types';
 import type { Model } from '@yomi/common';
-import { MODEL_PRICE_CURRENCY, PRICE_CURRENCY, type ModelPrice, type Rate, type RateBody } from '@yomi/common';
+import {
+  MODEL_PRICE_CURRENCY,
+  PRICE_CURRENCY,
+  inferMaker,
+  type FamilyPricingMode,
+  type ModelPrice,
+  type Rate,
+  type RateBody,
+} from '@yomi/common';
 import {
   OFFICIAL_USD_PRICES,
   officialUsdCapabilities,
@@ -40,6 +48,54 @@ export interface YomiStore {
   vendorRoutes: VendorRoute[];
   /** 价格表（基准价，按 modelKey 唯一，美元） */
   modelPrices: ModelPrice[];
+  /** 家族分组定价：一个渠道里一个模型家族一行，没有行 = 倍率 1。 */
+  familyPricings: FamilyPricingRow[];
+}
+
+export interface FamilyPricingRow {
+  vendorKey: string;
+  family: string;
+  mode: FamilyPricingMode;
+  value: number;
+}
+
+/** 别名所在家族在这个渠道里的分组定价；没有行是倍率 1。 */
+export function familyPricingOf(
+  familyPricings: readonly FamilyPricingRow[],
+  route: Pick<VendorRoute, 'vendorKey' | 'vendorModel'>,
+): Pick<FamilyPricingRow, 'mode' | 'value'> {
+  const family = inferMaker(route.vendorModel);
+  return (
+    familyPricings.find((f) => f.vendorKey === route.vendorKey && f.family === family) ?? {
+      mode: 'multiplier',
+      value: 1,
+    }
+  );
+}
+
+/**
+ * 一条继承定价（compiled）的别名怎么出价，与后端编译器同一口径：自己设了独立倍率就是牌价 × 它；
+ * 否则跟所在家族的分组——分组是倍率就是牌价 × 分组倍率，是按次 / 积分就直接用分组的那个价，不看牌价。
+ * 独立倍率和分组定价二选一，不叠乘。
+ */
+export type RoutePriceSource =
+  | { kind: 'list'; multiplier: number }
+  | { kind: 'flat'; body: RateBody };
+
+export function routePriceSource(
+  familyPricings: readonly FamilyPricingRow[],
+  route: Pick<VendorRoute, 'vendorKey' | 'vendorModel' | 'priceMultiplier'>,
+): RoutePriceSource {
+  if (route.priceMultiplier != null) return { kind: 'list', multiplier: route.priceMultiplier };
+  const family = familyPricingOf(familyPricings, route);
+  switch (family.mode) {
+    case 'per_call':
+      return { kind: 'flat', body: { billingType: 'per_call', rate: { pricePerCall: family.value } } };
+    case 'credit':
+      return { kind: 'flat', body: { billingType: 'per_credit', rate: { pricePerCredit: family.value } } };
+    default:
+      return { kind: 'list', multiplier: family.value };
+  }
 }
 
 export const genProviderUid = createUidSeq(12_000_000);
@@ -1019,6 +1075,10 @@ function apiTypeToVendorKey(apiType: ApiType): string {
 export const gatewayDiscoveryCatalog: Readonly<
   Record<string, { displayName: string; models: readonly string[] }>
 > = {
+  antigravity: {
+    displayName: 'Antigravity',
+    models: ['claude-sonnet-4-6', 'claude-opus-4-6', 'gemini-2.5-pro', 'gemini-2.5-flash'],
+  },
   kiro: {
     displayName: 'Kiro',
     models: ['claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-opus-4-6', 'claude-opus-4-7'],
@@ -1040,13 +1100,28 @@ export const gatewayDiscoveryCatalog: Readonly<
 /** 演示用「已入库」初始集合（admin 之前已通过接入页导入的内容）。 */
 export function seedImportedProviderGroups(): ProviderGroup[] {
   const t = epochMs(now);
+  // 渠道不带价格：价格定在家族分组上，见 seedFamilyPricings。
   return [
     { id: genProviderGroupUid(), queueGroup: 'kiro', vendorSlug: 'nai', status: 'active', upstreamModelCount: 3,
-      pricingMode: 'multiplier', pricingValue: 1.15, notes: null, createdAtUtc: t, updatedAtUtc: t },
+      notes: null, createdAtUtc: t, updatedAtUtc: t },
     { id: genProviderGroupUid(), queueGroup: 'gemini', vendorSlug: 'pa', status: 'active', upstreamModelCount: 3,
-      pricingMode: 'multiplier', pricingValue: 1.2, notes: null, createdAtUtc: t, updatedAtUtc: t },
+      notes: null, createdAtUtc: t, updatedAtUtc: t },
     { id: genProviderGroupUid(), queueGroup: 'codex', vendorSlug: 'rong', status: 'active', upstreamModelCount: 3,
-      pricingMode: 'multiplier', pricingValue: 1, notes: null, createdAtUtc: t, updatedAtUtc: t },
+      notes: null, createdAtUtc: t, updatedAtUtc: t },
+    // 一个渠道带两家的模型：模型定价页按家族分成 Claude / Gemini 两组，各定各的价。
+    { id: genProviderGroupUid(), queueGroup: 'antigravity', vendorSlug: 'ag', status: 'active', upstreamModelCount: 3,
+      notes: null, createdAtUtc: t, updatedAtUtc: t },
+  ];
+}
+
+/**
+ * 演示用分组定价。antigravity 的 Gemini 组、codex 没有行，就是默认的倍率 1。
+ */
+function seedFamilyPricings(): FamilyPricingRow[] {
+  return [
+    { vendorKey: 'kiro', family: 'anthropic', mode: 'multiplier', value: 1.15 },
+    { vendorKey: 'gemini', family: 'google', mode: 'multiplier', value: 1.2 },
+    { vendorKey: 'antigravity', family: 'anthropic', mode: 'multiplier', value: 1.3 },
   ];
 }
 
@@ -1099,6 +1174,7 @@ function seedVendorRoutes(providers: Provider[]): VendorRoute[] {
         isPublished: true,
         pricingMode: 'compiled',
         priceMultiplier: null,
+        chatVisible: true,
         notes: mapping.notes ?? null,
         createdAtUtc: t,
         updatedAtUtc: t,
@@ -1132,6 +1208,7 @@ function seedCatalogVendorRoutes(
       isPublished,
       pricingMode: 'compiled',
       priceMultiplier: null,
+      chatVisible: true,
       notes,
       createdAtUtc: t,
       updatedAtUtc: t,
@@ -1146,6 +1223,9 @@ function seedCatalogVendorRoutes(
   add('codex', 'gpt-4o', 'yomi-gpt-4o');
   add('codex', 'gpt-4o-mini', 'yomi-gpt-4o-mini');
   add('codex', 'gpt-5.6', 'yomi-gpt-5', false, '演示下线别名');
+  add('antigravity', 'claude-sonnet-4-6', 'ag-claude-sonnet');
+  add('antigravity', 'claude-opus-4-6', 'ag-claude-opus');
+  add('antigravity', 'gemini-2.5-pro', 'ag-gemini-pro');
   // 价格表没有这条，编译会跳过 → 「未定价」页有东西可看
   routes.push({
     uid: genVendorRouteUid(),
@@ -1155,6 +1235,7 @@ function seedCatalogVendorRoutes(
     isPublished: true,
     pricingMode: 'compiled',
     priceMultiplier: null,
+    chatVisible: true,
     notes: '演示：价格表尚未收录',
     createdAtUtc: t,
     updatedAtUtc: t,
@@ -1169,58 +1250,48 @@ function seedCatalogVendorRoutes(
 function seedCompiledRates(
   routes: VendorRoute[],
   prices: ModelPrice[],
-  groups: ProviderGroup[],
+  familyPricings: FamilyPricingRow[],
 ): Rate[] {
   const t = epochMs(now);
   const priceByKey = new Map(prices.map((p) => [p.modelKey, p]));
-  const vendors = new Map(groups.map((g) => [g.queueGroup, g]));
   const out: Rate[] = [];
   const seen = new Set<string>();
   for (const route of routes) {
     if (!route.isPublished || route.pricingMode !== 'compiled') continue;
     if (seen.has(route.routeKey)) continue;
     seen.add(route.routeKey);
-    // 与 YomiPricingMock 的编译器同一口径：积分渠道直接用渠道积分单价，不看价格表和倍率。
-    const vendor = vendors.get(route.vendorKey);
-    if (vendor?.pricingMode === 'credit') {
-      out.push({
-        billingType: 'per_credit',
-        rate: { pricePerCredit: vendor.pricingValue },
-        id: genRateUid(),
-        modelId: route.routeKey,
-        currency: PRICE_CURRENCY,
-        effectiveFromUtc: t - 2 * 86_400_000,
-        updatedAtUtc: t,
-        updatedBy: { iamUid: '200000001' },
-        sourceModelKey: null,
-        multiplierApplied: null,
-      });
-      continue;
-    }
-    const price = priceByKey.get(route.vendorModel.trim().toLowerCase());
-    if (!price) continue;
-    const multiplier = (vendor?.pricingValue ?? 1) * (route.priceMultiplier ?? 1);
-    const body = scaleRateBody(
-      { billingType: price.billingType, rate: price.rate } as RateBody,
-      multiplier,
-    );
-    out.push({
-      ...body,
+    // 与 YomiPricingMock 的编译器同一口径，见 routePriceSource。
+    const source = routePriceSource(familyPricings, route);
+    const base = {
       id: genRateUid(),
       modelId: route.routeKey,
       currency: PRICE_CURRENCY,
       effectiveFromUtc: t - 2 * 86_400_000,
       updatedAtUtc: t,
       updatedBy: { iamUid: '200000001' },
+    };
+    if (source.kind === 'flat') {
+      out.push({ ...source.body, ...base, sourceModelKey: null, multiplierApplied: null } as Rate);
+      continue;
+    }
+    const price = priceByKey.get(route.vendorModel.trim().toLowerCase());
+    if (!price) continue;
+    const body = scaleRateBody(
+      { billingType: price.billingType, rate: price.rate } as RateBody,
+      source.multiplier,
+    );
+    out.push({
+      ...body,
+      ...base,
       sourceModelKey: price.modelKey,
-      multiplierApplied: multiplier,
+      multiplierApplied: source.multiplier,
     } as Rate);
   }
   return out;
 }
 
 /**
- * 价格表种子 = 固化的官方美元牌价，当作号池管理台发布出来的那一份（这边只读）。编译：美元 × 渠道倍率 = 人民币。
+ * 价格表种子 = 固化的官方美元牌价，当作号池管理台发布出来的那一份（这边只读）。编译：美元 × 倍率 = 人民币。
  * 与渠道里用到哪些模型无关：价格表是一套官方基准目录，不是「在用清单」。
  */
 function seedModelPrices(): ModelPrice[] {
@@ -1258,7 +1329,11 @@ export function getYomiStore(): YomiStore {
     ...seedCatalogVendorRoutes(upstreamModels),
   ];
   const modelPrices = seedModelPrices();
-  const rate = [...seedRate(models), ...seedCompiledRates(vendorRoutes, modelPrices, providerGroups)];
+  const familyPricings = seedFamilyPricings();
+  const rate = [
+    ...seedRate(models),
+    ...seedCompiledRates(vendorRoutes, modelPrices, familyPricings),
+  ];
   cached = {
     providers,
     models,
@@ -1268,6 +1343,7 @@ export function getYomiStore(): YomiStore {
     upstreamModels,
     vendorRoutes,
     modelPrices,
+    familyPricings,
   };
   return cached;
 }

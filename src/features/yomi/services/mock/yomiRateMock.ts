@@ -4,6 +4,7 @@ import { delay } from '@/shared/lib/delay';
 
 import {
   PRICE_CURRENCY,
+  inferMaker,
   rateSchema,
   upsertRateInputSchema,
   type ListRateFilter,
@@ -111,6 +112,8 @@ export class YomiRateMock implements YomiRatePort {
         routeId: route.uid,
         pricingMode: route.pricingMode,
         priceMultiplier: route.priceMultiplier ?? null,
+        family: inferMaker(route.vendorModel),
+        chatVisible: route.chatVisible,
       });
     }
 
@@ -257,6 +260,7 @@ export class YomiRateMock implements YomiRatePort {
         vendorKey: r.vendorKey,
         vendorModel: r.vendorModel,
         routeId: r.uid,
+        family: inferMaker(r.vendorModel),
       }))
       .sort((a, b) => a.routeKey.localeCompare(b.routeKey));
     const items = clientPaginate(rows, input.page, input.pageSize);

@@ -110,6 +110,15 @@ export class YomiVendorRouteHttpAdapter implements YomiVendorRoutePort {
     return parseRoute(res.data);
   }
 
+  async setChatVisible(uid: Uid, chatVisible: boolean): Promise<AppResult<VendorRoute>> {
+    const res = await requestYomi<unknown>(`${BASE}/${encodeURIComponent(uid)}/chat-visible`, {
+      method: 'PATCH',
+      body: { chatVisible },
+    });
+    if (!res.success) return res;
+    return parseRoute(res.data);
+  }
+
   async stats(vendorKey: string): Promise<AppResult<VendorRouteStats>> {
     const res = await requestYomi<{
       vendorKey?: string;

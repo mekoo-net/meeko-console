@@ -1,4 +1,5 @@
 import {
+  inferMaker,
   rateSchema,
   upsertRateInputSchema,
   type ListRateFilter,
@@ -69,12 +70,23 @@ interface GroupedEntryWire {
   routeId?: string | number | null;
   pricingMode?: string | null;
   priceMultiplier?: number | null;
+  family?: string | null;
+  chatVisible?: boolean | null;
 }
 
 type VendorModelGroupedWire = Record<string, Record<string, GroupedEntryWire[]>>;
 
 function parsePricingMode(v: string | null | undefined): RoutePricingMode {
   return v === 'manual' ? 'manual' : 'compiled';
+}
+
+/**
+ * 家族以后端判的为准（分组定价是按它对的）。只有还没升级、不下发这个字段的后端才照模型名推一遍——
+ * 那样的后端也还没有分组定价，推出来的只用来归组显示。
+ */
+function parseFamily(v: string | null | undefined, vendorModel: string): string {
+  const k = v?.trim().toLowerCase();
+  return k ? k : inferMaker(vendorModel);
 }
 
 function flattenVendorModelGroups(items: VendorModelGroupedWire): AppResult<VendorModelGroup[]> {
@@ -96,6 +108,9 @@ function flattenVendorModelGroups(items: VendorModelGroupedWire): AppResult<Vend
           routeId: entry.routeId == null ? null : String(entry.routeId),
           pricingMode: parsePricingMode(entry.pricingMode),
           priceMultiplier: entry.priceMultiplier ?? null,
+          family: parseFamily(entry.family, vendorModel),
+          // 旧后端没有这个开关时，网页聊天按计费方式挑；新后端缺省是开。这里取开，开关一升级就是真值。
+          chatVisible: entry.chatVisible !== false,
         });
       }
       if (routeKeys.length > 0) {
@@ -226,6 +241,7 @@ export class YomiRateHttpAdapter implements YomiRatePort {
       vendorKey?: string;
       vendorModel?: string;
       routeId?: string | number | null;
+      family?: string | null;
     }>>(`${VENDOR_MODEL_BASE}/unconfigured`, {
       query: {
         page: input.page,
@@ -240,6 +256,7 @@ export class YomiRateHttpAdapter implements YomiRatePort {
         vendorKey: row.vendorKey ?? '',
         vendorModel: row.vendorModel ?? '',
         routeId: row.routeId != null && String(row.routeId) !== '' ? String(row.routeId) : null,
+        family: parseFamily(row.family, row.vendorModel ?? ''),
       })),
       total: result.data.total ?? 0,
     });

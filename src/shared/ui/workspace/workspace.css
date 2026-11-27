@@ -222,6 +222,18 @@
   justify-content: center;
 }
 
+/* 渠道侧栏：条数单独一行，在翻页按钮上面。 */
+.provider-sidebar__pager {
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.provider-sidebar__total {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
 @media (max-width: 900px) {
   .provider-page {
     height: auto;

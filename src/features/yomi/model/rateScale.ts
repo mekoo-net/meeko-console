@@ -2,7 +2,7 @@ import type { RateBody } from '@yomi/common';
 
 /**
  * 与后端 RateJsonScaler 同语义：只缩放价格字段，size / quality / min|maxSeconds 原样。
- * 渠道定价预览 = 价格表 × 渠道倍率，走这一份，不要前端另写一套乘法。
+ * 按倍率出价的预览 = 价格表 × 倍率（家族分组的或别名自己的），走这一份，不要前端另写一套乘法。
  */
 export function scaleRateBody(body: RateBody, factor: number): RateBody {
   const mul = (v: number | undefined): number | undefined =>

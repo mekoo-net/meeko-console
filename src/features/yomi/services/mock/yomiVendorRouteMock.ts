@@ -87,6 +87,7 @@ export class YomiVendorRouteMock implements YomiVendorRoutePort {
       isPublished: input.isPublished ?? true,
       pricingMode: 'compiled',
       priceMultiplier: null,
+      chatVisible: true,
       notes: input.notes?.trim() || null,
       createdAtUtc: t,
       updatedAtUtc: t,
@@ -129,6 +130,15 @@ export class YomiVendorRouteMock implements YomiVendorRoutePort {
 
   async setPublished(uid: Uid, isPublished: boolean): Promise<AppResult<VendorRoute>> {
     return this.update(uid, { isPublished });
+  }
+
+  async setChatVisible(uid: Uid, chatVisible: boolean): Promise<AppResult<VendorRoute>> {
+    await delay();
+    const route = this.store.vendorRoutes.find((r) => r.uid === uid);
+    if (!route) return fail({ code: 'not_found', message: `路由 ${uid} 不存在` });
+    route.chatVisible = chatVisible;
+    route.updatedAtUtc = Date.now();
+    return ok({ ...route });
   }
 
   async stats(vendorKey: string): Promise<AppResult<VendorRouteStats>> {

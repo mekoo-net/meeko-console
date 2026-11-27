@@ -25,5 +25,10 @@ export interface YomiVendorRoutePort {
   update(uid: Uid, input: UpdateVendorRouteInput): Promise<AppResult<VendorRoute>>;
   delete(uid: Uid): Promise<AppResult<void>>;
   setPublished(uid: Uid, isPublished: boolean): Promise<AppResult<VendorRoute>>;
+  /**
+   * 下不下发到网页聊天。后端顺手推进路由快照版本，网关几秒内重拉，网页聊天的模型列表跟着变；
+   * 不重算有效价。
+   */
+  setChatVisible(uid: Uid, chatVisible: boolean): Promise<AppResult<VendorRoute>>;
   stats(vendorKey: string): Promise<AppResult<VendorRouteStats>>;
 }

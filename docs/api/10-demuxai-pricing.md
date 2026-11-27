@@ -31,7 +31,8 @@
 > 金额单位与旧版一致；`effectiveFromUtc` 现在只是响应里的审计字段，upsert 不收。
 >
 > **2026-09 起**：`tierMultipliers`（LV 折扣）已彻底删除；`cachedRead` / `cachedWrite` 缺省时按 `input.perMToken` 计费。
-> 有效价的常态来路改为「价格表基准价 × 渠道倍率 × 路由倍率」自动编译，见文末[价格表 / 倍率](#价格表--倍率2026-09)。
+> 有效价的常态来路改为「价格表基准价 × 倍率」自动编译，见文末[价格表 / 倍率](#价格表--倍率2026-09)。
+> **2026-11 起**渠道不再管理价格：价格按「渠道 × 模型家族」分组定（倍率 / 按次价 / 积分单价），别名可以再设独立倍率顶掉分组的（不叠乘）。
 
 ### `modelId` 来源（2026-05）
 
@@ -134,7 +135,9 @@ Body 为 `UpsertPricingInput`（含 `modelId`、`billingType`、`pricing`、可�
 只会写出跟账单对不上的价。
 
 > 在这里直接写有效价会把该路由切成 `pricingMode = manual`（自定义）：人亲手写的价，编译器不再覆盖。
-> 走渠道定价则 `setRoutePricing({ mode: compiled, multiplier: null })`，有效价 = 价格表 × 渠道倍率。
+> 继承分组则 `setRoutePricing({ mode: compiled, multiplier: null })`，有效价跟别名所在模型家族的分组定价走
+> （分组是倍率就是价格表 × 分组倍率，是按次 / 积分就是分组那个价）；
+> 独立倍率则 `multiplier` 给数字，有效价 = 价格表 × 这个数（不看分组怎么定的）。
 
 `per_token` 示例（单位：元 / 1M tokens）：
 
@@ -180,19 +183,37 @@ onMounted → listProviderGroups + loadAllPricing + listModels + listModelRoutes
 官方源（models.dev / OpenRouter / LiteLLM / NewAPI）报的美元价在 **拉取时** 就按固定 `1 USD = 7 CNY`
 （`@demux/common` 的 `USD_CNY_FIXED_RATE`）折成人民币，候选里带 `sourceCurrency` / `fxApplied` 供审计。
 
-有效价（`vendor_rates`）有两条来路，模型定价页对每条别名二选一：
+**价格定在模型家族上，渠道不管价格（2026-11）**。一个渠道里往往带着几家的模型（antigravity 既有 claude 又有 gemini），
+各家的进价、结算方式不一样，挂在渠道上的一个倍率或一个积分单价定不准。现在渠道上没有任何定价字段和定价接口，
+渠道设置里也只剩渠道名称；价格只定在两处：
 
-- **渠道定价**（`pricing_mode = compiled`）：`有效价 = 价格表 × 渠道倍率`。价格表或渠道倍率一改，后端重编译这条。控制台不再单独叠路由倍率（`price_multiplier` 置空）。
+- **家族分组定价**：渠道里每个模型家族一份，方式（`mode`）加一个值（`value`）：
+  - `multiplier`：有效价 = 价格表 × 倍率，按 token 等用量计费；
+  - `per_call`：值就是有效价，人民币 / 每次调用，不看价格表；
+  - `credit`：值就是有效价，人民币 / 每 1 上游积分，按上游报的积分计费，不看价格表。
+
+  家族不用手工建——后端照别名的上游模型名归类（claude → `anthropic`、gemini → `google`，认不出的进 `other`），
+  键就是厂家键，展示名用 `modelFamilyLabel`（Claude / Gemini / …）。谁都没改过的组就是倍率 1——那就是它的定价，不存在「未设置」。
+  分组只存一个值：换方式就是换这个值的含义，换回去要重新给。
+- **独立倍率**：别名自己的（`price_multiplier`），有值就按价格表 × 它出价，顶掉分组的定价——二选一，**不叠乘**；
+  分组是按次 / 积分时也一样（顶掉的是分组的整个定价方式）。
+
+有效价（`vendor_rates`）有三条来路，模型定价页对每条别名三选一：
+
+- **继承分组**（`pricing_mode = compiled`，`price_multiplier = null`）：跟分组定价走，分组一改后端重编译这条。
+- **独立倍率**（`pricing_mode = compiled`，`price_multiplier` 有值）：`有效价 = 价格表 × 这个倍率`，分组再怎么改它不动。
 - **自定义**（`pricing_mode = manual`）：管理员自己写按量 / 按次 / 图片等，编译器不覆盖。
 
-`setRoutePricing` 仍接受 `multiplier`（兼容旧数据）；控制台渠道定价一律传 `null`。
+存量：升级后后端启动时把旧的渠道定价照抄给该渠道现有的每个家族——倍率渠道抄成分组倍率，原来叠乘在上面的路由倍率折成独立倍率
+（渠道倍率 × 路由倍率）；积分渠道抄成分组积分单价，路由上原来没人读的倍率清掉。有效价不变。
 
 | 业务动作 | Port 方法（`DemuxPricingPort`） | HTTP | REST 端点 |
 | --- | --- | --- | --- |
 | 单条基准价 | `getModelPrice` | GET | `/demux/api/admin/pricing/catalog/{modelKey}` |
-| 渠道倍率 | `setVendorMultiplier` | PATCH | `/demux/api/admin/pricing/vendors/{id}/multiplier` |
-| 路由模式 / 倍率 | `setRoutePricing` | PATCH | `/demux/api/admin/pricing/routes/{id}` `{ mode: compiled\|manual, multiplier }` |
-| 手动重编译 | `compile` | POST | `/demux/api/admin/pricing/compile` `{ modelKeys?, vendorKeys? }` |
+| 渠道的家族分组 | `listVendorFamilies` | GET | `/yomi/api/admin/pricing/vendors/{id}/families` → `items: { family, mode, value, routeCount, inheritingRouteCount }[]` |
+| 家族分组定价 | `setFamilyPricing` | PATCH | `/yomi/api/admin/pricing/vendors/{id}/families/{family}` `{ mode: multiplier\|per_call\|credit, value }`（两样都必填） |
+| 路由模式 / 独立倍率 | `setRoutePricing` | PATCH | `/yomi/api/admin/pricing/routes/{id}` `{ mode: compiled\|manual, multiplier }`（`multiplier: null` = 继承分组） |
+| 下发到网页聊天 | `YomiVendorRoutePort.setChatVisible` | PATCH | `/yomi/api/admin/routes/{id}/chat-visible` `{ chatVisible }`（必填；推进路由快照版本，网关几秒内重拉；不重算价） |
 
 **价格表不在这边（2026-11）**：价格表归 OneApi，全站一份，在管理端的「组件设置 → OneApi → 模型价格」（`/components/oneapi/ratecard`）里维护，
 见本文末尾[模型价格](#模型价格组件设置--oneapi2026-11)。Yomi 分组下原来的价格表页（`/yomi/pricing`）已经去掉，旧地址跳到新页面。
@@ -202,14 +223,24 @@ onMounted → listProviderGroups + loadAllPricing + listModels + listModelRoutes
 单条查询回的一行是 `{ modelKey, maker, billingType, rate, currency: "USD", capabilities, routeCount, updatedAtUtc }`：
 没有行号（按 `modelKey` 认行）、没有来源和生效时间；`updatedAtUtc` 是 Unix 毫秒；`routeCount` 单条查询是 0。
 
-重算结果（改渠道定价、改路由定价、手动重编译都回它）是
+**下发到网页聊天（2026-11）**：模型定价页每条已定价别名有一个开关，默认开。网页聊天下发所有定了价、开关开着的别名，
+不再按计费方式挑；按秒 / 按字符计价的网页上没有入口，开关置灰。关掉只影响网页聊天，API Key 照样能调。
+
+定价列表（`GET /yomi/api/admin/vendor/model`）每条别名带 `chatVisible`；每条别名、未配置列表（`…/unconfigured`）每一行都带 `family`：页面照它把别名归到分组下，
+不要自己照模型名再猜一遍——分组定价是按后端判的家族对的。
+渠道定价的旧接口（`PATCH …/vendors/{id}/pricing`）已经删掉；供应商组的响应里也不再有 `pricingMode` / `pricingValue`。
+
+后端还留着 `POST /yomi/api/admin/pricing/compile`（`{ modelKeys?, vendorKeys? }`）给运维在漏算时兜底，控制台不调它，端口上也没有对应的方法。
+
+重算结果（改分组定价、改路由定价都回它）是
 `{ compiled, unchanged, unmatchedModelKeys, newVersion, priceTableEmpty, invalidPriceKeys }`：
 `priceTableEmpty = true` 是手上没有牌价（没读到、或者号池管理台还没发布），按牌价出价的路由这一遍都没重算、现有的有效价原样在用，
 界面上要说「手上没有牌价，没有重算」而不是「无变化」；`invalidPriceKeys` 是牌价表里形状不对的那几行的键，用到它们的路由保留原价，界面上列出来。
 
 **厂家（maker）**：`model_prices.maker` 是模型是谁做的（`openai` / `anthropic` / `google` / …，开放集合，见 `@demux/common` `maker.ts`），
 与渠道（vendor / queueGroup）无关。判定按模型键而不是按源——阿里云也转售 `glm-5.2` / `kimi-k3`，厂家仍是智谱 / Moonshot。
-「全量重算有效价」是这边自己的事，在模型定价页（`/yomi/rate`）的页头。
+**重算跟着改动走，页面上没有「全量重算」按钮（2026-11）**：改一个家族的分组定价，后端只重算这个渠道里这个家族的别名；
+改一条别名的定价只重算这一条；牌价变了后端自己全量重算。别的家族、别的别名不在范围里，既不重算，也不计入结果里的「相同未动」。
 
 **方向是模型名映射到价格表**：价格表登记的是厂家发布的模型，与下游用了哪些别名无关，
 所以 `by-maker` 不带路由侧字段（`routeCount` / `vendorKeys` / 「在用但未定价」）。

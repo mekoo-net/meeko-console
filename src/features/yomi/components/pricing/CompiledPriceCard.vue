@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * 渠道定价预览：入/写 一列、出/读 一列，每档写出 价格表(USD) × 渠道倍率 = 有效价(CNY)。
+ * 按倍率出价的预览：入/写 一列、出/读 一列，每档写出 价格表(USD) × 倍率 = 有效价(CNY)。
+ * 倍率是哪一层的（家族分组的、还是别名自己的）由调用方在 `multiplierLabel` 里说。
  */
 import { computed } from 'vue';
 
@@ -12,6 +13,8 @@ const props = defineProps<{
   catalog: Omit<PriceDisplay, 'price'>;
   effective: Omit<PriceDisplay, 'price'>;
   multiplier: number;
+  /** 倍率下面那行小字，如「Claude 分组倍率」「独立倍率」。 */
+  multiplierLabel: string;
 }>();
 
 /** 一条「价格表 × 倍率 = 有效价」。`tier` 是同一行里的档位名（缓存写的 5m / 1h），单档的行没有。 */
@@ -104,7 +107,7 @@ function lineTitle(ln: CmpLine): string {
       </div>
       <div class="cprice__mul">
         <span class="cprice__mul-v">{{ mulText }}</span>
-        <span class="cprice__mul-k">渠道倍率</span>
+        <span class="cprice__mul-k">{{ multiplierLabel }}</span>
       </div>
     </div>
 
