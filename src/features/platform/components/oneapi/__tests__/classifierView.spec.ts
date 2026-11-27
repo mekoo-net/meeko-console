@@ -288,6 +288,93 @@ describe('classifier page: categories on the left, pages on the right', () => {
   });
 });
 
+describe('classifier dialog: the group is picked, the rest is typed', () => {
+  /** 条件那一格不在这里考：换成一个总是交得出条件的替身。 */
+  const ConditionStub = {
+    name: 'ConditionEditor',
+    template: '<div />',
+    methods: { read: () => ({ ok: true, when: { field: 'header.user-agent', op: 'prefix', value: 'x/' } }) },
+  };
+
+  async function dialogFor(props: Record<string, unknown>) {
+    const w = mount(ClassifierDialog, {
+      props: {
+        modelValue: false,
+        classifier: null,
+        schema: MOCK_FILTER_SCHEMA,
+        takenIds: ['agent.claude', 'chat.app'],
+        groups: ['agent', 'chat'],
+        submitting: false,
+        problems: [],
+        ...props,
+      },
+      global: { plugins: [ElementPlus], stubs: { ConditionEditor: ConditionStub } },
+      attachTo: document.body,
+    });
+    await w.setProps({ modelValue: true });
+    await settle();
+    return w;
+  }
+  const groupSelect = (w: VueWrapper) =>
+    w.findAllComponents({ name: 'ElSelect' }).find((c) => c.attributes('data-test') === 'classifier-group')!;
+  // el-input 把 data-test 放在里面的原生 input 上，不在组件根上
+  const keyInput = (w: VueWrapper) =>
+    w.findAllComponents({ name: 'ElInput' }).find((c) => c.find('[data-test="classifier-key"]').exists())!;
+  const submit = async (w: VueWrapper) => {
+    await w.find('[data-test="classifier-submit"]').trigger('click');
+    await settle();
+  };
+
+  it('offers the groups there are, starts on the one being looked at, and puts the id together', async () => {
+    const w = await dialogFor({ defaultGroup: 'chat' });
+    expect(groupSelect(w).props('modelValue')).toBe('chat');
+    expect(groupSelect(w).findAllComponents({ name: 'ElOption' }).map((o) => o.props('value'))).toEqual(['agent', 'chat']);
+
+    keyInput(w).vm.$emit('update:modelValue', 'kelivo');
+    await settle();
+    await submit(w);
+
+    expect(w.emitted('submit')?.[0]?.[0]).toMatchObject({ id: 'chat.kelivo' });
+    w.unmount();
+  });
+
+  it('a name that is not a group yet makes a new group', async () => {
+    const w = await dialogFor({});
+    groupSelect(w).vm.$emit('update:modelValue', 'bot');
+    keyInput(w).vm.$emit('update:modelValue', 'astrbot');
+    await settle();
+
+    const options = groupSelect(w).findAllComponents({ name: 'ElOption' });
+    expect(options.map((o) => o.props('value'))).toEqual(['agent', 'chat', 'bot']);
+
+    await submit(w);
+    expect(w.emitted('submit')?.[0]?.[0]).toMatchObject({ id: 'bot.astrbot' });
+    w.unmount();
+  });
+
+  it('a group name that cannot be one is caught before saving', async () => {
+    const w = await dialogFor({});
+    groupSelect(w).vm.$emit('update:modelValue', 'my group');
+    keyInput(w).vm.$emit('update:modelValue', 'x');
+    await settle();
+    await submit(w);
+
+    expect(w.emitted('submit')).toBeUndefined();
+    expect(document.body.textContent).toContain('分组只用小写字母、数字和下划线');
+    w.unmount();
+  });
+
+  it('editing shows the group and the rest of the id, and neither can change', async () => {
+    const w = await dialogFor({ classifier: { id: 'agent.gemini_cli', when: { field: 'header.origin', op: 'exists' } } });
+
+    expect(groupSelect(w).props('modelValue')).toBe('agent');
+    expect(groupSelect(w).props('disabled')).toBe(true);
+    expect(keyInput(w).props('modelValue')).toBe('gemini_cli');
+    expect(keyInput(w).props('disabled')).toBe(true);
+    w.unmount();
+  });
+});
+
 describe('condition chips in a list', () => {
   const chips = (when: unknown) =>
     mount(ConditionChips, { props: { when, compact: true }, global: { plugins: [ElementPlus] } });

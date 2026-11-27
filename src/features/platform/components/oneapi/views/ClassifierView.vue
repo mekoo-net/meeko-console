@@ -418,6 +418,8 @@ async function onSubmit(c: FilterClassifier, originalId: string | undefined): Pr
       :classifier="editing"
       :schema="schema"
       :taken-ids="takenIds"
+      :groups="categories.map((cat) => cat.key)"
+      :default-group="category === ALL ? undefined : category"
       :submitting="submitting"
       :problems="dialogProblems"
       @submit="onSubmit"
