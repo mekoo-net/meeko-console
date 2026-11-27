@@ -67,7 +67,7 @@ describe('classifier page', () => {
   it('lists the classifiers in order, with who refers to them', async () => {
     await open();
 
-    expect(ids()).toEqual(['agent.claude', 'chat.tavern', 'chat.app', 'chat.webview']);
+    expect(ids()).toEqual(['agent.claude', 'chat.tavern', 'chat.app', 'chat.phone']);
     expect(row('agent.claude').find('.cls-card__name').text()).toBe('Claude');
     expect(row('agent.claude').find('.cls-card__id').text()).toBe('agent.claude');
     expect(row('agent.claude').find('.chips').attributes('aria-label')).toBe(
@@ -77,7 +77,7 @@ describe('classifier page', () => {
       'Factory · no-agents',
       'Claude · own-client',
     ]);
-    expect(row('chat.webview').findAll('.cls-card__use').map((t) => t.text())).toEqual(['Claude · tavern']);
+    expect(row('chat.phone').findAll('.cls-card__use').map((t) => t.text())).toEqual(['Claude · tavern']);
   });
 
   it('a classifier no filter refers to can be moved and deleted', async () => {
@@ -104,11 +104,11 @@ describe('classifier page', () => {
     expect(wrapper.findAll('.cat-chip').map((c) => c.text().replace(/\s+/g, ' '))).toEqual([
       '全部 4',
       'Agent 1',
-      '聊天 3',
+      'Chat 3',
     ]);
 
     await wrapper.find('[data-category="chat"]').trigger('click');
-    expect(ids()).toEqual(['chat.tavern', 'chat.app', 'chat.webview']);
+    expect(ids()).toEqual(['chat.tavern', 'chat.app', 'chat.phone']);
     expect(row('chat.tavern').find('.cls-card__order').text()).toBe('2');
     // 顺序是整份的：筛着的时候上移会跨过看不见的那些
     expect(row('chat.app').find('[data-test="classifier-up"]').attributes('disabled')).toBeDefined();
@@ -146,12 +146,12 @@ describe('classifier page', () => {
     expect(dialog().props('classifier')).toMatchObject({ id: 'chat.tavern' });
 
     await submitFromDialog(
-      { id: 'chat.tavern', name: '酒馆', when: { field: 'header.user-agent', op: 'contains', value: 'Tavern' } },
+      { id: 'chat.tavern', name: 'Tavern SillyTavern', when: { field: 'header.user-agent', op: 'contains', value: 'Tavern' } },
       'chat.tavern',
     );
 
-    expect(savedIds()).toEqual(['agent.claude', 'chat.tavern', 'chat.app', 'chat.webview']);
-    expect(row('chat.tavern').find('.cls-card__name').text()).toBe('酒馆');
+    expect(savedIds()).toEqual(['agent.claude', 'chat.tavern', 'chat.app', 'chat.phone']);
+    expect(row('chat.tavern').find('.cls-card__name').text()).toBe('Tavern SillyTavern');
   });
 
   it('a classifier the gateway cannot read is not saved, and the dialog is told why', async () => {
@@ -187,7 +187,7 @@ describe('classifier page', () => {
 });
 
 describe('condition editor', () => {
-  const classifiers = [{ id: 'chat.app', name: '聊天 App' }, { id: 'agent.claude' }];
+  const classifiers = [{ id: 'chat.app', name: 'Chat' }, { id: 'agent.claude' }];
 
   function editor(initial: unknown, refs: typeof classifiers | null = classifiers) {
     return mount(ConditionEditor, {

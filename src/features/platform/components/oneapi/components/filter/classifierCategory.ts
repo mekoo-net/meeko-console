@@ -13,11 +13,11 @@ export interface CategoryLook {
 }
 
 const KNOWN: Readonly<Record<string, Omit<CategoryLook, 'key'>>> = {
-  chat: { label: '聊天', color: '#2563eb', icon: ChatDotRound },
+  chat: { label: 'Chat', color: '#2563eb', icon: ChatDotRound },
   agent: { label: 'Agent', color: '#7c3aed', icon: Cpu },
   sdk: { label: 'SDK', color: '#0d9488', icon: Monitor },
-  bot: { label: '机器人', color: '#ea580c', icon: Service },
-  unknown: { label: '未知', color: '#64748b', icon: QuestionFilled },
+  bot: { label: 'Bot', color: '#ea580c', icon: Service },
+  unknown: { label: 'Unknown', color: '#64748b', icon: QuestionFilled },
 };
 
 const OTHER: Omit<CategoryLook, 'key'> = { label: '', color: '#64748b', icon: CollectionTag };

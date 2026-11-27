@@ -42,7 +42,7 @@ import type { FilterDoc } from '../model/filter.types';
 const doc = (): FilterDoc => ({
   classifiers: [
     { id: 'agent.claude', when: { field: 'header.user-agent', op: 'prefix', value: 'claude-cli/' } },
-    { id: 'chat.app', name: '聊天 App', when: { field: 'header.user-agent', op: 'prefix', value: ['Kelivo', 'RikkaHub-'] } },
+    { id: 'chat.app', name: 'Chat', when: { field: 'header.user-agent', op: 'prefix', value: ['Kelivo', 'RikkaHub-'] } },
   ],
   filters: {
     Factory: {
@@ -281,7 +281,7 @@ describe('classifiers', () => {
 });
 
 describe('filters', () => {
-  it('fills in what the gateway assumes: no filter takes everything, a filter without enforce enforces', () => {
+  it('fills in what the gateway assumes: no filter takes everything, a filter without enforce only observes', () => {
     expect(channelOf(doc(), 'kiro')).toEqual({
       vendor: 'kiro',
       key: 'kiro',
@@ -295,7 +295,9 @@ describe('filters', () => {
     expect(factory).toMatchObject({ key: 'Factory', exists: true, enforce: false, defaultAction: 'allow' });
     expect(factory.rules.map((r) => r.id)).toEqual(['no-agents', 'no-chat']);
 
-    expect(channelOf({ filters: { kiro: { default: 'deny' } } }, 'kiro')).toMatchObject({ enforce: true, defaultAction: 'deny' });
+    // 没写 enforce 就是观察；要过滤得明确写 true
+    expect(channelOf({ filters: { kiro: { default: 'deny' } } }, 'kiro')).toMatchObject({ enforce: false, defaultAction: 'deny' });
+    expect(channelOf({ filters: { kiro: { enforce: true } } }, 'kiro')).toMatchObject({ enforce: true, defaultAction: 'allow' });
   });
 
   it('a new filter starts as mark-only and allowing', () => {
@@ -331,7 +333,7 @@ describe('filters', () => {
   it('summarises a vendor in one line', () => {
     expect(channelSummary(channelOf(doc(), 'kiro'))).toBe('没有规则，什么都收');
     expect(channelSummary(channelOf(doc(), 'factory'))).toBe('2 条规则 · 默认放行 · 观察');
-    expect(channelSummary(channelOf({ filters: { kiro: { default: 'deny' } } }, 'kiro'))).toBe('没有规则 · 默认拒绝 · 过滤');
+    expect(channelSummary(channelOf({ filters: { kiro: { default: 'deny' } } }, 'kiro'))).toBe('没有规则 · 默认拒绝 · 观察');
   });
 
   it('lists the registered vendors plus any only the filters know about', () => {

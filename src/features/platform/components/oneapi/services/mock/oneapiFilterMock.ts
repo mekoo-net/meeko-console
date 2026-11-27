@@ -56,7 +56,7 @@ export const MOCK_FILTER_SCHEMA: FilterSchema = {
   ],
 };
 
-/** 开场的样子：四个分类器；factory 拒 agent（观察模式），claude 只收自家客户端和酒馆。 */
+/** 开场的样子：四个分类器；factory 拒 agent（观察模式），claude 只收自家客户端和 Tavern / Chat / Phone 这几类。 */
 const seed = (): FilterDoc => ({
   classifiers: [
     {
@@ -83,17 +83,17 @@ const seed = (): FilterDoc => ({
     },
     {
       id: 'chat.tavern',
-      name: '酒馆',
-      when: { field: 'header.user-agent', op: 'prefix', value: 'TauriTavern/' },
+      name: 'Tavern',
+      when: { field: 'header.user-agent', op: 'prefix', value: ['TauriTavern/', 'Tavo/'] },
     },
     {
       id: 'chat.app',
-      name: '聊天 App',
-      when: { field: 'header.user-agent', op: 'prefix', value: ['Kelivo', 'RikkaHub-', 'Tavo'] },
+      name: 'Chat',
+      when: { field: 'header.user-agent', op: 'prefix', value: ['Kelivo', 'RikkaHub-'] },
     },
     {
-      id: 'chat.webview',
-      name: '小手机 WebView',
+      id: 'chat.phone',
+      name: 'Phone',
       when: { field: 'header.x-requested-with', op: 'exists' },
     },
   ],
@@ -107,7 +107,7 @@ const seed = (): FilterDoc => ({
       enforce: false,
       rules: [
         { id: 'own-client', action: 'allow', when: { classifier: 'agent.claude' } },
-        { id: 'tavern', action: 'allow', when: { classifier: ['chat.tavern', 'chat.app', 'chat.webview'] } },
+        { id: 'tavern', action: 'allow', when: { classifier: ['chat.tavern', 'chat.app', 'chat.phone'] } },
         {
           id: 'old-cli',
           action: 'allow',

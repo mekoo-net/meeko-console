@@ -114,7 +114,7 @@ describe('filter page', () => {
 
     expect(ruleIds()).toEqual(['own-client', 'tavern', 'old-cli']);
     expect(when('own-client')).toBe('分类器是 agent.claude');
-    expect(when('tavern')).toBe('分类器是 chat.tavern 或 chat.app 或 chat.webview');
+    expect(when('tavern')).toBe('分类器是 chat.tavern 或 chat.app 或 chat.phone');
     expect(when('old-cli')).toBe('x-app 等于 "cli"');
     expect(row('own-client').find('.action-badge').text()).toBe('放行');
     // 关着的规则灰掉，但还在它的位置上
@@ -161,7 +161,7 @@ describe('filter page', () => {
       'agent.claude',
       'chat.tavern',
       'chat.app',
-      'chat.webview',
+      'chat.phone',
     ]);
   });
 
@@ -216,13 +216,13 @@ describe('filter page', () => {
     expect(meta('factory')).toBe('没有规则，什么都收');
   });
 
-  it('a filter written by hand without "enforce" is shown as enforcing, which is what the gateway does', async () => {
+  it('a filter written by hand without "enforce" is shown as observing, which is what the gateway does', async () => {
     _resetOneApiFilterMock({
       filters: { kiro: { rules: [{ id: 'x', action: 'deny', when: { field: 'header.origin', op: 'exists' } }] }, retired: {} },
     });
     await open('kiro');
 
-    expect(meta('kiro')).toBe('1 条规则 · 默认放行 · 过滤');
+    expect(meta('kiro')).toBe('1 条规则 · 默认放行 · 观察');
     // 号池后台不认识的 Vendor 也列出来，不然它的过滤器没处看、没处删
     expect(wrapper.find('.vendor-item[data-vendor="retired"]').text()).toContain('未登记');
   });

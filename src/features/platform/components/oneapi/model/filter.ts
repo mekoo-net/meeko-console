@@ -414,12 +414,12 @@ export interface ChannelView {
   /** 有没有这个 Vendor 的过滤器。没有 = 什么都收。 */
   exists: boolean;
   defaultAction: FilterAction;
-  /** true = 过滤模式：判了拒绝的请求真的被拒；false = 观察模式：只记不拒。文档里不写算 true。 */
+  /** true = 过滤模式：判了拒绝的请求真的被拒；false = 观察模式：只记不拒。文档里不写就是观察，要过滤得明确写 true。 */
   enforce: boolean;
   rules: FilterRule[];
 }
 
-/** 一个 Vendor 的过滤器，缺的按网关的缺省补上（默认放行；不写 enforce 算过滤模式）。 */
+/** 一个 Vendor 的过滤器，缺的按网关的缺省补上（默认放行；不写 enforce 就是观察模式）。 */
 export function channelOf(doc: FilterDoc, vendor: string): ChannelView {
   const key = channelKeyOf(doc, vendor);
   const channel = key === undefined ? undefined : doc.filters![key];
@@ -428,7 +428,7 @@ export function channelOf(doc: FilterDoc, vendor: string): ChannelView {
     key: key ?? vendor,
     exists: channel !== undefined,
     defaultAction: channel?.default === 'deny' ? 'deny' : 'allow',
-    enforce: channel === undefined ? false : channel.enforce !== false,
+    enforce: channel?.enforce === true,
     rules: channel?.rules ?? [],
   };
 }
