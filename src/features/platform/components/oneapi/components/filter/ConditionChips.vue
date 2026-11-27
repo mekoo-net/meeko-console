@@ -246,6 +246,11 @@ const hiddenValues = (row: FieldRow): number => (props.compact ? Math.max(0, row
 .chips--compact > * {
   flex-shrink: 0;
 }
+/* 列表里一格就这么宽：标签里的字不折行，放不下的交给上面的淡出。 */
+.chips--compact .chip {
+  max-width: none;
+  white-space: nowrap;
+}
 .chip--more {
   font-size: 12px;
   color: var(--el-text-color-secondary);

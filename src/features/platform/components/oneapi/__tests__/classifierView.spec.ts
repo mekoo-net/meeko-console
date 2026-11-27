@@ -42,8 +42,8 @@ async function open(): Promise<void> {
   await settle();
 }
 
-const ids = (): string[] => wrapper.findAll('.cls-card').map((r) => r.attributes('data-classifier') ?? '');
-const row = (id: string) => wrapper.find(`.cls-card[data-classifier="${id}"]`);
+const ids = (): string[] => wrapper.findAll('.cls-list .cls-row').map((r) => r.attributes('data-classifier') ?? '');
+const row = (id: string) => wrapper.find(`.cls-list .cls-row[data-classifier="${id}"]`);
 const savedIds = (): string[] => (_currentOneApiFilterDoc()?.classifiers ?? []).map((c) => c.id);
 const toasts = (): string[] => [...document.body.querySelectorAll('.el-message')].map((m) => m.textContent?.trim() ?? '');
 const dialog = () => wrapper.findComponent(ClassifierDialog);
@@ -69,16 +69,16 @@ describe('classifier page', () => {
     await open();
 
     expect(ids()).toEqual(['agent.claude', 'chat.tavern', 'chat.app', 'chat.phone']);
-    expect(row('agent.claude').find('.cls-card__name').text()).toBe('Claude');
-    expect(row('agent.claude').find('.cls-card__id').text()).toBe('agent.claude');
+    expect(row('agent.claude').find('.cls-row__name').text()).toBe('Claude');
+    expect(row('agent.claude').find('.cls-row__id').text()).toBe('agent.claude');
     expect(row('agent.claude').find('.chips').attributes('aria-label')).toBe(
       'user-agent 开头是 "claude-cli/" 或 提示词·系统 包含 "You are Claude Code"',
     );
-    expect(row('agent.claude').findAll('.cls-card__use').map((t) => t.text())).toEqual([
+    expect(row('agent.claude').findAll('.cls-row__use').map((t) => t.text())).toEqual([
       'Factory · no-agents',
       'Claude · own-client',
     ]);
-    expect(row('chat.phone').findAll('.cls-card__use').map((t) => t.text())).toEqual(['Claude · tavern']);
+    expect(row('chat.phone').findAll('.cls-row__use').map((t) => t.text())).toEqual(['Claude · tavern']);
   });
 
   it('a classifier no filter refers to can be moved and deleted', async () => {
@@ -89,7 +89,7 @@ describe('classifier page', () => {
       ],
     });
     await open();
-    expect(row('a.one').find('.cls-card__unused').text()).toBe('没有过滤器引用');
+    expect(row('a.one').find('.cls-row__unused').text()).toBe('未引用');
 
     await row('b.two').find('[data-test="classifier-up"]').trigger('click');
     await settle();
@@ -102,15 +102,13 @@ describe('classifier page', () => {
 
   it('filters by category; the order column keeps the place in the whole list and reordering waits', async () => {
     await open();
-    expect(wrapper.findAll('.cat-chip').map((c) => c.text().replace(/\s+/g, ' '))).toEqual([
-      '全部 4',
-      'Agent 1',
-      'Chat 3',
-    ]);
+    expect(
+      wrapper.findAll('.cat-item').map((c) => `${c.find('.cat-item__name').text()} ${c.find('.cat-item__count').text()}`),
+    ).toEqual(['全部 4', 'Agent 1', 'Chat 3']);
 
     await wrapper.find('[data-category="chat"]').trigger('click');
     expect(ids()).toEqual(['chat.tavern', 'chat.app', 'chat.phone']);
-    expect(row('chat.tavern').find('.cls-card__order').text()).toBe('2');
+    expect(row('chat.tavern').find('.cls-row__order').text()).toBe('2');
     // 顺序是整份的：筛着的时候上移会跨过看不见的那些
     expect(row('chat.app').find('[data-test="classifier-up"]').attributes('disabled')).toBeDefined();
 
@@ -152,7 +150,7 @@ describe('classifier page', () => {
     );
 
     expect(savedIds()).toEqual(['agent.claude', 'chat.tavern', 'chat.app', 'chat.phone']);
-    expect(row('chat.tavern').find('.cls-card__name').text()).toBe('Tavern SillyTavern');
+    expect(row('chat.tavern').find('.cls-row__name').text()).toBe('Tavern SillyTavern');
   });
 
   it('a classifier the gateway cannot read is not saved, and the dialog is told why', async () => {
@@ -184,6 +182,82 @@ describe('classifier page', () => {
 
     expect(savedIds()).toEqual(['chat.app']);
     expect(ids()).toEqual(['chat.app']);
+  });
+});
+
+describe('classifier page: categories on the left, pages on the right', () => {
+  /** 一整套二十几个分类器的样子：agent 一大串，chat 几个。 */
+  const many = (agents: number, chats: number) => ({
+    classifiers: [
+      ...Array.from({ length: agents }, (_, i) => ({
+        id: `agent.a${String(i + 1).padStart(2, '0')}`,
+        when: { field: 'header.user-agent', op: 'prefix', value: `a${i + 1}/` },
+      })),
+      ...Array.from({ length: chats }, (_, i) => ({
+        id: `chat.c${i + 1}`,
+        when: { field: 'header.user-agent', op: 'prefix', value: `c${i + 1}/` },
+      })),
+    ],
+  });
+  const next = async () => {
+    await wrapper.find('.provider-pagination .btn-next').trigger('click');
+    await settle();
+  };
+  const total = () => wrapper.find('.provider-pagination .el-pagination__total').text();
+
+  it('shows ten a page, and the order column keeps counting on the next page', async () => {
+    _resetOneApiFilterMock(many(12, 2));
+    await open();
+
+    expect(ids()).toHaveLength(10);
+    expect(ids()[0]).toBe('agent.a01');
+    expect(total()).toContain('14');
+
+    await next();
+    expect(ids()).toEqual(['agent.a11', 'agent.a12', 'chat.c1', 'chat.c2']);
+    expect(row('agent.a11').find('.cls-row__order').text()).toBe('11');
+  });
+
+  it('picking a category on the left goes back to its first page', async () => {
+    _resetOneApiFilterMock(many(12, 2));
+    await open();
+    await next();
+
+    await wrapper.find('[data-category="chat"]').trigger('click');
+    await settle();
+    expect(ids()).toEqual(['chat.c1', 'chat.c2']);
+    expect(wrapper.find('.provider-detail__title').text()).toBe('Chat');
+    expect(wrapper.find('[data-category="chat"]').classes()).toContain('provider-sidebar__item--active');
+
+    await wrapper.find('[data-category="agent"]').trigger('click');
+    await settle();
+    expect(ids()[0]).toBe('agent.a01');
+  });
+
+  it('a new classifier opens the page it landed on, under all categories when it is not the one being looked at', async () => {
+    _resetOneApiFilterMock(many(12, 2));
+    await open();
+    await wrapper.find('[data-category="chat"]').trigger('click');
+    await settle();
+
+    await submitFromDialog({ id: 'bot.astrbot', when: { field: 'header.user-agent', op: 'prefix', value: 'astrbot/' } });
+
+    expect(wrapper.find('.provider-detail__title').text()).toBe('全部分类器');
+    expect(ids().at(-1)).toBe('bot.astrbot');
+    expect(row('bot.astrbot').find('.cls-row__order').text()).toBe('15');
+  });
+
+  it('deleting the last one on the last page steps back a page instead of showing an empty one', async () => {
+    _resetOneApiFilterMock(many(11, 0));
+    await open();
+    await next();
+    expect(ids()).toEqual(['agent.a11']);
+
+    await row('agent.a11').find('[data-test="classifier-delete"]').trigger('click');
+    await settle();
+
+    expect(savedIds()).toHaveLength(10);
+    expect(ids()).toHaveLength(10);
   });
 });
 
