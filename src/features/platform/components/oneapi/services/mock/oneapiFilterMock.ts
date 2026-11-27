@@ -65,19 +65,8 @@ const seed = (): FilterDoc => ({
       when: {
         any: [
           { field: 'header.user-agent', op: 'prefix', value: 'claude-cli/' },
-          {
-            all: [
-              { field: 'prompt.system', op: 'contains', value: 'You are Claude Code' },
-              {
-                tool: {
-                  all: [
-                    { field: 'name', op: 'eq', value: 'Bash' },
-                    { field: 'description', op: 'contains', value: 'Executes a given bash command' },
-                  ],
-                },
-              },
-            ],
-          },
+          // 提示词就认得出 Claude Code，不用再看工具
+          { field: 'prompt.system', op: 'contains', value: 'You are Claude Code' },
         ],
       },
     },

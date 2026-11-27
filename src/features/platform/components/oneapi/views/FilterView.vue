@@ -406,6 +406,7 @@ async function onSubmit(rule: FilterRule, originalId: string | undefined): Promi
               <ConditionChips
                 :when="rule.when"
                 :classifiers="classifiers"
+                compact
               />
               <div class="rule-card__foot">
                 <el-switch

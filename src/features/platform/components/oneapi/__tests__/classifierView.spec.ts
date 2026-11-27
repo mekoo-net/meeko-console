@@ -3,6 +3,7 @@ import ElementPlus from 'element-plus';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ClassifierDialog from '../components/filter/ClassifierDialog.vue';
+import ConditionChips from '../components/filter/ConditionChips.vue';
 import ConditionEditor from '../components/filter/ConditionEditor.vue';
 import { MOCK_FILTER_SCHEMA, _currentOneApiFilterDoc, _resetOneApiFilterMock } from '../services/mock/oneapiFilterMock';
 import type { FilterClassifier } from '../model/filter.types';
@@ -71,7 +72,7 @@ describe('classifier page', () => {
     expect(row('agent.claude').find('.cls-card__name').text()).toBe('Claude');
     expect(row('agent.claude').find('.cls-card__id').text()).toBe('agent.claude');
     expect(row('agent.claude').find('.chips').attributes('aria-label')).toBe(
-      'user-agent 开头是 "claude-cli/" 或 （提示词·系统 包含 "You are Claude Code" 且 有工具（名称 等于 "Bash" 且 描述 包含 "Executes a given bash command"））',
+      'user-agent 开头是 "claude-cli/" 或 提示词·系统 包含 "You are Claude Code"',
     );
     expect(row('agent.claude').findAll('.cls-card__use').map((t) => t.text())).toEqual([
       'Factory · no-agents',
@@ -183,6 +184,35 @@ describe('classifier page', () => {
 
     expect(savedIds()).toEqual(['chat.app']);
     expect(ids()).toEqual(['chat.app']);
+  });
+});
+
+describe('condition chips in a list', () => {
+  const chips = (when: unknown) =>
+    mount(ConditionChips, { props: { when, compact: true }, global: { plugins: [ElementPlus] } });
+
+  it('keeps a long condition to one line: nested groups and tool objects fold, extra values become +N', () => {
+    const when = {
+      any: [
+        { field: 'header.user-agent', op: 'prefix', value: ['claude-cli/', 'Claude-Desktop/', 'x'] },
+        { all: [{ field: 'prompt.system', op: 'contains', value: 'a' }, { field: 'prompt.user', op: 'contains', value: 'b' }] },
+        { tool: { all: [{ field: 'name', op: 'eq', value: 'Bash' }, { field: 'description', op: 'contains', value: 'c' }] } },
+      ],
+    };
+    const w = chips(when);
+
+    expect(w.find('.chips').classes()).toContain('chips--compact');
+    expect(w.findAll('.chip__value').map((v) => v.text())).toEqual(['claude-cli/']);
+    expect(w.text()).toContain('+2');
+    expect(w.findAll('.chip--more').map((c) => c.text())).toEqual(['2 个条件', '工具对象']);
+    // 完整的那句话还在，悬停和读屏用
+    expect(w.find('.chips').attributes('aria-label')).toContain('有工具（名称 等于 "Bash" 且 描述 包含 "c"）');
+  });
+
+  it('shortens a long value', () => {
+    const w = chips({ field: 'prompt.system', op: 'contains', value: 'You are Claude Code, Anthropic official CLI for Claude.' });
+
+    expect(w.find('.chip__value').text()).toBe('You are Claude Code, Ant…');
   });
 });
 

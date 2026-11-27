@@ -3,6 +3,9 @@
  * 把一个条件画成一排标签块：引用的分类器按类别上色，字段比较拆成「字段 · 比法 · 值」三段，套着的组加括号。
  * 表单编不出来的条件（写法这一页不认识的 JSON）只画一块「自定义条件」，悬停看原文。
  * 整句话（`describeCondition`）挂在 aria-label 上，读屏和测试按它认。
+ *
+ * `compact`（列表里用）：只画一行。最外层每个条件一块；套着的组缩成「N 个条件」，工具对象缩成「工具对象」；
+ * 一个条件有好几个值时只显示第一个和「+N」，长的截断。完整的那句话悬停看。
  */
 import { computed } from 'vue';
 
@@ -21,6 +24,8 @@ const props = defineProps<{
   when: unknown;
   /** 用来查分类器的名字、认出引用了不存在的分类器；不给就不查。 */
   classifiers?: readonly FilterClassifier[];
+  /** 只画一行的简要版，悬停看全文。 */
+  compact?: boolean;
 }>();
 
 type ClassifierRow = Extract<ConditionRow, { kind: 'classifier' }>;
@@ -31,6 +36,7 @@ type Token =
   | { t: 'close' }
   | { t: 'not'; text: string }
   | { t: 'tool'; text: string }
+  | { t: 'more'; text: string }
   | { t: 'classifier'; row: ClassifierRow }
   | { t: 'field'; row: FieldRow };
 
@@ -65,8 +71,36 @@ function tokensOf(node: ConditionNode, nested: boolean, out: Token[]): Token[] {
   return out;
 }
 
+/** 一个节点里一共有几行条件（套着的组、工具对象里面的都算）。 */
+function leaves(node: ConditionNode): number {
+  if (node.kind === 'group') return node.children.reduce((n, c) => n + leaves(c), 0);
+  if (node.kind === 'tool') return leaves(node.group);
+  return 1;
+}
+
+/** 简要版：只摊最外面那一层，里面的组和工具对象各缩成一块。 */
+function compactTokens(root: ConditionNode): Token[] {
+  const top = root.kind === 'group' && !root.negate ? root.children : [root];
+  const mode = root.kind === 'group' ? root.mode : 'all';
+  const out: Token[] = [];
+  top.forEach((node, i) => {
+    if (i > 0) out.push({ t: 'join', text: mode === 'all' ? '且' : '或' });
+    if (node.kind === 'group') {
+      out.push({ t: 'more', text: `${node.negate ? '不满足 ' : ''}${leaves(node)} 个条件` });
+    } else if (node.kind === 'tool') {
+      out.push({ t: 'more', text: node.negate ? '没有工具对象' : '工具对象' });
+    } else {
+      tokensOf(node, true, out);
+    }
+  });
+  return out;
+}
+
 const tree = computed(() => conditionTree(props.when));
-const tokens = computed(() => (tree.value ? tokensOf(tree.value, false, []) : []));
+const tokens = computed(() => {
+  if (!tree.value) return [];
+  return props.compact ? compactTokens(tree.value) : tokensOf(tree.value, false, []);
+});
 const sentence = computed(() => describeCondition(props.when));
 const json = computed(() => JSON.stringify(props.when ?? null, null, 2));
 
@@ -76,100 +110,123 @@ const nameOf = (id: string): string => known.value.get(id)?.name ?? id;
 
 const opText = (row: FieldRow): string => (row.op === 'exists' ? (row.negate ? '没有值' : '有值') : opLabel(row.op));
 const valueJoin = (row: FieldRow): string => (row.op === 'contains_all' ? '和' : '或');
+
+const SHORT = 24;
+const shorten = (v: string): string => (v.length > SHORT ? `${v.slice(0, SHORT)}…` : v);
+/** 简要版只显示第一个值。 */
+const shownValues = (row: FieldRow): string[] => (props.compact ? row.values.slice(0, 1).map(shorten) : row.values);
+const hiddenValues = (row: FieldRow): number => (props.compact ? Math.max(0, row.values.length - 1) : 0);
 </script>
 
 <template>
-  <div
-    class="chips"
-    :aria-label="sentence"
-    role="group"
+  <el-tooltip
+    :disabled="!compact || !tree"
+    :content="sentence"
+    placement="top-start"
+    :show-after="300"
   >
-    <template v-if="tree">
-      <template
-        v-for="(token, i) in tokens"
-        :key="i"
-      >
-        <span
-          v-if="token.t === 'join'"
-          class="chips__join"
-        >{{ token.text }}</span>
-        <span
-          v-else-if="token.t === 'open' || token.t === 'close'"
-          class="chips__paren"
-        >{{ token.t === 'open' ? '(' : ')' }}</span>
-        <span
-          v-else-if="token.t === 'not'"
-          class="chips__not"
-        >{{ token.text }}</span>
-        <span
-          v-else-if="token.t === 'tool'"
-          class="chips__tool"
-        >{{ token.text }}</span>
+    <div
+      class="chips"
+      :class="{ 'chips--compact': compact }"
+      :aria-label="sentence"
+      role="group"
+    >
+      <template v-if="tree">
+        <template
+          v-for="(token, i) in tokens"
+          :key="i"
+        >
+          <span
+            v-if="token.t === 'join'"
+            class="chips__join"
+          >{{ token.text }}</span>
+          <span
+            v-else-if="token.t === 'open' || token.t === 'close'"
+            class="chips__paren"
+          >{{ token.t === 'open' ? '(' : ')' }}</span>
+          <span
+            v-else-if="token.t === 'not'"
+            class="chips__not"
+          >{{ token.text }}</span>
+          <span
+            v-else-if="token.t === 'tool'"
+            class="chips__tool"
+          >{{ token.text }}</span>
+          <span
+            v-else-if="token.t === 'more'"
+            class="chip chip--more"
+          >{{ token.text }}</span>
 
-        <template v-else-if="token.t === 'classifier'">
-          <template
-            v-for="(id, j) in token.row.classifiers"
-            :key="id"
-          >
-            <span
-              v-if="j > 0"
-              class="chips__or"
-            >或</span>
-            <el-tooltip
-              :content="missing(id) ? '没有这个分类器' : nameOf(id)"
-              placement="top"
-              :show-after="300"
+          <template v-else-if="token.t === 'classifier'">
+            <template
+              v-for="(id, j) in token.row.classifiers"
+              :key="id"
             >
               <span
-                class="chip chip--classifier"
-                :class="{ 'chip--missing': missing(id) }"
-                :style="{ '--chip-color': categoryLook(id).color }"
+                v-if="j > 0"
+                class="chips__or"
+              >或</span>
+              <el-tooltip
+                :disabled="compact"
+                :content="missing(id) ? '没有这个分类器' : nameOf(id)"
+                placement="top"
+                :show-after="300"
               >
-                <el-icon :size="12">
-                  <component :is="categoryLook(id).icon" />
-                </el-icon>
-                {{ id }}
-              </span>
-            </el-tooltip>
+                <span
+                  class="chip chip--classifier"
+                  :class="{ 'chip--missing': missing(id) }"
+                  :style="{ '--chip-color': categoryLook(id).color }"
+                >
+                  <el-icon :size="12">
+                    <component :is="categoryLook(id).icon" />
+                  </el-icon>
+                  {{ id }}
+                </span>
+              </el-tooltip>
+            </template>
           </template>
-        </template>
 
-        <span
-          v-else
-          class="chip chip--field"
-        >
-          <span class="chip__key">{{ fieldLabel(token.row.field) }}</span>
-          <span class="chip__op">{{ opText(token.row) }}</span>
-          <template
-            v-for="(v, j) in token.row.values"
-            :key="j"
-          >
-            <span
-              v-if="j > 0"
-              class="chip__op"
-            >{{ valueJoin(token.row) }}</span>
-            <code class="chip__value">{{ v }}</code>
-          </template>
           <span
-            v-if="token.row.ignoreCase"
-            class="chip__flag"
-            title="不分大小写"
-          >Aa</span>
-        </span>
+            v-else
+            class="chip chip--field"
+          >
+            <span class="chip__key">{{ fieldLabel(token.row.field) }}</span>
+            <span class="chip__op">{{ opText(token.row) }}</span>
+            <template
+              v-for="(v, j) in shownValues(token.row)"
+              :key="j"
+            >
+              <span
+                v-if="j > 0"
+                class="chip__op"
+              >{{ valueJoin(token.row) }}</span>
+              <code class="chip__value">{{ v }}</code>
+            </template>
+            <span
+              v-if="hiddenValues(token.row) > 0"
+              class="chip__op"
+            >+{{ hiddenValues(token.row) }}</span>
+            <span
+              v-if="token.row.ignoreCase"
+              class="chip__flag"
+              title="不分大小写"
+            >Aa</span>
+          </span>
+        </template>
       </template>
-    </template>
 
-    <el-tooltip
-      v-else
-      placement="top"
-      :show-after="300"
-    >
-      <template #content>
-        <pre class="chips__json">{{ json }}</pre>
-      </template>
-      <span class="chip chip--custom">{ } 自定义条件</span>
-    </el-tooltip>
-  </div>
+      <el-tooltip
+        v-else
+        placement="top"
+        :show-after="300"
+      >
+        <template #content>
+          <pre class="chips__json">{{ json }}</pre>
+        </template>
+        <span class="chip chip--custom">{ } 自定义条件</span>
+      </el-tooltip>
+    </div>
+  </el-tooltip>
 </template>
 
 <style scoped>
@@ -179,6 +236,21 @@ const valueJoin = (row: FieldRow): string => (row.op === 'contains_all' ? '和' 
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+.chips--compact {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  /* 一行放不下时右边淡出，不硬切 */
+  mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+}
+.chips--compact > * {
+  flex-shrink: 0;
+}
+.chip--more {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color);
+  border: 1px dashed var(--el-border-color);
 }
 .chips__join {
   padding: 0 6px;

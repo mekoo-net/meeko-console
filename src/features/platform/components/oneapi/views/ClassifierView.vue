@@ -279,7 +279,10 @@ async function onSubmit(c: FilterClassifier, originalId: string | undefined): Pr
                 网关读不懂
               </el-tag>
             </div>
-            <ConditionChips :when="c.when" />
+            <ConditionChips
+              :when="c.when"
+              compact
+            />
           </div>
 
           <div class="cls-card__uses">
