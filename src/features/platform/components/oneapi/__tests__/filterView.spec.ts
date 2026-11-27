@@ -12,7 +12,7 @@ import {
 import FilterView from '../views/FilterView.vue';
 
 /**
- * 过滤器页整页挂起来点一遍：按 Vendor 看规则表、默认动作和执行开关、开关规则、调顺序、删、新建和编辑、
+ * 过滤器页整页挂起来点一遍：按 Vendor 看规则表、默认动作和模式（观察 / 过滤）、开关规则、调顺序、删、新建和编辑、
  * 网关读不懂时怎么说、别人先改过时怎么办。数据用这一页自己的 mock；纯逻辑在 filterModel.spec.ts 里钉着。
  */
 
@@ -75,7 +75,7 @@ async function setDefault(action: 'allow' | 'deny'): Promise<void> {
   await settle();
 }
 
-async function setMode(mode: 'mark' | 'enforce'): Promise<void> {
+async function setMode(mode: 'observe' | 'enforce'): Promise<void> {
   segmented('channel-mode').vm.$emit('change', mode);
   await settle();
 }
@@ -98,8 +98,8 @@ describe('filter page', () => {
     await open();
 
     expect(wrapper.findAll('.vendor-item__name').map((n) => n.text())).toEqual(['Agentspace', 'Claude', 'Factory', 'Kiro']);
-    expect(meta('factory')).toBe('1 条规则 · 默认放行 · 只标记');
-    expect(meta('claude')).toBe('3 条规则 · 默认拒绝 · 只标记');
+    expect(meta('factory')).toBe('1 条规则 · 默认放行 · 观察');
+    expect(meta('claude')).toBe('3 条规则 · 默认拒绝 · 观察');
     expect(meta('kiro')).toBe('没有规则，什么都收');
 
     // 开场选中第一个
@@ -120,7 +120,7 @@ describe('filter page', () => {
     // 关着的规则灰掉，但还在它的位置上
     expect(row('old-cli').classes()).toContain('rule-row--off');
     expect(wrapper.find('[data-test="default-action"]').text()).toBe('拒绝');
-    expect(wrapper.find('[data-test="channel-state"]').text()).toContain('只标记');
+    expect(wrapper.find('[data-test="channel-state"]').text()).toContain('观察');
   });
 
   it('switching a rule off, moving it and deleting it each save at once', async () => {
@@ -147,14 +147,14 @@ describe('filter page', () => {
 
     await submitFromDialog({ id: 'no-chat', action: 'deny', when: { classifier: 'chat.app' } });
 
-    // 新建的过滤器先只标记：一加上就开始拒请求的话，没人来得及看它会拦掉什么
+    // 新建的过滤器先是观察模式：一加上就开始拒请求的话，没人来得及看它会拦掉什么
     expect(saved('kiro')).toEqual({
       default: 'allow',
       enforce: false,
       rules: [{ id: 'no-chat', action: 'deny', when: { classifier: 'chat.app' } }],
     });
     expect(ruleIds()).toEqual(['no-chat']);
-    expect(meta('kiro')).toBe('1 条规则 · 默认放行 · 只标记');
+    expect(meta('kiro')).toBe('1 条规则 · 默认放行 · 观察');
     expect(toasts().join('|')).toContain('已新建');
     // 分类器没被碰
     expect(_currentOneApiFilterDoc()!.classifiers!.map((c) => c.id)).toEqual([
@@ -195,9 +195,9 @@ describe('filter page', () => {
     await setMode('enforce');
     expect(confirmDanger).toHaveBeenCalledTimes(1);
     expect(saved('factory')!.enforce).toBe(true);
-    expect(meta('factory')).toBe('1 条规则 · 默认放行 · 执行中');
+    expect(meta('factory')).toBe('1 条规则 · 默认放行 · 过滤');
 
-    await setMode('mark');
+    await setMode('observe');
     expect(confirmDanger).toHaveBeenCalledTimes(1);
     expect(saved('factory')!.enforce).toBe(false);
 
@@ -222,7 +222,7 @@ describe('filter page', () => {
     });
     await open('kiro');
 
-    expect(meta('kiro')).toBe('1 条规则 · 默认放行 · 执行中');
+    expect(meta('kiro')).toBe('1 条规则 · 默认放行 · 过滤');
     // 号池后台不认识的 Vendor 也列出来，不然它的过滤器没处看、没处删
     expect(wrapper.find('.vendor-item[data-vendor="retired"]').text()).toContain('未登记');
   });

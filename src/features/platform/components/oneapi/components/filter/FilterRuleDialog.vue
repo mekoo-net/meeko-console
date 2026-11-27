@@ -100,7 +100,7 @@ function submit(): void {
   <el-dialog
     v-model="visible"
     :title="`${editing ? '编辑' : '新建'}过滤规则 · ${vendorName}`"
-    width="760px"
+    width="880px"
     :close-on-click-modal="false"
   >
     <el-form

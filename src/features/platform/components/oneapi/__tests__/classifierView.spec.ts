@@ -71,7 +71,7 @@ describe('classifier page', () => {
     expect(row('agent.claude').find('.cls-card__name').text()).toBe('Claude');
     expect(row('agent.claude').find('.cls-card__id').text()).toBe('agent.claude');
     expect(row('agent.claude').find('.chips').attributes('aria-label')).toBe(
-      'user-agent 开头是 "claude-cli/" 或 系统提示词 包含 "You are Claude Code"',
+      'user-agent 开头是 "claude-cli/" 或 （提示词·系统 包含 "You are Claude Code" 且 工具·名称 全部包含 "Bash" 和 "Read" 和 "Edit"）',
     );
     expect(row('agent.claude').findAll('.cls-card__use').map((t) => t.text())).toEqual([
       'Factory · no-agents',
@@ -196,62 +196,97 @@ describe('condition editor', () => {
     });
   }
 
-  /** 每一行开头那个「从哪儿取值」的下拉框。 */
-  const sourceSelect = (w: ReturnType<typeof editor>) =>
-    w.findAllComponents({ name: 'ElSelect' }).find((c) => c.attributes('data-test') === 'cond-source')!;
+  /** 第 n 行（按出现顺序，套着的组里的也算）上某个下拉框。 */
+  const selectIn = (w: ReturnType<typeof editor>, test: string, n = 0) =>
+    w.findAllComponents({ name: 'ElSelect' }).filter((c) => c.attributes('data-test') === test)[n]!;
+  const labels = (select: ReturnType<typeof selectIn>) =>
+    select.findAllComponents({ name: 'ElOption' }).map((o) => o.props('label'));
+  const read = (w: ReturnType<typeof editor>) => (w.vm as unknown as { read(): unknown }).read();
 
-  it('hands back a condition the form can edit unchanged', () => {
+  it('hands back any condition the form can edit unchanged, nested groups included', () => {
     for (const when of [
       { classifier: ['chat.app', 'agent.claude'] },
       { any: [{ not: { classifier: 'chat.app' } }, { field: 'header.origin', op: 'exists' }] },
+      {
+        any: [
+          { field: 'header.user-agent', op: 'prefix', value: 'claude-cli/' },
+          { all: [{ field: 'prompt.system', op: 'contains', value: 'You are' }, { field: 'tools.count', op: 'gte', value: 3 }] },
+        ],
+      },
     ]) {
       const w = editor(when);
       expect(w.find('[data-test="cond-json"]').exists()).toBe(false);
-      expect(w.vm.read()).toEqual({ ok: true, when });
+      expect(read(w)).toEqual({ ok: true, when });
       w.unmount();
     }
   });
 
+  it('draws a nested group inside its parent', () => {
+    const w = editor({ any: [{ classifier: 'chat.app' }, { all: [{ classifier: 'agent.claude' }, { field: 'tools.name', op: 'exists' }] }] });
+
+    expect(w.findAll('.cgroup').map((g) => g.attributes('data-depth'))).toEqual(['0', '1']);
+    expect(w.findAll('.cgroup[data-depth="1"] .cond-row')).toHaveLength(2);
+  });
+
   it('a condition the form cannot edit opens as JSON and comes back as written', () => {
-    const when = { all: [{ any: [{ classifier: 'chat.app' }, { field: 'header.origin', op: 'exists' }] }] };
+    const when = { all: [{ any: [] }] };
     const w = editor(when);
 
     expect(w.find('[data-test="cond-json"]').exists()).toBe(true);
-    expect(w.vm.read()).toEqual({ ok: true, when });
+    expect(read(w)).toEqual({ ok: true, when });
   });
 
   it('a new filter rule starts with a classifier row; a new classifier starts with a header row', () => {
     const rule = editor(undefined);
     expect(rule.find('.cond-row').attributes('data-kind')).toBe('classifier');
-    // 什么都没选时说哪里没填
-    expect(rule.vm.read()).toEqual({ ok: false, error: '条件没选分类器' });
+    expect(read(rule)).toEqual({ ok: false, error: '有条件没选分类器' });
 
     const classifier = editor(undefined, null);
-    expect(classifier.find('.cond-row').attributes('data-kind')).toBe('field');
     expect(classifier.find('.cond-row').attributes('data-source')).toBe('header');
   });
 
-  it('a classifier reads from a header or the system prompt; a filter rule can also pick a classifier', () => {
-    const sourcesOf = (w: ReturnType<typeof editor>) =>
-      sourceSelect(w).findAllComponents({ name: 'ElOption' }).map((o) => o.props('label'));
+  it('a row picks a source, then a level', () => {
+    expect(labels(selectIn(editor(undefined, null), 'cond-source'))).toEqual(['请求头', '提示词', '工具']);
+    expect(labels(selectIn(editor(undefined), 'cond-source'))).toEqual(['分类器', '请求头', '提示词', '工具']);
 
-    expect(sourcesOf(editor(undefined, null))).toEqual(['请求头', '系统提示词']);
-    expect(sourcesOf(editor(undefined))).toEqual(['分类器', '请求头', '系统提示词']);
+    const prompt = editor({ field: 'prompt.user', op: 'contains', value: 'x' }, null);
+    expect(labels(selectIn(prompt, 'cond-level'))).toEqual(['系统', '用户', '助手']);
+    const tools = editor({ field: 'tools.name', op: 'exists' }, null);
+    expect(labels(selectIn(tools, 'cond-level'))).toEqual(['名称', '描述', '数量']);
+    expect(labels(selectIn(tools, 'cond-op'))).toEqual(['包含任一', '全部包含', '开头是', '有值']);
   });
 
-  it('switching a row to the system prompt drops the header picker and matches by contains', async () => {
+  it('switching to 提示词 starts at the system level and matches by contains', async () => {
     const w = editor(undefined, null);
-    sourceSelect(w).vm.$emit('change', 'system');
+    selectIn(w, 'cond-source').vm.$emit('change', 'prompt');
     await flushPromises();
 
-    expect(w.find('.cond-row').attributes('data-source')).toBe('system');
-    expect(w.find('.cond-row__field').exists()).toBe(false);
-    expect(w.vm.read()).toEqual({ ok: false, error: '条件没填值' });
+    expect(w.find('.cond-row').attributes('data-source')).toBe('prompt');
+    expect(read(w)).toEqual({ ok: false, error: '有条件没填值' });
+    expect(selectIn(w, 'cond-level').props('modelValue')).toBe('prompt.system');
+    expect(selectIn(w, 'cond-op').props('modelValue')).toBe('contains');
+  });
 
-    // 一个系统提示词条件原样读进来、原样交回去
-    const when = { field: 'system', op: 'contains', value: 'You are Claude Code' };
-    const loaded = editor(when, null);
-    expect(loaded.find('.cond-row').attributes('data-source')).toBe('system');
-    expect(loaded.vm.read()).toEqual({ ok: true, when });
+  it('switching a level to 数量 gives a number input and writes a number', async () => {
+    const w = editor({ field: 'tools.name', op: 'contains_any', value: ['Bash'] }, null);
+    selectIn(w, 'cond-level').vm.$emit('change', 'tools.count');
+    await flushPromises();
+
+    const input = w.findComponent({ name: 'ElInputNumber' });
+    expect(input.exists()).toBe(true);
+    input.vm.$emit('update:modelValue', 4);
+    await flushPromises();
+    expect(read(w)).toEqual({ ok: true, when: { field: 'tools.count', op: 'gte', value: 4 } });
+  });
+
+  it('adding a group nests it under the current one and it can be removed again', async () => {
+    const w = editor({ classifier: 'chat.app' });
+    await w.find('[data-test="add-group"]').trigger('click');
+
+    expect(w.findAll('.cgroup[data-depth="1"]')).toHaveLength(1);
+    const nested = w.findAllComponents({ name: 'ConditionGroupEditor' })[1]!;
+    nested.vm.$emit('remove');
+    await flushPromises();
+    expect(w.findAll('.cgroup[data-depth="1"]')).toHaveLength(0);
   });
 });

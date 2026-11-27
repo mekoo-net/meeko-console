@@ -85,7 +85,7 @@ export function classifierUses(doc: FilterDoc, id: string): ClassifierUse[] {
 
 // ---------- 条件 ----------
 
-/** 条件里的一行：引用分类器，或者比一个请求头。 */
+/** 条件里的一行：引用分类器，或者比一个字段。 */
 export type ConditionRow =
   | {
       kind: 'classifier';
@@ -99,16 +99,22 @@ export type ConditionRow =
       negate: boolean;
       field: string;
       op: string;
-      /** 比的值。`exists` 没有值；别的可以有多个，命中任一个就算。 */
+      /** 比的值。`exists` 没有值；文本和工具名可以有多个；数字只有一个（按字符串存，写回去时转成数）。 */
       values: string[];
+      /** 值是数字（工具数量）。 */
+      numeric: boolean;
       ignoreCase: boolean;
     };
 
-/** 表单编得出来的条件：一组行，全部成立或者任一成立。 */
-export interface FlatCondition {
+/** 一组条件：全部成立或者任一成立，可以整组取反，组里还能再套组（层级）。 */
+export interface ConditionGroup {
+  kind: 'group';
+  negate: boolean;
   mode: 'all' | 'any';
-  rows: ConditionRow[];
+  children: ConditionNode[];
 }
+
+export type ConditionNode = ConditionRow | ConditionGroup;
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -117,9 +123,7 @@ const keysOf = (v: Record<string, unknown>): string[] => Object.keys(v).sort();
 
 const isStringList = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string');
 
-function readPlainRow(node: unknown): ConditionRow | null {
-  if (!isObject(node)) return null;
-
+function readLeaf(node: Record<string, unknown>): ConditionRow | null {
   if (keysOf(node).join() === 'classifier') {
     const value = node.classifier;
     if (typeof value === 'string') return { kind: 'classifier', negate: false, classifiers: [value] };
@@ -131,79 +135,122 @@ function readPlainRow(node: unknown): ConditionRow | null {
   if (keysOf(node).some((k) => !['field', 'op', 'value', 'ignoreCase'].includes(k))) return null;
 
   let values: string[];
+  let numeric = false;
   if (node.value === undefined) values = [];
   else if (typeof node.value === 'string') values = [node.value];
-  else if (isStringList(node.value)) values = [...node.value];
+  else if (typeof node.value === 'number' && Number.isInteger(node.value)) {
+    values = [String(node.value)];
+    numeric = true;
+  } else if (isStringList(node.value)) values = [...node.value];
   else return null;
 
   if (node.ignoreCase !== undefined && typeof node.ignoreCase !== 'boolean') return null;
-  return { kind: 'field', negate: false, field: node.field, op: node.op, values, ignoreCase: node.ignoreCase === true };
+  return {
+    kind: 'field',
+    negate: false,
+    field: node.field,
+    op: node.op,
+    values,
+    numeric,
+    ignoreCase: node.ignoreCase === true,
+  };
 }
 
-function readRow(node: unknown): ConditionRow | null {
-  if (isObject(node) && keysOf(node).join() === 'not') {
-    const inner = readPlainRow(node.not);
-    return inner ? { ...inner, negate: true } : null;
+function readNode(node: unknown): ConditionNode | null {
+  if (!isObject(node)) return null;
+  const keys = keysOf(node).join();
+
+  if (keys === 'not') {
+    const inner = readNode(node.not);
+    return inner ? { ...inner, negate: !inner.negate } : null;
   }
-  return readPlainRow(node);
+
+  if (keys === 'all' || keys === 'any') {
+    const list = node[keys];
+    if (!Array.isArray(list) || list.length === 0) return null;
+    const children = list.map(readNode);
+    return children.every((c) => c !== null)
+      ? { kind: 'group', negate: false, mode: keys, children: children as ConditionNode[] }
+      : null;
+  }
+
+  return readLeaf(node);
 }
 
 /**
- * 把条件树读成表单编得出来的样子；读不成（套了好几层的、写法这一页不认识的）回 null，页面改用 JSON 编辑。
- * 读得成的保证 `buildCondition` 写回去意思不变。
+ * 把条件读成表单编得出来的样子：最外面总是一组（全部成立 / 任一成立），里面是行和套着的组。
+ * 写法这一页不认识的（不认识的键、空组）回 null，页面改用 JSON 编辑。读得成的保证 `buildCondition` 写回去意思不变。
  */
-export function flattenCondition(when: unknown): FlatCondition | null {
-  if (isObject(when)) {
-    for (const mode of ['all', 'any'] as const) {
-      if (keysOf(when).join() !== mode) continue;
-      const list = when[mode];
-      if (!Array.isArray(list) || list.length === 0) return null;
-      const rows = list.map(readRow);
-      return rows.every((r) => r !== null) ? { mode, rows } : null;
-    }
-  }
-  const single = readRow(when);
-  return single ? { mode: 'all', rows: [single] } : null;
+export function conditionTree(when: unknown): ConditionGroup | null {
+  const node = readNode(when);
+  if (!node) return null;
+  if (node.kind === 'group' && !node.negate) return node;
+  return { kind: 'group', negate: false, mode: 'all', children: [node] };
 }
+
+export const emptyTree = (first: ConditionNode): ConditionGroup => ({
+  kind: 'group',
+  negate: false,
+  mode: 'all',
+  children: [first],
+});
+
+/** 数字字段上能用的比法；它们只比一个值。 */
+const NUMBER_OPS = new Set(['gt', 'gte', 'lt', 'lte']);
 
 /** `exists` 不比值，别的都要。 */
 export const opNeedsValue = (op: string): boolean => op !== 'exists';
 
-/** 正则只写一个模式；别的可以给好几个值，命中任一个就算。 */
-export const opTakesMany = (op: string): boolean => op !== 'regex' && op !== 'exists';
+/** 正则、数字只写一个值；别的可以给好几个，命中任一个（或者「全部包含」）就算。 */
+export const opTakesMany = (op: string, numeric = false): boolean =>
+  !numeric && op !== 'regex' && op !== 'exists' && !NUMBER_OPS.has(op);
 
-function writeRow(row: ConditionRow): Record<string, unknown> {
-  let node: Record<string, unknown>;
-  if (row.kind === 'classifier') {
-    node = { classifier: row.classifiers.length === 1 ? row.classifiers[0] : [...row.classifiers] };
+function writeNode(node: ConditionNode): Record<string, unknown> {
+  let out: Record<string, unknown>;
+  if (node.kind === 'group') {
+    out = { [node.mode]: node.children.map(writeNode) };
+  } else if (node.kind === 'classifier') {
+    out = { classifier: node.classifiers.length === 1 ? node.classifiers[0] : [...node.classifiers] };
   } else {
-    node = { field: row.field, op: row.op };
-    if (opNeedsValue(row.op)) node.value = row.values.length === 1 ? row.values[0] : [...row.values];
-    if (row.ignoreCase && opNeedsValue(row.op)) node.ignoreCase = true;
+    out = { field: node.field, op: node.op };
+    if (opNeedsValue(node.op)) {
+      out.value = node.numeric
+        ? Number(node.values[0])
+        : node.values.length === 1
+          ? node.values[0]
+          : [...node.values];
+    }
+    if (node.ignoreCase && opNeedsValue(node.op) && !node.numeric) out.ignoreCase = true;
   }
-  return row.negate ? { not: node } : node;
+  return node.negate ? { not: out } : out;
 }
 
-/** 表单 → 条件树。只有一行时不套 `all`。 */
-export function buildCondition(flat: FlatCondition): Record<string, unknown> {
-  const rows = flat.rows.map(writeRow);
-  return rows.length === 1 ? rows[0]! : { [flat.mode]: rows };
+/** 表单 → 条件。最外面那组只有一项时不套 `all` / `any`。 */
+export function buildCondition(tree: ConditionGroup): Record<string, unknown> {
+  if (tree.children.length === 1 && !tree.negate) return writeNode(tree.children[0]!);
+  return writeNode(tree);
 }
 
 /** 表单里的条件哪里还没填好；null = 可以存了（剩下的交给号池后台用网关的编译器查）。 */
-export function flatConditionError(flat: FlatCondition): string | null {
-  if (flat.rows.length === 0) return '至少要有一个条件';
-  for (const [i, row] of flat.rows.entries()) {
-    const which = flat.rows.length > 1 ? `第 ${i + 1} 个条件` : '条件';
-    if (row.kind === 'classifier') {
-      if (row.classifiers.length === 0) return `${which}没选分类器`;
-      continue;
+export function conditionError(tree: ConditionGroup): string | null {
+  const check = (node: ConditionNode): string | null => {
+    if (node.kind === 'group') {
+      if (node.children.length === 0) return '有一组里没有条件';
+      for (const child of node.children) {
+        const error = check(child);
+        if (error) return error;
+      }
+      return null;
     }
-    if (!row.field) return `${which}没选字段`;
-    if (!row.op) return `${which}没选比法`;
-    if (opNeedsValue(row.op) && row.values.every((v) => v === '')) return `${which}没填值`;
-  }
-  return null;
+    if (node.kind === 'classifier') return node.classifiers.length === 0 ? '有条件没选分类器' : null;
+    if (!node.field) return '有条件没选字段';
+    if (!node.op) return '有条件没选比法';
+    if (!opNeedsValue(node.op)) return null;
+    if (node.values.every((v) => v.trim() === '')) return '有条件没填值';
+    if (node.numeric && !/^-?\d+$/.test(node.values[0]?.trim() ?? '')) return '数量要填整数';
+    return null;
+  };
+  return check(tree);
 }
 
 /** 条件树里引用了哪些分类器（不管套了几层）。 */
@@ -221,37 +268,56 @@ export function referencedClassifiers(when: unknown): string[] {
   return [...found];
 }
 
-// ---------- 说成人话 ----------
+// ---------- 字段：来源和层级 ----------
 
-const HEADER_PREFIX = 'header.';
-const SOURCE_HEADER = 'header';
+/**
+ * 字段名是 `来源.层级`（网关的叫法）：请求头的层级是头名；提示词分系统、用户、助手；工具分名称、描述、数量。
+ * 网关以后多报的来源或层级这里还不认识的，原样显示。
+ */
+const SOURCE_LABELS: Record<string, string> = { header: '请求头', prompt: '提示词', tools: '工具' };
+const LEVEL_LABELS: Record<string, Record<string, string>> = {
+  prompt: { system: '系统', user: '用户', assistant: '助手' },
+  tools: { name: '名称', description: '描述', count: '数量' },
+};
 
-/** 字段在页面上叫什么：请求头就是头名本身（`user-agent`），系统提示词叫「系统提示词」；网关以后多报的字段这里还不认识，原样显示。 */
-export function fieldLabel(name: string): string {
-  if (name.startsWith(HEADER_PREFIX)) return name.slice(HEADER_PREFIX.length);
-  if (name === 'system') return '系统提示词';
-  return name;
+export const sourceOf = (field: string): string => field.split('.')[0] ?? field;
+const levelOf = (field: string): string => field.slice(sourceOf(field).length + 1);
+
+export const sourceLabel = (source: string): string => SOURCE_LABELS[source] ?? source;
+
+export function levelLabel(field: string): string {
+  const source = sourceOf(field);
+  const level = levelOf(field);
+  return LEVEL_LABELS[source]?.[level] ?? level;
 }
 
-/** 条件从哪儿取值：请求头（再选是哪个头），或者某个单独的字段（系统提示词……）。 */
+/** 字段在页面上叫什么：请求头就是头名本身（`user-agent`），别的是「来源·层级」（提示词·系统、工具·名称）。 */
+export function fieldLabel(field: string): string {
+  const source = sourceOf(field);
+  if (source === 'header') return levelOf(field);
+  return levelOf(field) ? `${sourceLabel(source)}·${levelLabel(field)}` : sourceLabel(source);
+}
+
+/** 条件从哪儿取值：一个来源和它下面的层级（各是一个字段）。 */
 export interface ConditionSource {
   key: string;
   label: string;
+  levels: { field: string; label: string; kind: string }[];
 }
 
-/** 一个字段属于哪个来源：所有请求头算一个来源，其余字段各自一个。 */
-export const sourceOf = (field: string): string => (field.startsWith(HEADER_PREFIX) ? SOURCE_HEADER : field);
-
-/** 网关报的字段整理成来源，按第一次出现的顺序。 */
-export function conditionSources(fields: readonly { name: string }[]): ConditionSource[] {
+/** 网关报的字段按来源归好，按第一次出现的顺序。 */
+export function conditionSources(fields: readonly { name: string; kind: string }[]): ConditionSource[] {
   const sources: ConditionSource[] = [];
   for (const f of fields) {
     const key = sourceOf(f.name);
-    if (sources.some((s) => s.key === key)) continue;
-    sources.push({ key, label: key === SOURCE_HEADER ? '请求头' : fieldLabel(f.name) });
+    let source = sources.find((s) => s.key === key);
+    if (!source) sources.push((source = { key, label: sourceLabel(key), levels: [] }));
+    source.levels.push({ field: f.name, label: levelLabel(f.name), kind: f.kind });
   }
   return sources;
 }
+
+// ---------- 说成人话 ----------
 
 const OP_LABELS: Record<string, string> = {
   eq: '等于',
@@ -260,28 +326,40 @@ const OP_LABELS: Record<string, string> = {
   contains: '包含',
   regex: '匹配正则',
   exists: '有值',
+  contains_any: '包含任一',
+  contains_all: '全部包含',
+  gt: '大于',
+  gte: '至少',
+  lt: '小于',
+  lte: '至多',
 };
 
 export const opLabel = (op: string): string => OP_LABELS[op] ?? op;
 
 function describeRow(row: ConditionRow): string {
   if (row.kind === 'classifier') {
-    const text = `分类器是 ${row.classifiers.join(' 或 ')}`;
-    return row.negate ? `分类器不是 ${row.classifiers.join(' 也不是 ')}` : text;
+    return row.negate ? `分类器不是 ${row.classifiers.join(' 也不是 ')}` : `分类器是 ${row.classifiers.join(' 或 ')}`;
   }
   const field = fieldLabel(row.field);
   if (row.op === 'exists') return row.negate ? `${field} 没有值` : `${field} 有值`;
 
-  const values = row.values.map((v) => `"${v}"`).join(' 或 ');
+  const joiner = row.op === 'contains_all' ? ' 和 ' : ' 或 ';
+  const values = row.numeric ? row.values.join('') : row.values.map((v) => `"${v}"`).join(joiner);
   const text = `${field} ${opLabel(row.op)} ${values}${row.ignoreCase ? '（不分大小写）' : ''}`;
   return row.negate ? `不满足：${text}` : text;
 }
 
+function describeNode(node: ConditionNode, nested: boolean): string {
+  if (node.kind !== 'group') return describeRow(node);
+  const inner = node.children.map((c) => describeNode(c, true)).join(node.mode === 'all' ? ' 且 ' : ' 或 ');
+  if (node.negate) return `不满足（${inner}）`;
+  return nested && node.children.length > 1 ? `（${inner}）` : inner;
+}
+
 /** 列表里那一格：这个条件说的是什么。表单读不成的条件只说它是手写的。 */
 export function describeCondition(when: unknown): string {
-  const flat = flattenCondition(when);
-  if (!flat) return '自定义条件（JSON）';
-  return flat.rows.map(describeRow).join(flat.mode === 'all' ? ' 且 ' : ' 或 ');
+  const tree = conditionTree(when);
+  return tree ? describeNode(tree, false) : '自定义条件（JSON）';
 }
 
 // ---------- 过滤器 ----------
@@ -304,12 +382,12 @@ export interface ChannelView {
   /** 有没有这个 Vendor 的过滤器。没有 = 什么都收。 */
   exists: boolean;
   defaultAction: FilterAction;
-  /** true = 判了拒绝的请求真的被拒；false = 只标记。文档里不写算 true。 */
+  /** true = 过滤模式：判了拒绝的请求真的被拒；false = 观察模式：只记不拒。文档里不写算 true。 */
   enforce: boolean;
   rules: FilterRule[];
 }
 
-/** 一个 Vendor 的过滤器，缺的按网关的缺省补上（默认放行；不写 enforce 算执行）。 */
+/** 一个 Vendor 的过滤器，缺的按网关的缺省补上（默认放行；不写 enforce 算过滤模式）。 */
 export function channelOf(doc: FilterDoc, vendor: string): ChannelView {
   const key = channelKeyOf(doc, vendor);
   const channel = key === undefined ? undefined : doc.filters![key];
@@ -324,8 +402,8 @@ export function channelOf(doc: FilterDoc, vendor: string): ChannelView {
 }
 
 /**
- * 改一个 Vendor 的过滤器。还没有的话先建一份：默认放行、**只标记**——
- * 新加的规则先看它会拦掉什么，确认了再由人打开执行，不能一加上就开始拒请求。
+ * 改一个 Vendor 的过滤器。还没有的话先建一份：默认放行、**观察模式**——
+ * 新加的规则先看它会拦掉什么，确认了再由人切到过滤，不能一加上就开始拒请求。
  * 这一页不认识的键照留。
  */
 function writeChannel(doc: FilterDoc, vendor: string, change: (channel: FilterChannel) => FilterChannel): FilterDoc {
@@ -385,7 +463,7 @@ export function removeChannel(doc: FilterDoc, vendor: string): FilterDoc {
 export function channelSummary(view: ChannelView): string {
   if (!view.exists) return '没有规则，什么都收';
   const count = view.rules.length === 0 ? '没有规则' : `${view.rules.length} 条规则`;
-  return `${count} · 默认${view.defaultAction === 'deny' ? '拒绝' : '放行'} · ${view.enforce ? '执行中' : '只标记'}`;
+  return `${count} · 默认${view.defaultAction === 'deny' ? '拒绝' : '放行'} · ${view.enforce ? '过滤' : '观察'}`;
 }
 
 export interface VendorItem {

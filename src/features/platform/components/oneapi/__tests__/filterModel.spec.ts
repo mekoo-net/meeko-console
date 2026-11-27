@@ -10,9 +10,9 @@ import {
   channelOf,
   channelSummary,
   classifierUses,
+  conditionError,
+  conditionTree,
   describeCondition,
-  flatConditionError,
-  flattenCondition,
   moveClassifier,
   moveFilterRule,
   problemsOfChannel,
@@ -28,6 +28,9 @@ import {
   upsertClassifier,
   upsertFilterRule,
   vendorList,
+  type ConditionGroup,
+  type ConditionNode,
+  type ConditionRow,
 } from '../model/filter';
 import type { FilterDoc } from '../model/filter.types';
 
@@ -68,7 +71,7 @@ describe('ids', () => {
 });
 
 describe('conditions', () => {
-  it('reads the shapes the form can edit and writes them back unchanged', () => {
+  it('reads every shape the form can edit, nested groups included, and writes it back unchanged', () => {
     const cases: unknown[] = [
       { classifier: 'chat.app' },
       { classifier: ['chat.app', 'chat.tavern'] },
@@ -76,50 +79,60 @@ describe('conditions', () => {
       { field: 'header.user-agent', op: 'prefix', value: 'claude-cli/' },
       { field: 'header.user-agent', op: 'prefix', value: ['Kelivo', 'Tavo'], ignoreCase: true },
       { not: { field: 'header.user-agent', op: 'exists' } },
+      { field: 'tools.count', op: 'gte', value: 3 },
+      { field: 'tools.name', op: 'contains_all', value: ['Bash', 'Read'] },
+      { any: [{ classifier: 'chat.app' }, { field: 'header.x-requested-with', op: 'exists' }] },
+      // 层级：组里套组、整组取反
       {
         any: [
-          { classifier: 'chat.app' },
-          { field: 'header.x-requested-with', op: 'exists' },
+          { field: 'header.user-agent', op: 'prefix', value: 'claude-cli/' },
+          {
+            all: [
+              { field: 'prompt.system', op: 'contains', value: 'You are Claude Code' },
+              { not: { any: [{ field: 'tools.count', op: 'lt', value: 3 }, { field: 'tools.name', op: 'exists' }] } },
+            ],
+          },
         ],
       },
+      { not: { any: [{ classifier: 'chat.app' }, { classifier: 'chat.tavern' }] } },
     ];
     for (const when of cases) {
-      const flat = flattenCondition(when);
-      expect(flat, JSON.stringify(when)).not.toBeNull();
-      expect(buildCondition(flat!)).toEqual(when);
+      const tree = conditionTree(when);
+      expect(tree, JSON.stringify(when)).not.toBeNull();
+      expect(buildCondition(tree!)).toEqual(when);
     }
   });
 
-  it('leaves nested or unknown shapes to the JSON editor', () => {
-    expect(flattenCondition({ all: [{ any: [{ classifier: 'a.b' }] }] })).toBeNull();
-    expect(flattenCondition({ all: [] })).toBeNull();
-    expect(flattenCondition({ classifier: [] })).toBeNull();
-    expect(flattenCondition({ classifier: 'a.b', field: 'x' })).toBeNull();
-    expect(flattenCondition({ field: 'header.x', op: 'eq', value: 1 })).toBeNull();
-    expect(flattenCondition('nope')).toBeNull();
-    expect(flattenCondition(undefined)).toBeNull();
+  it('leaves shapes it does not know to the JSON editor', () => {
+    expect(conditionTree({ all: [{ any: [] }] })).toBeNull();
+    expect(conditionTree({ all: [] })).toBeNull();
+    expect(conditionTree({ classifier: [] })).toBeNull();
+    expect(conditionTree({ classifier: 'a.b', field: 'x' })).toBeNull();
+    expect(conditionTree({ field: 'header.x', op: 'eq', value: 1.5 })).toBeNull();
+    expect(conditionTree('nope')).toBeNull();
+    expect(conditionTree(undefined)).toBeNull();
   });
 
   it('says what is missing before it goes to the gateway', () => {
-    expect(flatConditionError({ mode: 'all', rows: [] })).toBe('至少要有一个条件');
-    expect(flatConditionError({ mode: 'all', rows: [{ kind: 'classifier', negate: false, classifiers: [] }] })).toBe(
-      '条件没选分类器',
+    const field = (patch: Partial<ConditionRow & { kind: 'field' }>): ConditionNode => ({
+      kind: 'field',
+      negate: false,
+      field: 'header.origin',
+      op: 'eq',
+      values: ['x'],
+      numeric: false,
+      ignoreCase: false,
+      ...patch,
+    });
+    const group = (...children: ConditionNode[]): ConditionGroup => ({ kind: 'group', negate: false, mode: 'all', children });
+
+    expect(conditionError(group())).toBe('有一组里没有条件');
+    expect(conditionError(group({ kind: 'classifier', negate: false, classifiers: [] }))).toBe('有条件没选分类器');
+    expect(conditionError(group(field({}), group(field({ values: [''] }))))).toBe('有条件没填值');
+    expect(conditionError(group(field({ field: 'tools.count', op: 'gte', values: ['2.5'], numeric: true })))).toBe(
+      '数量要填整数',
     );
-    expect(
-      flatConditionError({
-        mode: 'any',
-        rows: [
-          { kind: 'classifier', negate: false, classifiers: ['chat.app'] },
-          { kind: 'field', negate: false, field: 'header.origin', op: 'eq', values: [''], ignoreCase: false },
-        ],
-      }),
-    ).toBe('第 2 个条件没填值');
-    expect(
-      flatConditionError({
-        mode: 'all',
-        rows: [{ kind: 'field', negate: true, field: 'header.origin', op: 'exists', values: [], ignoreCase: false }],
-      }),
-    ).toBeNull();
+    expect(conditionError(group(field({ op: 'exists', values: [], negate: true })))).toBeNull();
   });
 
   it('finds every classifier a condition refers to, however deep', () => {
@@ -131,7 +144,7 @@ describe('conditions', () => {
     expect(referencedClassifiers({ field: 'header.x', op: 'exists' })).toEqual([]);
   });
 
-  it('describes conditions in plain words', () => {
+  it('describes conditions in plain words, nested groups in brackets', () => {
     expect(describeCondition({ classifier: 'chat.app' })).toBe('分类器是 chat.app');
     expect(describeCondition({ classifier: ['chat.app', 'chat.tavern'] })).toBe('分类器是 chat.app 或 chat.tavern');
     expect(describeCondition({ not: { classifier: ['chat.app', 'chat.tavern'] } })).toBe('分类器不是 chat.app 也不是 chat.tavern');
@@ -142,33 +155,75 @@ describe('conditions', () => {
     expect(
       describeCondition({ all: [{ classifier: 'agent.claude' }, { field: 'header.x-app', op: 'eq', value: 'cli' }] }),
     ).toBe('分类器是 agent.claude 且 x-app 等于 "cli"');
+    expect(
+      describeCondition({
+        any: [
+          { field: 'header.user-agent', op: 'prefix', value: 'claude-cli/' },
+          {
+            all: [
+              { field: 'prompt.system', op: 'contains', value: 'You are Claude Code' },
+              { field: 'tools.name', op: 'contains_all', value: ['Bash', 'Read'] },
+            ],
+          },
+        ],
+      }),
+    ).toBe('user-agent 开头是 "claude-cli/" 或 （提示词·系统 包含 "You are Claude Code" 且 工具·名称 全部包含 "Bash" 和 "Read"）');
+    expect(describeCondition({ field: 'tools.count', op: 'gte', value: 3 })).toBe('工具·数量 至少 3');
+    expect(describeCondition({ not: { any: [{ classifier: 'chat.app' }, { classifier: 'chat.tavern' }] } })).toBe(
+      '不满足（分类器是 chat.app 或 分类器是 chat.tavern）',
+    );
     expect(describeCondition({ all: [{ any: [] }] })).toBe('自定义条件（JSON）');
   });
 });
 
 describe('where a condition reads from', () => {
-  it('names fields the way people say them: the header name itself, and 系统提示词', () => {
+  it('names fields as people say them: a header is its name, the rest are 来源·层级', () => {
     expect(fieldLabel('header.user-agent')).toBe('user-agent');
-    expect(fieldLabel('system')).toBe('系统提示词');
-    expect(fieldLabel('tools.names')).toBe('tools.names');
+    expect(fieldLabel('prompt.system')).toBe('提示词·系统');
+    expect(fieldLabel('prompt.user')).toBe('提示词·用户');
+    expect(fieldLabel('tools.name')).toBe('工具·名称');
+    // 网关以后多报的，这里还不认识，原样显示
+    expect(fieldLabel('messages.count')).toBe('messages·count');
   });
 
-  it('groups every header into one source, every other field is a source of its own', () => {
+  it('groups the fields the gateway offers into sources, each with its levels', () => {
     expect(sourceOf('header.origin')).toBe('header');
-    expect(sourceOf('system')).toBe('system');
+    expect(sourceOf('prompt.assistant')).toBe('prompt');
     expect(
-      conditionSources([{ name: 'header.user-agent' }, { name: 'header.origin' }, { name: 'system' }, { name: 'tools.names' }]),
+      conditionSources([
+        { name: 'header.user-agent', kind: 'text' },
+        { name: 'header.origin', kind: 'text' },
+        { name: 'prompt.system', kind: 'text' },
+        { name: 'prompt.user', kind: 'text' },
+        { name: 'tools.name', kind: 'set' },
+        { name: 'tools.count', kind: 'number' },
+      ]),
     ).toEqual([
-      { key: 'header', label: '请求头' },
-      { key: 'system', label: '系统提示词' },
-      { key: 'tools.names', label: 'tools.names' },
+      {
+        key: 'header',
+        label: '请求头',
+        levels: [
+          { field: 'header.user-agent', label: 'user-agent', kind: 'text' },
+          { field: 'header.origin', label: 'origin', kind: 'text' },
+        ],
+      },
+      {
+        key: 'prompt',
+        label: '提示词',
+        levels: [
+          { field: 'prompt.system', label: '系统', kind: 'text' },
+          { field: 'prompt.user', label: '用户', kind: 'text' },
+        ],
+      },
+      {
+        key: 'tools',
+        label: '工具',
+        levels: [
+          { field: 'tools.name', label: '名称', kind: 'set' },
+          { field: 'tools.count', label: '数量', kind: 'number' },
+        ],
+      },
     ]);
-  });
-
-  it('describes a system prompt condition', () => {
-    expect(describeCondition({ field: 'system', op: 'contains', value: 'You are Claude Code' })).toBe(
-      '系统提示词 包含 "You are Claude Code"',
-    );
   });
 });
 
@@ -249,8 +304,8 @@ describe('filters', () => {
 
   it('summarises a vendor in one line', () => {
     expect(channelSummary(channelOf(doc(), 'kiro'))).toBe('没有规则，什么都收');
-    expect(channelSummary(channelOf(doc(), 'factory'))).toBe('2 条规则 · 默认放行 · 只标记');
-    expect(channelSummary(channelOf({ filters: { kiro: { default: 'deny' } } }, 'kiro'))).toBe('没有规则 · 默认拒绝 · 执行中');
+    expect(channelSummary(channelOf(doc(), 'factory'))).toBe('2 条规则 · 默认放行 · 观察');
+    expect(channelSummary(channelOf({ filters: { kiro: { default: 'deny' } } }, 'kiro'))).toBe('没有规则 · 默认拒绝 · 过滤');
   });
 
   it('lists the registered vendors plus any only the filters know about', () => {

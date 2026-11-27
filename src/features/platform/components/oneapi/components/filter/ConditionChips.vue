@@ -1,12 +1,19 @@
 <script setup lang="ts">
 /**
- * 把一个条件画成一排标签块：引用的分类器按类别上色，请求头比较拆成「字段 · 比法 · 值」三段。
- * 表单编不出来的条件（套了好几层的手写 JSON）只画一块「自定义条件」，悬停看原文。
+ * 把一个条件画成一排标签块：引用的分类器按类别上色，字段比较拆成「字段 · 比法 · 值」三段，套着的组加括号。
+ * 表单编不出来的条件（写法这一页不认识的 JSON）只画一块「自定义条件」，悬停看原文。
  * 整句话（`describeCondition`）挂在 aria-label 上，读屏和测试按它认。
  */
 import { computed } from 'vue';
 
-import { describeCondition, fieldLabel, flattenCondition, opLabel, type ConditionRow } from '../../model/filter';
+import {
+  conditionTree,
+  describeCondition,
+  fieldLabel,
+  opLabel,
+  type ConditionNode,
+  type ConditionRow,
+} from '../../model/filter';
 import type { FilterClassifier } from '../../model/filter.types';
 import { categoryLook } from './classifierCategory';
 
@@ -16,7 +23,42 @@ const props = defineProps<{
   classifiers?: readonly FilterClassifier[];
 }>();
 
-const flat = computed(() => flattenCondition(props.when));
+type ClassifierRow = Extract<ConditionRow, { kind: 'classifier' }>;
+type FieldRow = Extract<ConditionRow, { kind: 'field' }>;
+type Token =
+  | { t: 'join'; text: string }
+  | { t: 'open' }
+  | { t: 'close' }
+  | { t: 'not'; text: string }
+  | { t: 'classifier'; row: ClassifierRow }
+  | { t: 'field'; row: FieldRow };
+
+/** 树摊成一串记号按顺序画：组前后加括号（最外面那组和只有一项的组不加），组与组、行与行之间是「且 / 或」。 */
+function tokensOf(node: ConditionNode, nested: boolean, out: Token[]): Token[] {
+  if (node.kind === 'group') {
+    const paren = node.negate || (nested && node.children.length > 1);
+    if (node.negate) out.push({ t: 'not', text: '不满足' });
+    if (paren) out.push({ t: 'open' });
+    node.children.forEach((child, i) => {
+      if (i > 0) out.push({ t: 'join', text: node.mode === 'all' ? '且' : '或' });
+      tokensOf(child, true, out);
+    });
+    if (paren) out.push({ t: 'close' });
+    return out;
+  }
+  if (node.kind === 'classifier') {
+    if (node.negate) out.push({ t: 'not', text: '不是' });
+    out.push({ t: 'classifier', row: node });
+  } else {
+    // 「没有值」自己就是否定的说法，不再加「不满足」
+    if (node.negate && node.op !== 'exists') out.push({ t: 'not', text: '不满足' });
+    out.push({ t: 'field', row: node });
+  }
+  return out;
+}
+
+const tree = computed(() => conditionTree(props.when));
+const tokens = computed(() => (tree.value ? tokensOf(tree.value, false, []) : []));
 const sentence = computed(() => describeCondition(props.when));
 const json = computed(() => JSON.stringify(props.when ?? null, null, 2));
 
@@ -24,7 +66,8 @@ const known = computed(() => new Map((props.classifiers ?? []).map((c) => [c.id,
 const missing = (id: string): boolean => props.classifiers !== undefined && !known.value.has(id);
 const nameOf = (id: string): string => known.value.get(id)?.name ?? id;
 
-const fieldName = (row: Extract<ConditionRow, { kind: 'field' }>): string => fieldLabel(row.field);
+const opText = (row: FieldRow): string => (row.op === 'exists' ? (row.negate ? '没有值' : '有值') : opLabel(row.op));
+const valueJoin = (row: FieldRow): string => (row.op === 'contains_all' ? '和' : '或');
 </script>
 
 <template>
@@ -33,24 +76,27 @@ const fieldName = (row: Extract<ConditionRow, { kind: 'field' }>): string => fie
     :aria-label="sentence"
     role="group"
   >
-    <template v-if="flat">
+    <template v-if="tree">
       <template
-        v-for="(row, i) in flat.rows"
+        v-for="(token, i) in tokens"
         :key="i"
       >
         <span
-          v-if="i > 0"
+          v-if="token.t === 'join'"
           class="chips__join"
-        >{{ flat.mode === 'all' ? '且' : '或' }}</span>
-
+        >{{ token.text }}</span>
         <span
-          v-if="row.negate"
+          v-else-if="token.t === 'open' || token.t === 'close'"
+          class="chips__paren"
+        >{{ token.t === 'open' ? '(' : ')' }}</span>
+        <span
+          v-else-if="token.t === 'not'"
           class="chips__not"
-        >{{ row.kind === 'classifier' ? '不是' : '不满足' }}</span>
+        >{{ token.text }}</span>
 
-        <template v-if="row.kind === 'classifier'">
+        <template v-else-if="token.t === 'classifier'">
           <template
-            v-for="(id, j) in row.classifiers"
+            v-for="(id, j) in token.row.classifiers"
             :key="id"
           >
             <span
@@ -67,7 +113,9 @@ const fieldName = (row: Extract<ConditionRow, { kind: 'field' }>): string => fie
                 :class="{ 'chip--missing': missing(id) }"
                 :style="{ '--chip-color': categoryLook(id).color }"
               >
-                <el-icon :size="12"><component :is="categoryLook(id).icon" /></el-icon>
+                <el-icon :size="12">
+                  <component :is="categoryLook(id).icon" />
+                </el-icon>
                 {{ id }}
               </span>
             </el-tooltip>
@@ -78,20 +126,20 @@ const fieldName = (row: Extract<ConditionRow, { kind: 'field' }>): string => fie
           v-else
           class="chip chip--field"
         >
-          <span class="chip__key">{{ fieldName(row) }}</span>
-          <span class="chip__op">{{ row.op === 'exists' ? (row.negate ? '没带' : '有值') : opLabel(row.op) }}</span>
+          <span class="chip__key">{{ fieldLabel(token.row.field) }}</span>
+          <span class="chip__op">{{ opText(token.row) }}</span>
           <template
-            v-for="(v, j) in row.values"
+            v-for="(v, j) in token.row.values"
             :key="j"
           >
             <span
               v-if="j > 0"
               class="chip__op"
-            >或</span>
+            >{{ valueJoin(token.row) }}</span>
             <code class="chip__value">{{ v }}</code>
           </template>
           <span
-            v-if="row.ignoreCase"
+            v-if="token.row.ignoreCase"
             class="chip__flag"
             title="不分大小写"
           >Aa</span>
@@ -128,6 +176,12 @@ const fieldName = (row: Extract<ConditionRow, { kind: 'field' }>): string => fie
   color: var(--el-text-color-secondary);
   border-radius: 9px;
   background: var(--el-fill-color);
+}
+.chips__paren {
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 1;
+  color: var(--el-text-color-placeholder);
 }
 .chips__or {
   font-size: 12px;

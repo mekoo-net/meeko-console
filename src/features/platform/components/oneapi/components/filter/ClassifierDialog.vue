@@ -85,7 +85,7 @@ function submit(): void {
   <el-dialog
     v-model="visible"
     :title="editing ? '编辑分类器' : '新建分类器'"
-    width="760px"
+    width="880px"
     :close-on-click-modal="false"
   >
     <el-form

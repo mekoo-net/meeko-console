@@ -41,7 +41,7 @@ export type FilterRule = z.infer<typeof filterRuleSchema>;
 export const filterChannelSchema = z.looseObject({
   /** 都没匹配上时：`allow`（不写也是它）或 `deny`。 */
   default: z.string().optional(),
-  /** false = 只标记：判了拒绝的请求照常放行，只在遥测里记一笔。**不写算 true**（网关的规矩）。 */
+  /** 模式。false = 观察：判了拒绝的请求照常放行，只在遥测里记一笔；true = 过滤：真的拒。**不写算 true**（网关的规矩）。 */
   enforce: z.boolean().optional(),
   rules: z.array(filterRuleSchema).optional(),
 });

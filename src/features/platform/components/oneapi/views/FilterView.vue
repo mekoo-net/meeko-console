@@ -7,8 +7,8 @@
  * 也可以直接比请求头，两样能混着写。没有过滤器的 Vendor 什么都收。
  * 被拒的请求错误码是 `filter_rejected.<规则 id>`，上层按它决定怎么处理（比如扣不扣费）。
  *
- * 新建的过滤器先是「只标记」：判了拒绝的请求照常放行，只在遥测里记一笔「本该拒绝」。看过它会拦掉什么，
- * 再由人切到「执行」。
+ * 两种模式。新建的过滤器先是「观察」：判了拒绝的请求照常放行，只在遥测里记一笔「本该拒绝」。看过它会拦掉什么，
+ * 再由人切到「过滤」，判了拒绝的才真的被拒。
  *
  * 分类器和过滤规则在网关那边是一整份文档，这一页只改过滤器那一块，存的是整份（见 useFilterDocument）。
  * 存进去网关马上换上新的，所以没有「发布」：每个动作都是当场存，存成了就是生效了。
@@ -73,8 +73,8 @@ const vendorBroken = (key: string): boolean =>
 const ruleProblems = (rule: FilterRule, index: number): string[] =>
   problemsOfRule(problems.value, view.value.key, rule.id, index);
 
-/** 左边每个 Vendor 头像旁边那个点：执行中红、只标记黄、没有过滤器灰。 */
-const stateOf = (v: ChannelView): 'live' | 'mark' | 'none' => (!v.exists ? 'none' : v.enforce ? 'live' : 'mark');
+/** 左边每个 Vendor 头像旁边那个点：过滤模式红、观察模式黄、没有过滤器灰。 */
+const stateOf = (v: ChannelView): 'live' | 'observe' | 'none' => (!v.exists ? 'none' : v.enforce ? 'live' : 'observe');
 
 const AVATAR_COLORS = ['#4f46e5', '#0891b2', '#db2777', '#ea580c', '#16a34a', '#7c3aed', '#0d9488', '#2563eb'];
 function avatarColor(key: string): string {
@@ -89,23 +89,23 @@ const DEFAULT_OPTIONS = [
   { label: '拒绝', value: 'deny' },
 ];
 const MODE_OPTIONS = [
-  { label: '只标记', value: 'mark' },
-  { label: '执行', value: 'enforce' },
+  { label: '观察', value: 'observe' },
+  { label: '过滤', value: 'enforce' },
 ];
 
 async function onDefault(value: string | number | boolean): Promise<void> {
   await commit(setChannelDefault(doc.value, vendor.value, value === 'deny' ? 'deny' : 'allow'));
 }
 
-/** 切到「执行」以后请求会真的被拒，先问一句；退回只标记不用问。 */
+/** 切到「过滤」以后请求会真的被拒，先问一句；退回观察不用问。 */
 async function onMode(value: string | number | boolean): Promise<void> {
   const enforce = value === 'enforce';
   if (enforce === view.value.enforce && view.value.exists) return;
   if (enforce) {
     const sure = await confirmDanger({
-      title: '执行过滤器',
-      message: `切到执行以后，${vendorName.value} 上判了拒绝的请求会真的被拒掉（403）。先在遥测里确认过「本该拒绝」的都是该拒的了吗？`,
-      confirmText: '切到执行',
+      title: '切到过滤模式',
+      message: `切到过滤以后，${vendorName.value} 上判了拒绝的请求会真的被拒掉（403）。先在遥测里确认过「本该拒绝」的都是该拒的了吗？`,
+      confirmText: '切到过滤',
     });
     if (!sure) return;
   }
@@ -328,11 +328,11 @@ async function onSubmit(rule: FilterRule, originalId: string | undefined): Promi
           <div class="ch-control">
             <span class="ch-control__label">模式</span>
             <el-segmented
-              :model-value="view.enforce ? 'enforce' : 'mark'"
+              :model-value="view.enforce ? 'enforce' : 'observe'"
               :options="MODE_OPTIONS"
               :disabled="!canWrite || saving"
               class="seg"
-              :class="view.enforce ? 'seg--deny' : 'seg--mark'"
+              :class="view.enforce ? 'seg--deny' : 'seg--observe'"
               data-test="channel-mode"
               @change="onMode"
             />
@@ -347,14 +347,14 @@ async function onSubmit(rule: FilterRule, originalId: string | undefined): Promi
         <div
           v-if="view.exists"
           class="mode-banner"
-          :class="view.enforce ? 'mode-banner--live' : 'mode-banner--mark'"
+          :class="view.enforce ? 'mode-banner--live' : 'mode-banner--observe'"
           data-test="channel-state"
         >
           <el-icon :size="16">
             <component :is="view.enforce ? Warning : View" />
           </el-icon>
-          <span v-if="view.enforce"><b>执行中</b>：判了拒绝的请求直接返回 403（错误码 filter_rejected.&lt;规则 id&gt;）。</span>
-          <span v-else><b>只标记</b>：判了拒绝的请求照常放行，只在遥测里记「本该拒绝」。确认没有误伤后再切到执行。</span>
+          <span v-if="view.enforce"><b>过滤</b>：判了拒绝的请求直接返回 403（错误码 filter_rejected.&lt;规则 id&gt;）。</span>
+          <span v-else><b>观察</b>：判了拒绝的请求照常放行，只在遥测里记「本该拒绝」。确认没有误伤后再切到过滤。</span>
         </div>
         <div
           v-else
@@ -363,7 +363,7 @@ async function onSubmit(rule: FilterRule, originalId: string | undefined): Promi
           <el-icon :size="16">
             <View />
           </el-icon>
-          <span>这个 Vendor 还没有过滤器，所有请求都放行。加第一条规则时会建一个，先是只标记。</span>
+          <span>这个 Vendor 还没有过滤器，所有请求都放行。加第一条规则时会建一个，先是观察模式。</span>
         </div>
 
         <el-alert
@@ -587,7 +587,7 @@ async function onSubmit(rule: FilterRule, originalId: string | undefined): Promi
 .vendor-avatar__dot--live {
   background: var(--el-color-danger);
 }
-.vendor-avatar__dot--mark {
+.vendor-avatar__dot--observe {
   background: var(--el-color-warning);
 }
 .vendor-avatar__dot--none {
@@ -635,7 +635,7 @@ async function onSubmit(rule: FilterRule, originalId: string | undefined): Promi
 .seg--deny {
   --el-segmented-item-selected-bg-color: var(--el-color-danger);
 }
-.seg--mark {
+.seg--observe {
   --el-segmented-item-selected-bg-color: var(--el-color-warning);
 }
 
@@ -657,7 +657,7 @@ async function onSubmit(rule: FilterRule, originalId: string | undefined): Promi
   color: var(--el-color-danger-dark-2);
   background: var(--el-color-danger-light-9);
 }
-.mode-banner--mark {
+.mode-banner--observe {
   color: var(--el-color-warning-dark-2);
   background: var(--el-color-warning-light-9);
 }

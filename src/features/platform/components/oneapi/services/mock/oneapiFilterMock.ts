@@ -28,9 +28,21 @@ const HEADERS = [
 ];
 
 export const MOCK_FILTER_SCHEMA: FilterSchema = {
-  // 条件能看的只有请求本身带的东西：这些请求头和系统提示词
-  fields: [...HEADERS.map((h) => ({ name: `header.${h}`, kind: 'text' })), { name: 'system', kind: 'text' }],
-  operators: { text: ['eq', 'in', 'prefix', 'contains', 'regex', 'exists'] },
+  // 条件能看的只有请求本身带的东西：请求头、提示词、工具。字段名是「来源.层级」
+  fields: [
+    ...HEADERS.map((h) => ({ name: `header.${h}`, kind: 'text' })),
+    { name: 'prompt.system', kind: 'text' },
+    { name: 'prompt.user', kind: 'text' },
+    { name: 'prompt.assistant', kind: 'text' },
+    { name: 'tools.name', kind: 'set' },
+    { name: 'tools.description', kind: 'text' },
+    { name: 'tools.count', kind: 'number' },
+  ],
+  operators: {
+    text: ['eq', 'in', 'prefix', 'contains', 'regex', 'exists'],
+    set: ['contains_any', 'contains_all', 'prefix', 'exists'],
+    number: ['eq', 'gt', 'gte', 'lt', 'lte'],
+  },
   vendors: [
     { key: 'agentspace', displayName: 'Agentspace' },
     { key: 'claude', displayName: 'Claude' },
@@ -39,7 +51,7 @@ export const MOCK_FILTER_SCHEMA: FilterSchema = {
   ],
 };
 
-/** 开场的样子：四个分类器；factory 拒 agent（只标记），claude 只收自家客户端和酒馆。 */
+/** 开场的样子：四个分类器；factory 拒 agent（观察模式），claude 只收自家客户端和酒馆。 */
 const seed = (): FilterDoc => ({
   classifiers: [
     {
@@ -48,7 +60,12 @@ const seed = (): FilterDoc => ({
       when: {
         any: [
           { field: 'header.user-agent', op: 'prefix', value: 'claude-cli/' },
-          { field: 'system', op: 'contains', value: 'You are Claude Code' },
+          {
+            all: [
+              { field: 'prompt.system', op: 'contains', value: 'You are Claude Code' },
+              { field: 'tools.name', op: 'contains_all', value: ['Bash', 'Read', 'Edit'] },
+            ],
+          },
         ],
       },
     },
@@ -115,8 +132,7 @@ export function _currentOneApiFilterDoc(): FilterDoc | null {
   return doc === null ? null : clone(doc);
 }
 
-const FIELD_NAMES = new Set(MOCK_FILTER_SCHEMA.fields.map((f) => f.name));
-const OPERATORS = new Set(MOCK_FILTER_SCHEMA.operators.text);
+const FIELD_KINDS = new Map(MOCK_FILTER_SCHEMA.fields.map((f) => [f.name, f.kind]));
 
 /** `classifiers` 为 null 时是分类器自己的条件：不能再引用分类器。 */
 function conditionProblem(node: unknown, classifiers: Set<string> | null): string | null {
@@ -137,8 +153,14 @@ function conditionProblem(node: unknown, classifiers: Set<string> | null): strin
     return unknown === undefined ? null : `Unknown classifier '${String(unknown)}'.`;
   }
   if (typeof o.field !== 'string') return "Condition needs exactly one of 'all', 'any', 'not', 'classifier', 'field'.";
-  if (!FIELD_NAMES.has(o.field)) return `Unknown field '${o.field}'.`;
-  if (typeof o.op !== 'string' || !OPERATORS.has(o.op)) return `Unknown operator '${String(o.op)}' for a text field.`;
+  const kind = FIELD_KINDS.get(o.field);
+  if (!kind) return `Unknown field '${o.field}'.`;
+  if (typeof o.op !== 'string' || !MOCK_FILTER_SCHEMA.operators[kind]?.includes(o.op))
+    return `Unknown operator '${String(o.op)}' for a ${kind} field.`;
+  if (kind === 'number') {
+    if (typeof o.value !== 'number' || !Number.isInteger(o.value)) return `Operator '${o.op}' needs a whole number.`;
+    return null;
+  }
   if (o.op !== 'exists' && (o.value === undefined || o.value === '')) return `Operator '${o.op}' needs non-empty values.`;
   return null;
 }
