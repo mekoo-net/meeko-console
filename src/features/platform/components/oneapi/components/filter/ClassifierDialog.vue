@@ -3,8 +3,9 @@
  * 新建或编辑一个分类器：它叫什么、什么样的请求算这一类。分类器只认请求，不放行也不拒绝——
  * 放不放行是各个 Vendor 的过滤规则引用它以后说的。
  *
- * id 是「分组.标识」：分组从已有的里单选（Agent、Chat……），没有合适的就直接打一个新名字，存下去就有了这一组；
- * 标识只填后半截。拆成两格是因为分组决定它在左边哪一栏、过滤规则的 `agent.*` 认不认它，不能手一滑打错。
+ * id 是「分组.名字」：先选分组（从已有的里单选：Agent、Chat……，没有合适的就直接打一个新名字，存下去就有了这一组），
+ * 再填名字。拆成两格是因为分组决定它在左边哪一栏、过滤规则的 `agent.*` 认不认它，不能手一滑打错。
+ * 不另填显示名：文档里原有的 `name` 编辑时照留（upsertClassifier 只换表单管的键）。
  *
  * 只管把表单收成一个分类器交出去，不存：存要带上整份文档和版本号，由页面做。号池后台查出它写错了时，
  * 页面把原话放回 `problems` 里，弹窗留着不关。
@@ -49,7 +50,6 @@ const editing = computed(() => props.classifier !== null);
 
 const group = ref('');
 const key = ref('');
-const name = ref('');
 const localError = ref<string | null>(null);
 /** 每打开一次换一个，条件编辑器跟着重挂，读进这一次的条件。 */
 const opened = ref(0);
@@ -71,7 +71,6 @@ watch(
     const id = props.classifier?.id ?? '';
     group.value = id ? categoryOf(id) : (props.defaultGroup ?? '');
     key.value = id ? id.slice(group.value.length + 1) : '';
-    name.value = props.classifier?.name ?? '';
   },
 );
 
@@ -83,12 +82,12 @@ function submit(): void {
     return;
   }
   if (!KEY_PATTERN.test(k)) {
-    localError.value = '标识只用小写字母、数字和下划线，例如 claude、tavern';
+    localError.value = k ? '名字只用小写字母、数字和下划线，例如 claude、tavern' : '填一个名字';
     return;
   }
   const classifierId = `${g}.${k}`;
   if (!CLASSIFIER_ID_PATTERN.test(classifierId)) {
-    localError.value = 'id 写成「分组.标识」，只用小写字母、数字和下划线，例如 chat.app';
+    localError.value = '名字只用小写字母、数字和下划线，例如 claude、tavern';
     return;
   }
   if (!editing.value && props.takenIds.includes(classifierId)) {
@@ -103,12 +102,7 @@ function submit(): void {
   }
   localError.value = null;
 
-  const label = name.value.trim();
-  emit(
-    'submit',
-    { id: classifierId, ...(label ? { name: label } : {}), when: condition.when },
-    props.classifier?.id,
-  );
+  emit('submit', { id: classifierId, when: condition.when }, props.classifier?.id);
 }
 </script>
 
@@ -154,24 +148,13 @@ function submit(): void {
         </el-select>
       </el-form-item>
 
-      <el-form-item label="标识">
+      <el-form-item label="名字">
         <el-input
           v-model="key"
           :disabled="editing"
-          placeholder="例如 claude、tavern"
+          placeholder="规则名字，例如 claude、tavern"
+          class="key-input"
           data-test="classifier-key"
-        >
-          <template #prepend>
-            {{ group ? `${group}.` : '分组.' }}
-          </template>
-        </el-input>
-      </el-form-item>
-
-      <el-form-item label="名称">
-        <el-input
-          v-model="name"
-          placeholder="可不填"
-          data-test="classifier-name"
         />
       </el-form-item>
 
@@ -224,7 +207,8 @@ function submit(): void {
 .dialog-alert {
   margin-top: 8px;
 }
-.group-select {
+.group-select,
+.key-input {
   width: 260px;
 }
 .group-option {

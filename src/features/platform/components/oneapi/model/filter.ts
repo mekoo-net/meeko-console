@@ -45,7 +45,8 @@ function move<T>(items: readonly T[], index: number, direction: -1 | 1): T[] | n
 
 export const classifiersOf = (doc: FilterDoc): FilterClassifier[] => doc.classifiers ?? [];
 
-const CLASSIFIER_FORM_KEYS = ['id', 'name', 'when'];
+/** 表单只管 id 和条件。`name` 表单不再填，文档里原有的（整套分类器里带的那些）编辑时照留。 */
+const CLASSIFIER_FORM_KEYS = ['id', 'when'];
 
 /** 写进一个分类器。`originalId` 给了就是改那一个（位置不动，表单不管的键照留），没给就加在最后。 */
 export function upsertClassifier(doc: FilterDoc, classifier: FilterClassifier, originalId?: string): FilterDoc {

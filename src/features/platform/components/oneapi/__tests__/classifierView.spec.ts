@@ -100,7 +100,7 @@ describe('classifier page', () => {
     expect(savedIds()).toEqual(['b.two']);
   });
 
-  it('filters by category; the order column keeps the place in the whole list and reordering waits', async () => {
+  it('filters by category; reordering waits until the whole list is shown', async () => {
     await open();
     expect(
       wrapper.findAll('.cat-item').map((c) => `${c.find('.cat-item__name').text()} ${c.find('.cat-item__count').text()}`),
@@ -108,7 +108,8 @@ describe('classifier page', () => {
 
     await wrapper.find('[data-category="chat"]').trigger('click');
     expect(ids()).toEqual(['chat.tavern', 'chat.app', 'chat.phone']);
-    expect(row('chat.tavern').find('.cls-row__order').text()).toBe('2');
+    // 序号不显示
+    expect(wrapper.find('.cls-row__order').exists()).toBe(false);
     // 顺序是整份的：筛着的时候上移会跨过看不见的那些
     expect(row('chat.app').find('[data-test="classifier-up"]').attributes('disabled')).toBeDefined();
 
@@ -166,18 +167,19 @@ describe('classifier page', () => {
     expect(_currentOneApiFilterDoc()!.filters!.factory!.rules!.map((r) => r.id)).toEqual(['no-agents']);
   });
 
-  it('editing keeps the classifier where it is', async () => {
+  it('editing keeps the classifier where it is, and the name it already had', async () => {
     await open();
     await row('chat.tavern').find('[data-test="classifier-edit"]').trigger('click');
     expect(dialog().props('classifier')).toMatchObject({ id: 'chat.tavern' });
 
-    await submitFromDialog(
-      { id: 'chat.tavern', name: 'Tavern SillyTavern', when: { field: 'header.user-agent', op: 'contains', value: 'Tavern' } },
-      'chat.tavern',
-    );
+    // 弹窗不再填显示名，只交 id 和条件
+    const when = { field: 'header.user-agent', op: 'contains', value: 'Tavern' };
+    await submitFromDialog({ id: 'chat.tavern', when }, 'chat.tavern');
 
     expect(savedIds()).toEqual(['agent.claude', 'chat.tavern', 'chat.app', 'chat.phone']);
-    expect(row('chat.tavern').find('.cls-row__name').text()).toBe('Tavern SillyTavern');
+    const saved = _currentOneApiFilterDoc()!.classifiers!.find((c) => c.id === 'chat.tavern')!;
+    expect(saved.when).toEqual(when);
+    expect(row('chat.tavern').find('.cls-row__name').text()).toBe('Tavern');
   });
 
   it('a classifier the gateway cannot read is not saved, and the dialog is told why', async () => {
@@ -232,7 +234,7 @@ describe('classifier page: categories on the left, pages on the right', () => {
   };
   const total = () => wrapper.find('.provider-pagination .el-pagination__total').text();
 
-  it('shows ten a page, and the order column keeps counting on the next page', async () => {
+  it('shows ten a page and the rest on the next', async () => {
     _resetOneApiFilterMock(many(12, 2));
     await open();
 
@@ -242,7 +244,6 @@ describe('classifier page: categories on the left, pages on the right', () => {
 
     await next();
     expect(ids()).toEqual(['agent.a11', 'agent.a12', 'chat.c1', 'chat.c2']);
-    expect(row('agent.a11').find('.cls-row__order').text()).toBe('11');
   });
 
   it('picking a category on the left goes back to its first page', async () => {
@@ -271,7 +272,6 @@ describe('classifier page: categories on the left, pages on the right', () => {
 
     expect(wrapper.find('.provider-detail__title').text()).toBe('全部分类器');
     expect(ids().at(-1)).toBe('bot.astrbot');
-    expect(row('bot.astrbot').find('.cls-row__order').text()).toBe('15');
   });
 
   it('deleting the last one on the last page steps back a page instead of showing an empty one', async () => {

@@ -62,7 +62,7 @@ const categories = computed(() => {
   for (const c of classifiers.value) counts.set(categoryOf(c.id), (counts.get(categoryOf(c.id)) ?? 0) + 1);
   return [...counts].map(([key, count]) => ({ key, count, look: lookOfCategory(key) }));
 });
-/** 每一行带着它在整份里的位置：顺序那一格显示的是它，筛过以后不重新编号。 */
+/** 每一行带着它在整份里的位置：上移下移、号池后台按位置报的问题都按它，不显示出来。 */
 const rows = computed(() =>
   classifiers.value
     .map((c, index) => ({ c, index }))
@@ -282,7 +282,6 @@ async function onSubmit(c: FilterClassifier, originalId: string | undefined): Pr
           :class="{ 'cls-row--readonly': !canWrite }"
           aria-hidden="true"
         >
-          <span>#</span>
           <span />
           <span>分类器</span>
           <span>条件</span>
@@ -298,7 +297,6 @@ async function onSubmit(c: FilterClassifier, originalId: string | undefined): Pr
             :style="{ '--cat-color': categoryLook(c.id).color }"
             :data-classifier="c.id"
           >
-            <span class="cls-row__order">{{ index + 1 }}</span>
             <span class="cls-row__mark">
               <el-icon :size="14"><component :is="categoryLook(c.id).icon" /></el-icon>
             </span>
@@ -515,7 +513,7 @@ async function onSubmit(c: FilterClassifier, originalId: string | undefined): Pr
 }
 .cls-row {
   display: grid;
-  grid-template-columns: 28px 26px minmax(160px, 220px) minmax(0, 1fr) minmax(120px, 170px) 112px;
+  grid-template-columns: 26px minmax(160px, 220px) minmax(0, 1fr) minmax(120px, 170px) 112px;
   align-items: center;
   gap: 12px;
   min-height: 52px;
@@ -523,7 +521,7 @@ async function onSubmit(c: FilterClassifier, originalId: string | undefined): Pr
   border-bottom: 1px solid var(--el-border-color-extra-light);
 }
 .cls-row--readonly {
-  grid-template-columns: 28px 26px minmax(160px, 220px) minmax(0, 1fr) minmax(120px, 170px);
+  grid-template-columns: 26px minmax(160px, 220px) minmax(0, 1fr) minmax(120px, 170px);
 }
 .cls-row--head {
   position: sticky;
@@ -537,13 +535,6 @@ async function onSubmit(c: FilterClassifier, originalId: string | undefined): Pr
 }
 .cls-list .cls-row:hover {
   background: var(--el-fill-color-light);
-}
-.cls-row__order {
-  font-size: 12px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--el-text-color-placeholder);
-  text-align: center;
 }
 .cls-row__mark {
   display: inline-flex;
@@ -619,10 +610,10 @@ async function onSubmit(c: FilterClassifier, originalId: string | undefined): Pr
 @media (max-width: 1100px) {
   .cls-row,
   .cls-row--readonly {
-    grid-template-columns: 28px 26px minmax(140px, 1fr) minmax(0, 1.4fr) 112px;
+    grid-template-columns: 26px minmax(140px, 1fr) minmax(0, 1.4fr) 112px;
   }
   .cls-row__uses,
-  .cls-row--head > :nth-child(5) {
+  .cls-row--head > :nth-child(4) {
     display: none;
   }
 }

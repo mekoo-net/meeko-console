@@ -263,7 +263,8 @@ describe('classifiers', () => {
 
     d = { ...d, classifiers: d.classifiers!.map((c) => (c.id === 'chat.app' ? { ...c, extra: 1 } : c)) };
     d = upsertClassifier(d, { id: 'chat.app', when: { field: 'header.origin', op: 'exists' } }, 'chat.app');
-    expect(d.classifiers![1]).toEqual({ id: 'chat.app', when: { field: 'header.origin', op: 'exists' }, extra: 1 });
+    // 表单只管 id 和条件：原有的显示名（name）和表单不认识的键都照留
+    expect(d.classifiers![1]).toEqual({ id: 'chat.app', name: 'Chat', when: { field: 'header.origin', op: 'exists' }, extra: 1 });
 
     d = moveClassifier(d, 'chat.tavern', -1);
     expect(d.classifiers!.map((c) => c.id)).toEqual(['agent.claude', 'chat.tavern', 'chat.app']);
